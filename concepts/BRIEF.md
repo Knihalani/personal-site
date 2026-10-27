@@ -1,17 +1,12 @@
 # Brief: Kaiav Nihalani personal-site hero concepts
 
-## Who he is (from public research, use these facts, don't invent others)
-- Kaiav Nihalani (he/him). Student developer. Ships fast, builds his own tools and open-sources them.
-- GitHub: github.com/KaiavN · DEV: dev.to/kaiav_nihalani · Email: kaiav.nihalani@gmail.com
-- **Eden** — "the autonomous observability layer for AI agents". Unifies the AI observability stack and turns data into actions. MVP, recruiting beta testers. Stack: Tinybird/ClickHouse (OLAP), Neon Postgres (OLTP), Northflank backend, Vercel frontend.
-- **Eden Know** — compact fact graph. Dump `graph.kpk` (magic bytes `KPK8`), ~15 KB holding 8,299 facts. Built by crawler `Edenbot/0.1` from public pages that allow crawling under RFC 9309 (Wikipedia, catalogs, Common Crawl WET). A query returns one fact card ≤ 48 tokens, or `{ "unknown": true }`. Source closed, data open (CC BY 4.0).
-- **Folio** — on-device AI app (React Native/Expo, Android, native ExecuTorch engine module). Private, runs locally.
-- **Anvil** (repo anvilcode) — Rust terminal AI coding agent. Multi-provider (OpenAI, Anthropic, OpenRouter, Groq, Vertex, Bedrock), MCP support, restricted shell mode, prompt queue, anvil.yaml, ZSH plugin with cost in prompt. `anvil provider login`.
-- **WebProbe** — open-source Rust CLI (`npm i @knihalani/webprobe`). Launches crawlers that interact with every interactive element on a site to find errors a user would hit; load tests; handles auth via selectors; JSON report with network stats, load times, errors, per-page stats. Works with localhost / host:port / bare port.
-- Others: Nodely (TS, node-based), StudyShare (TS), testagent (TS), fluxscape fork (Noodl visual programming), vellum-assistant fork.
-- Languages: Rust, TypeScript. Themes: AI agents, observability, data, on-device AI, dev tooling.
-
-Copy: keep it short. Use the name "Kaiav Nihalani", a one-line tagline like "Student developer building tools for AI agents" and the project facts above. Where longer bio text would go, use a clearly short placeholder line (Kaiav will supply long copy later). Link projects to their GitHub URLs (github.com/KaiavN/<repo>; Eden Know data repo is github.com/KaiavN/eden-know-data).
+## Who he is (UPDATED — this replaces any earlier project list; use ONLY these facts)
+- Kaiav Nihalani (he/him). Founder.
+- **Eden** — he is the founder. Describe it ONLY as "Context for agents." No link, no other detail.
+- **J: Rising Founder** — he is co-founder (with Jose Cruz-Lopez). https://risingfounder.net. "An early chance for extraordinary founders." A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world. No fee, no equity.
+- Links: LinkedIn https://www.linkedin.com/in/kaiav-nihalani-594703356/ · X https://x.com/KaiavRNihalani · Email kaiav.nihalani@gmail.com
+- Do NOT mention or reference any other projects (no WebProbe, Anvil, Folio, Eden Know, Nodely, StudyShare, GitHub repos, Rust gears, phones-as-Folio, "8,299 facts", KPK8, etc.). Replace any such content with Eden / J or with neutral content.
+- Tagline suggestions: "Founder of Eden. Co-founder of J." / "Building context for agents."
 
 ## Goal
 The concept does NOT need to be about his projects. Creativity, wow-factor, interactivity and performance come first; his name + a light site skeleton is enough personalization. Each concept is the **hero / base** of his personal site, and it must be massively impressive: a real-time 3D or interactive piece that would make a visitor stop. Spend the effort on the centerpiece: smooth 60fps, shader craft, postprocessing, considered motion, interaction (mouse/touch/scroll/keys). Below or over the centerpiece, include a minimal site skeleton (name, tagline, project list or nav, contact) so it reads as a personal site. Each concept needs its OWN visual identity (palette, fonts from Google Fonts, layout). Avoid the cliches: no purple→blue gradient, no Inter/Space Grotesk, no cream+terracotta, no lone acid-green-on-black.
