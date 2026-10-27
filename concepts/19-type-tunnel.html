@@ -1,0 +1,717 @@
+<title>Type Tunnel</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --paper:#F1F1EE;
+  --ink:#0B0B0B;
+  --red:#FF2A12;
+  --ink-soft:rgba(11,11,11,.62);
+  --paper-soft:rgba(241,241,238,.68);
+  --rule:rgba(11,11,11,.18);
+  --display:"Anton","Impact","Arial Narrow Bold","Helvetica Neue",sans-serif;
+  --serif:"Instrument Serif","Times New Roman",Georgia,serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --gut:max(16px, env(safe-area-inset-left,0px));
+  --gut-r:max(16px, env(safe-area-inset-right,0px));
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--paper);color:var(--ink);font-family:var(--mono);-webkit-font-smoothing:antialiased;overscroll-behavior:none}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair;outline:none}
+#gl.hot{cursor:pointer}
+/* fallback when no webgl */
+.fallback{position:fixed;inset:0;display:none;align-items:center;justify-content:center;overflow:hidden;
+  background:repeating-radial-gradient(circle at 50% 50%, var(--paper) 0 26px, #e2e2de 26px 28px)}
+.fallback span{font-family:var(--display);font-size:clamp(64px,18vw,240px);line-height:.85;text-transform:uppercase;text-align:center}
+.no-gl .fallback{display:flex}
+.no-gl #gl{display:none}
+
+.hud{position:fixed;inset:0;pointer-events:none;padding:max(14px,env(safe-area-inset-top,0px)) var(--gut-r) max(14px,env(safe-area-inset-bottom,0px)) var(--gut);
+  display:grid;grid-template-columns:1fr auto;grid-template-rows:auto 1fr auto;gap:12px}
+.hud a,.hud button{pointer-events:auto}
+.brand{grid-column:1;grid-row:1;max-width:min(520px,70vw)}
+.brand h1{display:inline-block;background:var(--paper);padding:2px 6px 0;margin:0 0 0 -6px;font-family:var(--display);font-weight:400;font-size:clamp(26px,3.2vw,40px);line-height:.92;letter-spacing:.005em;text-transform:uppercase}
+.brand h1 b{color:var(--red);font-weight:400}
+.brand p{margin:6px 0 0;font-family:var(--serif);font-style:italic;font-size:clamp(17px,1.6vw,21px);line-height:1.15;color:var(--ink)}
+.brand p span{background:var(--paper);box-decoration-break:clone;-webkit-box-decoration-break:clone;padding:0 4px;margin-left:-4px}
+nav.index{grid-column:2;grid-row:1;justify-self:end}
+nav.index ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;align-items:flex-end}
+nav.index button{all:unset;cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  padding:5px 8px;background:var(--paper);color:var(--ink);display:flex;gap:10px;align-items:center;transition:background .2s,color .2s}
+nav.index button i{font-style:normal;color:var(--ink-soft)}
+nav.index button[aria-current="true"]{background:var(--ink);color:var(--paper)}
+nav.index button[aria-current="true"] i{color:var(--red)}
+nav.index button:hover{background:var(--red);color:var(--paper)}
+nav.index button:hover i{color:var(--paper)}
+.bl{grid-column:1;grid-row:3;align-self:end;display:flex;align-items:flex-end;gap:14px}
+.num{background:var(--paper);padding:6px 6px 0;margin-left:-6px;font-family:var(--display);font-size:clamp(64px,9vw,128px);line-height:.78;color:var(--ink);font-variant-numeric:tabular-nums;will-change:transform}
+.meta{background:var(--paper);padding:6px 8px;display:flex;flex-direction:column;gap:6px;padding-bottom:2px;min-width:0}
+.meta .sec{font-family:var(--display);font-size:clamp(20px,2.2vw,28px);line-height:1;text-transform:uppercase;white-space:nowrap}
+.meta .vel{font-size:11px;letter-spacing:.08em;color:var(--ink-soft);display:flex;align-items:center;gap:8px}
+.bar{width:120px;height:3px;background:var(--rule);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--red);transform-origin:0 50%;transform:scaleX(0)}
+.br{grid-column:2;grid-row:3;align-self:end;justify-self:end;text-align:right;font-size:11px;letter-spacing:.08em;text-transform:uppercase;line-height:1.7;color:var(--ink)}
+.br span{background:var(--paper);padding:2px 6px}
+.br kbd{font-family:var(--mono);color:var(--red)}
+.loading{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);pointer-events:none;transition:opacity .6s}
+.ready .loading{opacity:0}
+.cross{position:fixed;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;pointer-events:none;opacity:.5}
+.cross:before,.cross:after{content:"";position:absolute;background:var(--ink)}
+.cross:before{left:6px;top:0;width:2px;height:14px}.cross:after{top:6px;left:0;height:2px;width:14px}
+.tip{position:fixed;left:0;top:0;pointer-events:none;font-size:11px;letter-spacing:.1em;text-transform:uppercase;background:var(--red);color:var(--paper);
+  padding:5px 8px;opacity:0;transition:opacity .15s;will-change:transform;white-space:nowrap}
+.tip.on{opacity:1}
+
+/* overlay */
+.panel{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--ink);color:var(--paper);z-index:5;
+  transform:translateX(102%);transition:transform .7s cubic-bezier(.7,0,.2,1);overflow-y:auto;overscroll-behavior:contain;
+  padding:max(18px,env(safe-area-inset-top,0px)) var(--gut-r) 40px max(24px,env(safe-area-inset-left,0px));visibility:hidden}
+.panel.open{transform:none;visibility:visible}
+.panel .top{display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--paper-soft)}
+.panel .close{all:unset;cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--paper);padding:8px 10px;border:1px solid var(--paper-soft)}
+.panel .close:hover{background:var(--red);border-color:var(--red)}
+.panel h2{font-family:var(--display);font-weight:400;font-size:clamp(64px,15vw,150px);line-height:.84;margin:28px 0 18px;text-transform:uppercase;letter-spacing:-.005em;overflow-wrap:anywhere}
+.panel h2 em{font-style:normal;color:var(--red)}
+.panel .lede{font-family:var(--serif);font-style:italic;font-size:clamp(26px,4vw,36px);line-height:1.08;margin:0 0 22px}
+.panel p{font-family:var(--mono);font-size:13px;line-height:1.65;color:var(--paper-soft);margin:0 0 14px;max-width:46ch}
+.panel dl{margin:26px 0;border-top:1px solid rgba(241,241,238,.2)}
+.panel dl div{display:grid;grid-template-columns:120px 1fr;gap:12px;padding:10px 0;border-bottom:1px solid rgba(241,241,238,.2);font-size:12px;line-height:1.5}
+.panel dt{color:var(--paper-soft);text-transform:uppercase;letter-spacing:.08em;font-size:11px}
+.panel dd{margin:0}
+.panel .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.panel .links a,.panel .copy{all:unset;cursor:pointer;font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:10px 14px;background:var(--paper);color:var(--ink)}
+.panel .links a:hover,.panel .copy:hover{background:var(--red);color:var(--paper)}
+.email{font-family:var(--mono);font-size:clamp(15px,2.4vw,18px);user-select:all;-webkit-user-select:all;color:var(--paper);display:block;margin:6px 0 10px;overflow-wrap:anywhere}
+.copied{color:var(--red);font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-left:10px}
+:focus-visible{outline:2px solid var(--red)!important;outline-offset:3px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+@media (max-width:720px){
+  .hud{grid-template-columns:1fr;grid-template-rows:auto 1fr auto auto}
+  .brand{max-width:100%}
+  nav.index{grid-column:1;grid-row:4;justify-self:stretch;max-width:100%;overflow-x:auto;scrollbar-width:none}
+  nav.index::-webkit-scrollbar{display:none}
+  nav.index ol{flex-direction:row;align-items:stretch;width:max-content}
+  nav.index button{padding:9px 10px}
+  .bl{grid-row:3}
+  .br{display:none}
+  .bar{width:80px}
+}
+@media (prefers-reduced-motion:reduce){
+  .panel{transition:none}
+}
+</style>
+
+<canvas id="gl" aria-label="An infinite tunnel of kinetic typography. Scroll or drag to fly through it; click a word to open its section." role="img" tabindex="-1"></canvas>
+<div class="fallback" aria-hidden="true"><span>Kaiav<br>Nihalani</span></div>
+<div class="loading" aria-hidden="true">setting type&hellip;</div>
+<div class="cross" aria-hidden="true"></div>
+<div class="tip" aria-hidden="true"></div>
+
+<div class="hud">
+  <header class="brand">
+    <h1>Kaiav <b>Nihalani</b></h1>
+    <p><span>Founder of Eden. Co-founder of J.</span></p>
+  </header>
+  <nav class="index" aria-label="Sections">
+    <ol id="navlist"></ol>
+  </nav>
+  <div class="bl" aria-live="polite">
+    <div class="num" id="num">01</div>
+    <div class="meta">
+      <div class="sec" id="secname">Index</div>
+      <div class="vel"><span id="vel">VEL 00.0</span><span class="bar"><i id="velbar"></i></span></div>
+    </div>
+  </div>
+  <div class="br" aria-hidden="true">
+    <span><kbd>Scroll</kbd> / drag to fly</span><br>
+    <span>Move to bend the tunnel</span><br>
+    <span><kbd>Click</kbd> any word</span>
+  </div>
+</div>
+
+<aside class="panel" id="panel" role="dialog" aria-modal="false" aria-labelledby="ptitle" aria-hidden="true">
+  <div class="top"><span id="pkick">01 / 04</span><button class="close" id="pclose" type="button">Close &times;</button></div>
+  <div id="pbody"></div>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+const docEl = document.documentElement;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const mobile = matchMedia('(pointer:coarse)').matches || innerWidth < 720;
+const EMAIL = 'kaiav.nihalani@gmail.com';
+
+/* ---------- content ---------- */
+// word: [text, font a=Anton s=serif-italic m=mono, red?]
+const SECTIONS = [
+  { name:'Index', gate:['KAIAV','NIHALANI'],
+    words:[['KAIAV NIHALANI','a',1],['founder','s'],['FOUNDER OF EDEN','a'],['co-founder of J','s'],['CONTEXT FOR AGENTS','a'],['KAIAV','a'],['building context for agents','s'],['NIHALANI','a'],['FOUNDER','a'],['he / him','m'],['EDEN','a',1],['RISING FOUNDER','a']],
+    panel(){ return `<h2 id="ptitle">Kaiav <em>Nihalani</em></h2>
+      <p class="lede">Founder of Eden. Co-founder of J.</p>
+      <p>Building context for agents.</p>
+      <p>Longer bio coming soon.</p>
+      <dl><div><dt>Founder</dt><dd>Eden &mdash; Context for agents.</dd></div><div><dt>Co-founder</dt><dd>J: Rising Founder</dd></div></dl>
+      <div class="links"><a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn &nearr;</a><a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X &nearr;</a></div>`; } },
+  { name:'Eden', gate:['EDEN'],
+    words:[['EDEN','a',1],['context for agents.','s'],['CONTEXT','a'],['FOR AGENTS','a'],['CONTEXT FOR AGENTS','a'],['founder','s'],['EDEN','a'],['AGENTS','a'],['context.','s'],['FOUNDER','a']],
+    panel(){ return `<h2 id="ptitle">Eden</h2>
+      <p class="lede">Context for agents.</p>
+      <dl><div><dt>Role</dt><dd>Founder</dd></div></dl>`; } },
+  { name:'J', gate:['J'],
+    words:[['J','a',1],['RISING FOUNDER','a',1],['an early chance for extraordinary founders','s'],['FREE','a'],['REMOTE','a'],['THREE MONTHS','a'],['NO FEE','a'],['NO EQUITY','a'],['23 AND UNDER','a'],['anywhere in the world','s'],['risingfounder.net','m'],['CO-FOUNDER','a'],['ambitious founders','s'],['J: RISING FOUNDER','a']],
+    panel(){ return `<h2 id="ptitle"><em>J</em>: Rising Founder</h2>
+      <p class="lede">An early chance for extraordinary founders.</p>
+      <p>A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world. No fee, no equity.</p>
+      <dl><div><dt>Role</dt><dd>Co-founder, with Jose Cruz-Lopez</dd></div><div><dt>Format</dt><dd>Free &middot; remote &middot; three months</dd></div><div><dt>Who</dt><dd>Founders aged 23 and under, anywhere</dd></div><div><dt>Terms</dt><dd>No fee, no equity</dd></div></dl>
+      <div class="links"><a href="https://risingfounder.net" target="_blank" rel="noopener">risingfounder.net &nearr;</a></div>`; } },
+  { name:'Contact', gate:['SAY HELLO'],
+    words:[['SAY HELLO','a',1],['kaiav.nihalani@gmail.com','m'],['LINKEDIN','a'],['x.com/KaiavRNihalani','m'],['write in.','s'],['CONTACT','a'],['EMAIL','a'],['say hello','s']],
+    panel(){ return `<h2 id="ptitle">Say <em>hello</em></h2>
+      <p class="lede">The quickest way is email.</p>
+      <span class="email" id="email">${EMAIL}</span>
+      <button class="copy" id="copy" type="button">Copy email</button><span class="copied" id="copied" aria-live="polite"></span>
+      <div class="links"><a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn &nearr;</a><a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X &nearr;</a></div>`; } }
+];
+const NZ = SECTIONS.length;
+const pad2 = n => (n < 9 ? '0' : '') + (n + 1);
+
+/* ---------- DOM: nav + panel ---------- */
+const navlist = document.getElementById('navlist');
+const navBtns = SECTIONS.map((s, i) => {
+  const li = document.createElement('li');
+  const b = document.createElement('button');
+  b.type = 'button'; b.innerHTML = `<i>${pad2(i)}</i>${s.name}`;
+  b.addEventListener('click', () => { flyTo(i); openPanel(i); });
+  li.appendChild(b); navlist.appendChild(li); return b;
+});
+const panel = document.getElementById('panel'), pbody = document.getElementById('pbody'), pkick = document.getElementById('pkick');
+let panelOpen = false, lastFocus = null;
+function openPanel(i){
+  pbody.innerHTML = SECTIONS[i].panel();
+  pkick.textContent = pad2(i) + ' / ' + pad2(NZ - 1) + ' — ' + SECTIONS[i].name;
+  panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false'); panelOpen = true;
+  const c = document.getElementById('copy');
+  if (c) c.addEventListener('click', () => {
+    const out = document.getElementById('copied');
+    try {
+      navigator.clipboard.writeText(EMAIL).then(() => { out.textContent = 'Copied'; })
+        .catch(() => { selectEmail(); out.textContent = 'Press Ctrl/Cmd+C'; });
+    } catch (e) { selectEmail(); out.textContent = 'Press Ctrl/Cmd+C'; }
+  });
+  lastFocus = document.activeElement;
+  document.getElementById('pclose').focus({ preventScroll:true });
+}
+function selectEmail(){ const r = document.createRange(); r.selectNodeContents(document.getElementById('email')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+function closePanel(){
+  if (!panelOpen) return;
+  panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); panelOpen = false;
+  if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll:true });
+}
+document.getElementById('pclose').addEventListener('click', closePanel);
+
+/* ---------- HUD refs ---------- */
+const numEl = document.getElementById('num'), secEl = document.getElementById('secname'), velEl = document.getElementById('vel'), velBar = document.getElementById('velbar');
+const tip = document.querySelector('.tip');
+function setZoneHUD(z){
+  numEl.textContent = pad2(z); secEl.textContent = SECTIONS[z].name;
+  navBtns.forEach((b, i) => b.setAttribute('aria-current', i === z ? 'true' : 'false'));
+}
+setZoneHUD(0);
+
+/* ---------- motion state (works even before GL) ---------- */
+const Z = 96, L = Z * NZ, R = 5.4, P = 1.28, HW = 1.42, FAR = 92;
+let camS = -6, vel = 0, flyTarget = null, lastInput = -1e9;
+function flyTo(i){
+  // nearest forward occurrence of section i's gate, just before it
+  const base = i * Z + 2;
+  let t = base + Math.floor((camS - base) / L) * L;
+  while (t < camS + 4) t += L;
+  flyTarget = t;
+}
+
+/* ---------- WebGL setup ---------- */
+const canvas = document.getElementById('gl');
+let renderer;
+try {
+  if (!window.THREE) throw new Error('three missing');
+  renderer = new THREE.WebGLRenderer({ canvas, antialias:false, alpha:false, powerPreference:'high-performance', stencil:false });
+} catch (e) {
+  docEl.classList.add('no-gl'); document.body.classList.add('ready');
+  wireNonGL(); return;
+}
+function wireNonGL(){
+  addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+}
+
+const isGL2 = renderer.capabilities.isWebGL2;
+let DPR_MAX = mobile ? 1.5 : 2;
+let dpr = Math.min(devicePixelRatio || 1, DPR_MAX);
+renderer.setPixelRatio(1);
+const PAPER = new THREE.Color('#F1F1EE'), INK = new THREE.Color('#0B0B0B'), RED = new THREE.Color('#FF2A12');
+renderer.setClearColor(PAPER, 1);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.08, 220);
+const scene = new THREE.Scene(), pickScene = new THREE.Scene();
+let W = innerWidth, H = innerHeight;
+let rt = new THREE.WebGLRenderTarget(4, 4, { depthBuffer:false, stencilBuffer:false });
+const pickRT = new THREE.WebGLRenderTarget(1, 1);
+const pickBuf = new Uint8Array(4);
+
+const postMat = new THREE.ShaderMaterial({
+  uniforms:{ tDiff:{ value:rt.texture }, uCenter:{ value:new THREE.Vector2(.5,.5) }, uAmt:{ value:0 }, uTime:{ value:0 }, uRes:{ value:new THREE.Vector2(1,1) }, uGrain:{ value:reduce ? .02 : .045 } },
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }`,
+  fragmentShader:`
+    precision highp float;
+    uniform sampler2D tDiff; uniform vec2 uCenter; uniform float uAmt; uniform float uTime; uniform vec2 uRes; uniform float uGrain;
+    varying vec2 vUv;
+    float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+    void main(){
+      vec2 dir = vUv - uCenter;
+      vec3 c = texture2D(tDiff, vUv).rgb;
+      if(uAmt > 0.002){
+        float j = hash(vUv*uRes + uTime) ;
+        vec3 acc = c; float ws = 1.0;
+        for(int i=1;i<10;i++){
+          float t = (float(i)+j)/9.0;
+          float w = 1.0 - t*0.55;
+          acc += texture2D(tDiff, vUv - dir*t*uAmt).rgb * w; ws += w;
+        }
+        c = acc/ws;
+      }
+      float r = length(dir*vec2(uRes.x/uRes.y,1.0));
+      c *= 1.0 - smoothstep(0.55, 1.35, r)*0.18;
+      c += (hash(vUv*uRes + fract(uTime*7.0)*91.0) - 0.5) * uGrain;
+      gl_FragColor = vec4(c, 1.0);
+    }`,
+  depthTest:false, depthWrite:false
+});
+const postScene = new THREE.Scene();
+const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat);
+postQuad.frustumCulled = false; postScene.add(postQuad);
+
+function resize(){
+  W = innerWidth; H = innerHeight;
+  renderer.setSize(Math.round(W * dpr), Math.round(H * dpr), false);
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  rt.setSize(Math.round(W * dpr), Math.round(H * dpr));
+  postMat.uniforms.uRes.value.set(W * dpr, H * dpr);
+  camera.aspect = W / H; camera.updateProjectionMatrix();
+}
+resize();
+addEventListener('resize', resize);
+
+/* ---------- SDF atlas ---------- */
+const CELL = 104, PADX = 16, RAD = 13, ATLAS_W = 2048;
+const FONTS = {
+  a: (px) => `400 ${px}px Anton, Impact, "Arial Narrow Bold", sans-serif`,
+  s: (px) => `italic 400 ${px}px "Instrument Serif", "Times New Roman", Georgia, serif`,
+  m: (px) => `700 ${px}px "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace`
+};
+const FONT_PX = { a:78, s:80, m:54 };
+const INK_MAX = CELL - 2 * RAD - 6;
+
+function edt1d(grid, offset, stride, length, f, v, z){
+  v[0] = 0; z[0] = -1e20; z[1] = 1e20; f[0] = grid[offset];
+  for (let q = 1, k = 0, s = 0; q < length; q++){
+    f[q] = grid[offset + q * stride];
+    const q2 = q * q;
+    do { const r = v[k]; s = (f[q] - f[r] + q2 - r * r) / (q - r) / 2; } while (s <= z[k] && --k > -1);
+    k++; v[k] = q; z[k] = s; z[k + 1] = 1e20;
+  }
+  for (let q = 0, k = 0; q < length; q++){
+    while (z[k + 1] < q) k++;
+    const r = v[k], qr = q - r;
+    grid[offset + q * stride] = f[r] + qr * qr;
+  }
+}
+function edt(data, w, h, f, v, z){
+  for (let x = 0; x < w; x++) edt1d(data, x, w, h, f, v, z);
+  for (let y = 0; y < h; y++) edt1d(data, y * w, 1, w, f, v, z);
+}
+
+function buildAtlas(){
+  // collect unique strings
+  const keys = new Map();
+  const add = (t, f) => { const k = f + '|' + t; if (!keys.has(k)) keys.set(k, { t, f }); return k; };
+  SECTIONS.forEach(s => { s.words.forEach(w => { w.key = add(w[0], w[1]); }); s.gateKeys = s.gate.map(g => add(g, 'a')); });
+  const cv = document.createElement('canvas'); const ctx = cv.getContext('2d', { willReadFrequently:true });
+  // measure + layout (shelf packing)
+  const items = [];
+  let x = 0, y = 0;
+  ctx.font = FONTS.a(78);
+  for (const [k, it] of keys){
+    let px = FONT_PX[it.f];
+    ctx.font = FONTS[it.f](px);
+    let m = ctx.measureText(it.t);
+    let asc = m.actualBoundingBoxAscent || px * .75, desc = m.actualBoundingBoxDescent || px * .2;
+    const inkH = asc + desc;
+    if (inkH > INK_MAX){ px = Math.floor(px * INK_MAX / inkH); ctx.font = FONTS[it.f](px); m = ctx.measureText(it.t); asc = m.actualBoundingBoxAscent || px * .75; desc = m.actualBoundingBoxDescent || px * .2; }
+    let tw = Math.ceil(m.width);
+    let w = Math.min(ATLAS_W, tw + PADX * 2);
+    if (x + w > ATLAS_W){ x = 0; y += CELL; }
+    items.push({ k, it, px, asc, desc, x, y, w, tw });
+    x += w;
+  }
+  const AH = Math.max(256, Math.pow(2, Math.ceil(Math.log2(y + CELL))));
+  cv.width = ATLAS_W; cv.height = AH;
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, ATLAS_W, AH);
+  ctx.fillStyle = '#fff'; ctx.textBaseline = 'alphabetic';
+  for (const o of items){
+    ctx.font = FONTS[o.it.f](o.px);
+    const base = o.y + CELL / 2 + (o.asc - o.desc) / 2;
+    ctx.fillText(o.it.t, o.x + PADX, base, o.w - PADX * 2);
+  }
+  const img = ctx.getImageData(0, 0, ATLAS_W, AH).data;
+  const out = new Uint8Array(ATLAS_W * AH);
+  const maxW = ATLAS_W, n = maxW * CELL;
+  const outer = new Float64Array(n), inner = new Float64Array(n);
+  const f = new Float64Array(maxW), v = new Uint16Array(maxW), zz = new Float64Array(maxW + 1);
+  const rects = new Map();
+  return { items, img, out, outer, inner, f, v, zz, rects, AH, i:0 };
+}
+function atlasStep(st, budgetMs){
+  const t0 = performance.now();
+  const { items, img, out, outer, inner, f, v, zz, rects, AH } = st;
+  while (st.i < items.length){
+    const o = items[st.i++];
+    const w = o.w, h = CELL;
+    for (let yy = 0; yy < h; yy++){
+      for (let xx = 0; xx < w; xx++){
+        const a = img[((o.y + yy) * ATLAS_W + o.x + xx) * 4] / 255;
+        const j = yy * w + xx;
+        if (a >= 1){ outer[j] = 0; inner[j] = 1e20; }
+        else if (a <= 0){ outer[j] = 1e20; inner[j] = 0; }
+        else { const d = 0.5 - a; outer[j] = d > 0 ? d * d : 0; inner[j] = d < 0 ? d * d : 0; }
+      }
+    }
+    edt(outer, w, h, f, v, zz); edt(inner, w, h, f, v, zz);
+    for (let yy = 0; yy < h; yy++){
+      for (let xx = 0; xx < w; xx++){
+        const j = yy * w + xx;
+        const d = Math.sqrt(outer[j]) - Math.sqrt(inner[j]);
+        let val = 0.5 - d / (2 * RAD);
+        out[(o.y + yy) * ATLAS_W + o.x + xx] = Math.max(0, Math.min(255, Math.round(val * 255)));
+      }
+    }
+    rects.set(o.k, { u0:o.x / ATLAS_W, v0:o.y / AH, u1:(o.x + w) / ATLAS_W, v1:(o.y + h) / AH, aspect:w / h, inkFrac:(o.asc + o.desc) / h });
+    if (performance.now() - t0 > budgetMs) return false;
+  }
+  return true;
+}
+
+/* ---------- instances ---------- */
+let mesh, pickMesh, uniforms, idZone, idText;
+function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+function buildInstances(st){
+  const tex = new THREE.DataTexture(st.out, ATLAS_W, st.AH, isGL2 ? THREE.RedFormat : THREE.LuminanceFormat, THREE.UnsignedByteType);
+  tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = true; tex.flipY = false; tex.unpackAlignment = 1;
+  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  tex.needsUpdate = true;
+  const rects = st.rects;
+  const A = [], B = [], C = [], D = [];
+  idZone = []; idText = [];
+  const rand = rng(7);
+  const push = (r, a, c, d, zone, txt) => { A.push(...a); B.push(r.u0, r.v0, r.u1, r.v1); C.push(...c); D.push(...d); idZone.push(zone); idText.push(txt); return idZone.length - 1; };
+  for (let zi = 0; zi < NZ; zi++){
+    const sec = SECTIONS[zi], z0 = zi * Z;
+    const spin = (zi % 2 ? -1 : 1) * (reduce ? 0 : 0.07);
+    // gate (flat, facing camera)
+    const gk = sec.gateKeys;
+    const gH = gk.length > 1 ? 3.6 : 5.6;
+    gk.forEach((k, gi) => {
+      const r = rects.get(k); let w = gH * r.aspect, h = gH;
+      const maxW = 9.6; if (w > maxW){ h *= maxW / w; w = maxW; }
+      const yy = gk.length > 1 ? (gi === 0 ? 1.05 : -1.25) * (gH / 3.6) : 0;
+      push(r, [0, z0 + 8 + gi * 0.6, w, h], [1, 2, yy, 0], [0, 0], zi, sec.gate[gi]);
+    });
+    // coil
+    let t = 0; const ang0 = rand() * Math.PI * 2;
+    const sStart = z0 + 1, sEnd = z0 + Z - 1;
+    let wi = Math.floor(rand() * sec.words.length);
+    for (let guard = 0; guard < 4000; guard++){
+      const wd = sec.words[wi % sec.words.length]; wi += 1 + (rand() < .25 ? 1 : 0);
+      const r = rects.get(wd.key);
+      const w = HW * r.aspect;
+      const s = sStart + (t / R) / (Math.PI * 2) * P;
+      if (s > sEnd) break;
+      let style = 0;
+      if (wd[2]) style = rand() < .5 ? 2 : 3;
+      else if (wd[1] === 'a' && rand() < .34) style = 1;
+      push(r, [ang0 + t / R, s, w, HW], [0, style, P, 0], [spin, rand()], zi, wd[0]);
+      t += w + 0.35 + rand() * 0.5;
+    }
+    // floaters (small, mid-air)
+    const nf = mobile ? 7 : 12;
+    for (let k = 0; k < nf; k++){
+      const wd = sec.words[Math.floor(rand() * sec.words.length)];
+      const r = rects.get(wd.key);
+      const h = 0.34 + rand() * 0.34; let w = h * r.aspect;
+      const rr = 1.4 + rand() * 2.2, aa = rand() * Math.PI * 2;
+      push(r, [Math.cos(aa) * rr, z0 + 16 + rand() * (Z - 22), w, h], [1, rand() < .3 ? 1 : 0, Math.sin(aa) * rr, 0], [(rand() - .5) * (reduce ? 0 : .25), rand()], zi, wd[0]);
+    }
+  }
+  const N = idZone.length;
+  // ids
+  for (let i = 0; i < N; i++) C[i * 4 + 3] = i;
+  const base = new THREE.PlaneGeometry(1, 1, mobile ? 20 : 28, 1); base.translate(.5, .5, 0);
+  const g = new THREE.InstancedBufferGeometry();
+  g.index = base.index; g.setAttribute('position', base.getAttribute('position'));
+  g.setAttribute('aA', new THREE.InstancedBufferAttribute(new Float32Array(A), 4));
+  g.setAttribute('aB', new THREE.InstancedBufferAttribute(new Float32Array(B), 4));
+  g.setAttribute('aC', new THREE.InstancedBufferAttribute(new Float32Array(C), 4));
+  g.setAttribute('aD', new THREE.InstancedBufferAttribute(new Float32Array(D), 2));
+  g.instanceCount = N;
+  uniforms = {
+    uAtlas:{ value:tex }, uCam:{ value:camS }, uL:{ value:L }, uR:{ value:R }, uFar:{ value:FAR }, uTime:{ value:0 },
+    uStretch:{ value:0 }, uBlur:{ value:0 }, uBend:{ value:new THREE.Vector2() }, uHover:{ value:-1 }, uHoverT:{ value:0 },
+    uInk:{ value:INK }, uPaper:{ value:PAPER }, uRed:{ value:RED }
+  };
+  const VS = `
+    attribute vec4 aA; attribute vec4 aB; attribute vec4 aC; attribute vec2 aD;
+    uniform float uCam, uL, uR, uFar, uTime, uStretch, uHover, uHoverT; uniform vec2 uBend;
+    varying vec2 vUv; varying float vFog; varying float vNear; varying float vStyle; varying float vHov; varying float vId;
+    void main(){
+      vec2 uv = position.xy;
+      float mode = aC.x;
+      float d0 = mod(aA.y - uCam, uL);
+      if(d0 > uL - 24.0) d0 -= uL;
+      vId = aC.w; vStyle = aC.y;
+      float hov = step(abs(aC.w - uHover), 0.5) * uHoverT; vHov = hov;
+      if(d0 > uFar || d0 < -22.0){ gl_Position = vec4(2.0,2.0,2.0,1.0); vUv=vec2(0.); vFog=1.; vNear=0.; return; }
+      vec2 xy; float depth;
+      if(mode < 0.5){
+        float da = uv.x * aA.z / uR;
+        float a = aA.x + da + uTime * aD.x;
+        float hh = aA.w * (1.0 + uStretch);
+        depth = d0 + da / 6.2831853 * aC.z + uv.y * hh;
+        float rr = uR - hov * 0.35;
+        xy = vec2(cos(a), sin(a)) * rr;
+      } else {
+        float ca = cos(uTime*aD.x), sa = sin(uTime*aD.x);
+        vec2 c = vec2(aA.x, aC.z); c = vec2(ca*c.x - sa*c.y, sa*c.x + ca*c.y);
+        float sc = 1.0 + hov * 0.12;
+        xy = c + vec2((uv.x - 0.5) * aA.z, (uv.y - 0.5) * aA.w) * sc;
+        depth = d0 - uv.y * uStretch * 0.6;
+      }
+      xy += uBend * depth * depth * 0.0026;
+      gl_Position = projectionMatrix * viewMatrix * vec4(xy, -depth, 1.0);
+      vUv = vec2(mix(aB.x, aB.z, uv.x), mix(aB.w, aB.y, uv.y));
+      vFog = smoothstep(uFar * 0.22, uFar, depth);
+      vNear = mode < 0.5 ? smoothstep(0.0, 2.2, depth) : smoothstep(0.6, 9.0, depth);
+    }`;
+  const FS = `
+    #ifdef GL_OES_standard_derivatives
+    #extension GL_OES_standard_derivatives : enable
+    #endif
+    precision highp float;
+    uniform sampler2D uAtlas; uniform vec3 uInk, uPaper, uRed; uniform float uBlur;
+    varying vec2 vUv; varying float vFog; varying float vNear; varying float vStyle; varying float vHov; varying float vId;
+    void main(){
+      float d = texture2D(uAtlas, vUv).r;
+      float w = max(fwidth(d) * 0.75, 0.004) + uBlur * 0.09;
+      float fill = smoothstep(0.5 - w, 0.5 + w, d);
+      float ol = 1.0 - smoothstep(0.075 - w, 0.075 + w, abs(d - 0.5));
+      float isO = mod(vStyle, 2.0);
+      float cov = mix(fill, ol, isO * (1.0 - vHov));
+      vec3 col = (vStyle > 1.5 || vHov > 0.5) ? uRed : uInk;
+      col = mix(col, uPaper, vFog * vFog);
+      float a = cov * vNear * (1.0 - vFog);
+      if(a < 0.003) discard;
+      gl_FragColor = vec4(col * a, a);
+    }`;
+  const FSP = `
+    #ifdef GL_OES_standard_derivatives
+    #extension GL_OES_standard_derivatives : enable
+    #endif
+    precision highp float;
+    uniform sampler2D uAtlas;
+    varying vec2 vUv; varying float vFog; varying float vNear; varying float vStyle; varying float vHov; varying float vId;
+    void main(){
+      float d = texture2D(uAtlas, vUv).r;
+      if(d < 0.38 || vFog > 0.7 || vNear < 0.4) discard;
+      float id = vId + 1.0;
+      gl_FragColor = vec4(mod(id, 256.0) / 255.0, floor(id / 256.0) / 255.0, 0.0, 1.0);
+    }`;
+  const mat = new THREE.ShaderMaterial({ uniforms, vertexShader:VS, fragmentShader:FS, transparent:true, depthWrite:false, depthTest:false, premultipliedAlpha:true, extensions:{ derivatives:true } });
+  mat.blending = THREE.CustomBlending; mat.blendSrc = THREE.OneFactor; mat.blendDst = THREE.OneMinusSrcAlphaFactor; mat.blendEquation = THREE.AddEquation;
+  const pmat = new THREE.ShaderMaterial({ uniforms, vertexShader:VS, fragmentShader:FSP, depthTest:true, depthWrite:true, extensions:{ derivatives:true } });
+  mesh = new THREE.Mesh(g, mat); mesh.frustumCulled = false; scene.add(mesh);
+  pickMesh = new THREE.Mesh(g, pmat); pickMesh.frustumCulled = false; pickScene.add(pickMesh);
+}
+
+/* ---------- input ---------- */
+const ptr = { x:0, y:0, nx:0, ny:0, inside:false, down:false, sx:0, sy:0, ly:0, t0:0, moved:0, type:'mouse', dirty:false };
+const bend = new THREE.Vector2(), bendT = new THREE.Vector2();
+let hoverId = -1, hoverT = 0;
+canvas.addEventListener('pointermove', e => {
+  ptr.x = e.clientX; ptr.y = e.clientY; ptr.type = e.pointerType; ptr.inside = true; ptr.dirty = true;
+  ptr.nx = e.clientX / W * 2 - 1; ptr.ny = -(e.clientY / H * 2 - 1);
+  lastInput = performance.now();
+  if (ptr.down){
+    const dy = e.clientY - ptr.ly; ptr.ly = e.clientY;
+    ptr.moved += Math.abs(e.clientX - ptr.sx) + Math.abs(dy);
+    vel += -dy * (ptr.type === 'touch' ? 0.22 : 0.12);
+    flyTarget = null;
+  }
+});
+canvas.addEventListener('pointerdown', e => {
+  ptr.down = true; ptr.sx = e.clientX; ptr.sy = e.clientY; ptr.ly = e.clientY; ptr.t0 = performance.now(); ptr.moved = 0;
+  ptr.x = e.clientX; ptr.y = e.clientY; ptr.nx = e.clientX / W * 2 - 1; ptr.ny = -(e.clientY / H * 2 - 1); ptr.type = e.pointerType;
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+});
+canvas.addEventListener('pointerup', e => {
+  ptr.down = false;
+  const tap = ptr.moved < 10 && performance.now() - ptr.t0 < 450;
+  if (tap && mesh){
+    const id = pick(e.clientX, e.clientY);
+    if (id >= 0){ openPanel(idZone[id]); }
+    else if (panelOpen) closePanel();
+  }
+  if (ptr.type !== 'mouse') ptr.inside = false;
+});
+canvas.addEventListener('pointerleave', () => { if (ptr.type === 'mouse') ptr.inside = false; });
+canvas.addEventListener('pointercancel', () => { ptr.down = false; });
+addEventListener('wheel', e => {
+  if (e.target.closest && e.target.closest('.panel')) return;
+  e.preventDefault();
+  let d = e.deltaY; if (e.deltaMode === 1) d *= 32; else if (e.deltaMode === 2) d *= H;
+  vel += Math.max(-180, Math.min(180, d)) * 0.045;
+  flyTarget = null; lastInput = performance.now();
+}, { passive:false });
+addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ closePanel(); return; }
+  if (panelOpen && panel.contains(document.activeElement)) return;
+  const k = e.key;
+  if (k === 'ArrowDown' || k === 'PageDown' || (k === ' ' && document.activeElement === document.body)){ vel += 9; flyTarget = null; e.preventDefault(); }
+  else if (k === 'ArrowUp' || k === 'PageUp'){ vel -= 9; flyTarget = null; e.preventDefault(); }
+  lastInput = performance.now();
+});
+
+function pick(cx, cy){
+  if (!pickMesh) return -1;
+  const oc = renderer.getClearAlpha();
+  camera.setViewOffset(W, H, cx | 0, cy | 0, 1, 1);
+  renderer.setClearColor(0x000000, 0);
+  renderer.setRenderTarget(pickRT); renderer.clear(); renderer.render(pickScene, camera);
+  renderer.readRenderTargetPixels(pickRT, 0, 0, 1, 1, pickBuf);
+  renderer.setRenderTarget(null); renderer.setClearColor(PAPER, oc);
+  camera.clearViewOffset();
+  const id = pickBuf[0] + pickBuf[1] * 256 - 1;
+  return id;
+}
+
+/* ---------- loop ---------- */
+let running = false, visible = true, onscreen = true, raf = 0, last = 0, frame = 0, curZone = -1;
+let ftAcc = 0, ftN = 0, adapted = 0;
+const v3 = new THREE.Vector3();
+function tick(now){
+  raf = requestAnimationFrame(tick);
+  let dt = (now - last) / 1000; last = now;
+  if (!(dt > 0) || dt > 0.1) dt = 1 / 60;
+  frame++;
+  // adaptive quality
+  if (frame > 20 && frame <= 110 && adapted < 2){
+    ftAcc += dt; ftN++;
+    if (ftN === 60){
+      const avg = ftAcc / ftN; ftAcc = 0; ftN = 0;
+      if (avg > 1 / 42 && dpr > 0.8){ dpr = Math.max(0.75, dpr * 0.72); resize(); adapted++; frame = 21; }
+    }
+  }
+  // motion
+  const t = now / 1000;
+  const idle = now - lastInput > 2600;
+  if (flyTarget !== null){
+    const d = flyTarget - camS;
+    const want = Math.max(-90, Math.min(90, d * 2.4));
+    vel += (want - vel) * Math.min(1, dt * 6);
+    if (Math.abs(d) < 0.4){ flyTarget = null; }
+  } else {
+    const cruise = reduce ? 0 : (panelOpen ? 0.6 : 2.4);
+    vel += (cruise - vel) * (1 - Math.exp(-dt * (reduce ? 4 : 1.6)));
+  }
+  vel = Math.max(-120, Math.min(120, vel));
+  camS += vel * dt;
+  // bend
+  if (ptr.inside && !idle){ bendT.set(ptr.nx * 1.15, ptr.ny * 0.9); }
+  else if (!reduce){ bendT.set(Math.sin(t * .27) * .7, Math.cos(t * .19) * .45); }
+  else bendT.set(0, 0);
+  bend.lerp(bendT, 1 - Math.exp(-dt * 2.4));
+  const sp = Math.abs(vel);
+  const fx = reduce ? 0 : Math.min(sp / 55, 1);
+  camera.fov = 70 + fx * 16;
+  camera.rotation.set(bend.y * 0.06, -bend.x * 0.07, -bend.x * 0.12 + (reduce ? 0 : Math.sin(t * .4) * .02), 'YXZ');
+  camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+  if (uniforms){
+    uniforms.uCam.value = camS; uniforms.uTime.value = t;
+    uniforms.uStretch.value = reduce ? 0 : fx * 1.6;
+    uniforms.uBlur.value = reduce ? 0 : fx * fx;
+    uniforms.uBend.value.copy(bend);
+    // hover picking (mouse only), throttled
+    if (ptr.type === 'mouse' && ptr.inside && !ptr.down && (ptr.dirty ? frame % 2 === 0 : frame % 8 === 0)){
+      ptr.dirty = false;
+      const id = pick(ptr.x, ptr.y);
+      if (id !== hoverId){
+        hoverId = id;
+        if (id >= 0){ uniforms.uHover.value = id; tip.textContent = 'Open → ' + SECTIONS[idZone[id]].name; tip.classList.add('on'); canvas.classList.add('hot'); }
+        else { tip.classList.remove('on'); canvas.classList.remove('hot'); }
+      }
+    } else if (!ptr.inside && hoverId !== -1){ hoverId = -1; tip.classList.remove('on'); canvas.classList.remove('hot'); }
+    hoverT += ((hoverId >= 0 ? 1 : 0) - hoverT) * Math.min(1, dt * 14);
+    uniforms.uHoverT.value = hoverT;
+    if (hoverId >= 0) tip.style.transform = `translate(${ptr.x + 16}px,${ptr.y + 14}px)`;
+  }
+  // zone HUD
+  const zp = ((camS + 20) % L + L) % L;
+  const zone = Math.floor(zp / Z) % NZ;
+  if (zone !== curZone){ curZone = zone; setZoneHUD(zone); }
+  if (frame % 4 === 0){
+    velEl.textContent = 'VEL ' + (vel < 0 ? '-' : '') + (sp < 10 ? '0' : '') + sp.toFixed(1);
+    velBar.style.transform = `scaleX(${Math.min(1, sp / 60).toFixed(3)})`;
+  }
+  // post: vanishing point
+  v3.set(bend.x * 9.36, bend.y * 9.36, -60).project(camera);
+  postMat.uniforms.uCenter.value.set(v3.x * .5 + .5, v3.y * .5 + .5);
+  postMat.uniforms.uAmt.value = reduce ? 0 : Math.min(0.16, fx * fx * 0.16);
+  postMat.uniforms.uTime.value = t;
+  if (!uniforms) return;
+  renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene, camera);
+  renderer.setRenderTarget(null); renderer.render(postScene, postCam);
+}
+function start(){ if (running || !visible || !onscreen) return; running = true; last = performance.now(); raf = requestAnimationFrame(tick); }
+function stop(){ running = false; cancelAnimationFrame(raf); }
+document.addEventListener('visibilitychange', () => { visible = !document.hidden; visible ? start() : stop(); });
+if ('IntersectionObserver' in window){
+  new IntersectionObserver(es => { onscreen = es[0].isIntersecting; onscreen ? start() : stop(); }).observe(canvas);
+}
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); stop(); docEl.classList.add('no-gl'); });
+
+/* ---------- boot: first paint, fonts, then atlas in slices ---------- */
+start();
+const fontsReady = (document.fonts && document.fonts.load) ? Promise.race([
+  Promise.all([document.fonts.load('78px Anton'), document.fonts.load('italic 80px "Instrument Serif"'), document.fonts.load('700 54px "JetBrains Mono"')]),
+  new Promise(r => setTimeout(r, 2500))
+]).catch(() => {}) : Promise.resolve();
+fontsReady.then(() => {
+  window.__t0 = performance.now();
+  const st = buildAtlas();
+  const step = () => {
+    if (atlasStep(st, 14)){
+      buildInstances(st);
+      window.__atlasMs = performance.now() - window.__t0;
+      document.body.classList.add('ready');
+    } else setTimeout(step, 0);
+  };
+  step();
+});
+})();
+</script>

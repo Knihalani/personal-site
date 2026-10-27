@@ -1,0 +1,561 @@
+<title>Sumi Current</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@500;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#ecebe6;
+  --paper:#efeee9;
+  --ink:#141519;
+  --ink-soft:#3a3c44;
+  --muted:#6a6c72;
+  --indigo:#1d2d5e;
+  --verm:#d92e1c;
+  --rule:rgba(20,21,25,.14);
+  --rule-strong:rgba(20,21,25,.32);
+  --focus:#d92e1c;
+  --display:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho","Times New Roman",serif;
+  --body:"Zen Kaku Gothic New","Hiragino Sans","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-radius:2px}
+.sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+#fluid{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0;touch-action:none;cursor:crosshair;
+  background:radial-gradient(120% 90% at 50% 45%,var(--paper),#e2e0d9)}
+@media (pointer:coarse){#fluid{touch-action:pan-y}}
+
+.wrap{padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));max-width:1280px;margin:0 auto}
+
+/* HERO overlay — transparent to pointer except controls */
+.hero{position:relative;z-index:1;height:100vh;height:100dvh;min-height:520px;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
+.hero a,.hero button{pointer-events:auto}
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:max(18px, env(safe-area-inset-top,0px))}
+.mark{background:rgba(239,238,233,.9);border:1px solid var(--rule);border-radius:999px;padding:8px 14px;font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.18em;text-transform:uppercase;text-decoration:none;display:flex;align-items:center;gap:10px}
+.mark i{display:inline-block;width:9px;height:9px;background:var(--verm);border-radius:1px;transform:rotate(45deg)}
+nav ul{background:rgba(239,238,233,.9);border:1px solid var(--rule);border-radius:999px;padding:4px 16px;display:flex;gap:clamp(12px,2.4vw,28px);list-style:none;margin:0;padding:0;font-size:13px;letter-spacing:.08em}
+nav a{text-decoration:none;color:var(--ink-soft);padding:6px 0;background:linear-gradient(var(--ink),var(--ink)) 0 100%/0 1px no-repeat;transition:background-size .35s ease,color .2s}
+nav a:hover{color:var(--ink);background-size:100% 1px}
+
+.foot{display:grid;grid-template-columns:1fr auto;align-items:end;gap:20px;padding-bottom:max(22px, env(safe-area-inset-bottom,0px))}
+.tag{max-width:34ch;background:rgba(239,238,233,.9);padding:14px 18px 14px;border-radius:4px;border:1px solid var(--rule);pointer-events:auto}
+.tag p{margin:0;font-family:var(--display);font-weight:500;font-size:clamp(19px,2.1vw,27px);line-height:1.35;color:var(--ink)}
+.tag small{display:block;margin-top:10px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.tools{display:flex;flex-direction:column;align-items:flex-end;gap:12px}
+.seal{width:62px;height:62px;transform:rotate(-4deg);animation:stamp .9s cubic-bezier(.2,1.4,.3,1) .4s both}
+@keyframes stamp{from{transform:rotate(-4deg) scale(1.6);opacity:0}to{transform:rotate(-4deg) scale(1);opacity:1}}
+.inks{display:flex;gap:6px;align-items:center;background:rgba(239,238,233,.9);border:1px solid var(--rule);padding:5px;border-radius:999px;}
+.inks button{font:inherit;font-size:12px;letter-spacing:.06em;border:0;background:transparent;color:var(--ink-soft);padding:7px 11px 7px 8px;border-radius:999px;display:flex;align-items:center;gap:7px;cursor:pointer;transition:background .2s,color .2s}
+.inks button .dot{width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.inks button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.inks button.wash{border-left:1px solid var(--rule);border-radius:0 999px 999px 0;margin-left:2px;padding-left:12px}
+.inks .k{font-family:var(--display);font-weight:800;font-size:13px}
+.hint{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+
+/* CONTENT */
+.page{position:relative;z-index:2;background:var(--bg)}
+.page::before{content:"";position:absolute;left:0;right:0;top:-120px;height:120px;background:linear-gradient(to bottom,rgba(236,235,230,0),var(--bg));pointer-events:none}
+section{padding:clamp(64px,10vw,120px) 0}
+.eyebrow{display:flex;align-items:center;gap:12px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:0 0 28px}
+.eyebrow b{font-family:var(--display);color:var(--verm);font-size:15px;letter-spacing:0}
+h2{font-family:var(--display);font-weight:800;font-size:clamp(34px,5.4vw,64px);line-height:1.02;margin:0 0 40px;letter-spacing:-.01em}
+.list{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule-strong)}
+.list li{border-bottom:1px solid var(--rule)}
+.list .row{display:grid;grid-template-columns:3.2em minmax(0,1fr) auto;gap:16px;align-items:baseline;padding:22px 4px;text-decoration:none;position:relative}
+.list .n{font-family:var(--display);color:var(--muted);font-size:14px}
+.list h3{font-family:var(--display);font-weight:800;font-size:clamp(22px,2.6vw,32px);margin:0 0 6px;line-height:1.1}
+.list p{margin:0;color:var(--ink-soft);font-size:15px;line-height:1.55;max-width:62ch}
+.list .meta{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.list .row::after{content:"";position:absolute;left:0;bottom:-1px;height:1px;width:100%;background:var(--ink);transform:scaleX(0);transform-origin:left;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+.list a.row:hover::after,.list a.row:focus-visible::after{transform:scaleX(1)}
+.list a.row:hover h3{color:var(--indigo)}
+.also{margin-top:26px;color:var(--muted);font-size:14px;line-height:1.8}
+.also a{color:var(--ink-soft)}
+.about{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:clamp(24px,6vw,80px);align-items:start}
+.about p{font-size:17px;line-height:1.7;color:var(--ink-soft);margin:0 0 14px}
+.placeholder{color:var(--muted);font-style:italic}
+.contact{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;margin-top:8px}
+.email{font-family:var(--display);font-weight:500;font-size:clamp(18px,3.4vw,34px);user-select:all;-webkit-user-select:all;word-break:break-all}
+.btn{font:inherit;font-size:12px;letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--ink);background:transparent;color:var(--ink);padding:10px 16px;border-radius:999px;cursor:pointer;transition:background .2s,color .2s}
+.btn:hover{background:var(--ink);color:var(--paper)}
+.links{display:flex;gap:22px;flex-wrap:wrap;margin-top:22px;font-size:14px}
+footer{padding:28px 0 max(28px, env(safe-area-inset-bottom,0px));border-top:1px solid var(--rule);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+.no-gl #fluid{background:
+  radial-gradient(40% 30% at 18% 40%,rgba(20,21,25,.55),transparent 70%),
+  radial-gradient(35% 28% at 78% 58%,rgba(29,45,94,.5),transparent 70%),
+  radial-gradient(10% 9% at 62% 30%,rgba(217,46,28,.55),transparent 70%),var(--paper)}
+.no-gl .fallback-name{display:block}
+.fallback-name{display:none;position:absolute;left:0;right:0;top:42%;transform:translateY(-50%);text-align:center;font-family:var(--display);font-weight:800;font-size:clamp(40px,9vw,120px);letter-spacing:.06em;color:var(--paper);text-shadow:0 0 1px rgba(0,0,0,.4)}
+
+@media (max-width:720px){
+  nav ul{gap:14px;font-size:12px}
+  nav li.opt{display:none}
+  .foot{grid-template-columns:1fr;gap:16px}
+  .tools{align-items:flex-start;flex-direction:row-reverse;justify-content:space-between;width:100%}
+  .seal{width:48px;height:48px}
+  .inks button{padding:7px 9px 7px 7px}
+  .inks button .lbl{display:none}
+  .about{grid-template-columns:1fr}
+  .list .row{grid-template-columns:2.2em minmax(0,1fr);gap:10px}
+  .list .meta{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .seal{animation:none}
+  *{transition-duration:.01ms!important}
+}
+</style>
+
+<canvas id="fluid" aria-hidden="true"></canvas>
+
+<header class="hero wrap" id="hero">
+  <div class="top">
+    <a class="mark" href="#top" id="top"><i></i>Kaiav Nihalani</a>
+    <nav aria-label="Primary">
+      <ul>
+        <li><a href="#work">Work</a></li>
+        <li class="opt"><a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn</a></li>
+        <li class="opt"><a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
+    </nav>
+  </div>
+  <h1 class="sr">Kaiav Nihalani</h1>
+  <div class="fallback-name" aria-hidden="true">KAIAV NIHALANI</div>
+  <div class="foot">
+    <div class="tag">
+      <p>Founder of Eden. Co-founder of J.</p>
+      <small>Drag to stir the ink. Tap to drop it.</small>
+    </div>
+    <div class="tools">
+      <svg class="seal" viewBox="0 0 100 100" role="img" aria-label="Seal: KN">
+        <defs>
+          <filter id="rough" x="-10%" y="-10%" width="120%" height="120%">
+            <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7" result="n"/>
+            <feDisplacementMap in="SourceGraphic" in2="n" scale="4.5"/>
+          </filter>
+          <mask id="sealmask">
+            <rect width="100" height="100" fill="#fff"/>
+            <text x="50" y="47" text-anchor="middle" font-family="Shippori Mincho B1, serif" font-weight="800" font-size="40" fill="#000">K</text>
+            <text x="50" y="86" text-anchor="middle" font-family="Shippori Mincho B1, serif" font-weight="800" font-size="40" fill="#000">N</text>
+            <rect x="11" y="52" width="78" height="2.5" fill="#000"/>
+          </mask>
+        </defs>
+        <g filter="url(#rough)"><rect x="5" y="5" width="90" height="90" rx="6" fill="#d92e1c" mask="url(#sealmask)"/></g>
+      </svg>
+      <div class="inks" role="group" aria-label="Choose ink">
+        <button type="button" data-ink="0" aria-pressed="true"><span class="dot" style="background:#141519"></span><span class="k">墨</span><span class="lbl">Sumi</span></button>
+        <button type="button" data-ink="1" aria-pressed="false"><span class="dot" style="background:#1d2d5e"></span><span class="k">藍</span><span class="lbl">Indigo</span></button>
+        <button type="button" data-ink="2" aria-pressed="false"><span class="dot" style="background:#d92e1c"></span><span class="k">朱</span><span class="lbl">Vermilion</span></button>
+        <button type="button" class="wash" id="wash" aria-label="Wash the paper clean"><span class="lbl">Wash</span><span class="k" aria-hidden="true">洗</span></button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <section id="work" class="wrap">
+    <p class="eyebrow"><b>一</b>What I'm building</p>
+    <h2>Founder, co-founder.</h2>
+    <ul class="list">
+      <li><div class="row"><span class="n">01</span><div><h3>Eden</h3><p>Context for agents.</p></div><span class="meta">Founder</span></div></li>
+      <li><a class="row" href="https://risingfounder.net" target="_blank" rel="noopener"><span class="n">02</span><div><h3>J: Rising Founder</h3><p>An early chance for extraordinary founders. A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world. No fee, no equity.</p></div><span class="meta">Co-founder ↗</span></a></li>
+    </ul>
+  </section>
+
+  <section class="wrap about" id="about">
+    <div>
+      <p class="eyebrow"><b>二</b>About</p>
+      <h2>Building context for agents.</h2>
+    </div>
+    <div>
+      <p>I'm the founder of Eden, and I co-founded J: Rising Founder with Jose Cruz-Lopez.</p>
+      <p class="placeholder">A longer bio is coming soon.</p>
+    </div>
+  </section>
+
+  <section class="wrap" id="contact">
+    <p class="eyebrow"><b>三</b>Contact</p>
+    <h2>Say hello.</h2>
+    <div class="contact">
+      <span class="email" id="email">kaiav.nihalani@gmail.com</span>
+      <button class="btn" type="button" id="copy">Copy email</button>
+      <span class="hint" id="copied" aria-live="polite"></span>
+    </div>
+    <div class="links">
+      <a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn</a>
+      <a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X / @KaiavRNihalani</a>
+    </div>
+  </section>
+
+  <footer class="wrap"><span>© Kaiav Nihalani</span><span>Ink simulated live on your GPU.</span></footer>
+</main>
+
+<script>
+/* copy email */
+document.getElementById('copy').addEventListener('click',function(){
+  var out=document.getElementById('copied');
+  var t=document.getElementById('email').textContent;
+  try{
+    navigator.clipboard.writeText(t).then(function(){out.textContent='Copied';},function(){out.textContent='Select the address to copy';});
+  }catch(e){out.textContent='Select the address to copy';}
+});
+</script>
+
+<script>
+(function(){
+'use strict';
+var canvas=document.getElementById('fluid');
+var root=document.documentElement;
+var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+var mobile=matchMedia('(pointer: coarse)').matches || Math.min(screen.width,screen.height)<700;
+function fail(){root.classList.add('no-gl');}
+
+var gl=null;
+try{gl=canvas.getContext('webgl2',{alpha:false,depth:false,stencil:false,antialias:false,premultipliedAlpha:false,preserveDrawingBuffer:false,powerPreference:'high-performance'});}catch(e){}
+if(!gl){fail();return;}
+var cbf=gl.getExtension('EXT_color_buffer_float')||gl.getExtension('EXT_color_buffer_half_float');
+if(!cbf){fail();return;}
+
+/* ---------- shaders ---------- */
+var VS='#version 300 es\nprecision highp float;in vec2 aPos;uniform vec2 uTexel;out vec2 vUv,vL,vR,vT,vB;'+
+'void main(){vUv=aPos*.5+.5;vL=vUv-vec2(uTexel.x,0.);vR=vUv+vec2(uTexel.x,0.);vT=vUv+vec2(0.,uTexel.y);vB=vUv-vec2(0.,uTexel.y);gl_Position=vec4(aPos,0.,1.);}';
+var H='#version 300 es\nprecision highp float;precision highp sampler2D;in vec2 vUv,vL,vR,vT,vB;out vec4 o;\n';
+var SOLID='uniform sampler2D uMask;float solid(vec2 uv){return step(.5,texture(uMask,uv).r);}float soft(vec2 uv){return smoothstep(.3,.7,texture(uMask,uv).r);}\n';
+
+var FS={
+copy:H+'uniform sampler2D uTex;void main(){o=texture(uTex,vUv);}',
+clear:H+'uniform sampler2D uTex;uniform float uValue;void main(){o=uValue*texture(uTex,vUv);}',
+splat:H+SOLID+'uniform sampler2D uTarget;uniform float uAspect,uRadius;uniform vec3 uColor;uniform vec2 uPoint;'+
+ 'void main(){vec2 p=vUv-uPoint;p.x*=uAspect;vec3 s=exp(-dot(p,p)/uRadius)*uColor;vec3 b=texture(uTarget,vUv).xyz;o=vec4((b+s)*(1.-soft(vUv)),1.);}',
+advect:H+SOLID+'uniform sampler2D uVelocity,uSource;uniform vec2 uVelTexel;uniform float dt,uDiss;'+
+ 'void main(){vec2 c=vUv-dt*texture(uVelocity,vUv).xy*uVelTexel;vec4 r=texture(uSource,c)/(1.+uDiss*dt);o=r*(1.-soft(vUv));}',
+divergence:H+SOLID+'uniform sampler2D uVelocity;'+
+ 'void main(){vec2 C=texture(uVelocity,vUv).xy;float L=texture(uVelocity,vL).x,R=texture(uVelocity,vR).x,T=texture(uVelocity,vT).y,B=texture(uVelocity,vB).y;'+
+ 'if(vL.x<0.||solid(vL)>.5)L=-C.x;if(vR.x>1.||solid(vR)>.5)R=-C.x;if(vT.y>1.||solid(vT)>.5)T=-C.y;if(vB.y<0.||solid(vB)>.5)B=-C.y;'+
+ 'o=vec4(.5*(R-L+T-B),0.,0.,1.);}',
+curl:H+'uniform sampler2D uVelocity;void main(){float L=texture(uVelocity,vL).y,R=texture(uVelocity,vR).y,T=texture(uVelocity,vT).x,B=texture(uVelocity,vB).x;o=vec4(.5*(R-L-T+B),0.,0.,1.);}',
+vorticity:H+SOLID+'uniform sampler2D uVelocity,uCurl;uniform float uCurlStr,dt;'+
+ 'void main(){float L=texture(uCurl,vL).x,R=texture(uCurl,vR).x,T=texture(uCurl,vT).x,B=texture(uCurl,vB).x,C=texture(uCurl,vUv).x;'+
+ 'vec2 f=.5*vec2(abs(T)-abs(B),abs(R)-abs(L));f/=length(f)+1e-4;f*=uCurlStr*C;f.y*=-1.;'+
+ 'vec2 v=texture(uVelocity,vUv).xy+f*dt;v=clamp(v,-1000.,1000.);o=vec4(v*(1.-solid(vUv)),0.,1.);}',
+pressure:H+SOLID+'uniform sampler2D uPressure,uDivergence;'+
+ 'void main(){float C=texture(uPressure,vUv).x;float L=texture(uPressure,vL).x,R=texture(uPressure,vR).x,T=texture(uPressure,vT).x,B=texture(uPressure,vB).x;'+
+ 'if(solid(vL)>.5)L=C;if(solid(vR)>.5)R=C;if(solid(vT)>.5)T=C;if(solid(vB)>.5)B=C;'+
+ 'o=vec4((L+R+B+T-texture(uDivergence,vUv).x)*.25,0.,0.,1.);}',
+gradient:H+SOLID+'uniform sampler2D uPressure,uVelocity;'+
+ 'void main(){float C=texture(uPressure,vUv).x;float L=texture(uPressure,vL).x,R=texture(uPressure,vR).x,T=texture(uPressure,vT).x,B=texture(uPressure,vB).x;'+
+ 'if(solid(vL)>.5)L=C;if(solid(vR)>.5)R=C;if(solid(vT)>.5)T=C;if(solid(vB)>.5)B=C;'+
+ 'vec2 v=texture(uVelocity,vUv).xy-vec2(R-L,T-B);o=vec4(v*(1.-solid(vUv)),0.,1.);}',
+prefilter:H+'uniform sampler2D uTex;uniform vec2 uSrcTexel;void main(){vec3 a=texture(uTex,vUv+uSrcTexel*vec2(-1,-1)).rgb+texture(uTex,vUv+uSrcTexel*vec2(1,-1)).rgb+texture(uTex,vUv+uSrcTexel*vec2(-1,1)).rgb+texture(uTex,vUv+uSrcTexel*vec2(1,1)).rgb;a*=.25;o=vec4(max(a-.04,0.),1.);}',
+blur:H+'uniform sampler2D uTex;uniform vec2 uDir;void main(){vec3 c=texture(uTex,vUv).rgb*.2270270;'+
+ 'c+=(texture(uTex,vUv+uDir*1.3846154).rgb+texture(uTex,vUv-uDir*1.3846154).rgb)*.3162162;'+
+ 'c+=(texture(uTex,vUv+uDir*3.2307692).rgb+texture(uTex,vUv-uDir*3.2307692).rgb)*.0702703;o=vec4(c,1.);}',
+display:H+'uniform sampler2D uDye,uBleed,uMask;uniform vec2 uRes,uDyeTexel,uMaskTexel;uniform float uTime;\n'+
+ 'float h(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}\n'+
+ 'float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}\n'+
+ 'void main(){vec2 px=vUv*uRes;\n'+
+ ' float g=n(px*.004)*.5+n(px*.011)*.3+n(px*.05)*.2;\n'+
+ ' float f1=n(mat2(.86,.5,-.5,.86)*px*vec2(.9,.045));float f2=n(mat2(.5,-.86,.86,.5)*px*vec2(.8,.04));\n'+
+ ' float fiber=max(f1,f2);fiber=smoothstep(.55,.95,fiber);\n'+
+ ' float grain=h(px*.73)-.5;\n'+
+ ' vec3 paper=vec3(.936,.931,.913)*(.965+.05*g)+fiber*.018+grain*.012;\n'+
+ ' vec3 A=texture(uDye,vUv).rgb;\n'+
+ ' vec3 ax=texture(uDye,vUv+vec2(uDyeTexel.x*1.5,0.)).rgb-texture(uDye,vUv-vec2(uDyeTexel.x*1.5,0.)).rgb;\n'+
+ ' vec3 ay=texture(uDye,vUv+vec2(0.,uDyeTexel.y*1.5)).rgb-texture(uDye,vUv-vec2(0.,uDyeTexel.y*1.5)).rgb;\n'+
+ ' vec3 edge=sqrt(ax*ax+ay*ay);\n'+
+ ' vec3 B=texture(uBleed,vUv).rgb;\n'+
+ ' float tooth=.82+.3*g+.25*fiber+grain*.12;\n'+
+ ' vec3 At=A*tooth+edge*.75+B*.45;\n'+
+ ' vec3 col=paper*exp(-At*1.15);\n'+
+ ' float sheen=clamp(dot(vec2(ax.r+ax.g+ax.b,ay.r+ay.g+ay.b),vec2(-.7,.7))*.18,-0.05,.05);\n'+
+ ' col+=sheen*smoothstep(.2,1.5,A.r+A.g+A.b);\n'+
+ ' float m=texture(uMask,vUv).r;\n'+
+ ' float mx=texture(uMask,vUv+vec2(uMaskTexel.x*1.6,0.)).r-texture(uMask,vUv-vec2(uMaskTexel.x*1.6,0.)).r;\n'+
+ ' float my=texture(uMask,vUv+vec2(0.,uMaskTexel.y*1.6)).r-texture(uMask,vUv-vec2(0.,uMaskTexel.y*1.6)).r;\n'+
+ ' float emb=(mx-my)*.5;\n'+
+ ' vec3 letter=vec3(.962,.958,.944)*(.985+.03*g)+fiber*.012;\n'+
+ ' float inside=smoothstep(.35,.65,m);\n'+
+ ' col=mix(col,letter,inside);\n'+
+ ' col+=emb*vec3(.07,.07,.075)*(1.-inside*.3);\n'+
+ ' col-=vec3(.035)*smoothstep(0.,.5,m)*(1.-inside);\n'+
+ ' vec2 q=vUv-.5;col*=1.-dot(q,q)*.22;\n'+
+ ' o=vec4(col,1.);}'
+};
+
+function compile(type,src){var s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){console.warn(gl.getShaderInfoLog(s));return null;}return s;}
+var vs=compile(gl.VERTEX_SHADER,VS);
+function Program(fs){
+  var p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,compile(gl.FRAGMENT_SHADER,fs));gl.bindAttribLocation(p,0,'aPos');gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS)){throw new Error(gl.getProgramInfoLog(p));}
+  var u={},n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+  for(var i=0;i<n;i++){var nm=gl.getActiveUniform(p,i).name;u[nm]=gl.getUniformLocation(p,nm);}
+  this.p=p;this.u=u;
+}
+Program.prototype.use=function(){gl.useProgram(this.p);return this.u;};
+var P={};
+try{for(var k in FS)P[k]=new Program(FS[k]);}catch(e){console.warn(e);fail();return;}
+
+/* quad */
+var vao=gl.createVertexArray();gl.bindVertexArray(vao);
+var vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+
+/* ---------- FBOs ---------- */
+var HF=gl.HALF_FLOAT;
+function createFBO(w,h,ifmt,fmt,filter){
+  var t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,filter);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,filter);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,ifmt,w,h,0,fmt,HF,null);
+  var f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);
+  gl.viewport(0,0,w,h);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
+  return {tex:t,fbo:f,w:w,h:h,tx:1/w,ty:1/h,ok:gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE};
+}
+function freeFBO(o){gl.deleteTexture(o.tex);gl.deleteFramebuffer(o.fbo);}
+function DoubleFBO(w,h,ifmt,fmt,filter){this.a=createFBO(w,h,ifmt,fmt,filter);this.b=createFBO(w,h,ifmt,fmt,filter);this.read=this.a;this.write=this.b;}
+DoubleFBO.prototype.swap=function(){var t=this.read;this.read=this.write;this.write=t;};
+DoubleFBO.prototype.free=function(){freeFBO(this.a);freeFBO(this.b);};
+
+function bindTex(unit,tex){gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,tex);return unit;}
+function blit(target){
+  if(target){gl.viewport(0,0,target.w,target.h);gl.bindFramebuffer(gl.FRAMEBUFFER,target.fbo);}
+  else{gl.viewport(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight);gl.bindFramebuffer(gl.FRAMEBUFFER,null);}
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+}
+
+/* ---------- settings & quality ---------- */
+var Q=[
+  {sim:160,dye:1024,iters:22,dpr:2},
+  {sim:128,dye:720,iters:18,dpr:1.5},
+  {sim:96,dye:512,iters:14,dpr:1.1},
+  {sim:72,dye:384,iters:10,dpr:.85}
+];
+var qi=mobile?2:0;
+var cfg={curl:18,velDiss:.4,dyeDiss:.17,pressure:.8};
+
+var W=1,Hh=1,dpr=1;
+var velocity,dye,divergenceF,curlF,pressureF,bleedA,bleedB;
+var maskTex=gl.createTexture(),maskW=1,maskH=1;
+var maskCanvas=document.createElement('canvas'),mctx=maskCanvas.getContext('2d');
+
+function res(base){
+  var a=gl.drawingBufferWidth/gl.drawingBufferHeight;if(a<1)a=1/a;
+  var mn=Math.round(base),mx=Math.round(base*a);
+  return gl.drawingBufferWidth>gl.drawingBufferHeight?{w:mx,h:mn}:{w:mn,h:mx};
+}
+function resample(old,nw,nh,ifmt,fmt,filter){
+  var d=new DoubleFBO(nw,nh,ifmt,fmt,filter);
+  if(old){var u=P.copy.use();gl.uniform2f(u.uTexel,d.read.tx,d.read.ty);gl.uniform1i(u.uTex,bindTex(0,old.read.tex));blit(d.read);old.free();}
+  return d;
+}
+function initFBOs(){
+  var q=Q[qi],s=res(q.sim),d=res(q.dye);
+  var RGBA=gl.RGBA16F,RG=gl.RG16F,R=gl.R16F;
+  velocity=resample(velocity,s.w,s.h,RG,gl.RG,gl.LINEAR);
+  dye=resample(dye,d.w,d.h,RGBA,gl.RGBA,gl.LINEAR);
+  if(divergenceF)freeFBO(divergenceF);if(curlF)freeFBO(curlF);if(pressureF)pressureF.free();if(bleedA){freeFBO(bleedA);freeFBO(bleedB);}
+  divergenceF=createFBO(s.w,s.h,R,gl.RED,gl.NEAREST);
+  curlF=createFBO(s.w,s.h,R,gl.RED,gl.NEAREST);
+  pressureF=new DoubleFBO(s.w,s.h,R,gl.RED,gl.NEAREST);
+  var bw=Math.max(32,d.w>>2),bh=Math.max(32,d.h>>2);
+  bleedA=createFBO(bw,bh,RGBA,gl.RGBA,gl.LINEAR);bleedB=createFBO(bw,bh,RGBA,gl.RGBA,gl.LINEAR);
+  if(!dye.read.ok||!velocity.read.ok){fail();throw new Error('fbo');}
+}
+
+/* ---------- name mask ---------- */
+var NAME_FONT='"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho","Times New Roman",serif';
+function drawMask(){
+  var cw=canvas.clientWidth||innerWidth,ch=canvas.clientHeight||innerHeight;
+  var s=Math.min(1,1100/Math.max(cw,ch));
+  maskW=Math.max(64,Math.round(cw*s));maskH=Math.max(64,Math.round(ch*s));
+  maskCanvas.width=maskW;maskCanvas.height=maskH;
+  var c=mctx;c.setTransform(1,0,0,1,0,0);c.fillStyle='#000';c.fillRect(0,0,maskW,maskH);
+  var lines=(maskW/maskH)<1.15?['KAIAV','NIHALANI']:['KAIAV NIHALANI'];
+  var track=.09;
+  c.font='800 100px '+NAME_FONT;
+  function lineW(t,size){var w=0;for(var i=0;i<t.length;i++)w+=c.measureText(t[i]).width;return w+(t.length-1)*track*size;}
+  var maxW=0;for(var i=0;i<lines.length;i++)maxW=Math.max(maxW,lineW(lines[i],100)/100);
+  var size=Math.min(maskW*.86/maxW,maskH*(lines.length>1?.17:.2));
+  var lh=size*1.12,y0=maskH*.47-(lines.length-1)*lh/2;
+  c.font='800 '+size+'px '+NAME_FONT;c.textBaseline='middle';c.fillStyle='#fff';
+  try{c.filter='blur('+Math.max(.6,size*.012)+'px)';}catch(e){}
+  for(var l=0;l<lines.length;l++){
+    var t=lines[l],w=lineW(t,size),x=(maskW-w)/2,y=y0+l*lh+size*.04;
+    for(var j=0;j<t.length;j++){c.fillText(t[j],x,y);x+=c.measureText(t[j]).width+track*size;}
+  }
+  try{c.filter='none';}catch(e){}
+  gl.bindTexture(gl.TEXTURE_2D,maskTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,maskCanvas);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+}
+
+function resize(){
+  dpr=Math.min(window.devicePixelRatio||1,Q[qi].dpr,mobile?1.5:2);
+  var cw=canvas.clientWidth||innerWidth,ch=canvas.clientHeight||innerHeight;
+  var w=Math.max(1,Math.round(cw*dpr)),h=Math.max(1,Math.round(ch*dpr));
+  var changed=w!==canvas.width||h!==canvas.height;
+  canvas.width=w;canvas.height=h;W=cw;Hh=ch;
+  if(changed||!velocity){initFBOs();drawMask();}
+}
+
+/* ---------- inks ---------- */
+var INKS=[[1.0,.96,.88],[1.1,.66,.17],[.03,.85,1.12]];
+var current=0;
+
+/* ---------- sim ---------- */
+var tmp3=new Float32Array(3);
+function splat(x,y,dx,dy,r,g,b,radius){
+  var aspect=canvas.width/canvas.height,rad=radius*(aspect>1?aspect:1);
+  var u=P.splat.use();
+  gl.uniform2f(u.uTexel,velocity.read.tx,velocity.read.ty);
+  gl.uniform1i(u.uTarget,bindTex(0,velocity.read.tex));gl.uniform1i(u.uMask,bindTex(1,maskTex));
+  gl.uniform1f(u.uAspect,aspect);gl.uniform2f(u.uPoint,x,y);gl.uniform3f(u.uColor,dx,dy,0);gl.uniform1f(u.uRadius,rad);
+  blit(velocity.write);velocity.swap();
+  gl.uniform1i(u.uTarget,bindTex(0,dye.read.tex));gl.uniform3f(u.uColor,r,g,b);gl.uniform1f(u.uRadius,rad*.82);
+  blit(dye.write);dye.swap();
+}
+
+function step(dt){
+  var v=velocity,u;
+  u=P.curl.use();gl.uniform2f(u.uTexel,v.read.tx,v.read.ty);gl.uniform1i(u.uVelocity,bindTex(0,v.read.tex));blit(curlF);
+  u=P.vorticity.use();gl.uniform2f(u.uTexel,v.read.tx,v.read.ty);gl.uniform1i(u.uVelocity,bindTex(0,v.read.tex));gl.uniform1i(u.uCurl,bindTex(1,curlF.tex));gl.uniform1i(u.uMask,bindTex(2,maskTex));gl.uniform1f(u.uCurlStr,cfg.curl);gl.uniform1f(u.dt,dt);blit(v.write);v.swap();
+  u=P.divergence.use();gl.uniform2f(u.uTexel,v.read.tx,v.read.ty);gl.uniform1i(u.uVelocity,bindTex(0,v.read.tex));gl.uniform1i(u.uMask,bindTex(1,maskTex));blit(divergenceF);
+  u=P.clear.use();gl.uniform2f(u.uTexel,v.read.tx,v.read.ty);gl.uniform1i(u.uTex,bindTex(0,pressureF.read.tex));gl.uniform1f(u.uValue,cfg.pressure);blit(pressureF.write);pressureF.swap();
+  u=P.pressure.use();gl.uniform2f(u.uTexel,v.read.tx,v.read.ty);gl.uniform1i(u.uDivergence,bindTex(0,divergenceF.tex));gl.uniform1i(u.uMask,bindTex(1,maskTex));
+  for(var i=0,n=Q[qi].iters;i<n;i++){gl.uniform1i(u.uPressure,bindTex(2,pressureF.read.tex));blit(pressureF.write);pressureF.swap();}
+  u=P.gradient.use();gl.uniform2f(u.uTexel,v.read.tx,v.read.ty);gl.uniform1i(u.uPressure,bindTex(0,pressureF.read.tex));gl.uniform1i(u.uVelocity,bindTex(1,v.read.tex));gl.uniform1i(u.uMask,bindTex(2,maskTex));blit(v.write);v.swap();
+  u=P.advect.use();gl.uniform2f(u.uTexel,v.read.tx,v.read.ty);gl.uniform2f(u.uVelTexel,v.read.tx,v.read.ty);gl.uniform1i(u.uVelocity,bindTex(0,v.read.tex));gl.uniform1i(u.uSource,bindTex(0,v.read.tex));gl.uniform1i(u.uMask,bindTex(1,maskTex));gl.uniform1f(u.dt,dt);gl.uniform1f(u.uDiss,cfg.velDiss);blit(v.write);v.swap();
+  gl.uniform2f(u.uTexel,dye.read.tx,dye.read.ty);gl.uniform1i(u.uVelocity,bindTex(0,v.read.tex));gl.uniform1i(u.uSource,bindTex(2,dye.read.tex));gl.uniform1f(u.uDiss,washT>0?3.5:cfg.dyeDiss);blit(dye.write);dye.swap();
+}
+
+function render(t){
+  var u=P.prefilter.use();gl.uniform2f(u.uTexel,bleedA.tx,bleedA.ty);gl.uniform2f(u.uSrcTexel,dye.read.tx,dye.read.ty);gl.uniform1i(u.uTex,bindTex(0,dye.read.tex));blit(bleedA);
+  u=P.blur.use();gl.uniform2f(u.uTexel,bleedA.tx,bleedA.ty);
+  for(var i=0;i<2;i++){var s=1+i*1.5;
+    gl.uniform2f(u.uDir,bleedA.tx*s,0);gl.uniform1i(u.uTex,bindTex(0,bleedA.tex));blit(bleedB);
+    gl.uniform2f(u.uDir,0,bleedA.ty*s);gl.uniform1i(u.uTex,bindTex(0,bleedB.tex));blit(bleedA);}
+  u=P.display.use();gl.uniform2f(u.uTexel,1/canvas.width,1/canvas.height);
+  gl.uniform1i(u.uDye,bindTex(0,dye.read.tex));gl.uniform1i(u.uBleed,bindTex(1,bleedA.tex));gl.uniform1i(u.uMask,bindTex(2,maskTex));
+  gl.uniform2f(u.uRes,canvas.width,canvas.height);gl.uniform2f(u.uDyeTexel,dye.read.tx,dye.read.ty);gl.uniform2f(u.uMaskTexel,1/maskW,1/maskH);gl.uniform1f(u.uTime,t);
+  blit(null);
+}
+
+/* ---------- emitters (ambient brush strokes) ---------- */
+var EM=[];for(var e=0;e<10;e++)EM.push({life:0,x:0,y:0,vx:0,vy:0,ink:0,amt:0,rad:0,wob:0,ph:0});
+function emit(x,y,vx,vy,ink,amt,rad,life){
+  for(var i=0;i<EM.length;i++){var m=EM[i];if(m.life<=0){m.x=x;m.y=y;m.vx=vx;m.vy=vy;m.ink=ink;m.amt=amt;m.rad=rad;m.life=life;m.ph=Math.random()*6.28;m.wob=.6+Math.random()*1.2;return;}}
+}
+function pickInk(){var r=Math.random();return r<.5?0:r<.84?1:2;}
+function ambient(){
+  var side=Math.random(),ink=pickInk(),sp=reduce?.25:.5+Math.random()*.35,y,x,a;
+  if(side<.38){x=-.02;y=.3+Math.random()*.4;a=(Math.random()-.5)*.6;}
+  else if(side<.7){x=1.02;y=.3+Math.random()*.4;a=Math.PI+(Math.random()-.5)*.6;}
+  else if(side<.85){x=.2+Math.random()*.6;y=-.02;a=Math.PI/2+(Math.random()-.5)*.8;}
+  else{x=.2+Math.random()*.6;y=1.02;a=-Math.PI/2+(Math.random()-.5)*.8;}
+  emit(x,y,Math.cos(a)*sp,Math.sin(a)*sp,ink,ink===2?.55:.8,.0045+Math.random()*.004,.9+Math.random()*.7);
+}
+function intro(){
+  emit(-.02,.56,.85,-.02,0,.95,.006,1.25);
+  setTimeout(function(){emit(1.02,.4,-.8,.03,1,.95,.0065,1.25);},260);
+  setTimeout(function(){emit(.12,-.02,.25,.7,1,.7,.005,1.1);},520);
+  setTimeout(function(){emit(.88,1.02,-.3,-.7,0,.75,.005,1.1);},700);
+  setTimeout(function(){emit(.62,1.02,-.05,-.75,2,.6,.004,.9);},1000);
+}
+function runEmitters(dt){
+  for(var i=0;i<EM.length;i++){var m=EM[i];if(m.life<=0)continue;
+    m.ph+=dt*4*m.wob;var wx=-m.vy*Math.sin(m.ph)*.6,wy=m.vx*Math.sin(m.ph)*.6;
+    var vx=m.vx+wx,vy=m.vy+wy;m.x+=vx*dt;m.y+=vy*dt;m.life-=dt;
+    var k=INKS[m.ink],a=m.amt*Math.min(1,m.life*2)*dt*60*.17;
+    splat(m.x,m.y,vx*260,vy*260,k[0]*a,k[1]*a,k[2]*a,m.rad);
+  }
+}
+
+/* ---------- pointer ---------- */
+var ptrs=[];
+function getPtr(id){for(var i=0;i<ptrs.length;i++)if(ptrs[i].id===id)return ptrs[i];var p={id:id,x:0,y:0,dx:0,dy:0,moved:false,down:false,fresh:true};ptrs.push(p);return p;}
+canvas.addEventListener('pointerdown',function(e){
+  var p=getPtr(e.pointerId);p.down=true;p.x=e.clientX/W;p.y=1-e.clientY/Hh;p.dx=0;p.dy=0;p.fresh=false;
+  var k=INKS[current];var a=e.pointerType==='touch'?1.1:1.4;
+  pending.push(p.x,p.y,(Math.random()-.5)*300,(Math.random()-.5)*300,k[0]*a,k[1]*a,k[2]*a,.0028);
+  idleT=0;
+});
+canvas.addEventListener('pointermove',function(e){
+  var p=getPtr(e.pointerId);var x=e.clientX/W,y=1-e.clientY/Hh;
+  if(p.fresh){p.x=x;p.y=y;p.fresh=false;return;}
+  p.dx+=x-p.x;p.dy+=y-p.y;p.x=x;p.y=y;p.moved=true;idleT=0;
+});
+function up(e){var p=getPtr(e.pointerId);p.down=false;if(e.pointerType!=='mouse'){p.fresh=true;p.moved=false;}}
+canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);
+canvas.addEventListener('pointerleave',function(e){var p=getPtr(e.pointerId);p.fresh=true;p.moved=false;});
+var pending=[];
+function applyPointers(){
+  for(var i=0;i<pending.length;i+=8)splat(pending[i],pending[i+1],pending[i+2],pending[i+3],pending[i+4],pending[i+5],pending[i+6],pending[i+7]);
+  pending.length=0;
+  for(var j=0;j<ptrs.length;j++){var p=ptrs[j];if(!p.moved)continue;p.moved=false;
+    var d=Math.sqrt(p.dx*p.dx+p.dy*p.dy);var a=p.down?Math.min(.4,.06+d*8):Math.min(.08,d*2);
+    var k=INKS[current];
+    splat(p.x,p.y,p.dx*5200,p.dy*5200,k[0]*a,k[1]*a,k[2]*a,p.down?.0026:.0018);
+    p.dx=0;p.dy=0;}
+}
+
+/* ---------- UI ---------- */
+var btns=document.querySelectorAll('.inks button[data-ink]');
+for(var b=0;b<btns.length;b++)btns[b].addEventListener('click',function(){
+  current=+this.getAttribute('data-ink');
+  for(var i=0;i<btns.length;i++)btns[i].setAttribute('aria-pressed',btns[i]===this?'true':'false');
+  var a=Math.random()*6.28,k=INKS[current];
+  pending.push(.3+Math.random()*.4,.35+Math.random()*.3,Math.cos(a)*700,Math.sin(a)*700,k[0]*2.2,k[1]*2.2,k[2]*2.2,.006);
+  if(!running)wake();
+});
+var washT=0;
+document.getElementById('wash').addEventListener('click',function(){washT=1.1;if(!running)wake();});
+addEventListener('keydown',function(e){
+  if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))return;
+  if(e.key==='1'||e.key==='2'||e.key==='3'){btns[+e.key-1].click();}
+});
+
+/* ---------- loop ---------- */
+var running=false,heroVisible=true,last=0,time=0,ambT=0,idleT=0,frames=0,acc=0,raf=0;
+function frame(now){
+  raf=0;if(!running)return;
+  var dt=Math.min((now-last)/1000,1/30);last=now;if(dt<=0)dt=1/60;
+  time+=dt;
+  if(frames<90){frames++;if(frames>15){acc+=dt;}
+    if(frames===90){var avg=acc/75;if(avg>1/48&&qi<Q.length-1){qi+=avg>1/30?2:1;if(qi>Q.length-1)qi=Q.length-1;resize();initFBOs();frames=60;acc=0;}}
+  }
+  idleT+=dt;ambT-=dt;
+  if(ambT<=0){ambient();ambT=reduce?6:(idleT>4?1.0:2.2)+Math.random()*.8;}
+  if(washT>0)washT-=dt;
+  runEmitters(reduce?dt*.5:dt);
+  applyPointers();
+  step(reduce?dt*.5:dt);
+  render(time);
+  raf=requestAnimationFrame(frame);
+}
+function wake(){if(running)return;running=true;last=performance.now();raf=requestAnimationFrame(frame);}
+function sleep(){running=false;if(raf){cancelAnimationFrame(raf);raf=0;}}
+function update(){(!document.hidden&&heroVisible)?wake():sleep();}
+document.addEventListener('visibilitychange',update);
+if('IntersectionObserver' in window){
+  new IntersectionObserver(function(en){heroVisible=en[0].isIntersecting;update();},{threshold:0}).observe(document.getElementById('hero'));
+}
+var rT=0;addEventListener('resize',function(){clearTimeout(rT);rT=setTimeout(function(){resize();drawMask();if(!running)render(time);},120);});
+
+try{resize();}catch(e){console.warn(e);return;}
+intro();
+update();
+if(document.fonts&&document.fonts.load){
+  document.fonts.load('800 100px "Shippori Mincho B1"').then(function(){drawMask();}).catch(function(){});
+}
+})();
+</script>

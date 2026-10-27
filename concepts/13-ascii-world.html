@@ -1,0 +1,700 @@
+<title>ASCII World Kaiav</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#07090b;
+  --bg-2:#0d1114;
+  --panel:rgba(7,9,11,.78);
+  --ink:#dfeef2;
+  --ink-dim:#8a9ba1;
+  --ink-faint:#4a5a60;
+  --signal:#ff6a2b;
+  --signal-soft:rgba(255,106,43,.16);
+  --cyan:#7fe3ff;
+  --rule:rgba(223,238,242,.14);
+  --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);-webkit-font-smoothing:antialiased}
+body{overflow-x:hidden}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:3px}
+::selection{background:var(--signal);color:#000}
+
+.hero{position:relative;height:100vh;height:100dvh;min-height:520px;overflow:hidden;background:var(--bg)}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:crosshair}
+#gl.dragging{cursor:grabbing}
+.fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--ink-dim);
+  background:radial-gradient(ellipse at 50% 45%, #1a2226 0%, var(--bg) 70%)}
+.fallback pre{font-size:12px;line-height:1.1;color:var(--signal);margin:0 0 12px}
+.hero.no-gl .fallback{display:flex}
+
+.overlay{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;
+  padding-top:max(16px, env(safe-area-inset-top,0px));padding-bottom:max(16px, env(safe-area-inset-bottom,0px));
+  padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px))}
+.overlay > *{pointer-events:auto}
+.topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;font-size:13px}
+.prompt{color:var(--ink-dim);background:var(--panel);padding:6px 10px;border:1px solid var(--rule)}
+.prompt b{color:var(--signal);font-weight:500}
+nav.top{display:flex;gap:2px;background:var(--panel);border:1px solid var(--rule)}
+nav.top a{display:block;padding:6px 10px;text-decoration:none;color:var(--ink)}
+nav.top a:hover{background:var(--signal);color:#000}
+
+.bottom{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ident{background:var(--panel);border:1px solid var(--rule);padding:14px 16px 16px;max-width:min(640px,100%)}
+.ident .tag{font-size:11px;letter-spacing:.12em;color:var(--ink-dim);text-transform:uppercase}
+.ident h1{margin:6px 0 8px;font-weight:700;font-size:clamp(30px,6.2vw,74px);line-height:.95;letter-spacing:-.03em}
+.ident h1 .us{color:var(--signal)}
+.ident h1 .caret{display:inline-block;width:.5em;height:.82em;background:var(--signal);vertical-align:-.04em;margin-left:.08em;animation:blink 1.05s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.ident p{margin:0;font-size:14px;color:var(--ink)}
+.ident p span{color:var(--ink-dim)}
+
+.ctrl{background:var(--panel);border:1px solid var(--rule);padding:10px 12px;font-size:12px;min-width:260px}
+.ctrl .row{display:flex;align-items:center;gap:8px;margin:4px 0;flex-wrap:wrap}
+.ctrl .lbl{color:var(--ink-dim);width:56px;flex:none}
+.ctrl button{font:inherit;font-size:12px;color:var(--ink);background:transparent;border:1px solid var(--rule);padding:4px 8px;cursor:pointer}
+.ctrl button:hover{border-color:var(--ink-dim)}
+.ctrl button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.ctrl .stat{color:var(--ink-faint);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.ctrl .hint{color:var(--ink-dim);margin-top:4px}
+.ctrl kbd{font:inherit;border:1px solid var(--rule);padding:0 4px;color:var(--ink)}
+
+main{position:relative;background:var(--bg);border-top:1px solid var(--rule)}
+.wrap{max-width:1080px;margin:0 auto;padding:72px max(16px, env(safe-area-inset-right,0px)) 72px max(16px, env(safe-area-inset-left,0px))}
+.sec-h{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);margin:0 0 18px;display:flex;gap:10px;align-items:center}
+.sec-h::before{content:"##";color:var(--signal)}
+.ls{width:100%;border-collapse:collapse;font-size:14px}
+.ls td{padding:12px 10px 12px 0;border-bottom:1px dashed var(--rule);vertical-align:top}
+.ls tr:hover td{background:var(--signal-soft)}
+.ls .perm{color:var(--ink-faint);white-space:nowrap;width:1%}
+.ls .name a{color:var(--ink);font-weight:500;text-decoration:none;border-bottom:1px solid var(--signal)}
+.ls .name a:hover{color:var(--signal)}
+.ls .nolink{color:var(--ink);font-weight:500}
+.ls .lang{color:var(--cyan);white-space:nowrap;width:1%}
+.ls .desc{color:var(--ink-dim)}
+.about p{max-width:62ch;color:var(--ink-dim);line-height:1.7;margin:0 0 12px}
+.about p.lead{color:var(--ink);font-size:18px}
+.contact{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.email{user-select:all;background:var(--bg-2);border:1px solid var(--rule);padding:10px 12px;font-size:15px;overflow-wrap:anywhere}
+.btn{font:inherit;font-size:13px;color:#000;background:var(--signal);border:0;padding:11px 14px;cursor:pointer}
+.btn:hover{filter:brightness(1.1)}
+.links a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--rule);margin-right:16px}
+.links a:hover{border-color:var(--signal)}
+footer{color:var(--ink-faint);font-size:12px;padding-top:48px}
+
+@media (max-width:640px){
+  .topbar{font-size:12px}
+  .prompt{display:none}
+  nav.top{margin-left:auto}
+  .ctrl{min-width:0;width:100%}
+  .ctrl .lbl{width:48px}
+  .ctrl .hint{display:none}
+  .ls .perm{display:none}
+  .ls td{display:block;border:0;padding:2px 0}
+  .ls tr{display:block;padding:12px 0;border-bottom:1px dashed var(--rule)}
+}
+@media (prefers-reduced-motion:reduce){ .ident h1 .caret{animation:none} }
+</style>
+
+<section class="hero" id="hero" aria-label="Interactive ASCII render">
+  <canvas id="gl" aria-label="Real-time 3D scene rendered as ASCII characters. Drag to rotate; the lens under the pointer reveals the shaded render."></canvas>
+  <div class="fallback" role="img" aria-label="WebGL unavailable"><div><pre>  .:-=+*#%@
+ kaiav.nihalani </pre>WebGL isn't available here, so the live ASCII render is switched off.</div></div>
+  <div class="overlay">
+    <div class="topbar">
+      <div class="prompt"><b>kaiav@nihalani</b>:~$ ./render --ascii --live</div>
+      <nav class="top" aria-label="Primary">
+        <a href="#work">[building]</a><a href="#about">[about]</a><a href="#contact">[contact]</a>
+      </nav>
+    </div>
+    <div class="bottom">
+      <div class="ident">
+        <div class="tag">// founder · eden &nbsp;·&nbsp; co-founder · j</div>
+        <h1>KAIAV<br>NIHALANI<span class="caret" aria-hidden="true"></span></h1>
+        <p>Building context for agents. <span>Founder of Eden. Co-founder of J.</span></p>
+      </div>
+      <div class="ctrl" role="group" aria-label="Renderer controls">
+        <div class="row"><span class="lbl">ramp</span>
+          <button data-ramp="0" aria-pressed="true">classic</button>
+          <button data-ramp="1" aria-pressed="false">blocks</button>
+          <button data-ramp="2" aria-pressed="false">braille</button>
+          <button data-ramp="3" aria-pressed="false">glyph</button>
+        </div>
+        <div class="row"><span class="lbl">cell</span>
+          <button data-cell="9" aria-pressed="false">fine</button>
+          <button data-cell="13" aria-pressed="true">mid</button>
+          <button data-cell="19" aria-pressed="false">coarse</button>
+          <button data-color aria-pressed="true">color</button>
+        </div>
+        <div class="stat" id="stat" aria-live="off">cols -- × rows -- · -- fps</div>
+        <div class="hint">drag to rotate · hover = lens · <kbd>1</kbd>–<kbd>4</kbd> ramps · <kbd>←</kbd><kbd>→</kbd></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main>
+  <div class="wrap">
+    <section id="work" aria-labelledby="work-h">
+      <h2 class="sec-h" id="work-h">ls -la ~/building</h2>
+      <table class="ls">
+        <tbody>
+          <tr><td class="perm">drwxr-xr-x</td><td class="name"><span class="nolink">eden/</span></td><td class="lang">founder</td><td class="desc">Context for agents.</td></tr>
+          <tr><td class="perm">drwxr-xr-x</td><td class="name"><a href="https://risingfounder.net" target="_blank" rel="noopener">j-rising-founder/</a></td><td class="lang">co-founder</td><td class="desc">An early chance for extraordinary founders. A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world. No fee, no equity. Co-founded with Jose Cruz-Lopez.</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section id="about" class="about" aria-labelledby="about-h" style="margin-top:72px">
+      <h2 class="sec-h" id="about-h">cat about.txt</h2>
+      <p class="lead">Founder of Eden. Co-founder of J: Rising Founder.</p>
+      <p>[ Longer bio coming soon. ]</p>
+    </section>
+    <section id="contact" aria-labelledby="contact-h" style="margin-top:72px">
+      <h2 class="sec-h" id="contact-h">echo $CONTACT</h2>
+      <div class="contact">
+        <span class="email" id="email">kaiav.nihalani@gmail.com</span>
+        <button class="btn" id="copy" type="button">copy</button>
+      </div>
+      <p class="links" style="margin-top:20px">
+        <a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">linkedin/kaiav-nihalani</a>
+        <a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">x/@KaiavRNihalani</a>
+      </p>
+    </section>
+    <footer>EOF · rendered live on your GPU, one glyph per cell.</footer>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script>
+(function(){
+  "use strict";
+  // ---------- copy email (works without WebGL) ----------
+  var copyBtn = document.getElementById('copy');
+  copyBtn.addEventListener('click', function(){
+    var txt = document.getElementById('email').textContent;
+    var done = function(ok){ copyBtn.textContent = ok ? 'copied ✓' : 'select + ⌘C'; setTimeout(function(){ copyBtn.textContent='copy'; }, 1600); };
+    try { navigator.clipboard.writeText(txt).then(function(){done(true);}).catch(function(){done(false);}); } catch(e){ done(false); }
+  });
+
+  var hero = document.getElementById('hero');
+  var canvas = document.getElementById('gl');
+  if (!window.THREE) { hero.classList.add('no-gl'); return; }
+
+  // Lazy-init after first paint
+  requestAnimationFrame(function(){ setTimeout(init, 0); });
+
+  function init(){
+  var renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
+  } catch (e) { hero.classList.add('no-gl'); return; }
+  if (!renderer.getContext()) { hero.classList.add('no-gl'); return; }
+
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var isSmall = Math.min(window.innerWidth, window.innerHeight) < 700;
+  var maxDpr = isSmall ? 1.5 : 2;
+  var dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+  var sceneScale = 0.5;          // scene target res relative to drawing buffer
+  renderer.setPixelRatio(dpr);
+  renderer.setClearColor(0x000000, 1);
+
+  // ---------- 3D SCENE ----------
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+  camera.position.set(0, 0.35, 10.5);
+  camera.lookAt(0, 0, 0);
+
+  var world = new THREE.Group();
+  scene.add(world); world.position.y = 0.35;
+
+  var litVS = [
+    'uniform float uTime; uniform float uWobble;',
+    'varying vec3 vN; varying vec3 vP; varying vec3 vObj;',
+    'void main(){',
+    '  vec3 p = position; vec3 n = normal;',
+    '  p += n * uWobble * (sin(p.x*2.7 + uTime*1.3) * sin(p.y*3.1 - uTime*0.9) * sin(p.z*2.3 + uTime*0.7));',
+    '  vec4 wp = vec4(p,1.0);',
+    '  #ifdef USE_INSTANCING',
+    '  wp = instanceMatrix * wp; n = mat3(instanceMatrix) * n;',
+    '  #endif',
+    '  vObj = p;',
+    '  wp = modelMatrix * wp;',
+    '  vP = wp.xyz; vN = normalize(mat3(modelMatrix) * n);',
+    '  gl_Position = projectionMatrix * viewMatrix * wp;',
+    '}'
+  ].join('\n');
+  var litFS = [
+    'uniform vec3 uBase; uniform vec3 uKey; uniform vec3 uRim; uniform float uStripes; uniform float uTime;',
+    'varying vec3 vN; varying vec3 vP; varying vec3 vObj;',
+    'void main(){',
+    '  vec3 N = normalize(vN); if(!gl_FrontFacing) N = -N;',
+    '  vec3 V = normalize(cameraPosition - vP);',
+    '  vec3 L1 = normalize(vec3(0.6, 0.9, 0.7));',   // warm key
+    '  vec3 L2 = normalize(vec3(-0.9, -0.2, -0.5));', // cool rim
+    '  float d1 = max(dot(N,L1),0.0);',
+    '  float d2 = max(dot(N,L2),0.0);',
+    '  vec3 H = normalize(L1+V); float sp = pow(max(dot(N,H),0.0), 48.0);',
+    '  float fr = pow(1.0 - max(dot(N,V),0.0), 3.0);',
+    '  float hemi = 0.5 + 0.5*N.y;',
+    '  float band = 1.0;',
+    '  if(uStripes > 0.0){ band = 0.55 + 0.45*smoothstep(-0.25, 0.25, sin(vObj.x*uStripes + vObj.y*uStripes*0.6 - uTime*1.6)); }',
+    '  vec3 col = uBase * (0.07 + 0.08*hemi + d1*0.95*band) * uKey;',
+    '  col += uRim * (d2*0.55 + fr*0.9);',
+    '  col += vec3(1.0,0.95,0.9) * sp * 0.9;',
+    '  gl_FragColor = vec4(col, 1.0);',
+    '}'
+  ].join('\n');
+
+  function litMat(base, stripes, wobble){
+    return new THREE.ShaderMaterial({
+      vertexShader: litVS, fragmentShader: litFS,
+      uniforms: {
+        uTime: { value: 0 }, uWobble: { value: wobble || 0 },
+        uBase: { value: new THREE.Color(base) }, uKey: { value: new THREE.Color(1.0, 0.78, 0.6) },
+        uRim: { value: new THREE.Color(0.32, 0.78, 1.0) }, uStripes: { value: stripes || 0 }
+      }
+    });
+  }
+
+  // hero sculpture: torus knot
+  var knotMat = litMat(0xffffff, 9.0, 0.07);
+  var knot = new THREE.Mesh(new THREE.TorusKnotGeometry(1.45, 0.46, isSmall ? 220 : 320, 40, 2, 3), knotMat);
+  world.add(knot);
+
+  // orbiting ring
+  var ringMat = litMat(0xff8a4a, 0, 0);
+  var ring = new THREE.Mesh(new THREE.TorusGeometry(3.15, 0.045, 10, 180), ringMat);
+  ring.rotation.x = 1.2;
+  world.add(ring);
+  var ring2 = new THREE.Mesh(new THREE.TorusGeometry(3.6, 0.025, 8, 200), litMat(0x9fe8ff, 0, 0));
+  ring2.rotation.set(0.4, 0.9, 0);
+  world.add(ring2);
+
+  // floating forms (instanced)
+  var PER = isSmall ? 9 : 14;
+  var forms = [];
+  var geos = [new THREE.IcosahedronGeometry(0.32, 0), new THREE.OctahedronGeometry(0.34, 0), new THREE.BoxGeometry(0.42, 0.42, 0.42)];
+  var cols = [0xffffff, 0xffb27a, 0xa8ecff];
+  for (var g = 0; g < geos.length; g++){
+    var im = new THREE.InstancedMesh(geos[g], litMat(cols[g], 0, 0), PER);
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    var data = new Float32Array(PER * 6);
+    for (var i = 0; i < PER; i++){
+      data[i*6]   = 3.6 + Math.random() * 2.6;           // radius
+      data[i*6+1] = (0.06 + Math.random() * 0.12) * (Math.random() < 0.5 ? -1 : 1); // speed
+      data[i*6+2] = Math.random() * Math.PI * 2;         // phase
+      data[i*6+3] = (Math.random() - 0.5) * 3.4;         // height
+      data[i*6+4] = 0.4 + Math.random() * 1.4;           // spin
+      data[i*6+5] = 0.55 + Math.random() * 0.9;          // scale
+    }
+    world.add(im);
+    forms.push({ mesh: im, data: data });
+  }
+
+  // floor grid
+  var floorMat = new THREE.ShaderMaterial({
+    transparent: false,
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: 'varying vec3 vP; void main(){ vec4 wp = modelMatrix*vec4(position,1.0); vP = wp.xyz; gl_Position = projectionMatrix*viewMatrix*wp; }',
+    fragmentShader: [
+      'uniform float uTime; varying vec3 vP;',
+      'void main(){',
+      '  vec2 g = vP.xz*0.5; g.y += uTime*0.2;',
+      '  vec2 a = abs(fract(g) - 0.5); vec2 w = fwidth(g)*1.2;',
+            '  float lx = smoothstep(0.5 - w.x*1.5, 0.5, a.x); float lz = smoothstep(0.5 - w.y*1.5, 0.5, a.y);',
+      '  float l = max(lx, lz);',
+      '  float fade = exp(-length(vP.xz)*0.13);',
+      '  vec3 col = mix(vec3(0.0), vec3(1.0,0.45,0.18), l*fade*0.9) + vec3(0.02,0.03,0.035)*fade;',
+      '  gl_FragColor = vec4(col,1.0);',
+      '}'
+    ].join('\n'),
+    extensions: { derivatives: true }
+  });
+  var floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60, 1, 1), floorMat);
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -3.0;
+  scene.add(floor);
+
+  // dust
+  var DUST = isSmall ? 260 : 520;
+  var dPos = new Float32Array(DUST * 3);
+  for (var k = 0; k < DUST; k++){
+    var r = 4 + Math.random() * 9, a = Math.random() * Math.PI * 2;
+    dPos[k*3] = Math.cos(a) * r; dPos[k*3+1] = (Math.random() - 0.4) * 7; dPos[k*3+2] = Math.sin(a) * r - 2;
+  }
+  var dGeo = new THREE.BufferGeometry(); dGeo.setAttribute('position', new THREE.BufferAttribute(dPos, 3));
+  var dustMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uPx: { value: 1 } },
+    vertexShader: 'uniform float uTime; uniform float uPx; varying float vA; void main(){ vec3 p = position; p.y += sin(uTime*0.3 + p.x)*0.3; vec4 mv = modelViewMatrix*vec4(p,1.0); gl_PointSize = uPx*22.0/-mv.z; vA = 0.5+0.5*sin(uTime*1.7+p.z*3.0); gl_Position = projectionMatrix*mv; }',
+    fragmentShader: 'varying float vA; void main(){ float d = length(gl_PointCoord-0.5); if(d>0.5) discard; gl_FragColor = vec4(vec3(0.75,0.92,1.0)*(0.4+0.6*vA)*smoothstep(0.5,0.1,d),1.0); }'
+  });
+  var dust = new THREE.Points(dGeo, dustMat);
+  world.add(dust);
+
+  var sceneRT = new THREE.WebGLRenderTarget(4, 4, { depthBuffer: true, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+
+  // ---------- GLYPH ATLAS ----------
+  var RAMPS = [
+    { name: 'classic', chars: " .'`:-=+*oxe#%&@" },
+    { name: 'blocks',  n: 9 },
+    { name: 'braille', n: 9 },
+    { name: 'glyph',   n: 10 }
+  ];
+  var ATLAS_COLS = 16;
+  var atlasCanvas = document.createElement('canvas');
+  var actx = atlasCanvas.getContext('2d');
+  var atlasTex = new THREE.CanvasTexture(atlasCanvas);
+  atlasTex.minFilter = THREE.LinearFilter; atlasTex.magFilter = THREE.LinearFilter; atlasTex.generateMipmaps = false;
+  var BRAILLE_ORDER = [[0,1],[1,2],[0,3],[1,0],[0,2],[1,3],[0,0],[1,1]]; // col,row fill order (spreads dots)
+
+  function rampLen(r){ return r.chars ? r.chars.length : r.n; }
+
+  function buildAtlas(cw, ch){
+    atlasCanvas.width = ATLAS_COLS * cw; atlasCanvas.height = RAMPS.length * ch;
+    actx.fillStyle = '#000'; actx.fillRect(0, 0, atlasCanvas.width, atlasCanvas.height);
+    actx.fillStyle = '#fff'; actx.strokeStyle = '#fff';
+    actx.textAlign = 'center'; actx.textBaseline = 'middle';
+    var fs = Math.round(ch * 0.82);
+    actx.font = '500 ' + fs + 'px "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
+    for (var r = 0; r < RAMPS.length; r++){
+      var R = RAMPS[r], y0 = r * ch, len = rampLen(R);
+      for (var i = 0; i < len; i++){
+        var x0 = i * cw, t = i / (len - 1);
+        actx.save(); actx.beginPath(); actx.rect(x0, y0, cw, ch); actx.clip();
+        if (r === 0){
+          actx.fillText(R.chars[i], x0 + cw / 2, y0 + ch * 0.53);
+        } else if (r === 1){
+          // ordered-dither blocks: empty, 1/8 ... full
+          var px = Math.max(1, Math.round(cw / 4));
+          var bayer = [0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+          var thr = t * 16;
+          for (var yy = 0; yy < ch; yy += px) for (var xx = 0; xx < cw; xx += px){
+            var bi = ((yy/px)|0) % 4 * 4 + ((xx/px)|0) % 4;
+            if (bayer[bi] < thr) actx.fillRect(x0 + xx, y0 + yy, px, px);
+          }
+        } else if (r === 2){
+          var dots = i; var rad = Math.max(1, cw * 0.14);
+          for (var d = 0; d < dots; d++){
+            var cc = BRAILLE_ORDER[d];
+            actx.beginPath();
+            actx.arc(x0 + cw * (0.3 + cc[0] * 0.4), y0 + ch * (0.16 + cc[1] * 0.225), rad * (0.8 + 0.25 * t), 0, Math.PI * 2);
+            actx.fill();
+          }
+        } else {
+          var cx = x0 + cw / 2, cy = y0 + ch / 2, m = Math.min(cw, ch) * 0.5;
+          actx.lineWidth = Math.max(1, cw * 0.09);
+          actx.beginPath();
+          switch (i){
+            case 0: break;
+            case 1: actx.arc(cx, cy, m * 0.12, 0, 6.283); actx.fill(); break;
+            case 2: actx.arc(cx, cy, m * 0.24, 0, 6.283); actx.fill(); break;
+            case 3: actx.moveTo(cx - m*0.5, cy); actx.lineTo(cx + m*0.5, cy); actx.moveTo(cx, cy - m*0.5); actx.lineTo(cx, cy + m*0.5); actx.stroke(); break;
+            case 4: actx.moveTo(cx - m*0.55, cy - m*0.55); actx.lineTo(cx + m*0.55, cy + m*0.55); actx.moveTo(cx + m*0.55, cy - m*0.55); actx.lineTo(cx - m*0.55, cy + m*0.55); actx.stroke(); break;
+            case 5: actx.arc(cx, cy, m * 0.6, 0, 6.283); actx.stroke(); break;
+            case 6: actx.arc(cx, cy, m * 0.7, 0, 6.283); actx.stroke(); actx.beginPath(); actx.arc(cx, cy, m * 0.22, 0, 6.283); actx.fill(); break;
+            case 7: actx.moveTo(cx, cy - m*0.85); actx.lineTo(cx + m*0.85, cy); actx.lineTo(cx, cy + m*0.85); actx.lineTo(cx - m*0.85, cy); actx.closePath(); actx.fill(); break;
+            case 8: actx.arc(cx, cy, m * 0.8, 0, 6.283); actx.fill(); break;
+            case 9: actx.fillRect(x0 + cw*0.08, y0 + ch*0.2, cw*0.84, ch*0.6); break;
+          }
+        }
+        actx.restore();
+      }
+    }
+    atlasTex.needsUpdate = true;
+  }
+
+  // ---------- ASCII PASS ----------
+  var asciiMat = new THREE.ShaderMaterial({
+    uniforms: {
+      tScene: { value: sceneRT.texture }, tAtlas: { value: atlasTex },
+      uRes: { value: new THREE.Vector2(1, 1) }, uCell: { value: new THREE.Vector2(8, 13) },
+      uMouse: { value: new THREE.Vector2(-999, -999) }, uLens: { value: 0 },
+      uTime: { value: 0 }, uRow: { value: 0 }, uPrevRow: { value: 0 }, uLen: { value: 16 }, uPrevLen: { value: 16 },
+      uSwitch: { value: 2 }, uColor: { value: 1 }, uAtlasRows: { value: RAMPS.length },
+      uInk: { value: new THREE.Color(0xdfeef2) }, uBg: { value: new THREE.Color(0x07090b) }, uSignal: { value: new THREE.Color(0xff6a2b) },
+      uIntro: { value: 0 }
+    },
+    depthTest: false, depthWrite: false,
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: [
+      'uniform sampler2D tScene; uniform sampler2D tAtlas;',
+      'uniform vec2 uRes; uniform vec2 uCell; uniform vec2 uMouse;',
+      'uniform float uLens; uniform float uTime; uniform float uRow; uniform float uPrevRow; uniform float uLen; uniform float uPrevLen;',
+      'uniform float uSwitch; uniform float uColor; uniform float uAtlasRows; uniform float uIntro;',
+      'uniform vec3 uInk; uniform vec3 uBg; uniform vec3 uSignal;',
+      'varying vec2 vUv;',
+      'float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }',
+      'float luma(vec3 c){ return dot(c, vec3(0.299,0.587,0.114)); }',
+      'void main(){',
+      '  vec2 frag = vUv * uRes;',
+      '  vec2 grid = uRes / uCell;',
+      '  vec2 cell = floor(frag / uCell);',
+      '  vec2 cuv = fract(frag / uCell);',
+      '  vec2 cc = (cell + 0.5) * uCell / uRes;',
+      '  vec2 q = uCell / uRes * 0.25;',
+      '  vec3 s = (texture2D(tScene, cc + vec2(-q.x,-q.y)).rgb + texture2D(tScene, cc + vec2(q.x,-q.y)).rgb + texture2D(tScene, cc + vec2(-q.x,q.y)).rgb + texture2D(tScene, cc + vec2(q.x,q.y)).rgb) * 0.25;',
+      '  float l = luma(s);',
+      // edge emphasis from neighbour cells
+      '  vec2 o = uCell / uRes;',
+      '  float lx = luma(texture2D(tScene, cc + vec2(o.x,0.0)).rgb) - luma(texture2D(tScene, cc - vec2(o.x,0.0)).rgb);',
+      '  float ly = luma(texture2D(tScene, cc + vec2(0.0,o.y)).rgb) - luma(texture2D(tScene, cc - vec2(0.0,o.y)).rgb);',
+      '  float edge = clamp(length(vec2(lx,ly))*1.4, 0.0, 1.0);',
+      '  l = clamp(l * 0.92 + edge*0.3, 0.0, 1.0);',
+      '  float h = hash(cell);',
+      // intro: rows reveal top to bottom with scramble
+      '  float intro = uIntro*1.4 - (1.0 - cell.y/grid.y)*0.8 - h*0.3;',
+      '  float wave = (cell.x / grid.x) * 0.7 + h * 0.3;',
+      '  bool nw = uSwitch > wave;',
+      '  float row = nw ? uRow : uPrevRow;',
+      '  float len = nw ? uLen : uPrevLen;',
+      '  float idx = floor(l * (len - 0.001) + (h - 0.5) * 0.45);',
+      '  idx = clamp(idx, 0.0, len - 1.0);',
+      '  float front = abs(uSwitch - wave);',
+      '  float scr = step(front, 0.05) + step(intro, 0.12)*step(0.0, intro);',
+      '  if(scr > 0.0 && l > 0.02){ idx = floor(hash(cell + floor(uTime*24.0)) * (len-1.0)) + 1.0; }',
+      '  vec2 auv = vec2((idx + cuv.x) / 16.0, 1.0 - (row + 1.0 - cuv.y) / uAtlasRows);',
+      '  float gly = texture2D(tAtlas, auv).r;',
+      '  if(intro < 0.0) gly = 0.0;',
+      // colour: hue of the scene at full brightness, mixed with ink
+      '  float mx = max(max(s.r, s.g), max(s.b, 0.04));',
+      '  vec3 hue = clamp(s / mx, 0.0, 1.0);',
+      '  vec3 tint = mix(uInk, mix(uInk, hue, 0.85), uColor);',
+      '  float bright = 0.45 + 0.75 * l;',
+      '  vec3 glyphCol = tint * bright;',
+      '  if(scr > 0.0) glyphCol = mix(glyphCol, uSignal, 0.85);',
+      '  vec3 bgc = uBg + s * 0.05 * uColor;',
+      '  vec3 col = mix(bgc, glyphCol, gly);',
+      // lens
+      '  vec2 m = uMouse;',
+      '  float d = length(frag - m);',
+      '  float R = uLens;',
+      '  if(R > 1.0 && d < R + 6.0){',
+      '    vec2 mu = m / uRes;',
+      '    vec2 dir = (vUv - mu);',
+      '    float k = d / max(R,1.0);',
+      '    float mag = 1.0 / (1.18 - 0.12*k*k);',
+      '    vec2 base = mu + dir / mag;',
+      '    float ca = 0.004 * k*k;',
+      '    vec3 lc;',
+      '    lc.r = texture2D(tScene, base + dir*ca).r;',
+      '    lc.g = texture2D(tScene, base).g;',
+      '    lc.b = texture2D(tScene, base - dir*ca).b;',
+      '    lc += 0.03 * sin(frag.y * 1.6 + uTime*3.0) * 0.5;',
+      '    lc *= 1.0 - 0.25*k*k;',
+      '    float inside = 1.0 - smoothstep(R - 1.5, R, d);',
+      '    col = mix(col, lc, inside);',
+      '    float ringw = 1.0 - smoothstep(0.0, 2.0, abs(d - R));',
+      '    float tick = step(0.92, fract(atan(frag.y - m.y, frag.x - m.x) / 6.2831 * 48.0)) * (1.0 - smoothstep(0.0, 5.0, abs(d - R - 5.0)));',
+      '    col = mix(col, uSignal, clamp(ringw + tick*0.8, 0.0, 1.0));',
+      '  }',
+      // vignette
+      '  vec2 vv = vUv - 0.5; col *= 1.0 - dot(vv,vv)*0.55;',
+      '  gl_FragColor = vec4(col, 1.0);',
+      '}'
+    ].join('\n')
+  });
+  var quadScene = new THREE.Scene();
+  var quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  var quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), asciiMat);
+  quad.frustumCulled = false;
+  quadScene.add(quad);
+
+  // ---------- state ----------
+  var cellCss = 13, colorOn = 1;
+  var W = 1, H = 1, cw = 8, ch = 13;
+  var stat = document.getElementById('stat');
+  var rampIdx = 0;
+
+  function applyCell(){
+    ch = Math.max(6, Math.round(cellCss * dpr));
+    cw = Math.max(4, Math.round(ch * 0.6));
+    buildAtlas(cw, ch);
+    asciiMat.uniforms.uCell.value.set(cw, ch);
+  }
+
+  function resize(){
+    W = Math.max(1, hero.clientWidth); H = Math.max(1, hero.clientHeight);
+    renderer.setPixelRatio(dpr);
+    renderer.setSize(W, H, false);
+    var bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+    sceneRT.setSize(Math.max(2, Math.round(bw * sceneScale)), Math.max(2, Math.round(bh * sceneScale)));
+    asciiMat.uniforms.uRes.value.set(bw, bh);
+    dustMat.uniforms.uPx.value = bh * sceneScale / 900 * 2.0;
+    camera.aspect = W / H;
+    // keep sculpture framed on narrow screens
+    camera.position.z = W / H < 0.8 ? 16 : (W / H < 1.2 ? 14 : 13.2);
+    camera.updateProjectionMatrix();
+    applyCell();
+  }
+
+  function setRamp(i){
+    if (i === rampIdx) return;
+    var u = asciiMat.uniforms;
+    u.uPrevRow.value = rampIdx; u.uPrevLen.value = rampLen(RAMPS[rampIdx]);
+    rampIdx = i;
+    u.uRow.value = i; u.uLen.value = rampLen(RAMPS[i]);
+    u.uSwitch.value = -0.1;
+    document.querySelectorAll('[data-ramp]').forEach(function(b){ b.setAttribute('aria-pressed', String(+b.dataset.ramp === i)); });
+  }
+  document.querySelectorAll('[data-ramp]').forEach(function(b){ b.addEventListener('click', function(){ setRamp(+b.dataset.ramp); }); });
+  document.querySelectorAll('[data-cell]').forEach(function(b){
+    b.addEventListener('click', function(){
+      cellCss = +b.dataset.cell; applyCell();
+      document.querySelectorAll('[data-cell]').forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+    });
+  });
+  var colorBtn = document.querySelector('[data-color]');
+  colorBtn.addEventListener('click', function(){ colorOn = colorOn ? 0 : 1; colorBtn.setAttribute('aria-pressed', String(!!colorOn)); });
+
+  // ---------- pointer: rotate + lens ----------
+  var rotY = 0, rotX = 0.15, velY = reduced ? 0.02 : 0.12, velX = 0;
+  var dragging = false, lastX = 0, lastY = 0, lastMoveT = 0;
+  var mouseX = -999, mouseY = -999, lensTarget = 0, lensR = 0, lensX = -999, lensY = -999;
+  var hoverPX = 0, hoverPY = 0;
+  var LENS_CSS = isSmall ? 90 : 130;
+
+  canvas.addEventListener('pointerdown', function(e){
+    dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.classList.add('dragging');
+    mouseX = e.offsetX; mouseY = e.offsetY; lensTarget = LENS_CSS;
+    if (lensR < 2){ lensX = mouseX; lensY = mouseY; }
+    try { canvas.setPointerCapture(e.pointerId); } catch(_){}
+  });
+  canvas.addEventListener('pointermove', function(e){
+    mouseX = e.offsetX; mouseY = e.offsetY;
+    if (e.pointerType === 'mouse') lensTarget = LENS_CSS;
+    hoverPX = (e.offsetX / W) * 2 - 1; hoverPY = (e.offsetY / H) * 2 - 1;
+    if (dragging){
+      var dx = e.clientX - lastX, dy = e.clientY - lastY;
+      lastX = e.clientX; lastY = e.clientY;
+      velY = dx * 0.0065; velX = dy * 0.0045;
+      rotY += velY; rotX += velX;
+      lastMoveT = performance.now();
+    }
+  });
+  function endDrag(e){
+    dragging = false; canvas.classList.remove('dragging');
+    if (e.pointerType !== 'mouse') lensTarget = 0;
+    if (performance.now() - lastMoveT > 80){ velX = 0; }
+  }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('pointerleave', function(e){ if (e.pointerType === 'mouse') lensTarget = 0; });
+
+  window.addEventListener('keydown', function(e){
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (e.key >= '1' && e.key <= '4') setRamp(+e.key - 1);
+    else if (e.key === 'ArrowLeft') velY = -0.06;
+    else if (e.key === 'ArrowRight') velY = 0.06;
+  });
+
+  // ---------- loop control ----------
+  var running = true, visible = true, onscreen = true, raf = 0;
+  document.addEventListener('visibilitychange', function(){ visible = !document.hidden; kick(); });
+  if ('IntersectionObserver' in window){
+    new IntersectionObserver(function(es){ onscreen = es[0].isIntersecting; kick(); }, { threshold: 0 }).observe(canvas);
+  }
+  function kick(){ var want = visible && onscreen; if (want && !running){ running = true; last = performance.now(); raf = requestAnimationFrame(frame); } else if (!want){ running = false; } }
+
+  var ro = ('ResizeObserver' in window) ? new ResizeObserver(function(){ resize(); }) : null;
+  if (ro) ro.observe(hero); else window.addEventListener('resize', resize);
+  resize();
+
+  if (document.fonts && document.fonts.load){
+    document.fonts.load('500 20px "IBM Plex Mono"').then(function(){ buildAtlas(cw, ch); }).catch(function(){});
+  }
+
+  // adaptive quality
+  var frames = 0, accum = 0, tuned = false;
+  var fpsAcc = 0, fpsN = 0, statT = 0;
+  var dummy = new THREE.Object3D();
+  var t = 0, last = performance.now(), introT = 0;
+  var u = asciiMat.uniforms;
+
+  function frame(now){
+    if (!running) return;
+    raf = requestAnimationFrame(frame);
+    var dt = Math.min(0.05, (now - last) / 1000); last = now;
+    var tm = reduced ? 0.25 : 1;
+    t += dt * tm;
+
+    // adaptive: measure first 60 frames (skip first 10 warmup)
+    frames++;
+    if (!tuned && frames > 10){
+      accum += dt;
+      if (frames === 70){
+        tuned = true;
+        var avg = accum / 60;
+        if (avg > 0.024){ dpr = Math.max(1, dpr * 0.7); sceneScale = 0.4; resize(); }
+        else if (avg > 0.019){ sceneScale = 0.4; resize(); }
+      }
+    }
+
+    // rotation w/ inertia + idle drift
+    if (!dragging){
+      velY += ((reduced ? 0.0015 : 0.0045) - velY) * 0.02;
+      velX *= 0.92;
+      rotY += velY; rotX += velX;
+      rotX += (0.15 - rotX) * 0.01;
+    }
+    rotX = Math.max(-1.1, Math.min(1.1, rotX));
+    world.rotation.y = rotY;
+    world.rotation.x = rotX + hoverPY * 0.06;
+    camera.position.x += (hoverPX * 0.5 - camera.position.x) * 0.04;
+    camera.lookAt(0, 0, 0);
+
+    knot.rotation.z = t * 0.21;
+    knot.rotation.x = Math.sin(t * 0.3) * 0.25;
+    ring.rotation.z = t * 0.4;
+    ring2.rotation.y = 0.9 + t * 0.25;
+
+    // instanced forms
+    for (var f = 0; f < forms.length; f++){
+      var fm = forms[f], d = fm.data;
+      for (var i = 0; i < PER; i++){
+        var o = i * 6, ang = d[o+2] + t * d[o+1] * 3.0;
+        dummy.position.set(Math.cos(ang) * d[o], d[o+3] + Math.sin(t * 0.7 + d[o+2]) * 0.35, Math.sin(ang) * d[o]);
+        dummy.rotation.set(t * d[o+4], t * d[o+4] * 0.7 + f, 0);
+        var sc = d[o+5]; dummy.scale.set(sc, sc, sc);
+        dummy.updateMatrix();
+        fm.mesh.setMatrixAt(i, dummy.matrix);
+      }
+      fm.mesh.instanceMatrix.needsUpdate = true;
+      fm.mesh.material.uniforms.uTime.value = t;
+    }
+    knotMat.uniforms.uTime.value = t;
+    floorMat.uniforms.uTime.value = t;
+    dustMat.uniforms.uTime.value = t;
+
+    // lens easing (CSS px -> buffer px, GL y-up)
+    lensR += (lensTarget - lensR) * 0.14;
+    if (lensX < -900){ lensX = mouseX; lensY = mouseY; }
+    lensX += (mouseX - lensX) * 0.3; lensY += (mouseY - lensY) * 0.3;
+    u.uMouse.value.set(lensX * dpr, (H - lensY) * dpr);
+    u.uLens.value = lensR * dpr;
+    u.uTime.value = now / 1000;
+    if (u.uSwitch.value < 1.2) u.uSwitch.value += dt * 1.4;
+    introT = Math.min(1.2, introT + dt * (reduced ? 3 : 0.9));
+    u.uIntro.value = introT;
+    u.uColor.value += (colorOn - u.uColor.value) * 0.12;
+
+    renderer.setRenderTarget(sceneRT);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    renderer.render(quadScene, quadCam);
+
+    // stats (cheap text update twice a second)
+    fpsAcc += dt; fpsN++; statT += dt;
+    if (statT > 0.5){
+      stat.textContent = 'cols ' + Math.floor(W * dpr / cw) + ' × rows ' + Math.floor(H * dpr / ch) + ' · ' + RAMPS[rampIdx].name + ' · ' + Math.round(fpsN / fpsAcc) + ' fps';
+      statT = 0; fpsAcc = 0; fpsN = 0;
+    }
+  }
+  raf = requestAnimationFrame(frame);
+  }
+})();
+</script>

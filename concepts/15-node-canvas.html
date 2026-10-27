@@ -1,0 +1,1039 @@
+<title>Kaiav Node Graph</title>
+<meta charset="utf-8">
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0b0d10; --bg2:#101318; --node:#14171cf2; --node-solid:#14171c; --head:#191d23;
+  --edge:#262c35; --edge-hi:#3b4450; --ink:#ece7dc; --mute:#9097a1; --dim:#5d646e;
+  --amber:#f3b648; --coral:#ff6a4d; --sky:#5cc8ff; --mint:#74e0b4; --rose:#ff8fb6; --lilac:#c3a6ff;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:'IBM Plex Sans Condensed','Arial Narrow',system-ui,sans-serif;
+  --serif:'Instrument Serif',Georgia,'Times New Roman',serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);overscroll-behavior:none}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px}
+
+#stage{position:fixed;inset:0;height:100dvh;touch-action:none;overflow:hidden;cursor:grab;user-select:none;-webkit-user-select:none}
+#stage.panning{cursor:grabbing}
+#stage.cut{cursor:crosshair}
+#stage.wiring{cursor:copy}
+#wires{position:absolute;inset:0;width:100%;height:100%;display:block}
+#vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 45%,transparent 55%,#05060899 100%)}
+#world{position:absolute;left:0;top:0;transform-origin:0 0}
+#world.moving{will-change:transform}
+
+/* nodes */
+.node{position:absolute;left:0;top:0;width:260px;background:var(--node);border:1px solid var(--edge);border-radius:10px;
+  box-shadow:0 18px 40px -18px #000e,0 0 0 1px #00000080;transition:opacity .45s ease,border-color .2s ease,box-shadow .2s ease;
+  animation:nodeIn .7s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i,0) * 60ms)}
+@keyframes nodeIn{from{opacity:0}to{opacity:1}}
+.node.sel{border-color:var(--edge-hi);box-shadow:0 18px 50px -16px #000,0 0 0 1px var(--a,var(--amber))}
+.node.off{opacity:.42}
+.node.off .live{filter:grayscale(1)}
+.nh{display:flex;align-items:center;gap:8px;padding:9px 12px 8px;background:var(--head);border-bottom:1px solid var(--edge);border-radius:10px 10px 0 0;cursor:move}
+.nh .led{width:7px;height:7px;border-radius:50%;background:var(--a,var(--amber));box-shadow:0 0 8px var(--a,var(--amber));flex:none}
+.node.off .nh .led{background:var(--dim);box-shadow:none}
+.nh b{font:600 15px/1.1 var(--sans);letter-spacing:.01em;color:var(--ink);white-space:nowrap}
+.nh .tag{margin-left:auto;font:500 9.5px/1 var(--mono);letter-spacing:.12em;color:var(--mute);text-transform:uppercase;white-space:nowrap}
+.node.off .nh .tag::before{content:'no signal · ';color:var(--coral)}
+.nb{padding:10px 12px 12px;font-size:13.5px;line-height:1.42;color:#cfcac0}
+.nb p{margin:0 0 8px}
+.nb .k{font:500 10.5px/1.5 var(--mono);color:var(--mute);letter-spacing:.02em}
+.nb a.gh{display:inline-flex;align-items:center;gap:6px;margin-top:4px;font:500 11.5px/1 var(--mono);color:var(--a,var(--amber));text-decoration:none;padding:6px 8px;border:1px solid var(--edge);border-radius:6px;background:#0d0f13}
+.nb a.gh:hover{border-color:var(--a,var(--amber))}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.chips span{font:500 10.5px/1 var(--mono);padding:5px 7px;border-radius:99px;border:1px solid var(--edge);color:var(--mute)}
+.badge{display:inline-block;font:600 9.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:4px 6px;border-radius:4px;color:#0b0d10;background:var(--a,var(--amber));margin-bottom:8px}
+canvas.live{display:block;width:100%;border-radius:6px;background:#0c0e12;border:1px solid #1e232b;margin-bottom:9px}
+pre.term{margin:0 0 9px;height:var(--h,104px);overflow:hidden;padding:8px 9px;border-radius:6px;background:#0a0c0f;border:1px solid #1e232b;font:400 11px/1.5 var(--mono);color:#b9c0c9;white-space:pre-wrap;word-break:break-word}
+pre.term div{min-height:16.5px}
+pre.term .c{color:var(--ink)} pre.term .c::first-letter{color:var(--a,var(--amber))}
+pre.term .ok{color:var(--mint)} pre.term .j{color:var(--coral)} pre.term .m{color:var(--dim)}
+pre.term div:last-child::after{content:'';display:inline-block;width:6px;height:12px;margin-left:2px;vertical-align:-2px;background:var(--a,var(--amber));animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px dashed #232830}
+.list li:last-child{border-bottom:0}
+.list a{font:600 13.5px/1.2 var(--sans);text-decoration:none}
+.list a:hover{color:var(--a)}
+.list small{font:400 10.5px/1.3 var(--mono);color:var(--mute);text-align:right}
+.mail{display:flex;align-items:center;gap:6px;margin:2px 0 8px}
+.mail code{flex:1;min-width:0;font:500 12px/1.2 var(--mono);color:var(--ink);user-select:text;-webkit-user-select:text;overflow-wrap:anywhere;padding:7px 8px;background:#0a0c0f;border:1px solid #1e232b;border-radius:6px}
+button{font:inherit;color:inherit}
+.btn{font:500 11px/1 var(--mono);letter-spacing:.04em;padding:7px 9px;border-radius:6px;border:1px solid var(--edge-hi);background:#1a1e25;color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--amber)}
+.row2{display:flex;gap:6px;flex-wrap:wrap}
+.big{font:400 46px/1 var(--serif);color:var(--ink);letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+
+/* ports */
+.pr{position:relative;display:flex;align-items:center;height:26px;padding:0 12px;font:500 10.5px/1 var(--mono);color:var(--mute);letter-spacing:.06em;text-transform:uppercase}
+.pr.o{justify-content:flex-end}
+.ports{padding:6px 0 4px;border-top:1px solid #1d2128}
+.ports.top{border-top:0;border-bottom:1px solid #1d2128;padding:4px 0}
+.port{position:absolute;top:50%;width:13px;height:13px;margin-top:-6.5px;border-radius:50%;background:var(--node-solid);border:2px solid var(--c);box-shadow:0 0 0 3px var(--bg);cursor:crosshair;z-index:2}
+.port::before{content:'';position:absolute;inset:-12px;border-radius:50%}
+.port.in{left:-7.5px} .port.out{right:-7.5px}
+.port.on{background:var(--c);box-shadow:0 0 0 3px var(--bg),0 0 14px 1px var(--c)}
+.port.snap{transform:scale(1.5);box-shadow:0 0 0 3px var(--bg),0 0 22px 4px var(--c)}
+.port .ring{position:absolute;inset:-3px;border-radius:50%;border:2px solid var(--c);opacity:0;pointer-events:none}
+.port{transition:transform .15s ease}
+
+/* overlay chrome */
+.ui{position:fixed;z-index:5;pointer-events:none}
+.ui > *{pointer-events:auto}
+.brand{top:0;left:0;padding-top:max(18px,env(safe-area-inset-top,0px));padding-left:max(22px,env(safe-area-inset-left,0px));padding-right:16px;max-width:560px}
+.brand h1{margin:0;font:400 clamp(34px,5.2vw,60px)/.92 var(--serif);letter-spacing:-.015em;color:var(--ink);pointer-events:none}
+.brand h1 i{color:var(--amber)}
+.brand p{margin:8px 0 0;font:500 12px/1.4 var(--mono);color:var(--mute);letter-spacing:.02em;pointer-events:none}
+.tools{top:0;right:0;padding-top:max(18px,env(safe-area-inset-top,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;gap:6px;align-items:center}
+.tools .zr{font:500 11px/1 var(--mono);color:var(--mute);min-width:44px;text-align:right;margin-right:4px;font-variant-numeric:tabular-nums}
+.tools .btn{background:#13161bdd}
+.foot{left:0;right:0;bottom:0;padding-bottom:max(14px,env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;align-items:flex-end;gap:14px}
+.foot nav{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;min-width:0;flex:1;padding:2px}
+.foot nav::-webkit-scrollbar{display:none}
+.foot nav button{flex:none;font:500 11px/1 var(--mono);padding:8px 10px;border-radius:99px;border:1px solid var(--edge);background:#11141add;color:#c7c2b8;cursor:pointer;white-space:nowrap}
+.foot nav button::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--a);margin-right:7px;vertical-align:1px}
+.foot nav button:hover{border-color:var(--a)}
+.hint{position:fixed;left:max(16px,env(safe-area-inset-left,0px));bottom:calc(max(14px,env(safe-area-inset-bottom,0px)) + 44px);font:400 10.5px/1.5 var(--mono);color:var(--dim);z-index:5;pointer-events:none;letter-spacing:.02em}
+.hint kbd{font:inherit;color:var(--mute)}
+#mmwrap{flex:none;position:relative;border:1px solid var(--edge);border-radius:8px;background:#0d0f13e6;overflow:hidden;box-shadow:0 10px 30px -10px #000}
+#minimap{display:block;width:190px;height:122px;cursor:pointer;touch-action:none}
+#mmwrap span{position:absolute;left:8px;top:6px;font:500 9px/1 var(--mono);letter-spacing:.12em;color:var(--dim);pointer-events:none}
+.fallback{display:none}
+@media (max-width:700px){
+  .hint{display:none}
+  .tools .zr,.tools .opt{display:none}
+  #minimap{width:120px;height:80px}
+  .brand{max-width:calc(100% - 120px)}
+  .brand p{font-size:11px}
+}
+@media (prefers-reduced-motion:reduce){ .node{animation:none} pre.term div:last-child::after{animation:none} }
+</style>
+
+<div id="stage" aria-label="Interactive node graph: Kaiav Nihalani">
+  <canvas id="wires" aria-hidden="true"></canvas>
+  <div id="vig"></div>
+  <div id="world">
+
+    <section class="node" data-id="kaiav" data-x="0" data-y="200" style="--a:var(--amber);--i:0;width:280px" aria-label="Kaiav Nihalani">
+      <div class="nh"><span class="led"></span><b>Kaiav Nihalani</b><span class="tag">source</span></div>
+      <div class="nb">
+        <canvas class="live" data-live="wire" width="256" height="132" style="height:132px" aria-hidden="true"></canvas>
+        <p>Founder of Eden. Co-founder of J.</p>
+        <div class="k">he/him · building context for agents</div>
+      </div>
+      <div class="ports">
+        <div class="pr o">about<span class="port out" data-p="kaiav:about" data-c="amber" style="--c:var(--amber)"></span></div>
+        <div class="pr o">eden<span class="port out" data-p="kaiav:eden" data-c="sky" style="--c:var(--sky)"></span></div>
+        <div class="pr o">j<span class="port out" data-p="kaiav:j" data-c="coral" style="--c:var(--coral)"></span></div>
+        <div class="pr o">x<span class="port out" data-p="kaiav:x" data-c="lilac" style="--c:var(--lilac)"></span></div>
+        <div class="pr o">linkedin<span class="port out" data-p="kaiav:li" data-c="mint" style="--c:var(--mint)"></span></div>
+        <div class="pr o">contact<span class="port out" data-p="kaiav:contact" data-c="rose" style="--c:var(--rose)"></span></div>
+      </div>
+    </section>
+
+    <section class="node" data-id="about" data-x="470" data-y="-90" style="--a:var(--amber);--i:1" aria-label="About">
+      <div class="nh"><span class="led"></span><b>About</b><span class="tag">text</span></div>
+      <div class="ports top"><div class="pr">in<span class="port in" data-p="about:in" data-c="amber" style="--c:var(--amber)"></span></div></div>
+      <div class="nb">
+        <p>Founder. Short bio coming soon.</p>
+        <div class="chips"><span>founder · Eden</span><span>co-founder · J</span></div>
+      </div>
+    </section>
+
+    <section class="node" data-id="eden" data-x="840" data-y="-120" style="--a:var(--sky);--i:2;width:300px" aria-label="Eden">
+      <div class="nh"><span class="led"></span><b>Eden</b><span class="tag">founder</span></div>
+      <div class="ports top"><div class="pr">in<span class="port in" data-p="eden:in" data-c="sky" style="--c:var(--sky)"></span></div></div>
+      <div class="nb">
+        <canvas class="live" data-live="weave" width="276" height="110" style="height:110px" aria-hidden="true"></canvas>
+        <p style="font:400 26px/1.05 var(--serif);color:var(--ink);margin:2px 0 0">Context for agents.</p>
+      </div>
+    </section>
+
+    <section class="node" data-id="j" data-x="900" data-y="230" style="--a:var(--coral);--i:3;width:320px" aria-label="J: Rising Founder">
+      <div class="nh"><span class="led"></span><b>J: Rising Founder</b><span class="tag">co-founder</span></div>
+      <div class="ports top"><div class="pr">in<span class="port in" data-p="j:in" data-c="coral" style="--c:var(--coral)"></span></div></div>
+      <div class="nb">
+        <pre class="term" data-term="j" style="--h:106px" aria-label="Program summary, typed out"></pre>
+        <p>An early chance for extraordinary founders. Co-founded with Jose Cruz-Lopez.</p>
+        <a class="gh" href="https://risingfounder.net" target="_blank" rel="noopener">risingfounder.net ↗</a>
+      </div>
+    </section>
+
+    <section class="node" data-id="x" data-x="470" data-y="560" style="--a:var(--lilac);--i:4;width:250px" aria-label="X">
+      <div class="nh"><span class="led"></span><b>X</b><span class="tag">social</span></div>
+      <div class="ports top"><div class="pr">in<span class="port in" data-p="x:in" data-c="lilac" style="--c:var(--lilac)"></span></div></div>
+      <div class="nb">
+        <div class="k">@KaiavRNihalani</div>
+        <a class="gh" href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">x.com/KaiavRNihalani ↗</a>
+      </div>
+    </section>
+
+    <section class="node" data-id="li" data-x="860" data-y="700" style="--a:var(--mint);--i:5;width:260px" aria-label="LinkedIn">
+      <div class="nh"><span class="led"></span><b>LinkedIn</b><span class="tag">social</span></div>
+      <div class="ports top"><div class="pr">in<span class="port in" data-p="li:in" data-c="mint" style="--c:var(--mint)"></span></div></div>
+      <div class="nb">
+        <div class="k">in/kaiav-nihalani</div>
+        <a class="gh" href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn profile ↗</a>
+      </div>
+    </section>
+
+    <section class="node" data-id="contact" data-x="420" data-y="800" style="--a:var(--rose);--i:6;width:300px" aria-label="Contact">
+      <div class="nh"><span class="led"></span><b>Contact</b><span class="tag">sink</span></div>
+      <div class="ports top"><div class="pr">in<span class="port in" data-p="contact:in" data-c="rose" style="--c:var(--rose)"></span></div></div>
+      <div class="nb">
+        <div class="mail"><code id="email">kaiav.nihalani@gmail.com</code><button class="btn" id="copy" type="button">Copy</button></div>
+        <div class="k">signals received</div>
+        <div class="big" id="count">0</div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<header class="ui brand">
+  <h1>Kaiav <i>Nihalani</i></h1>
+  <p>Founder of Eden. Co-founder of J.</p>
+</header>
+
+<div class="ui tools" role="toolbar" aria-label="Canvas controls">
+  <span class="zr" id="zr" aria-live="off">100%</span>
+  <button class="btn" type="button" id="zout" aria-label="Zoom out">−</button>
+  <button class="btn" type="button" id="zin" aria-label="Zoom in">+</button>
+  <button class="btn" type="button" id="fit">Fit</button>
+  <button class="btn opt" type="button" id="rewire">Rewire</button>
+</div>
+
+<div class="hint" aria-hidden="true">drag to pan · <kbd>scroll</kbd>/pinch to zoom · drag a port to rewire · click a wire to cut · <kbd>F</kbd> fit</div>
+
+<div class="ui foot">
+  <nav aria-label="Jump to node">
+    <button type="button" data-go="kaiav" style="--a:var(--amber)">Kaiav</button>
+    <button type="button" data-go="eden" style="--a:var(--sky)">Eden</button>
+    <button type="button" data-go="j" style="--a:var(--coral)">J: Rising Founder</button>
+    <button type="button" data-go="about" style="--a:var(--amber)">About</button>
+    <button type="button" data-go="x" style="--a:var(--lilac)">X</button>
+    <button type="button" data-go="li" style="--a:var(--mint)">LinkedIn</button>
+    <button type="button" data-go="contact" style="--a:var(--rose)">Contact</button>
+  </nav>
+  <div id="mmwrap"><span>MAP</span><canvas id="minimap" aria-label="Minimap, click to move the view"></canvas></div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const stage = $('#stage'), world = $('#world'), cv = $('#wires');
+const ctx = cv.getContext('2d', { alpha: false });
+const mm = $('#minimap'), mctx = mm.getContext('2d');
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const COARSE = matchMedia('(pointer: coarse)').matches || innerWidth < 700;
+let DPR = Math.min(window.devicePixelRatio || 1, COARSE ? 1.5 : 2);
+let W = innerWidth, H = innerHeight;
+const rootCS = getComputedStyle(document.documentElement);
+const COL = {};
+['amber','coral','sky','mint','rose','lilac','bg','dim'].forEach(k => COL[k] = rootCS.getPropertyValue('--' + k).trim());
+
+/* ---------- camera ---------- */
+const cam = { x: 0, y: 0, z: 1 };
+const tgt = { x: 0, y: 0, z: 1, on: false };
+let camDirty = true, movingAt = 0, isMoving = false;
+const ZMIN = 0.18, ZMAX = 2.4;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+let zoomGoal = 0, zoomAX = 0, zoomAY = 0, zoomAnim = false;
+let velX = 0, velY = 0, inertia = false;
+
+/* ---------- nodes & ports ---------- */
+const nodes = [], byId = {};
+let zTop = 20;
+document.querySelectorAll('.node').forEach((el, i) => {
+  const n = { id: el.dataset.id, el, x: +el.dataset.x, y: +el.dataset.y, w: 260, h: 200, on: true, vis: true, outs: [], ins: [], depth: 0 };
+  nodes.push(n); byId[n.id] = n;
+  el.style.transform = `translate(${n.x}px,${n.y}px)`;
+});
+const ports = {}, inPorts = [];
+document.querySelectorAll('.port').forEach(el => {
+  const id = el.dataset.p, nid = id.split(':')[0];
+  const ring = document.createElement('i'); ring.className = 'ring'; el.appendChild(ring);
+  const p = { id, el, ring, node: byId[nid], out: el.classList.contains('out'), ox: 0, oy: 0, color: COL[el.dataset.c] || COL.amber, wires: [] };
+  ports[id] = p;
+  if (p.out) p.node.outs.push(p); else { p.node.ins.push(p); inPorts.push(p); }
+});
+
+function measure() {
+  const z = cam.z;
+  for (const n of nodes) { n.w = n.el.offsetWidth; n.h = n.el.offsetHeight; }
+  for (const id in ports) {
+    const p = ports[id];
+    const nr = p.node.el.getBoundingClientRect(), r = p.el.getBoundingClientRect();
+    p.ox = (r.left + r.width / 2 - nr.left) / z;
+    p.oy = (r.top + r.height / 2 - nr.top) / z;
+  }
+  mmBounds(); mmDirty = true;
+}
+
+/* ---------- wires ---------- */
+const DEFAULT = [
+  ['kaiav:about','about:in'], ['kaiav:eden','eden:in'], ['kaiav:j','j:in'],
+  ['kaiav:x','x:in'], ['kaiav:li','li:in'], ['kaiav:contact','contact:in']
+];
+const wires = [], ghosts = [];
+let now = 0;
+function connect(a, b, delay) {
+  for (let i = wires.length - 1; i >= 0; i--) if (wires[i].b === b) removeWire(wires[i], true, true);
+  const w = { a, b, p: Math.random(), seg: -1, born: now + (delay || 0), hover: false,
+    x0:0,y0:0,x1:0,y1:0,x2:0,y2:0,x3:0,y3:0, len: 300, on: true };
+  w.seg = Math.floor(w.p * 3);
+  wires.push(w); a.wires.push(w); b.wires.push(w);
+  topo();
+  return w;
+}
+function removeWire(w, ghost, quiet) {
+  const i = wires.indexOf(w); if (i < 0) return;
+  wires.splice(i, 1);
+  w.a.wires.splice(w.a.wires.indexOf(w), 1);
+  w.b.wires.splice(w.b.wires.indexOf(w), 1);
+  if (ghost) ghosts.push({ a: w.a, b: w.b, t0: now, color: w.a.color });
+  if (hoverWire === w) hoverWire = null;
+  if (!quiet) topo();
+}
+function topo() {
+  for (const n of nodes) { n.on = false; n.depth = 0; }
+  const root = byId.kaiav; root.on = true;
+  const q = [root];
+  while (q.length) {
+    const n = q.shift();
+    for (const p of n.outs) for (const w of p.wires) {
+      const m = w.b.node;
+      if (!m.on) { m.on = true; m.depth = n.depth + 1; q.push(m); }
+    }
+  }
+  for (const n of nodes) n.el.classList.toggle('off', !n.on);
+  for (const id in ports) ports[id].el.classList.toggle('on', ports[id].wires.length > 0);
+  for (const w of wires) w.on = w.a.node.on;
+  mmDirty = true;
+}
+function resetWires(stagger) {
+  while (wires.length) removeWire(wires[0], !stagger, true);
+  topo();
+  // stagger by depth for the intro
+  for (const [a, b] of DEFAULT) connect(ports[a], ports[b], stagger ? 0.35 + DEFAULT.findIndex(d => d[0] === a) * 0.16 + Math.random() * 0.06 : Math.random() * 0.25);
+}
+
+/* ---------- canvas sizing ---------- */
+function resize() {
+  W = innerWidth; H = innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  const mw = mm.clientWidth, mh = mm.clientHeight;
+  mm.width = Math.round(mw * DPR); mm.height = Math.round(mh * DPR);
+  mmDirty = true; camDirty = true;
+}
+
+/* grid patterns (built once) */
+function makeTile(major) {
+  const s = 2, t = document.createElement('canvas');
+  const size = major ? 120 : 24;
+  t.width = t.height = size * s;
+  const c = t.getContext('2d');
+  c.scale(s, s);
+  if (major) {
+    c.strokeStyle = '#2b323c'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(0, 0.5); c.lineTo(5, 0.5); c.moveTo(0.5, 0); c.lineTo(0.5, 5);
+    c.moveTo(115, 0.5); c.lineTo(120, 0.5); c.moveTo(0.5, 115); c.lineTo(0.5, 120); c.stroke();
+  } else {
+    c.fillStyle = '#1f252d'; c.beginPath(); c.arc(0.75, 0.75, 0.9, 0, 6.283); c.fill();
+  }
+  return t;
+}
+const patMinor = ctx.createPattern(makeTile(false), 'repeat');
+const patMajor = ctx.createPattern(makeTile(true), 'repeat');
+const pm = new DOMMatrix();
+
+/* glow sprites per color */
+const sprites = {};
+function sprite(color) {
+  if (sprites[color]) return sprites[color];
+  const s = document.createElement('canvas'); s.width = s.height = 64;
+  const c = s.getContext('2d');
+  const g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(0.12, color); g.addColorStop(0.35, color + '55'); g.addColorStop(1, color + '00');
+  c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+  return (sprites[color] = s);
+}
+
+/* ---------- bezier helpers (no alloc) ---------- */
+let PX = 0, PY = 0;
+function bez(w, t) {
+  const u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+  PX = a * w.x0 + b * w.x1 + c * w.x2 + d * w.x3;
+  PY = a * w.y0 + b * w.y1 + c * w.y2 + d * w.y3;
+}
+function setCurve(w, x0, y0, x3, y3, z) {
+  const dxr = x3 - x0;
+  let dx = Math.max(50 * z, Math.abs(dxr) * 0.5);
+  if (dxr < 0) dx = Math.max(dx, 90 * z + Math.abs(y3 - y0) * 0.25);
+  w.x0 = x0; w.y0 = y0; w.x3 = x3; w.y3 = y3;
+  w.x1 = x0 + dx; w.y1 = y0; w.x2 = x3 - dx; w.y2 = y3;
+}
+function portScreen(p) {
+  PX = (p.node.x + p.ox) * cam.z + cam.x;
+  PY = (p.node.y + p.oy) * cam.z + cam.y;
+}
+
+/* ---------- quality ---------- */
+let quality = 2; // 2 high, 1 low
+let fCount = 0, fAcc = 0;
+
+/* ---------- sparks ---------- */
+const SP = 80, sp = new Float32Array(SP * 6); let spI = 0;
+function burst(x, y, color, n) {
+  for (let k = 0; k < n; k++) {
+    const o = (spI++ % SP) * 6, a = Math.random() * 6.283, v = 60 + Math.random() * 220;
+    sp[o] = x; sp[o+1] = y; sp[o+2] = Math.cos(a) * v; sp[o+3] = Math.sin(a) * v - 40; sp[o+4] = 1; sp[o+5] = COLORS_IDX(color);
+  }
+}
+const CLIST = [];
+function COLORS_IDX(c) { let i = CLIST.indexOf(c); if (i < 0) { CLIST.push(c); i = CLIST.length - 1; } return i; }
+
+/* ---------- arrival flashes ---------- */
+const RING_KF = [{ transform: 'scale(.7)', opacity: 1 }, { transform: 'scale(2.9)', opacity: 0 }];
+const RING_OPT = { duration: 600, easing: 'cubic-bezier(.2,.7,.3,1)' };
+const countEl = $('#count'); let count = 0, countShown = -1;
+function arrive(w) {
+  const n = w.b.node;
+  if (n.vis && w.b.ring.animate) w.b.ring.animate(RING_KF, RING_OPT);
+  count++;
+}
+
+/* ---------- live previews ---------- */
+const lives = [];
+document.querySelectorAll('canvas.live').forEach(c => {
+  const node = byId[c.closest('.node').dataset.id];
+  const cw = +c.getAttribute('width'), ch = +c.getAttribute('height');
+  const pr = Math.min(DPR, 2);
+  c.width = Math.round(cw * pr); c.height = Math.round(ch * pr);
+  const x = c.getContext('2d'); x.scale(pr, pr);
+  lives.push({ kind: c.dataset.live, c, x, node, w: cw, h: ch, st: null });
+});
+
+// icosphere for the wireframe preview
+const ico = (() => {
+  const t = (1 + Math.sqrt(5)) / 2;
+  let V = [[-1,t,0],[1,t,0],[-1,-t,0],[1,-t,0],[0,-1,t],[0,1,t],[0,-1,-t],[0,1,-t],[t,0,-1],[t,0,1],[-t,0,-1],[-t,0,1]];
+  let F = [[0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],[1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],[3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],[4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1]];
+  V = V.map(v => { const l = Math.hypot(...v); return v.map(c => c / l); });
+  const cache = {};
+  const mid = (a, b) => { const k = a < b ? a + '_' + b : b + '_' + a; if (cache[k] != null) return cache[k];
+    const v = [(V[a][0]+V[b][0])/2,(V[a][1]+V[b][1])/2,(V[a][2]+V[b][2])/2]; const l = Math.hypot(...v);
+    V.push(v.map(c => c / l)); return (cache[k] = V.length - 1); };
+  const F2 = [];
+  for (const [a,b,c] of F) { const ab = mid(a,b), bc = mid(b,c), ca = mid(c,a); F2.push([a,ab,ca],[b,bc,ab],[c,ca,bc],[ab,bc,ca]); }
+  const E = new Set(); const edges = [];
+  for (const f of F2) for (let i = 0; i < 3; i++) { const a = f[i], b = f[(i+1)%3]; const k = a < b ? a*1000+b : b*1000+a; if (!E.has(k)) { E.add(k); edges.push(a, b); } }
+  const vs = new Float32Array(V.length * 3); V.forEach((v, i) => vs.set(v, i * 3));
+  return { vs, n: V.length, edges: new Uint16Array(edges), px: new Float32Array(V.length), py: new Float32Array(V.length), pz: new Float32Array(V.length) };
+})();
+
+function drawWire(L, t, dt) {
+  const x = L.x, w = L.w, h = L.h, cx = w / 2, cy = h / 2 + 2;
+  x.fillStyle = '#0c0e12'; x.fillRect(0, 0, w, h);
+  const ry = t * 0.45, rx = 0.42 + Math.sin(t * 0.3) * 0.18, cyy = Math.cos(ry), syy = Math.sin(ry), cxx = Math.cos(rx), sxx = Math.sin(rx);
+  const R = h * 0.36, vs = ico.vs, px = ico.px, py = ico.py, pz = ico.pz;
+  for (let i = 0; i < ico.n; i++) {
+    let X = vs[i*3], Y = vs[i*3+1], Z = vs[i*3+2];
+    const d = 1 + 0.09 * Math.sin(t * 1.7 + X * 3.1 + Y * 2.3) + 0.05 * Math.sin(t * 2.3 + Z * 4.0);
+    X *= d; Y *= d; Z *= d;
+    const x1 = X * cyy + Z * syy, z1 = -X * syy + Z * cyy;
+    const y2 = Y * cxx - z1 * sxx, z2 = Y * sxx + z1 * cxx;
+    const f = 3.2 / (3.2 + z2);
+    px[i] = cx + x1 * R * f; py[i] = cy + y2 * R * f; pz[i] = z2;
+  }
+  // orbit ring
+  x.lineWidth = 1;
+  x.strokeStyle = '#f3b64830';
+  x.beginPath(); x.ellipse(cx, cy, R * 1.55, R * 0.42, -0.25, 0, 6.283); x.stroke();
+  const E = ico.edges;
+  for (let b = 0; b < 3; b++) {
+    x.beginPath();
+    for (let k = 0; k < E.length; k += 2) {
+      const zz = (pz[E[k]] + pz[E[k+1]]) * 0.5;
+      const bucket = zz > 0.33 ? 0 : zz > -0.33 ? 1 : 2;
+      if (bucket !== b) continue;
+      x.moveTo(px[E[k]], py[E[k]]); x.lineTo(px[E[k+1]], py[E[k+1]]);
+    }
+    x.strokeStyle = b === 0 ? '#f3b64830' : b === 1 ? '#f3b64870' : '#ffd88ad0';
+    x.lineWidth = b === 2 ? 1.1 : 0.8;
+    x.stroke();
+  }
+  // satellites on the ring
+  for (let s = 0; s < 5; s++) {
+    const a = t * 0.6 + s * 1.2566, ex = Math.cos(a) * R * 1.55, ey = Math.sin(a) * R * 0.42;
+    const ca = Math.cos(-0.25), sa = Math.sin(-0.25);
+    const sx = cx + ex * ca - ey * sa, sy = cy + ex * sa + ey * ca;
+    x.fillStyle = s === 0 ? COL.coral : s === 1 ? COL.sky : s === 2 ? COL.rose : s === 3 ? COL.mint : COL.lilac;
+    x.globalAlpha = Math.sin(a) > 0 ? 1 : 0.35;
+    x.beginPath(); x.arc(sx, sy, 2.3, 0, 6.283); x.fill();
+  }
+  x.globalAlpha = 1;
+  x.font = '500 9px "IBM Plex Mono", monospace'; x.fillStyle = '#5d646e';
+  x.fillText('KN · v' + (t * 0.25 | 0) % 10 + '.' + (t * 3 | 0) % 100, 8, h - 8);
+}
+
+// Eden preview: abstract context weave (strands of signal braided toward one point)
+function drawWeave(L, t, dt) {
+  if (!L.st) L.st = { grad: null };
+  const x = L.x, w = L.w, h = L.h, cy = h / 2;
+  x.fillStyle = '#0c0e12'; x.fillRect(0, 0, w, h);
+  x.globalCompositeOperation = 'lighter';
+  const S = 9;
+  for (let s = 0; s < S; s++) {
+    const ph = s * 0.7, amp = (h * 0.38) * (0.35 + 0.65 * ((s * 37) % 9) / 9);
+    x.beginPath();
+    for (let i = 0; i <= 48; i++) {
+      const u = i / 48, xx = u * w;
+      const env = Math.pow(1 - u, 1.6);
+      const yy = cy + Math.sin(u * 7 + t * 1.3 + ph) * amp * env + Math.sin(u * 13 - t * 0.9 + ph * 2) * 4 * env;
+      i ? x.lineTo(xx, yy) : x.moveTo(xx, yy);
+    }
+    x.strokeStyle = s % 3 === 0 ? '#5cc8ff70' : s % 3 === 1 ? '#5cc8ff38' : '#f3b64830';
+    x.lineWidth = 1.1; x.stroke();
+  }
+  // packets travelling along strands
+  for (let s = 0; s < S; s++) {
+    const ph = s * 0.7, amp = (h * 0.38) * (0.35 + 0.65 * ((s * 37) % 9) / 9);
+    const u = ((t * 0.18 + s * 0.137) % 1), env = Math.pow(1 - u, 1.6);
+    const xx = u * w, yy = cy + Math.sin(u * 7 + t * 1.3 + ph) * amp * env + Math.sin(u * 13 - t * 0.9 + ph * 2) * 4 * env;
+    x.fillStyle = s % 3 === 2 ? '#f3b648' : '#9fe0ff';
+    x.beginPath(); x.arc(xx, yy, 1.8, 0, 6.283); x.fill();
+  }
+  // focal point
+  const pulse = 0.5 + 0.5 * Math.sin(t * 2.2);
+  x.fillStyle = '#5cc8ff22'; x.beginPath(); x.arc(w - 1, cy, 10 + pulse * 6, 0, 6.283); x.fill();
+  x.fillStyle = '#dff4ff'; x.beginPath(); x.arc(w - 1, cy, 2.6, 0, 6.283); x.fill();
+  x.globalCompositeOperation = 'source-over';
+  x.font = '500 9px "IBM Plex Mono", monospace'; x.fillStyle = '#5d646e';
+  x.fillText('context →', 8, 12);
+}
+const DRAW = { wire: drawWire, weave: drawWeave };
+
+/* terminals */
+const SCRIPTS = {
+  j: ['> what is J?', 'an early chance for extraordinary founders', '> who is it for?', 'ambitious founders aged 23 and under, anywhere', '> format?', '✓ free · remote · three months', '✓ no fee · no equity']
+};
+const terms = [];
+document.querySelectorAll('pre.term').forEach(el => {
+  const key = el.dataset.term, lines = Math.round(parseFloat(el.style.getPropertyValue('--h')) / 16.5) - 1;
+  const rows = [];
+  for (let i = 0; i < lines; i++) { const d = document.createElement('div'); el.appendChild(d); rows.push(d); }
+  terms.push({ el, node: byId[el.closest('.node').dataset.id], script: SCRIPTS[key], rows, buf: [], li: 0, ci: 0, acc: 0, wait: 0.5 + Math.random() });
+});
+function cls(s) { const c = s[0]; return (c === '$' || c === '?' || c === '>') ? 'c' : c === '✓' ? 'ok' : c === '{' ? 'j' : 'm'; }
+function renderTerm(T) {
+  const off = Math.max(0, T.buf.length - T.rows.length);
+  for (let i = 0; i < T.rows.length; i++) {
+    const s = T.buf[off + i];
+    const r = T.rows[i];
+    const txt = s === undefined ? '' : s;
+    if (r.textContent !== txt) { r.textContent = txt; r.className = txt ? cls(txt) : ''; }
+  }
+  // keep cursor on the last filled row
+  for (let i = 0; i < T.rows.length; i++) T.rows[i].style.display = (off + i < T.buf.length || i === 0) ? '' : 'none';
+}
+function stepTerm(T, dt) {
+  if (T.wait > 0) { T.wait -= dt; return; }
+  const s = T.script[T.li];
+  if (s === undefined) { T.buf.length = 0; T.li = 0; T.ci = 0; T.wait = 0.4; renderTerm(T); return; }
+  const typed = cls(s) === 'c';
+  if (T.ci === 0) T.buf.push('');
+  if (typed) {
+    T.acc += dt * (RM ? 400 : 26 + Math.random() * 16);
+    let changed = false;
+    while (T.acc >= 1 && T.ci < s.length) { T.acc -= 1; T.ci++; changed = true; }
+    if (changed || T.ci === 0) { T.buf[T.buf.length - 1] = s.slice(0, Math.max(T.ci, 1)); if (T.ci === 0) T.ci = 1; }
+    if (T.ci >= s.length) { T.li++; T.ci = 0; T.acc = 0; T.wait = 0.5; if (T.li >= T.script.length) T.wait = 2.6; }
+  } else {
+    T.buf[T.buf.length - 1] = s; T.li++; T.ci = 0; T.wait = 0.35 + Math.random() * 0.3;
+    if (T.li >= T.script.length) T.wait = 2.6;
+  }
+  renderTerm(T);
+}
+
+/* ---------- minimap ---------- */
+let mmDirty = true, mmB = { x: 0, y: 0, w: 1, h: 1, s: 1, ox: 0, oy: 0 };
+function mmBounds() {
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const n of nodes) { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x + n.w); y1 = Math.max(y1, n.y + n.h); }
+  const pad = 80; x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+  const mw = mm.clientWidth || 190, mh = mm.clientHeight || 122;
+  const s = Math.min(mw / (x1 - x0), mh / (y1 - y0));
+  mmB.x = x0; mmB.y = y0; mmB.w = x1 - x0; mmB.h = y1 - y0; mmB.s = s;
+  mmB.ox = (mw - (x1 - x0) * s) / 2; mmB.oy = (mh - (y1 - y0) * s) / 2;
+}
+function drawMinimap() {
+  const s = mmB.s, ox = mmB.ox - mmB.x * s, oy = mmB.oy - mmB.y * s;
+  const mw = mm.clientWidth, mh = mm.clientHeight;
+  mctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  mctx.clearRect(0, 0, mw, mh);
+  mctx.lineWidth = 1;
+  for (const w of wires) {
+    mctx.strokeStyle = w.a.color; mctx.globalAlpha = w.on ? 0.55 : 0.18;
+    mctx.beginPath();
+    mctx.moveTo((w.a.node.x + w.a.ox) * s + ox, (w.a.node.y + w.a.oy) * s + oy);
+    mctx.lineTo((w.b.node.x + w.b.ox) * s + ox, (w.b.node.y + w.b.oy) * s + oy);
+    mctx.stroke();
+  }
+  mctx.globalAlpha = 1;
+  for (const n of nodes) {
+    const x = n.x * s + ox, y = n.y * s + oy, w = n.w * s, h = n.h * s;
+    mctx.fillStyle = n.on ? '#1d222a' : '#14171c'; mctx.fillRect(x, y, w, h);
+    mctx.fillStyle = n.on ? (n.outs[0] ? n.outs[0].color : n.ins[0].color) : '#3a414b';
+    mctx.fillRect(x, y, w, Math.max(2, 22 * s));
+  }
+  // viewport
+  const vx = (-cam.x / cam.z) * s + ox, vy = (-cam.y / cam.z) * s + oy, vw = (W / cam.z) * s, vh = (H / cam.z) * s;
+  mctx.strokeStyle = COL.amber; mctx.lineWidth = 1.2;
+  mctx.strokeRect(vx + 0.5, vy + 0.5, vw, vh);
+  mctx.fillStyle = '#f3b6480d'; mctx.fillRect(vx, vy, vw, vh);
+}
+function mmPoint(e) {
+  const r = mm.getBoundingClientRect();
+  const wx = (e.clientX - r.left - mmB.ox) / mmB.s + mmB.x, wy = (e.clientY - r.top - mmB.oy) / mmB.s + mmB.y;
+  tgt.x = W / 2 - wx * cam.z; tgt.y = H / 2 - wy * cam.z; tgt.z = cam.z; tgt.on = true; zoomAnim = false; inertia = false;
+}
+mm.addEventListener('pointerdown', e => { e.stopPropagation(); mm.setPointerCapture(e.pointerId); mmPoint(e); });
+mm.addEventListener('pointermove', e => { if (mm.hasPointerCapture(e.pointerId)) mmPoint(e); });
+
+/* ---------- camera helpers ---------- */
+function bounds() {
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const n of nodes) { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x + n.w); y1 = Math.max(y1, n.y + n.h); }
+  return [x0, y0, x1, y1];
+}
+function fitTarget(immediate) {
+  const [x0, y0, x1, y1] = bounds();
+  const top = W < 700 ? 110 : 120, bot = W < 700 ? 130 : 110;
+  const z = clamp(Math.min((W - 40) / (x1 - x0), (H - top - bot) / (y1 - y0)), ZMIN, 1.1);
+  tgt.z = z; tgt.x = (W - (x1 - x0) * z) / 2 - x0 * z; tgt.y = top + ((H - top - bot) - (y1 - y0) * z) / 2 - y0 * z;
+  tgt.on = true; zoomAnim = false; inertia = false;
+  if (immediate) { cam.x = tgt.x; cam.y = tgt.y; cam.z = tgt.z; tgt.on = false; camDirty = true; }
+}
+function flyTo(n) {
+  const z = W < 700 ? clamp((W - 48) / n.w, 0.6, 1) : 1;
+  const top = W < 700 ? 100 : 60;
+  tgt.z = z; tgt.x = W / 2 - (n.x + n.w / 2) * z;
+  const vh = H - top - 120;
+  tgt.y = top + Math.max(0, (vh - n.h * z) / 2) - n.y * z;
+  tgt.on = true; zoomAnim = false; inertia = false;
+  select(n);
+}
+function zoomAt(sx, sy, nz) {
+  nz = clamp(nz, ZMIN, ZMAX);
+  const wx = (sx - cam.x) / cam.z, wy = (sy - cam.y) / cam.z;
+  cam.z = nz; cam.x = sx - wx * nz; cam.y = sy - wy * nz; camDirty = true;
+}
+let selNode = null;
+function select(n) {
+  if (selNode === n) return;
+  if (selNode) selNode.el.classList.remove('sel');
+  selNode = n;
+  if (n) { n.el.classList.add('sel'); n.el.style.zIndex = ++zTop; }
+}
+
+/* ---------- interaction ---------- */
+const pointers = new Map();
+let drag = null, hoverWire = null, pinch = null, snapPort = null;
+function stopAuto() { tgt.on = false; zoomAnim = false; inertia = false; }
+
+function nearestWire(sx, sy, maxD) {
+  let best = null, bd = maxD * maxD;
+  for (const w of wires) {
+    if (now < w.born) continue;
+    for (let i = 0; i <= 24; i++) {
+      bez(w, i / 24);
+      const dx = PX - sx, dy = PY - sy, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = w; }
+    }
+  }
+  return best;
+}
+function nearestIn(sx, sy, from) {
+  let best = null, bd = (COARSE ? 40 : 30) ** 2;
+  for (const p of inPorts) {
+    if (p.node === from.node) continue;
+    portScreen(p);
+    const dx = PX - sx, dy = PY - sy, d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+function setSnap(p) {
+  if (snapPort === p) return;
+  if (snapPort) snapPort.el.classList.remove('snap');
+  snapPort = p;
+  if (p) p.el.classList.add('snap');
+}
+
+stage.addEventListener('pointerdown', e => {
+  const t = e.target;
+  if (t.closest('a,button,code')) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+  stopAuto();
+  if (pointers.size === 2) {
+    if (drag && drag.type === 'wire') setSnap(null);
+    drag = null;
+    const [a, b] = [...pointers.values()];
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: cam.z, wx: (mx - cam.x) / cam.z, wy: (my - cam.y) / cam.z };
+    return;
+  }
+  if (pointers.size > 2) return;
+  const portEl = t.closest('.port');
+  const nodeEl = t.closest('.node');
+  if (portEl) {
+    const p = ports[portEl.dataset.p];
+    if (p.out) drag = { type: 'wire', from: p, x: e.clientX, y: e.clientY };
+    else if (p.wires.length) {
+      const w = p.wires[0], from = w.a;
+      removeWire(w, false);
+      drag = { type: 'wire', from, x: e.clientX, y: e.clientY };
+    } else return;
+    stage.classList.add('wiring');
+    return;
+  }
+  if (nodeEl) {
+    const n = byId[nodeEl.dataset.id];
+    select(n);
+    drag = { type: 'node', n, sx: e.clientX, sy: e.clientY, nx: n.x, ny: n.y };
+    return;
+  }
+  select(null);
+  const w = nearestWire(e.clientX, e.clientY, e.pointerType === 'touch' ? 14 : 8);
+  drag = { type: 'pan', lx: e.clientX, ly: e.clientY, sx: e.clientX, sy: e.clientY, lt: performance.now(), cut: w, moved: false };
+  velX = velY = 0;
+  if (!w) stage.classList.add('panning');
+});
+
+stage.addEventListener('pointermove', e => {
+  const pt = pointers.get(e.pointerId);
+  if (pt) { pt.x = e.clientX; pt.y = e.clientY; }
+  if (pinch && pointers.size >= 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const nz = clamp(pinch.z0 * d / pinch.d0, ZMIN, ZMAX);
+    cam.z = nz; cam.x = mx - pinch.wx * nz; cam.y = my - pinch.wy * nz; camDirty = true;
+    return;
+  }
+  if (!drag) {
+    if (e.pointerType === 'mouse' && !e.target.closest('.node')) {
+      const w = nearestWire(e.clientX, e.clientY, 8);
+      if (w !== hoverWire) { hoverWire = w; stage.classList.toggle('cut', !!w); }
+    } else if (hoverWire) { hoverWire = null; stage.classList.remove('cut'); }
+    return;
+  }
+  if (drag.type === 'pan') {
+    const dx = e.clientX - drag.lx, dy = e.clientY - drag.ly;
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 4) { drag.moved = true; stage.classList.add('panning'); stage.classList.remove('cut'); }
+    if (!drag.moved) return;
+    cam.x += dx; cam.y += dy; camDirty = true;
+    const tn = performance.now(), dtm = Math.max(1, tn - drag.lt);
+    velX = velX * 0.6 + (dx / dtm) * 0.4; velY = velY * 0.6 + (dy / dtm) * 0.4;
+    drag.lx = e.clientX; drag.ly = e.clientY; drag.lt = tn;
+  } else if (drag.type === 'node') {
+    const n = drag.n;
+    n.x = drag.nx + (e.clientX - drag.sx) / cam.z; n.y = drag.ny + (e.clientY - drag.sy) / cam.z;
+    n.el.style.transform = `translate(${n.x}px,${n.y}px)`;
+    mmDirty = true;
+  } else if (drag.type === 'wire') {
+    drag.x = e.clientX; drag.y = e.clientY;
+    setSnap(nearestIn(e.clientX, e.clientY, drag.from));
+  }
+});
+
+function endPointer(e) {
+  pointers.delete(e.pointerId);
+  if (pinch) { if (pointers.size < 2) pinch = null; return; }
+  if (!drag) return;
+  if (drag.type === 'pan') {
+    stage.classList.remove('panning');
+    if (!drag.moved && drag.cut) {
+      const w = drag.cut;
+      burst(e.clientX, e.clientY, w.a.color, 18);
+      removeWire(w, true);
+      hoverWire = null; stage.classList.remove('cut');
+    } else if (drag.moved && performance.now() - drag.lt < 60 && !RM) inertia = true;
+  } else if (drag.type === 'node') { mmBounds(); }
+  else if (drag.type === 'wire') {
+    stage.classList.remove('wiring');
+    if (snapPort) {
+      const w = connect(drag.from, snapPort, 0); w.born = now - 1;
+      portScreen(snapPort); burst(PX, PY, drag.from.color, 14);
+    } else burst(drag.x, drag.y, drag.from.color, 8);
+    setSnap(null);
+  }
+  drag = null;
+}
+stage.addEventListener('pointerup', endPointer);
+stage.addEventListener('pointercancel', endPointer);
+stage.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && hoverWire && !drag) { hoverWire = null; stage.classList.remove('cut'); } });
+
+stage.addEventListener('wheel', e => {
+  e.preventDefault();
+  tgt.on = false; inertia = false;
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? H : 1;
+  const dy = e.deltaY * unit, dx = e.deltaX * unit;
+  if (e.shiftKey) { cam.x -= dy || dx; camDirty = true; return; }
+  if (e.ctrlKey) { zoomAnim = false; zoomAt(e.clientX, e.clientY, cam.z * Math.exp(-dy * 0.01)); return; }
+  if (!zoomAnim) zoomGoal = Math.log(cam.z);
+  zoomGoal = clamp(zoomGoal - dy * 0.0018, Math.log(ZMIN), Math.log(ZMAX));
+  zoomAX = e.clientX; zoomAY = e.clientY; zoomAnim = true;
+}, { passive: false });
+// Safari trackpad pinch
+stage.addEventListener('gesturestart', e => e.preventDefault());
+
+addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input,textarea')) return;
+  const k = e.key; let used = true;
+  if (k === 'ArrowLeft') { stopAuto(); cam.x += 60; }
+  else if (k === 'ArrowRight') { stopAuto(); cam.x -= 60; }
+  else if (k === 'ArrowUp') { stopAuto(); cam.y += 60; }
+  else if (k === 'ArrowDown') { stopAuto(); cam.y -= 60; }
+  else if (k === '+' || k === '=') { stopAuto(); zoomAt(W / 2, H / 2, cam.z * 1.2); }
+  else if (k === '-' || k === '_') { stopAuto(); zoomAt(W / 2, H / 2, cam.z / 1.2); }
+  else if (k === 'f' || k === 'F' || k === '0') fitTarget(false);
+  else used = false;
+  if (used) { camDirty = true; e.preventDefault(); }
+});
+
+// focusing something inside an offscreen node brings it into view
+world.addEventListener('focusin', e => {
+  const el = e.target.closest('.node'); if (!el) return;
+  const n = byId[el.dataset.id];
+  const sx = n.x * cam.z + cam.x, sy = n.y * cam.z + cam.y;
+  if (sx < 0 || sy < 60 || sx + n.w * cam.z > W || sy + n.h * cam.z > H - 80) flyTo(n);
+  // the browser may have scrolled the stage to reveal focus; undo it
+  stage.scrollLeft = 0; stage.scrollTop = 0;
+});
+
+$('#zin').addEventListener('click', () => { stopAuto(); zoomGoal = Math.log(cam.z); zoomGoal = Math.min(Math.log(ZMAX), zoomGoal + 0.3); zoomAX = W / 2; zoomAY = H / 2; zoomAnim = true; });
+$('#zout').addEventListener('click', () => { stopAuto(); zoomGoal = Math.log(cam.z); zoomGoal = Math.max(Math.log(ZMIN), zoomGoal - 0.3); zoomAX = W / 2; zoomAY = H / 2; zoomAnim = true; });
+$('#fit').addEventListener('click', () => fitTarget(false));
+$('#rewire').addEventListener('click', () => { resetWires(false); });
+document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => flyTo(byId[b.dataset.go])));
+const copyBtn = $('#copy');
+copyBtn.addEventListener('click', () => {
+  const txt = $('#email').textContent;
+  const done = ok => { copyBtn.textContent = ok ? 'Copied' : 'Select ↑'; setTimeout(() => copyBtn.textContent = 'Copy', 1600); };
+  try {
+    navigator.clipboard.writeText(txt).then(() => done(true)).catch(() => { selectEmail(); done(false); });
+  } catch (_) { selectEmail(); done(false); }
+});
+function selectEmail() { const r = document.createRange(); r.selectNodeContents($('#email')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+
+/* ---------- render ---------- */
+const zrEl = $('#zr'); let zrShown = -1;
+function frame(dt) {
+  const z = cam.z;
+  // camera animation
+  if (tgt.on) {
+    const k = 1 - Math.exp(-dt * 5.5);
+    cam.x += (tgt.x - cam.x) * k; cam.y += (tgt.y - cam.y) * k;
+    cam.z = Math.exp(Math.log(cam.z) + (Math.log(tgt.z) - Math.log(cam.z)) * k);
+    if (Math.abs(tgt.x - cam.x) < 0.3 && Math.abs(tgt.y - cam.y) < 0.3 && Math.abs(tgt.z - cam.z) < 0.0005) { cam.x = tgt.x; cam.y = tgt.y; cam.z = tgt.z; tgt.on = false; }
+    camDirty = true;
+  }
+  if (zoomAnim) {
+    const lz = Math.log(cam.z), k = 1 - Math.exp(-dt * 16), nl = lz + (zoomGoal - lz) * k;
+    zoomAt(zoomAX, zoomAY, Math.exp(nl));
+    if (Math.abs(zoomGoal - nl) < 0.0008) zoomAnim = false;
+  }
+  if (inertia) {
+    cam.x += velX * dt * 1000; cam.y += velY * dt * 1000; camDirty = true;
+    const d = Math.exp(-dt * 5); velX *= d; velY *= d;
+    if (Math.abs(velX) + Math.abs(velY) < 0.01) inertia = false;
+  }
+  if (camDirty) {
+    world.style.transform = `translate3d(${cam.x}px,${cam.y}px,0) scale(${cam.z})`;
+    if (!isMoving) { world.classList.add('moving'); isMoving = true; }
+    movingAt = now; mmDirty = true; camDirty = false;
+    const zr = Math.round(cam.z * 100);
+    if (zr !== zrShown) { zrEl.textContent = zr + '%'; zrShown = zr; }
+  } else if (isMoving && now - movingAt > 0.18) { world.classList.remove('moving'); isMoving = false; }
+
+  // node visibility (pure math)
+  for (const n of nodes) {
+    const sx = n.x * cam.z + cam.x, sy = n.y * cam.z + cam.y;
+    n.vis = sx < W && sy < H && sx + n.w * cam.z > 0 && sy + n.h * cam.z > 0;
+  }
+
+  /* ---- background grid ---- */
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, W, H);
+  const minorA = clamp((cam.z - 0.3) / 0.35, 0, 1);
+  pm.a = cam.z / 2; pm.b = 0; pm.c = 0; pm.d = cam.z / 2; pm.e = cam.x; pm.f = cam.y;
+  if (minorA > 0) { patMinor.setTransform(pm); ctx.globalAlpha = minorA; ctx.fillStyle = patMinor; ctx.fillRect(0, 0, W, H); }
+  patMajor.setTransform(pm); ctx.globalAlpha = 0.9; ctx.fillStyle = patMajor; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+
+  const zs = clamp(cam.z, 0.45, 1.6);
+  ctx.lineCap = 'round';
+
+  /* ---- ghosts (cut wires droop and fade) ---- */
+  for (let i = ghosts.length - 1; i >= 0; i--) {
+    const g = ghosts[i], age = now - g.t0;
+    if (age > 0.7) { ghosts.splice(i, 1); continue; }
+    portScreen(g.a); const ax = PX, ay = PY; portScreen(g.b);
+    setCurve(G, ax, ay, PX, PY, cam.z);
+    const sag = age * age * 900 * zs;
+    G.y1 += sag; G.y2 += sag;
+    ctx.globalAlpha = 1 - age / 0.7;
+    ctx.setLineDash([6 * zs, 6 * zs]);
+    ctx.strokeStyle = g.color; ctx.lineWidth = 2 * zs;
+    ctx.beginPath(); ctx.moveTo(G.x0, G.y0); ctx.bezierCurveTo(G.x1, G.y1, G.x2, G.y2, G.x3, G.y3); ctx.stroke();
+    ctx.setLineDash(NO_DASH);
+  }
+  ctx.globalAlpha = 1;
+
+  /* ---- wires ---- */
+  const hi = quality > 1;
+  for (const w of wires) {
+    portScreen(w.a); const ax = PX, ay = PY; portScreen(w.b);
+    setCurve(w, ax, ay, PX, PY, cam.z);
+    // rough length in world units
+    const dx = w.x3 - w.x0, dy = w.y3 - w.y0;
+    w.len = (Math.sqrt(dx * dx + dy * dy) + Math.abs(w.x1 - w.x0) * 0.6) / cam.z;
+    const grow = clamp((now - w.born) / 0.6, 0, 1);
+    if (grow <= 0) continue;
+    const lit = w.on ? 1 : 0.28, hov = w === hoverWire;
+    // build path (partial while growing)
+    ctx.beginPath();
+    ctx.moveTo(w.x0, w.y0);
+    if (grow >= 1) ctx.bezierCurveTo(w.x1, w.y1, w.x2, w.y2, w.x3, w.y3);
+    else { const ge = 1 - Math.pow(1 - grow, 3); for (let i = 1; i <= 28; i++) { bez(w, ge * i / 28); ctx.lineTo(PX, PY); } }
+    ctx.globalAlpha = 1; ctx.strokeStyle = '#06070a'; ctx.lineWidth = 6.5 * zs; ctx.stroke();
+    if (hi && w.on) { ctx.globalAlpha = hov ? 0.28 : 0.12; ctx.strokeStyle = w.a.color; ctx.lineWidth = 9 * zs; ctx.stroke(); }
+    ctx.globalAlpha = (hov ? 1 : 0.82) * lit; ctx.strokeStyle = hov ? '#ffffff' : w.a.color; ctx.lineWidth = (hov ? 2.6 : 2) * zs; ctx.stroke();
+    if (hov) { ctx.strokeStyle = w.a.color; ctx.globalAlpha = 1; ctx.lineWidth = 1.2 * zs; ctx.stroke(); }
+  }
+
+  /* ---- pulses ---- */
+  ctx.globalCompositeOperation = 'lighter';
+  const K = 3, trail = hi ? 6 : 3, speed = RM ? 60 : 210;
+  for (const w of wires) {
+    if (!w.on || now < w.born + 0.6) continue;
+    w.p += dt * speed / Math.max(120, w.len);
+    if (w.p >= 1) w.p -= 1;
+    const seg = Math.floor(w.p * K);
+    if (seg !== w.seg) { w.seg = seg; arrive(w); }
+    const spr = sprite(w.a.color), base = 22 * zs;
+    const tstep = 9 / Math.max(120, w.len);
+    for (let k = 0; k < K; k++) {
+      let t = w.p + k / K; if (t >= 1) t -= 1;
+      for (let j = 0; j < trail; j++) {
+        const tt = t - j * tstep; if (tt < 0) break;
+        bez(w, tt);
+        const s = base * (1 - j / trail * 0.7);
+        ctx.globalAlpha = (1 - j / trail) * (j ? 0.55 : 1);
+        ctx.drawImage(spr, PX - s / 2, PY - s / 2, s, s);
+      }
+    }
+  }
+
+  /* ---- dragging wire ---- */
+  if (drag && drag.type === 'wire') {
+    portScreen(drag.from); const ax = PX, ay = PY;
+    let bx = drag.x, by = drag.y;
+    if (snapPort) { portScreen(snapPort); bx = PX; by = PY; }
+    setCurve(G, ax, ay, bx, by, cam.z);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1; ctx.strokeStyle = drag.from.color; ctx.lineWidth = 2.2 * zs;
+    ctx.setLineDash([7 * zs, 6 * zs]); ctx.lineDashOffset = -now * 40;
+    ctx.beginPath(); ctx.moveTo(G.x0, G.y0); ctx.bezierCurveTo(G.x1, G.y1, G.x2, G.y2, G.x3, G.y3); ctx.stroke();
+    ctx.setLineDash(NO_DASH);
+    ctx.globalCompositeOperation = 'lighter';
+    const spr = sprite(drag.from.color), s = (snapPort ? 46 : 30) * zs;
+    ctx.drawImage(spr, bx - s / 2, by - s / 2, s, s);
+  }
+
+  /* ---- sparks ---- */
+  ctx.lineWidth = 1.6;
+  for (let i = 0; i < SP; i++) {
+    const o = i * 6; if (sp[o + 4] <= 0) continue;
+    sp[o + 4] -= dt * 1.8;
+    sp[o + 3] += 500 * dt;
+    const x0 = sp[o], y0 = sp[o + 1];
+    sp[o] += sp[o + 2] * dt; sp[o + 1] += sp[o + 3] * dt;
+    ctx.globalAlpha = Math.max(0, sp[o + 4]);
+    ctx.strokeStyle = CLIST[sp[o + 5] | 0];
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(sp[o], sp[o + 1]); ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+
+  /* ---- live previews (only visible, powered nodes) ---- */
+  const lt = RM ? now * 0.25 : now;
+  for (const L of lives) {
+    if (!L.node.vis || !L.node.on) continue;
+    if (quality < 2 && (fTick & 1)) continue;
+    DRAW[L.kind](L, lt, RM ? dt * 0.25 : dt);
+  }
+  for (const T of terms) if (T.node.vis && T.node.on) stepTerm(T, dt);
+
+  if (count !== countShown && (fTick % 4 === 0)) { countEl.textContent = count.toLocaleString(); countShown = count; }
+  if (mmDirty && (fTick & 1) === 0) { drawMinimap(); mmDirty = false; }
+}
+const G = { x0:0,y0:0,x1:0,y1:0,x2:0,y2:0,x3:0,y3:0 };
+const NO_DASH = [];
+
+/* ---------- loop with visibility / adaptive quality ---------- */
+let raf = 0, last = 0, running = false, fTick = 0, pageVisible = !document.hidden, onScreen = true;
+function loop(ts) {
+  raf = requestAnimationFrame(loop);
+  let dt = (ts - last) / 1000; last = ts;
+  if (dt > 0.1) dt = 0.1; if (dt <= 0) dt = 0.016;
+  now += dt; fTick++;
+  if (fCount < 90) {
+    fCount++;
+    if (fCount > 30) fAcc += dt;
+    if (fCount === 90 && fAcc / 60 > 0.021 && quality > 1) {
+      quality = 1; DPR = Math.min(DPR, 1); resize();
+    }
+  }
+  frame(dt);
+}
+function start() { if (running || !pageVisible || !onScreen) return; running = true; last = performance.now(); raf = requestAnimationFrame(loop); }
+function stop() { running = false; cancelAnimationFrame(raf); }
+document.addEventListener('visibilitychange', () => { pageVisible = !document.hidden; pageVisible ? start() : stop(); });
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver(es => { onScreen = es[0].isIntersecting; onScreen ? start() : stop(); }).observe(stage);
+}
+let rzT = 0;
+addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => { resize(); measure(); }, 80); resize(); });
+
+/* ---------- boot ---------- */
+resize();
+cam.z = 1; camDirty = true;
+world.style.transform = 'translate3d(0,0,0) scale(1)';
+measure();
+fitTarget(true);
+// begin a touch wider and ease in
+const fz = cam.z, fx = cam.x, fy = cam.y;
+cam.z = fz * 0.82; cam.x = W / 2 - (W / 2 - fx) * 0.82; cam.y = H / 2 - (H / 2 - fy) * 0.82;
+tgt.x = fx; tgt.y = fy; tgt.z = fz; tgt.on = !RM; if (RM) { cam.x = fx; cam.y = fy; cam.z = fz; }
+camDirty = true;
+resetWires(true);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { const z = cam.z; measure(); });
+if (COARSE && W < 700) setTimeout(() => { if (!drag && !pinch && !zoomAnim && !inertia) flyTo(byId.kaiav); }, 2600);
+start();
+})();
+</script>
