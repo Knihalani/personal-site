@@ -197,7 +197,7 @@ var wallMat=new THREE.ShaderMaterial({uniforms:{uTime:uTime},
  ' float sl=pow(abs(sin(p.x*3.3+.3)),110.);',
  ' float sl2=pow(abs(sin(p.x*6.6+1.1)),260.)*.45;',
  ' float band=smoothstep(-3.2,-1.4,p.y)*smoothstep(8.,2.5,p.y);',
- ' col+=vec3(1.,.55,.17)*(sl+sl2)*band*(.18+1.25*glow*(.75+.25*drift));',
+ ' col+=vec3(1.,.55,.17)*(sl+sl2)*band*(.06+.95*glow*(.7+.3*drift));',
  ' col+=vec3(1.,.48,.13)*glow*.30;',
  ' col+=vec3(.35,.95,.78)*exp(-pow((p.y+2.65)*10.,2.))*.18*smoothstep(14.,0.,abs(p.x));',
  ' vec2 g=fract(p*1.6)-.5;col+=vec3(.5,.75,.68)*smoothstep(.05,.0,length(g))*.06*(1.-glow);',
@@ -214,7 +214,7 @@ var floorMat=new THREE.ShaderMaterial({uniforms:floorU,
  ' float fade=smoothstep(6.,-8.,z);',
  ' float glow=exp(-pow(x-.8,2.)/26.);',
  ' float sl=pow(abs(sin(x*3.3+.3)),26.);',
- ' col+=vec3(1.,.55,.17)*sl*fade*glow*.20*(.6+.4*fade);',
+ ' col+=vec3(1.,.55,.17)*sl*fade*glow*.13*(.6+.4*fade);',
  ' col+=vec3(1.,.48,.13)*glow*fade*.07;',
  ' float streak=exp(-pow((z-.55)*1.5,2.))*smoothstep(uPaneW*.5+.6,uPaneW*.5-.9,abs(x));',
  ' col+=vec3(.5,.95,.82)*streak*uIntact*.11;',
@@ -250,7 +250,7 @@ etchTex.minFilter=THREE.LinearMipmapLinearFilter;etchTex.anisotropy=Math.min(8,r
 
 var backRT=new THREE.WebGLRenderTarget(4,4,{type:THREE.HalfFloatType,depthBuffer:true});
 var glassU={uState:{value:stateTex},uStateH:{value:MAXS},uBack:{value:backRT.texture},uEtch:{value:etchTex},uEtchTexel:{value:new THREE.Vector2(1/2048,1/850)},
-  uRes:{value:new THREE.Vector2(1,1)},uCam:{value:camera.position},uTime:uTime,uSweep:{value:-2},uFlash:{value:0},uImpact:{value:new THREE.Vector2(.5,.5)}};
+  uRes:{value:new THREE.Vector2(1,1)},uCam:{value:camera.position},uTime:uTime,uSweep:{value:-2},uFlash:{value:0},uImpact:{value:new THREE.Vector2(.5,.5)},uIntact:{value:1},uAspect:{value:2.4}};
 var glassMat=new THREE.ShaderMaterial({uniforms:glassU,side:THREE.DoubleSide,extensions:{derivatives:true},
  vertexShader:[
  'uniform sampler2D uState;uniform float uStateH;attribute vec3 aInfo;attribute vec2 aUv;',
@@ -260,7 +260,7 @@ var glassMat=new THREE.ShaderMaterial({uniforms:glassU,side:THREE.DoubleSide,ext
  ' vec3 wp=P.xyz+qrot(Q,position);vN=qrot(Q,normal);vW=wp;vUv=aUv;vInfo=aInfo;vCrack=P.w;',
  ' gl_Position=projectionMatrix*viewMatrix*vec4(wp,1.);}'].join('\n'),
  fragmentShader:[
- 'uniform sampler2D uBack,uEtch;uniform vec2 uRes,uEtchTexel,uImpact;uniform vec3 uCam;uniform float uTime,uSweep,uFlash;',
+ 'uniform sampler2D uBack,uEtch;uniform vec2 uRes,uEtchTexel,uImpact;uniform vec3 uCam;uniform float uTime,uSweep,uFlash,uIntact,uAspect;',
  'varying vec3 vN,vW,vInfo;varying vec2 vUv;varying float vCrack;',
  'vec3 env(vec3 d){',
  ' vec3 c=mix(vec3(.01,.018,.02),vec3(.05,.08,.08),d.y*.5+.5);',
@@ -273,11 +273,14 @@ var glassMat=new THREE.ShaderMaterial({uniforms:glassU,side:THREE.DoubleSide,ext
  ' vec3 N=normalize(vN);if(!gl_FrontFacing)N=-N;',
  ' vec3 V=normalize(uCam-vW);vec3 I=-V;',
  ' bool side=vInfo.z>1.5;',
+ ' if(side&&uIntact>.5&&vInfo.y<.5)discard;',
  ' float et=0.;vec2 eg=vec2(0.);',
  ' if(!side){et=texture2D(uEtch,vUv).r;',
  '  eg.x=texture2D(uEtch,vUv+vec2(uEtchTexel.x*2.,0.)).r-texture2D(uEtch,vUv-vec2(uEtchTexel.x*2.,0.)).r;',
  '  eg.y=texture2D(uEtch,vUv+vec2(0.,uEtchTexel.y*2.)).r-texture2D(uEtch,vUv-vec2(0.,uEtchTexel.y*2.)).r;}',
- ' vec3 Ne=normalize(N+vec3(eg*.5,0.));',
+ ' vec2 bd=vec2(min(vUv.x,1.-vUv.x)*uAspect,min(vUv.y,1.-vUv.y));',
+ ' vec2 bev=vec2(vUv.x<.5?-1.:1.,vUv.y<.5?-1.:1.)*vec2(smoothstep(.07,0.,bd.x),smoothstep(.07,0.,bd.y));',
+ ' vec3 Ne=normalize(N+vec3(eg*.5+(side?vec2(0.):bev*.9),0.));',
  ' vec2 suv=gl_FragCoord.xy/uRes;',
  ' vec3 R1=refract(I,Ne,.665);',
  ' vec2 off=(R1.xy-I.xy)*(side?.11:.065)+eg*.006;',
@@ -298,7 +301,6 @@ var glassMat=new THREE.ShaderMaterial({uniforms:glassU,side:THREE.DoubleSide,ext
  ' float e=vInfo.y;float w=fwidth(e)*1.4;',
  ' float crack=(1.-smoothstep(0.,w,e))*vCrack;',
  ' col+=vec3(.85,1.,.95)*crack*2.4;',
- ' col+=vec3(.6,.95,.85)*(1.-smoothstep(0.,w*3.,e))*.06*step(.001,vCrack);',
  ' float s=exp(-pow((vUv.x*1.15+vUv.y*.45-uSweep)*6.,2.));',
  ' col+=s*vec3(1.,.88,.7)*(.12+et*1.4);',
  ' col+=vec3(1.,.95,.9)*uFlash*exp(-length((vUv-uImpact)*vec2(2.4,1.))*6.);',
@@ -328,9 +330,6 @@ function drawEtch(){
   if('letterSpacing' in c)c.letterSpacing=(sm*.3)+'px';
   c.fillText(sub,W/2,H-m-W*.035);
   if('letterSpacing' in c)c.letterSpacing='0px';
-  // tick marks
-  c.lineWidth=W*.001;
-  for(var k=0;k<9;k++){var x=W*.3+k*W*.05;c.beginPath();c.moveTo(x,m+W*.02);c.lineTo(x,m+W*(k%4===0?.04:.03));c.stroke();}
   etchTex.needsUpdate=true;
   glassU.uEtchTexel.value.set(1/W,1/H);
 }
@@ -396,8 +395,8 @@ function fracture(ix,iy,count){
       // side
       var ex=bx-ax,ey=by-ay,el=Math.sqrt(ex*ex+ey*ey)||1,nx=ey/el,ny=-ex/el;
       var su=k/m;
-      vtx(ax,ay,T,nx,ny,0,id,1,2,su,0);vtx(ax,ay,-T,nx,ny,0,id,1,2,su,1);vtx(bx,by,-T,nx,ny,0,id,1,2,su+.1,1);
-      vtx(ax,ay,T,nx,ny,0,id,1,2,su,0);vtx(bx,by,-T,nx,ny,0,id,1,2,su+.1,1);vtx(bx,by,T,nx,ny,0,id,1,2,su+.1,0);
+      vtx(ax,ay,T,nx,ny,0,id,e,2,su,0);vtx(ax,ay,-T,nx,ny,0,id,e,2,su,1);vtx(bx,by,-T,nx,ny,0,id,e,2,su+.1,1);
+      vtx(ax,ay,T,nx,ny,0,id,e,2,su,0);vtx(bx,by,-T,nx,ny,0,id,e,2,su+.1,1);vtx(bx,by,T,nx,ny,0,id,e,2,su+.1,0);
     }
     var o=id*3;sc[o]=cx;sc[o+1]=cy+PANE.y;sc[o+2]=0;sR[id]=R;
     var dx=cx-ix,dy=cy-iy;sDist[id]=Math.sqrt(dx*dx+dy*dy);sHue[id]=Math.random();
@@ -510,6 +509,7 @@ var camBase=new THREE.Vector3(),look=new THREE.Vector3(0,-.15,0);
 function layout(){
   var aspect=vw/vh,portrait=aspect<1;
   if(portrait){PANE.w=3.3;PANE.h=3.9;PANE.t=.28;}else{PANE.w=6.2;PANE.h=2.6;PANE.t=.26;}
+  glassU.uAspect.value=PANE.w/PANE.h;
   FLOOR_Y=PANE.y-PANE.h/2-(portrait?1.1:.95);floor.position.y=FLOOR_Y;floorU.uPaneW.value=PANE.w;
   var tn=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
   var d=Math.max(PANE.w/(.8*aspect*2*tn),PANE.h/((portrait?.5:.56)*2*tn));
@@ -597,7 +597,7 @@ function frame(now){
     if(!sweepActive&&!reduce&&phaseT>7){sweep=-1.2;sweepActive=true;phaseT=0;}
   }
   if(sweepActive){sweep+=rdt*1.1;if(sweep>2.6)sweepActive=false;}
-  glassU.uSweep.value=sweep;floorU.uSweep.value=sweep;
+  glassU.uSweep.value=sweep;glassU.uIntact.value=(phase==='idle'||phase==='crack')?1:0;floorU.uSweep.value=sweep;
   flash*=Math.exp(-rdt*5);glassU.uFlash.value=flash;finalPass.uniforms.uFlash.value=flash*.5;
   var tgt=(phase==='idle')?0:1;causticAmt+=(tgt-causticAmt)*Math.min(1,rdt*3);
   floorU.uIntact.value=1-causticAmt;

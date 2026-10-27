@@ -1116,13 +1116,5 @@
     mount: function (elm) { mount(elm); }
   });
 
-  /* optional test hook: only populated when a test harness predefines window.__kcgTest */
-  var TH = W.__kcgTest;
-  if (TH && typeof TH === 'object') {
-    TH.cur = function () { return cur; };
-    TH.input = input;
-    TH.stop = stopLoop;
-    TH.tick = function (n) { for (var i = 0; i < n && cur; i++) cur.game.update(STEP, input); if (cur) cur.game.render(M.ctx); };
-  }
 })();
 </script>

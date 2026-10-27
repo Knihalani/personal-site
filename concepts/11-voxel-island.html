@@ -80,7 +80,7 @@ button,a{font:inherit;color:inherit}
 .contactline a{color:var(--ink);text-underline-offset:3px}
 .hint{padding:7px 11px;font-size:11.5px;color:var(--muted)}
 .hint kbd{font-family:var(--mono);border:1.5px solid var(--line);border-radius:3px;padding:0 4px;color:var(--ink);background:var(--paper-2)}
-.panel{position:fixed;top:max(16px, env(safe-area-inset-top,0px));bottom:max(16px, env(safe-area-inset-bottom,0px));right:max(16px, env(safe-area-inset-right,0px));
+.panel{position:fixed;top:calc(max(16px, env(safe-area-inset-top,0px)) + 112px);bottom:max(16px, env(safe-area-inset-bottom,0px));right:max(16px, env(safe-area-inset-right,0px));
   width:min(410px, calc(100vw - 32px));overflow:auto;overscroll-behavior:contain;padding:20px 20px 24px;
   transform:translate3d(calc(100% + 40px),0,0);visibility:hidden;transition:transform .55s cubic-bezier(.2,.9,.2,1), visibility 0s linear .55s;z-index:5}
 .panel.open{transform:none;visibility:visible;transition:transform .55s cubic-bezier(.2,.9,.2,1), visibility 0s}
@@ -680,7 +680,7 @@ function init(){
   const wmesh = new THREE.Mesh(wgeo, wmat); wmesh.frustumCulled = false; scene.add(wmesh);
 
   // waterfall sheets (one merged geometry)
-  const FALL_LEN = 13;
+  const FALL_LEN = 16;
   (function(){
     const pos = [], uv = [], idx = [];
     falls.forEach((f,i) => {
@@ -710,7 +710,7 @@ function init(){
           float a = (0.35 + 0.55 * streak) * (1.0 - smoothstep(0.55, 1.0, vUv.y)) * smoothstep(0.0, 0.06, vUv.y);
           vec3 c = mix(vec3(0.62, 0.9, 0.97), vec3(1.0), streak * 0.7);
           c = mix(c, vec3(0.25, 0.38, 0.68), uNight * 0.7);
-          gl_FragColor = vec4(c, a * 0.85);
+          gl_FragColor = vec4(c, a * 0.95);
         }`
     });
     const mesh = new THREE.Mesh(g, m); mesh.renderOrder = 2; scene.add(mesh);
@@ -768,7 +768,7 @@ function init(){
   }
   const perFall = isMobile ? 26 : 48;
   const fdefs = [];
-  falls.forEach(f => { for (let i=0;i<perFall;i++){ const r1 = rnd(), r2 = rnd(); fdefs.push({ a:[f.x + (f.dz ? (r1-.5) : 0) , WY + .3, f.z + (f.dx ? (r1-.5) : 0), rnd()], b:[f.dx*(.5+r2*.7), f.dz*(.5+r2*.7), .32 + rnd()*.25, .16 + rnd()*.2] }); } });
+  falls.forEach(f => { for (let i=0;i<perFall;i++){ const r1 = rnd(), r2 = rnd(); fdefs.push({ a:[f.x + (f.dz ? (r1-.5) : 0) , WY + .3, f.z + (f.dx ? (r1-.5) : 0), rnd()], b:[f.dx*(.5+r2*.7), f.dz*(.5+r2*.7), .3 + rnd()*.25, .22 + rnd()*.26] }); } });
   const fallMesh = fdefs.length ? particles(fdefs, 0) : null;
   const sdefs = []; for (let i=0;i<(isMobile?10:16);i++) sdefs.push({ a:[11, 18, -6, i/16 + rnd()*.03], b:[0,0,.16,.75 + rnd()*.4] });
   particles(sdefs, 1);
