@@ -17,3 +17,6 @@ gate https://claude.ai/artifact/QvEVbRQ7CqYWPk8GbL3ZUX
 20 https://claude.ai/artifact/5Z2hupjuhrTsiDhn8ALXt1
 09 https://claude.ai/artifact/8KUETG2TeEuiM7HYh3WKnH
 10 https://claude.ai/artifact/Brtsgcy4UKmJ238ZUByVbi
+17 https://claude.ai/artifact/8gwmwRSy8DoCrW7iyGPPec
+18 https://claude.ai/artifact/4p1XjnvmGgGTNXs9EDb8di
+gallery https://claude.ai/artifact/BWoKKncLe3zRRdHede5JEq
