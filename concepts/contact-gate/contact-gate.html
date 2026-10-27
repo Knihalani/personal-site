@@ -36,7 +36,7 @@
 .kcg-overlay .kcg-stage{order:0;flex:0 0 100%;display:flex;justify-content:center;margin:0;padding:0}
 .kcg-overlay .kcg-screen{position:relative;display:block;margin:0;padding:0;overflow:hidden;background:var(--kcg-ink)}
 .kcg-overlay .kcg-screen canvas{display:block;margin:0;padding:0;border:0;image-rendering:crisp-edges;image-rendering:pixelated;background:var(--kcg-ink);touch-action:none;outline:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.kcg-overlay .kcg-screen canvas:focus-visible{outline:3px dashed var(--kcg-sky);outline-offset:-3px}
+.kcg-overlay .kcg-screen canvas:focus-visible{outline:2px solid var(--kcg-lav);outline-offset:-2px}
 .kcg-overlay .kcg-tl{order:1;display:flex;gap:12px;margin:0;padding:4px}
 .kcg-overlay .kcg-tr{order:2;display:flex;gap:12px;margin:0;padding:4px}
 .kcg-overlay .kcg-panel.kcg-land .kcg-play{flex-wrap:nowrap}
@@ -48,10 +48,15 @@
 .kcg-overlay .kcg-arr{display:block;width:0;height:0;border:9px solid transparent;border-left:12px solid var(--kcg-ink);margin-left:8px}
 .kcg-overlay .kcg-arr.kcg-l{transform:scaleX(-1);margin:0 8px 0 0}
 .kcg-overlay .kcg-hint{margin:0;padding:0 4px;font-family:var(--kcg-font);font-size:8px;line-height:1.8;color:var(--kcg-lav);text-align:center}
-.kcg-overlay .kcg-reveal{position:absolute;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;margin:0;padding:10px;background:rgba(11,14,26,.9);text-align:center;overflow:auto}
+.kcg-overlay .kcg-reveal{position:absolute;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;margin:0;padding:10px;background:rgba(11,14,26,.97);text-align:center;overflow:auto}
 .kcg-overlay .kcg-rvh{margin:0;padding:0;font-family:var(--kcg-font);font-size:10px;line-height:1.6;color:var(--kcg-sky)}
 .kcg-overlay .kcg-reveal .kcg-mail{padding:6px 8px;background:var(--kcg-navy);box-shadow:0 0 0 3px var(--kcg-cream)}
 .kcg-overlay .kcg-rvrow{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px 12px;margin:0;padding:0}
+.kcg-overlay .kcg-retry{position:absolute;left:50%;top:64%;transform:translateX(-50%);margin:0;min-height:40px;padding:10px 14px;font-size:9px}
+.kcg-overlay .kcg-retry:active{transform:translate(-50%,2px)}
+.kcg-overlay .kcg-keep{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px 12px;margin:0;padding:6px 4px 2px;font-family:var(--kcg-font);font-size:8px;line-height:1.6;color:var(--kcg-lav);text-align:center}
+.kcg-overlay .kcg-keep .kcg-mail{font-size:10px}
+.kcg-root .kcg-tri{display:inline-block;flex:0 0 auto;width:0;height:0;margin:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:7px solid currentColor}
 .kcg-root .kcg-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 </style>
 <script>
@@ -335,7 +340,7 @@
     }
     if (this.st === 'dead') {
       this.dt0 += dt; this.buf -= dt;
-      if (this.dt0 > 0.35 && this.buf > 0) { this.reset('run'); this.buf = 0; SFX.start(); }
+      if (this.dt0 > 0.35 && this.buf > 0) this.retry();
       return;
     }
     if (this.st === 'win') {
@@ -389,6 +394,7 @@
     var f = this.fx; f.far += dx * 0.12; f.city += dx * 0.4; f.gr += dx;
     for (var i = 0; i < this.clouds.length; i++) { var c = this.clouds[i]; c.x -= dx * 0.07 + 0.05; if (c.x < -20) { c.x += VW + 40; c.y = 8 + Math.floor(Math.random() * 44); } }
   };
+  Runner.prototype.retry = function () { if (this.st === 'dead') { this.reset('run'); this.buf = 0; SFX.start(); this.api.say('Running again.'); } };
   Runner.prototype.die = function () {
     this.st = 'dead'; this.dt0 = 0; this.buf = 0; this.hi = Math.max(this.hi || 0, this.score);
     if (!reduced()) this.shake = 0.3;
@@ -422,11 +428,11 @@
       panelBox(ctx, 46, 56, 228, 52);
       txt(ctx, 'REACH 300 TO UNLOCK', VW / 2, 64, P[10], 'c');
       txt(ctx, 'SPACE/UP/TAP = JUMP', VW / 2, 78, P[7], 'c');
-      if ((this.time * 2 | 0) & 1 || reduced()) txt(ctx, 'PRESS SPACE TO RUN', VW / 2, 94, P[11], 'c');
+      if ((this.time * 2 | 0) & 1 || reduced()) txt(ctx, 'SPACE OR TAP TO RUN', VW / 2, 94, P[11], 'c');
     } else if (this.st === 'dead') {
-      panelBox(ctx, 66, 58, 188, 40);
-      txt(ctx, 'OUCH! SCORE ' + this.score, VW / 2, 66, P[8], 'c');
-      txt(ctx, 'SPACE/TAP: RETRY', VW / 2, 82, P[7], 'c');
+      panelBox(ctx, 58, 46, 204, 52);
+      txt(ctx, 'OUCH! SCORE ' + this.score, VW / 2, 58, P[8], 'c');
+      txt(ctx, 'SPACE OR TAP TO RETRY', VW / 2, 82, P[7], 'c');
     } else if (this.st === 'win') {
       var by = reduced() ? 0 : Math.round(Math.sin(this.wt * 10) * 3);
       txt(ctx, 'UNLOCKED!', VW / 2, 70 + by, P[10], 'c');
@@ -467,7 +473,8 @@
       if (t > 0.55) b = P[7]; if (t > 0.7) { a = P[7]; b = P[12]; } if (t > 0.8) { a = P[7]; b = P[7]; }
       for (i = 0; i < VW; i++) { x.fillStyle = ((i + y) & 1) ? a : b; x.fillRect(i, y, 1, 1); }
     }
-    var hills = cnv(VW, 80), hx = hills.getContext('2d');
+    var hills = cnv(VW, 100), hx = hills.getContext('2d');
+    hx.fillStyle = P[3]; hx.fillRect(0, 80, VW, 20); hx.fillStyle = P[1]; hx.fillRect(0, 92, VW, 8);
     for (i = 0; i < VW; i++) {
       var u = i / VW * Math.PI * 2;
       var h = Math.round((34 + 16 * Math.sin(u * 3) + 7 * Math.sin(u * 7 + 1)) / 2) * 2;
@@ -645,7 +652,7 @@
       var clx = ((i * 97 + 20 - cx * 0.15) % (VW + 60) + VW + 60) % (VW + 60) - 30;
       ctx.drawImage(s.cloud, Math.round(clx), 14 + (i * 23) % 50);
     }
-    tile(ctx, bg.hills, cx * 0.3, VH - 80 - 20);
+    tile(ctx, bg.hills, cx * 0.3, VH - 100);
     ctx.translate(-cx, OY);
     ctx.drawImage(bg.level, cx, 0, VW, LH * T, cx, 0, VW, LH * T);
     for (i = 0; i < lv.cps.length; i++) {
@@ -696,7 +703,7 @@
       panelBox(ctx, 40, 52, 240, 56);
       txt(ctx, 'REACH THE FLAG', VW / 2, 60, P[10], 'c');
       txt(ctx, 'MOVE + JUMP. STOMP BUGS', VW / 2, 74, P[7], 'c');
-      if ((this.time * 2 | 0) & 1 || reduced()) txt(ctx, 'PRESS SPACE TO START', VW / 2, 92, P[11], 'c');
+      if ((this.time * 2 | 0) & 1 || reduced()) txt(ctx, touchOn ? 'TAP JUMP TO START' : 'PRESS SPACE TO START', VW / 2, 92, P[11], 'c');
     } else if (this.st === 'win') {
       var by = reduced() ? 0 : Math.round(Math.sin(this.wt * 10) * 3);
       txt(ctx, 'UNLOCKED!', VW / 2, 56 + by, P[10], 'c');
@@ -765,19 +772,27 @@
     var c = cnv(VW, VH); c.tabIndex = 0;
     c.setAttribute('role', 'img');
     var rv = el('div', 'kcg-reveal kcg-hide');
-    screen.appendChild(c); screen.appendChild(rv); stage.appendChild(screen);
+    var retry = mkBtn('kcg-retry kcg-hide', 'Retry');
+    retry.setAttribute('aria-label', 'Retry the run');
+    screen.appendChild(c); screen.appendChild(retry); screen.appendChild(rv); stage.appendChild(screen);
+    var keep = el('div', 'kcg-keep kcg-hide');
     play.appendChild(tl); play.appendChild(stage); play.appendChild(tr);
     var hint = el('p', 'kcg-hint');
     var sr = el('div', 'kcg-sr'); sr.setAttribute('aria-live', 'polite');
-    panel.appendChild(bar); panel.appendChild(play); panel.appendChild(hint); panel.appendChild(sr);
+    panel.appendChild(bar); panel.appendChild(play); panel.appendChild(keep); panel.appendChild(hint); panel.appendChild(sr);
     ov.appendChild(panel);
     D.body.appendChild(ov);
-    M = { ov: ov, panel: panel, bar: bar, title: title, mute: mute, close: close, play: play, tl: tl, tr: tr, stage: stage, screen: screen, c: c, ctx: c.getContext('2d'), rv: rv, hint: hint, sr: sr };
+    M = { ov: ov, panel: panel, bar: bar, title: title, mute: mute, close: close, play: play, tl: tl, tr: tr, stage: stage, screen: screen, c: c, ctx: c.getContext('2d'), rv: rv, hint: hint, sr: sr, retry: retry, keep: keep };
     M.ctx.imageSmoothingEnabled = false;
     var setMute = function () { mute.textContent = muted ? 'SOUND OFF' : 'SOUND ON'; mute.setAttribute('aria-pressed', muted ? 'true' : 'false'); };
     setMute();
     mute.addEventListener('click', function () { muted = !muted; sset('mute', muted ? '1' : null); setMute(); if (!muted) { audioInit(); SFX.coin(); } });
     close.addEventListener('click', function () { closeModal(); });
+    retry.addEventListener('click', function () {
+      if (!cur || !cur.game.retry) return;
+      audioInit(); cur.game.retry(); syncRetry();
+      try { c.focus({ preventScroll: true }); } catch (x) {}
+    });
     c.addEventListener('pointerdown', function (e) {
       if (!cur || cur.revealed) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -819,10 +834,10 @@
     M.panel.classList.toggle('kcg-land', land);
     M.hint.classList.toggle('kcg-hide', oh < 520 || touch);
     var barH = M.bar.offsetHeight, hintH = M.hint.classList.contains('kcg-hide') ? 0 : M.hint.offsetHeight + 8;
-    var tw = 0, th = 0;
+    var tw = 0, th = M.keep.classList.contains('kcg-hide') ? 0 : M.keep.offsetHeight + 8;
     if (touch) {
       if (land) tw = M.tl.offsetWidth + M.tr.offsetWidth + 16;
-      else th = Math.max(M.tl.offsetHeight, M.tr.offsetHeight) + 8;
+      else th += Math.max(M.tl.offsetHeight, M.tr.offsetHeight) + 8;
     }
     var availW = ow - 16 - 24 - tw, availH = oh - 16 - 24 - barH - 8 - hintH - th;
     var s = Math.min(availW / VW, availH / VH);
@@ -847,6 +862,24 @@
     while (acc >= STEP && n < 10) { cur.game.update(STEP, input); acc -= STEP; n++; }
     if (n >= 10) acc = 0;
     cur.game.render(M.ctx);
+    syncRetry();
+  }
+  function syncRetry() {
+    var show = !!(cur && !cur.revealed && cur.game.st === 'dead');
+    if (show !== !M.retry.classList.contains('kcg-hide')) {
+      M.retry.classList.toggle('kcg-hide', !show);
+      if (!show && D.activeElement === M.retry) { try { M.c.focus({ preventScroll: true }); } catch (x) {} }
+    }
+  }
+  function syncKeep() {
+    var k = M.keep; k.textContent = '';
+    var show = !!(cur && !cur.revealed && isOpen(cur.kind));
+    k.classList.toggle('kcg-hide', !show);
+    if (!show) return;
+    var email = unseal(cur.kind), mail = el('span', 'kcg-mail', email), cp = mkBtn('kcg-sm', 'Copy');
+    cp.setAttribute('aria-label', 'Copy email');
+    cp.addEventListener('click', function () { copyEmail(cp, email, mail); });
+    k.appendChild(el('span', null, 'Unlocked:')); k.appendChild(mail); k.appendChild(cp);
   }
   function startLoop() { if (!raf && cur && !D.hidden) { last = 0; acc = 0; raf = W.requestAnimationFrame(frame); } }
   function stopLoop() { if (raf) W.cancelAnimationFrame(raf); raf = 0; }
@@ -876,10 +909,10 @@
     row.appendChild(cp); row.appendChild(a);
     rv.appendChild(row);
     var again = mkBtn('kcg-ghost kcg-sm', 'Play again');
-    again.addEventListener('click', function () { cur.revealed = false; rv.classList.add('kcg-hide'); rv.textContent = ''; newGame(); layoutTouch(); fit(); try { M.c.focus({ preventScroll: true }); } catch (e) {} });
+    again.addEventListener('click', function () { cur.revealed = false; rv.classList.add('kcg-hide'); rv.textContent = ''; newGame(); syncKeep(); layoutTouch(); fit(); try { M.c.focus({ preventScroll: true }); } catch (e) {} });
     rv.appendChild(again);
     rv.classList.remove('kcg-hide');
-    clearInput(); layoutTouch(); fit();
+    clearInput(); syncRetry(); syncKeep(); layoutTouch(); fit();
     M.sr.textContent = 'Unlocked. The email address is ' + email;
     try { cp.focus({ preventScroll: true }); } catch (e) {}
     renderAll();
@@ -936,6 +969,7 @@
     M.rv.classList.add('kcg-hide'); M.rv.textContent = '';
     newGame();
     M.ov.classList.remove('kcg-hide');
+    syncRetry(); syncKeep();
     prevOverflow = D.documentElement.style.overflow;
     D.documentElement.style.overflow = 'hidden';
     layoutTouch(); fit();
@@ -989,7 +1023,8 @@
         cp.setAttribute('aria-label', 'Copy ' + LABEL[kind] + ' email');
         cp.addEventListener('click', function () { copyEmail(cp, email, mail); });
         var a = el('a', 'kcg-link', 'Email'); a.href = 'mailto:' + email;
-        var rp = mkBtn('kcg-ghost kcg-sm', 'Replay');
+        var rp = mkBtn('kcg-ghost kcg-sm', null);
+        rp.appendChild(el('span', 'kcg-tri')); rp.appendChild(el('span', null, 'Replay'));
         rp.setAttribute('aria-label', 'Replay the ' + LABEL[kind] + ' game');
         rp.addEventListener('click', function () { openModal(kind, rp); });
         card.appendChild(mail); card.appendChild(cp); card.appendChild(a); card.appendChild(rp);
@@ -1043,13 +1078,5 @@
     mount: function (elm) { mount(elm); }
   });
 
-  /* optional test hook: only populated when a test harness predefines window.__kcgTest */
-  var TH = W.__kcgTest;
-  if (TH && typeof TH === 'object') {
-    TH.cur = function () { return cur; };
-    TH.input = input;
-    TH.stop = stopLoop;
-    TH.tick = function (n) { for (var i = 0; i < n && cur; i++) cur.game.update(STEP, input); if (cur) cur.game.render(M.ctx); };
-  }
 })();
 </script>

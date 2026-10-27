@@ -687,7 +687,7 @@ function tick(now){
   // post: vanishing point
   v3.set(bend.x * 9.36, bend.y * 9.36, -60).project(camera);
   postMat.uniforms.uCenter.value.set(v3.x * .5 + .5, v3.y * .5 + .5);
-  postMat.uniforms.uAmt.value = reduce ? 0 : Math.min(0.16, fx * fx * 0.16);
+  postMat.uniforms.uAmt.value = reduce ? 0 : Math.min(0.12, fx * fx * 0.12);
   postMat.uniforms.uTime.value = t;
   if (!uniforms) return;
   renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene, camera);
