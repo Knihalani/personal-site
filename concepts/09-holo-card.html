@@ -494,7 +494,7 @@ var cyc;
   cyc=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:new THREE.Color(0x24262c).convertSRGBToLinear(),roughness:.92,metalness:0,envMapIntensity:.25,side:THREE.DoubleSide}));
   cyc.receiveShadow=true;scene.add(cyc);
 })();
-var spot=new THREE.SpotLight(0xfff1e6,2.4,0,.5,.9,0);
+var spot=new THREE.SpotLight(0xfff1e6,2.2,0,.62,1,0);
 spot.castShadow=true;spot.shadow.mapSize.set(1024,1024);spot.shadow.camera.near=3;spot.shadow.camera.far=30;spot.shadow.radius=9;spot.shadow.blurSamples=16;spot.shadow.bias=-.0004;
 scene.add(spot);scene.add(spot.target);
 var rim=new THREE.DirectionalLight(0x9fc4ff,.5);rim.position.set(6,2,-2);scene.add(rim);
@@ -665,7 +665,7 @@ function layout(){
   var L=anchor[1]-cardCY-ATTY;ROPE=Math.max(.8,L);SEG=ROPE/(NR-1);
   cyc.position.y=cardCY-CH/2-1.45;
   camBase.set(0,lookY+1.25,dist);camLook.set(0,lookY,0);
-  spot.position.set(anchorBaseX+1.6,anchor[1]+7,3.6);spot.target.position.set(anchorBaseX,cyc.position.y,-.6);spot.target.updateMatrixWorld();
+  spot.position.set(anchorBaseX+.9,anchor[1]+6,5.5);spot.target.position.set(anchorBaseX-.2,cyc.position.y,-2.2);spot.target.updateMatrixWorld();
   if(composer){composer.setPixelRatio(renderer.getPixelRatio());composer.setSize(W,H);}
 }
 

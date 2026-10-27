@@ -3,3 +3,5 @@
 gate https://claude.ai/artifact/QvEVbRQ7CqYWPk8GbL3ZUX
 13 https://claude.ai/artifact/DBMs3sTpN554EnVVQZv4BT
 14 https://claude.ai/artifact/Vz6QUSfPGwRT6oh8W12Q8y
+11 https://claude.ai/artifact/4TMBJF5g3YXcANHHAJU4Ac
+12 https://claude.ai/artifact/K2Gkt8TGDV33rWDFfgX7oR

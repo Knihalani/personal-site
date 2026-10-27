@@ -37,7 +37,8 @@ a{color:inherit}
   radial-gradient(circle at 50% 50%, #120c08, var(--bg) 60%)}
 #bh{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:pan-y}
 #bh:active{cursor:grabbing}
-.hud{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;
+.stage::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(rgba(2,2,3,.55),transparent 16%,transparent 62%,rgba(2,2,3,.78))}
+.hud{position:absolute;inset:0;z-index:1;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;
   padding-top:max(18px, env(safe-area-inset-top,0px));padding-bottom:max(18px, env(safe-area-inset-bottom,0px))}
 .hud a,.hud button{pointer-events:auto}
 .top{display:flex;justify-content:space-between;align-items:center;gap:12px}
@@ -263,7 +264,7 @@ footer{max-width:1120px;margin:0 auto;padding-top:96px;padding-bottom:max(28px, 
   ' float g=1./(ga*(1.-beta*dot(v,-rd)));g*=sqrt(1.-1./r);'+
   ' float temp=3900.*pow(max(prof,.02),.25)*g*g;'+
   ' vec3 col=bb(temp)*pow(g,3.5)*(2.4*pow(max(prof,0.),.55)+.06)*(.45+n*1.1);'+
-  ' return vec4(col,clamp(dens*1.15,0.,1.));}\n'+
+  ' col*=mix(vec3(1.06,.95,.86),vec3(.78,.9,1.22),smoothstep(.95,1.5,g)); return vec4(col,clamp(dens*1.15,0.,1.));}\n'+
   'void main(){vec2 uv=(gl_FragCoord.xy*2.-uRes)/uRes.y;'+
   ' vec3 rd=normalize(uF+uR*uv.x*uTan+uU*uv.y*uTan);'+
   ' vec3 pos=uPos,v=rd;vec3 h=cross(pos,v);float h2=dot(h,h);'+

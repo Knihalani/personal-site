@@ -270,14 +270,14 @@ vec3 aurora(vec3 rd){
     float hgt = 1.0 + fi*1.6;
     vec2 q = rd.xz*(hgt/(rd.y+0.035))*1.1 + vec2(0.0, uTime*0.02);
     float w = q.x*0.42 + 0.9*sin(q.y*0.33 + uTime*0.05) + 0.45*sin(q.y*0.9 - uTime*0.07) + 0.35*vnoise(q*0.35 + uTime*0.03);
-    float band = exp(-pow((tri(w*0.16)-0.18)*9.0, 2.0));
+    float band = exp(-pow((tri(w*0.16)-0.18)*20.0, 2.0)) + 0.35*exp(-pow((tri(w*0.11+0.3)-0.2)*26.0, 2.0));
     float rays = 0.55 + 0.45*vnoise(vec2(w*7.0 + uTime*0.2, fi*3.0));
     float I = band*rays*(1.0-fi)*smoothstep(0.0,0.15,fi+0.05);
     vec3 c = mix(vec3(0.12,1.0,0.55), vec3(0.15,0.75,0.85), smoothstep(0.1,0.6,fi));
     c = mix(c, vec3(1.0,0.32,0.45), smoothstep(0.55,1.0,fi));
     acc += c*I;
   }
-  return acc*(3.2/float(N))*smoothstep(0.01,0.12,rd.y);
+  return acc*(1.7/float(N))*smoothstep(0.01,0.12,rd.y);
 }
 vec3 stars(vec3 rd){
   vec3 q = rd*260.0;
@@ -344,24 +344,30 @@ vec3 lightTerrain(vec3 p, vec3 n, vec3 rd, float t, bool doShadow){
   lin += sc*0.12*max(dot(n, normalize(vec3(-uSun.x,0.0,-uSun.z))),0.0)*smoothstep(-0.05,0.1,uSun.y);
   float mdif = max(dot(n, uMoon), 0.0);
   lin += vec3(0.06,0.085,0.13)*mdif*night*1.6;
-  lin += vec3(0.02,0.09,0.06)*night*uAur*(0.5+0.5*n.y);
+  lin += vec3(0.004,0.024,0.016)*night*uAur*(0.5+0.5*n.y);
   vec3 col = alb*lin;
   float sp = pow(max(dot(reflect(rd,n), uSun),0.0), 24.0)*snow*sh;
   col += sc*sp*0.6;
   return col;
 }
 
+vec3 mist(vec3 col, vec3 ro, vec3 rd, float t);
 vec3 fog(vec3 col, vec3 ro, vec3 rd, float t){
   float day = dayF(), night = nightF();
-  vec3 fc = atmo(normalize(vec3(rd.x, max(rd.y,0.0)*0.35+0.015, rd.z)));
-  vec3 ext = vec3(1.0, 1.25, 1.65)*mix(0.00019, 0.00013, day);
+  vec3 fc = atmo(normalize(vec3(rd.x, max(rd.y,0.0)*0.3, rd.z)));
+  vec3 ext = vec3(1.0, 1.2, 1.5)*mix(0.00013, 0.0001, day);
   vec3 f = 1.0 - exp(-t*ext);
   col = mix(col, fc, f);
+  return mist(col, ro, rd, t);
+}
+vec3 mist(vec3 col, vec3 ro, vec3 rd, float t){
+  float day = dayF(), night = nightF();
+  vec3 fc = atmo(normalize(vec3(rd.x, 0.0, rd.z)));
   /* valley mist: thick at dawn, faint by day, moonlit at night */
-  float mistAmt = mix(0.0032, 0.0008, day);
+  float mistAmt = mix(0.0016, 0.0004, day);
   float b = 0.022;
-  float m = mistAmt*exp(-ro.y*b)*(1.0-exp(-t*rd.y*b))/max(rd.y, 1e-3);
-  if(abs(rd.y)<1e-3) m = mistAmt*exp(-ro.y*b)*t;
+  float ry = abs(rd.y)<1e-4 ? 1e-4 : rd.y;
+  float m = mistAmt*exp(-ro.y*b)*(1.0-exp(max(-t*ry*b,-30.0)))/ry;
   m = clamp(m, 0.0, 1.0);
   vec3 mc = mix(fc*1.05, sunCol()*0.6+fc*0.6, pow(max(dot(rd,uSun),0.0),4.0));
   mc = mix(mc, vec3(0.05,0.07,0.1), night*0.8);
@@ -414,9 +420,10 @@ void main(){
     col = fog(col, ro, rd, t);
   } else {
     col = sky(rd, true);
+    col = mist(col, ro, rd, 30000.0);
   }
   /* exposure that adapts with time of day */
-  float expo = mix(1.9, 1.0, dayF()) + 0.6*nightF();
+  float expo = mix(1.35, 1.0, dayF()) + 0.5*nightF();
   col = aces(col*expo);
   col = pow(col, vec3(0.4545));
   float vig = 1.0 - 0.22*dot(uv*0.55, uv*0.55);

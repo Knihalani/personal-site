@@ -255,15 +255,17 @@ function init(){
   const U2 = isMobile ? .44 : .4, GAP = 1.3;
   const tileW = T*U2;
   const glyphs = ['E','J','K','@'];
-  const gc = document.createElement('canvas'); gc.width = gc.height = 128;
-  const gx = gc.getContext('2d', { willReadFrequently: true });
-  const masks = glyphs.map(g => {
-    gx.clearRect(0,0,128,128); gx.fillStyle = '#fff'; gx.textAlign = 'center'; gx.textBaseline = 'middle';
-    gx.font = '800 104px Syne, "Arial Black", Arial, sans-serif'; gx.fillText(g, 64, 70);
-    const d = gx.getImageData(0,0,128,128).data, m = new Uint8Array(T*T);
+  const gc = document.createElement('canvas'); gc.width = 512; gc.height = 128;
+  const gx = gc.getContext('2d');
+  gx.fillStyle = '#fff'; gx.textAlign = 'center'; gx.textBaseline = 'middle';
+  gx.font = '800 104px Syne, "Arial Black", Arial, sans-serif';
+  glyphs.forEach((g, k) => gx.fillText(g, k*128 + 64, 70));
+  const gd = gx.getImageData(0, 0, 512, 128).data;          // single readback
+  const masks = glyphs.map((g, k) => {
+    const m = new Uint8Array(T*T);
     for (let a=0;a<T;a++) for (let b=0;b<T;b++){
-      const sx = Math.floor((a+.5)/T*128), sy = Math.floor((b+.5)/T*128);
-      m[b*T+a] = d[(sy*128+sx)*4+3] > 110 ? 1 : 0;
+      const sx = k*128 + Math.floor((a+.5)/T*128), sy = Math.floor((b+.5)/T*128);
+      m[b*T+a] = gd[(sy*512+sx)*4+3] > 110 ? 1 : 0;
     }
     return m;
   });
@@ -319,7 +321,7 @@ function init(){
     vertexShader: `
       uniform float uP; uniform float uT; uniform vec3 uMouse; uniform float uMouseOn; uniform float uC; uniform float uU2;
       attribute vec3 p0; attribute vec3 p1; attribute vec3 p2; attribute vec3 aH; attribute vec4 aD;
-      varying vec3 vL; varying vec3 vN; varying vec3 vWP; varying float vGlow; varying float vFill; varying float vHeat;
+      varying vec3 vL; varying vec3 vN; varying vec3 vWP; varying float vGlow; varying float vFill; varying float vHeat; varying float vHel;
       const float PI = 3.14159265;
       float ease(float x){ return x * x * x * (x * (x * 6.0 - 15.0) + 10.0); }
       float tr(float k){ return ease(clamp((uP - k - aD.y * 0.42) / 0.58 + 0.0, 0.0, 1.0)); }
@@ -360,10 +362,11 @@ function init(){
         vGlow = clamp(seam * 0.85 + aD.z * t1 * (1.0 - t2) + aD.w * t2 * (1.0 - t3) * 1.2 + t3 * 0.9 + push * 0.6, 0.0, 1.6);
         vFill = aD.z * t1 * (1.0 - t2) + aD.w * t2 * (1.0 - t3) + t3;
         vHeat = t3;
+        vHel = t2 * (1.0 - t3);
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
     fragmentShader: `
-      varying vec3 vL; varying vec3 vN; varying vec3 vWP; varying float vGlow; varying float vFill; varying float vHeat;
+      varying vec3 vL; varying vec3 vN; varying vec3 vWP; varying float vGlow; varying float vFill; varying float vHeat; varying float vHel;
       void main(){
         vec3 al = abs(vL);
         float mx = max(al.x, max(al.y, al.z));
@@ -381,9 +384,11 @@ function init(){
         vec3 baseC = vec3(0.095, 0.1, 0.11);
         vec3 sig = vec3(1.0, 0.415, 0.17);
         vec3 bone = vec3(0.925, 0.9, 0.855);
-        vec3 col = baseC * (0.5 + 1.45 * dif) + bone * spec * 0.35 + sig * under * 0.12 + bone * fres * 0.08;
+        baseC *= 1.0 + vHel * 1.2;
+        float rim = pow(max(dot(N, normalize(vec3(1.0, 0.1, -0.4))), 0.0), 2.0);
+        vec3 col = baseC * (0.5 + 1.45 * dif) + bone * spec * 0.35 + sig * under * 0.12 + bone * fres * 0.08 + sig * rim * 0.16;
         col = mix(col, sig * (0.55 + 0.6 * dif) + vec3(1.0, 0.8, 0.6) * spec * 0.5, clamp(vFill, 0.0, 1.0) * 0.85);
-        vec3 edgeC = mix(bone * 0.28, sig * 1.6, clamp(vGlow, 0.0, 1.0));
+        vec3 edgeC = mix(bone * (0.36 + 0.25 * vHel), sig * 1.6, clamp(vGlow, 0.0, 1.0));
         edgeC = mix(edgeC, vec3(1.0, 0.85, 0.65) * 1.8, vHeat * 0.6);
         col = mix(col, edgeC, edge * (0.55 + 0.45 * clamp(vGlow, 0.0, 1.0)));
         float fog = smoothstep(18.0, 46.0, length(cameraPosition - vWP));

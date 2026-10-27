@@ -567,9 +567,16 @@ var causticAmt=0;
 function frame(now){
   raf=0;if(!running)return;
   var rdt=Math.min(.05,(now-last)/1000)||.016;last=now;
+  tick(rdt,true);
+  camera.layers.set(1);renderer.setRenderTarget(backRT);renderer.clear();renderer.render(scene,camera);renderer.setRenderTarget(null);camera.layers.set(0);
+  composer.render(rdt);
+  raf=requestAnimationFrame(frame);
+}
+if(location.hash==='#qa')window.__qaTick=function(sec){for(var t=0;t<sec;t+=1/60)tick(1/60,false);};
+function tick(rdt,live){
   uTime.value+=rdt;
   // adaptive quality
-  if(frames<80){frames++;if(frames>15)fAcc+=rdt;
+  if(live&&frames<80){frames++;if(frames>15)fAcc+=rdt;
     if(frames===80){var avg=fAcc/65;
       if(avg>1/45&&qLevel<2){qLevel=avg>1/28?2:1;dprCap=qLevel===2?.85:1.1;if(qLevel===2)bloom.enabled=false;resize();frames=40;fAcc=0;}}}
   phaseT+=rdt;
@@ -614,10 +621,6 @@ function frame(now){
     var rs=(rate<0?'◂◂ ':'')+Math.abs(rate).toFixed(2)+'×';
     if(rs!==spEl.textContent){spEl.textContent=rs;spEl.classList.toggle('slow',rate!==1);}
   }
-  // render
-  camera.layers.set(1);renderer.setRenderTarget(backRT);renderer.clear();renderer.render(scene,camera);renderer.setRenderTarget(null);camera.layers.set(0);
-  composer.render(rdt);
-  raf=requestAnimationFrame(frame);
 }
 function wake(){if(running)return;running=true;last=performance.now();raf=requestAnimationFrame(frame);}
 function sleep(){running=false;if(raf){cancelAnimationFrame(raf);raf=0;}}
