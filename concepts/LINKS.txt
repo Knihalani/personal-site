@@ -11,3 +11,5 @@ gate https://claude.ai/artifact/QvEVbRQ7CqYWPk8GbL3ZUX
 04 https://claude.ai/artifact/5HjE6uCyVLAiuzCDgfMqxL
 05 https://claude.ai/artifact/YPKKtFcv6pPC9fXeR6puzs
 06 https://claude.ai/artifact/GcwQQTLnEJy7yJgwWfnoq4
+07 https://claude.ai/artifact/BjQbHN6LcDB19hhCLenZkq
+08 https://claude.ai/artifact/MUTmxrmzn9GEnWpvYwhWhF
