@@ -20,3 +20,4 @@ gate https://claude.ai/artifact/QvEVbRQ7CqYWPk8GbL3ZUX
 17 https://claude.ai/artifact/8gwmwRSy8DoCrW7iyGPPec
 18 https://claude.ai/artifact/4p1XjnvmGgGTNXs9EDb8di
 gallery https://claude.ai/artifact/BWoKKncLe3zRRdHede5JEq
+world https://claude.ai/artifact/WdqM4udDCjPhzSzjA8pRte

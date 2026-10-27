@@ -128,7 +128,7 @@ button{cursor:pointer}
 #book section{position:relative;padding:4px 6px}
 #book section + section{margin-top:22px;padding-top:22px;border-top:2px dotted rgba(106,85,69,.35)}
 .panel-sign #book section + section{margin-top:0;padding-top:4px;border-top:0}
-.kicker{font-family:var(--sc);font-weight:700;font-size:14px;letter-spacing:.14em;color:var(--rose);margin:0 0 4px}
+.kicker{font-family:var(--sc);font-weight:700;font-size:14px;letter-spacing:.14em;color:var(--rose);margin:0 0 4px;padding-right:48px}
 #book h2{font-family:var(--sc);font-weight:800;font-size:clamp(32px,6vw,44px);line-height:1;margin:0 0 10px;padding-right:44px;color:var(--ink)}
 #book .lead{font-size:clamp(21px,3.6vw,26px);line-height:1.25;font-style:italic;margin:0 0 14px;color:#4a372b}
 #book p{font-size:18px;line-height:1.55;margin:0 0 12px}
@@ -142,6 +142,8 @@ button{cursor:pointer}
 .facts li{font-family:var(--sc);font-weight:700;font-size:15px;padding:3px 10px;border-radius:999px;background:rgba(95,122,76,.16);border:1px solid rgba(95,122,76,.45);color:#3f5634}
 .gatebox{min-height:132px;margin:14px 0;padding:14px;border-radius:8px;background:#2b211b;color:#f3e6cc;border:2px solid var(--wood-dk);box-shadow:inset 0 0 0 2px rgba(255,240,210,.12)}
 .ctl.pk{background:rgba(106,85,69,.1);border-color:rgba(106,85,69,.3);color:var(--ink);margin:6px 0 12px;width:100%;font-size:16px}
+.ctl.pk{grid-template-columns:auto 1fr auto 1fr;justify-content:start}
+@media (max-width:560px){.ctl.pk{grid-template-columns:auto 1fr}}
 .idx-head{margin:0 0 14px;padding:0 44px 14px 6px;border-bottom:2px dotted rgba(106,85,69,.35)}
 .idx-head h2{font-family:var(--sc);font-weight:800;font-size:28px;margin:0 0 6px}
 .idx-head p{margin:0 0 8px;font-size:16px;color:var(--ink-soft)}
@@ -172,7 +174,17 @@ button{cursor:pointer}
 #carry b{position:absolute;right:0;bottom:-2px;font-family:var(--sans);font-weight:800;font-size:14px;color:#fff6e4;text-shadow:1px 1px 0 #2a1d15}
 .tipname{position:fixed;z-index:26;pointer-events:none;padding:3px 8px;border-radius:6px;background:rgba(30,22,18,.9);color:var(--paper);font-family:var(--sc);font-size:14px}
 
+@media (min-width:980px){
+  #title{justify-content:flex-start;padding-left:max(6vw, var(--gl))}
+  .tcard{margin:auto 0;text-align:left;width:min(470px,100%)}
+  .tcard .ctl{margin:22px 0 10px;grid-template-columns:auto auto auto auto}
+  #loadbar{margin:14px 0 0}
+}
 @media (max-width:700px){
+  #title{align-items:flex-start;padding-top:calc(var(--gt) + 46px)}
+  #title .ctl{grid-template-columns:auto auto;gap:3px 12px}
+  #title .ctl span.a{margin-top:0}
+  #toast{bottom:auto;top:calc(var(--gt) + 130px)}
   #mapwrap{width:104px}
   #map{width:104px;height:104px}
   #where{font-size:13px}
@@ -220,8 +232,8 @@ button{cursor:pointer}
   <div id="mapwrap" aria-hidden="true"><canvas id="map" width="296" height="296"></canvas><div id="where">The Hub</div></div>
   <div class="hbtns">
     <button class="hbtn" id="bMute" type="button" aria-label="Mute sound" aria-pressed="false" title="Mute (M)">
-      <svg class="off" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>
-      <svg class="on" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+      <svg class="on" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+      <svg class="off" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
     </button>
     <button class="hbtn" id="bPause" type="button" aria-label="Pause menu" title="Pause (Esc)">
       <svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>
@@ -453,7 +465,7 @@ function paint(tile, fn){
     atlasData[d] = buf[s]; atlasData[d + 1] = buf[s + 1]; atlasData[d + 2] = buf[s + 2]; atlasData[d + 3] = buf[s + 3];
   }
 }
-const GT = PAL([0x71895a, 0x7c935f, 0x889e67, 0x94a96f, 0xa0b277]);
+const GT = PAL([0x5d7746, 0x69834e, 0x758e55, 0x81985c, 0x8da263]);
 const DIRTP = PAL([0x6c5343, 0x7a5f4b, 0x876b53, 0x94785d]);
 const STONEP = PAL([0x7f7a77, 0x8c8682, 0x99938d, 0xa69f97]);
 const DEEPP = PAL([0x5d5662, 0x68606e, 0x736a79, 0x7f7584]);
@@ -467,7 +479,7 @@ const SIGNP = PAL([0x5e4130, 0x694a37, 0x75533e, 0x815c45]);
 const BRICKP = PAL([0xa06b5c, 0xab7665, 0xb68170, 0x96604f]);
 const GRAVP = PAL([0x9b8f7c, 0xa99c87, 0xb7aa94, 0x8a7e6c, 0xc4b8a2]);
 const JSP = PAL([0xbca583, 0xc6af8c, 0xd0ba97, 0xb19a78]);
-const WATERP = PAL([0x5f8d9a, 0x6b98a3, 0x78a3ac, 0x88afb6]);
+const WATERP = PAL([0x3d6c7a, 0x477683, 0x52818c, 0x5e8c96]);
 const STEPP = PAL([0xaaa392, 0xb4ad9c, 0xbeb7a6, 0x9f9887]);
 function cobbleFn(pal, mossy){
   const pts = []; for (let i = 0; i < 6; i++) pts.push([pr(i, 3, 41) * 16, pr(i, 9, 43) * 16]);
@@ -513,8 +525,8 @@ function buildAtlas(){
   paint(T.stepSide, (x, y) => { if (y < 2) return pick(LEAFP, pr(x, y, 58)); if (y === 2 && pr(x, 0, 59) > .5) return pick(LEAFP, .3); return pick(STEPP, pr(x, y, 60) * .5 + sm(x * .4, y * 1.3, 61, .5) * .5); });
   paint(T.jstone, (x, y) => { if (y % 8 === 7) return shade(JSP[0], .8); if (y % 8 === 0) return shade(JSP[2], 1.05); return pick(JSP, pr(x, y, 62) * .5 + sm(x * .3, y * .8, 63, .5) * .5); });
   paint(T.jstoneTop, (x, y) => { if (x === 0 || y === 0 || x === 15 || y === 15) return shade(JSP[0], .82); return pick(JSP, pr(x, y, 64) * .5 + sm(x, y, 65, .4) * .5); });
-  paint(T.ebark, (x, y) => { const v = Math.abs(Math.sin(x * .85 + Math.sin(y * .45) * 2.2)); if (v < .16) return A(pr(x, y, 66) > .5 ? rgb(0x9fe6cf) : rgb(0xc9f2d8), EM); let c = pick(PAL([0x3e3238, 0x483a40, 0x534349, 0x5e4c51]), sm(x * 1.1, y * .2, 67, 1) * .6 + pr(x, y, 68) * .4); return c; });
-  paint(T.eleaf, (x, y) => { if (pr(x, y, 69) > .86) return rgb(0x6f9e86); return A(pick(PAL([0x9fd0b6, 0xb6dfc0, 0xcfe5b8, 0xe4e2a6, 0xf0e7b8]), sm(x, y, 70, .45) * .6 + pr(x, y, 71) * .4), EM); });
+  paint(T.ebark, (x, y) => { const v = Math.abs(Math.sin(x * .85 + Math.sin(y * .45) * 2.2)); if (v < .1 && pr(x, y, 66) > .25) return A(pr(x, y, 67) > .5 ? rgb(0x6fc9ae) : rgb(0x9adcc2), EM); let c = pick(PAL([0x3e3238, 0x483a40, 0x534349, 0x5e4c51]), sm(x * 1.1, y * .2, 67, 1) * .6 + pr(x, y, 68) * .4); return c; });
+  paint(T.eleaf, (x, y) => { if (pr(x, y, 69) > .82) return A(rgb(0x5f9f86), EM); return A(pick(PAL([0x6fb79a, 0x84c4a4, 0x9bcfac, 0xc9d495, 0xe2d48e]), sm(x, y, 70, .45) * .6 + pr(x, y, 71) * .4), EM); });
   paint(T.crystal, (x, y) => { const t = ((x + y) * .09 + sm(x, y, 72, .3) * .5) % 1; if ((x + y) % 7 === 0) return A(rgb(0xf4f2ff), EM); return A(pick(PAL([0x8fa6dc, 0xa8bbe9, 0xc3c4f0, 0xd9cff4]), t), EM); });
   paint(T.water, (x, y) => pick(WATERP, .5 + .5 * Math.sin((x + y * .6) * .7 + sm(x, y, 73, .4) * 3)));
   paint(T.tgrass, plant((x, y) => { for (let b = 0; b < 5; b++){ const bx = 1 + b * 3 + Math.floor(pr(b, 0, 74) * 2), hgt = 6 + Math.floor(pr(b, 1, 75) * 8), lean = (pr(b, 2, 76) - .5) * 4; const xx = Math.round(bx + lean * (15 - y) / 15); if (x === xx && y > 15 - hgt) return shade(pick(GT, pr(b, y, 77)), .8 + (15 - y) / 15 * .35); } return null; }));
@@ -1006,7 +1018,7 @@ let atlasTex = null;
 if (glOK){
   atlasTex = new THREE.DataTexture(atlasData, ATL, ATL, THREE.RGBAFormat);
   atlasTex.magFilter = THREE.NearestFilter; atlasTex.minFilter = THREE.NearestMipmapLinearFilter; atlasTex.generateMipmaps = true;
-  atlasTex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy()); atlasTex.needsUpdate = true;
+  atlasTex.needsUpdate = true;
   U.uAtlas.value = atlasTex;
 }
 const ATLAS_FN = `
@@ -1046,7 +1058,7 @@ const terrainMat = glOK ? new THREE.ShaderMaterial({
       float emis = 1.0 - smoothstep(0.84, 0.96, t.a);
       float ao = 0.4 + vAO * 0.2;
       vec3 c = litCol(t.rgb, vN, ao, vBl);
-      c = mix(c, t.rgb * (0.95 + 0.75 * uNight), emis * (0.45 + 0.55 * uNight));
+      c = mix(c, t.rgb * (0.95 + 0.3 * uNight), emis * (0.22 + 0.78 * uNight));
       c = fogIt(c, vW);
       gl_FragColor = vec4(grade(c), 1.0);
     }`
@@ -1438,7 +1450,7 @@ function buildGlow(){
   const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(hp.filter((v, i) => i % 4 !== 3)), 3)); hg.setAttribute('aS', new THREE.BufferAttribute(new Float32Array(hp.filter((v, i) => i % 4 === 3)), 1));
   halos = new THREE.Points(hg, pointsMat(true, [
     `attribute float aS; uniform float uScale; uniform float uNight; varying float vS; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; vS = aS; gl_PointSize = (aS > 1.5 ? 9.0 : 3.6) * aS * uScale / -mv.z * (0.35 + 0.65 * uNight); }`,
-    `uniform float uNight; varying float vS; void main(){ float d = length(gl_PointCoord - 0.5) * 2.0; float a = pow(max(1.0 - d, 0.0), 2.2); vec3 c = vS > 1.5 ? vec3(0.62, 0.95, 0.8) : (vS > 1.2 ? vec3(0.7, 0.75, 1.0) : vec3(1.0, 0.74, 0.42)); gl_FragColor = vec4(c * a * (0.12 + 0.6 * uNight), 1.0); }`]));
+    `uniform float uNight; varying float vS; void main(){ float d = length(gl_PointCoord - 0.5) * 2.0; float a = pow(max(1.0 - d, 0.0), 2.2); vec3 c = vS > 1.5 ? vec3(0.62, 0.95, 0.8) : (vS > 1.2 ? vec3(0.7, 0.75, 1.0) : vec3(1.0, 0.74, 0.42)); gl_FragColor = vec4(c * a * (0.06 + 0.42 * uNight), 1.0); }`]));
   halos.frustumCulled = false; scene.add(halos);
   // fireflies
   const nF = LOW ? 90 : 240, fp = new Float32Array(nF * 3), fa = new Float32Array(nF);
@@ -2003,7 +2015,8 @@ function updateDrops(dt, t){
 let hand = null, handIcon = null, handMat = null, swing = 0, highlight = null, crack = null, crackTex = null, avatar = null;
 function buildHand(){
   handMat = dropShader(false);
-  hand = new THREE.Mesh(new THREE.BoxGeometry(.36, .36, .36), handMat); hand.renderOrder = 50; hand.frustumCulled = false;
+  handMat.transparent = true;
+  hand = new THREE.Mesh(new THREE.BoxGeometry(.24, .24, .24), handMat); hand.renderOrder = 50; hand.frustumCulled = false;
   hand.position.set(.42, -.36, -.62); hand.rotation.set(.1, .6, 0); camera.add(hand);
   handIcon = new THREE.Mesh(new THREE.PlaneGeometry(.42, .42), new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false, alphaTest: .5 }));
   handIcon.renderOrder = 51; handIcon.position.set(.38, -.3, -.6); handIcon.rotation.set(0, -.3, .2); handIcon.frustumCulled = false; camera.add(handIcon);
@@ -2012,7 +2025,7 @@ const iconTexCache = {};
 function updateHand(){
   if (!hand) return;
   const id = heldId();
-  hand.visible = isBlockItem(id) && !third; handIcon.visible = (!isBlockItem(id) && id > 0) && !third;
+  const show = !third && state !== 'title'; hand.visible = isBlockItem(id) && show; handIcon.visible = (!isBlockItem(id) && id > 0) && show;
   if (isBlockItem(id)) handMat.uniforms.uTileH.value = B_RT[id] === 3 ? B_TILES[id * 6 + 2] : B_TILES[id * 6];
   else if (id){ if (!iconTexCache[id]){ const im = new Image(); im.src = iconURL(id); const tx = new THREE.Texture(im); tx.magFilter = THREE.NearestFilter; tx.minFilter = THREE.NearestFilter; tx.generateMipmaps = false; im.onload = () => { tx.needsUpdate = true; }; iconTexCache[id] = tx; } handIcon.material.map = iconTexCache[id]; handIcon.material.needsUpdate = true; }
 }
@@ -2149,7 +2162,7 @@ let mineHeld = false, jumpHeld = false, useRepeat = 0;
 const titleEl = $('#title'), pauseEl = $('#pause'), panelEl = $('#panel'), hudEl = $('#hud'), touchEl = $('#touch'), resumeEl = $('#resume');
 function clearInput(){ for (const k in keys) keys[k] = false; mineHeld = false; jumpHeld = false; joy.on = false; joy.x = joy.y = 0; $('#stick').classList.remove('on'); }
 function setState(s){
-  state = s; clearInput();
+  state = s; clearInput(); if (U) setFog();
   titleEl.hidden = s !== 'title'; pauseEl.hidden = s !== 'pause'; invEl.hidden = s !== 'inv'; panelEl.hidden = s !== 'panel';
   hudEl.hidden = s === 'title' || !glOK;
   touchEl.hidden = !(TOUCH && s === 'play');
@@ -2171,7 +2184,7 @@ D.addEventListener('pointerlockchange', () => {
 });
 D.addEventListener('pointerlockerror', lockFail);
 function startPlay(){
-  audioStart(); setState('play'); requestLock(); canvas.focus({ preventScroll: true });
+  audioStart(); setState('play'); updateHand(); requestLock(); canvas.focus({ preventScroll: true });
   if (!playedOnce){ playedOnce = true; toast(TOUCH ? 'Walk to a signpost and tap to read it' : 'Walk up to a signpost and press E', 3000); }
 }
 let playedOnce = false;
@@ -2235,7 +2248,8 @@ $('#promptBtn').addEventListener('click', () => { if (nearSign) openPanel('sign'
 panelEl.addEventListener('click', e => { if (e.target === panelEl) closePanel(true); });
 panelEl.addEventListener('click', e => { const a = e.target.closest && e.target.closest('.idx-head nav a'); if (a){ e.preventDefault(); const t = D.querySelector(a.getAttribute('href')); if (t) t.scrollIntoView({ behavior: REDUCED ? 'auto' : 'smooth', block: 'start' }); } });
 const CTL_KEYS = [['Move', 'W A S D'], ['Look', TOUCH ? 'drag right side' : 'mouse'], ['Jump', 'Space'], ['Sprint', 'Shift'], ['Read sign', 'E'], ['Inventory', 'E / I'], ['Mine', 'hold left click'], ['Place / pet', 'right click'], ['Hotbar', '1-9 / wheel'], ['Camera', 'V / F5'], ['Pause', 'Esc'], ['Mute', 'M']];
-const ctlHTML = CTL_KEYS.map(k => '<span class="a">' + k[0] + '</span><span><kbd>' + k[1] + '</kbd></span>').join('') + (TOUCH || LOW ? '<span class="a">Touch</span><span>left stick to move, drag to look, buttons to jump, mine, place</span>' : '');
+const CTL_TOUCH = [['Move', 'left thumb stick'], ['Look', 'drag on the right'], ['Read sign', 'tap the prompt'], ['Pet', 'tap a creature'], ['Mine', 'hold Mine'], ['Place', 'Place'], ['Jump', 'Jump'], ['Inventory', 'Bag'], ['Camera', 'View'], ['Hotbar', 'tap a slot']];
+const ctlHTML = TOUCH ? CTL_TOUCH.map(k => '<span class="a">' + k[0] + '</span><span><kbd>' + k[1] + '</kbd></span>').join('') : CTL_KEYS.map(k => '<span class="a">' + k[0] + '</span><span><kbd>' + k[1] + '</kbd></span>').join('') + (TOUCH || LOW ? '<span class="a">Touch</span><span>left stick to move, drag to look, buttons to jump, mine, place</span>' : '');
 ['#ctlTitle', '#ctlPause', '#ctlSign'].forEach(s => { $(s).innerHTML = ctlHTML; });
 
 /* ================= input ================= */
@@ -2428,7 +2442,7 @@ function updateCamera(dt, hs){
       u.legL.rotation.x = sw; u.legR.rotation.x = -sw; u.armL.rotation.x = -sw * .8; u.armR.rotation.x = sw * .8 - swing * 1.2; u.head.rotation.x = PL.pitch * .5;
     }
   }
-  if (hand){ swing = Math.max(0, swing - dt * 4); const s = Math.sin(swing * Math.PI); hand.position.set(.42 - s * .08, -.36 + bob * .5 - s * .1, -.62 - s * .12); hand.rotation.set(.1 - s * .9, .6, 0); handIcon.position.set(.38 - s * .06, -.3 + bob * .5 - s * .1, -.6); handIcon.rotation.set(-s * .8, -.3, .2); }
+  if (hand){ swing = Math.max(0, swing - dt * 4); const s = Math.sin(swing * Math.PI); hand.position.set(.46 - s * .08, -.4 + bob * .5 - s * .1, -.7 - s * .12); hand.rotation.set(.15 - s * .9, .7, 0); handIcon.position.set(.38 - s * .06, -.3 + bob * .5 - s * .1, -.6); handIcon.rotation.set(-s * .8, -.3, .2); }
 }
 
 /* ================= minimap ================= */
@@ -2467,8 +2481,8 @@ function islandAt(x, z){ let best = null, bd = 1e9; for (let i = 0; i < 5; i++){
 /* ================= day / night ================= */
 const DAYLEN = 360;
 let dayT = .5;
-const PAL_D = { z: [.42, .56, .7], h: [.87, .84, .78], s: [1, .93, .8], as: [.6, .65, .72], ag: [.5, .45, .4], ab: [.68, .7, .72] };
-const PAL_G = { z: [.38, .44, .62], h: [.97, .72, .52], s: [1.05, .72, .46], as: [.62, .56, .62], ag: [.52, .4, .36], ab: [.74, .6, .58] };
+const PAL_D = { z: [.34, .5, .68], h: [.86, .82, .74], s: [.95, .87, .74], as: [.46, .52, .6], ag: [.38, .33, .3], ab: [.62, .66, .72] };
+const PAL_G = { z: [.32, .38, .58], h: [.98, .7, .5], s: [1.05, .7, .44], as: [.5, .46, .54], ag: [.42, .31, .29], ab: [.7, .56, .56] };
 const PAL_N = { z: [.05, .07, .16], h: [.16, .19, .31], s: [.3, .36, .55], as: [.22, .26, .4], ag: [.1, .1, .16], ab: [.1, .12, .2] };
 const _c3 = [0, 0, 0];
 function mix3(key, g, n){ const a = PAL_D[key], b = PAL_G[key], c = PAL_N[key]; for (let i = 0; i < 3; i++){ const v = a[i] + (b[i] - a[i]) * g; _c3[i] = v + (c[i] - v) * n; } return _c3; }
@@ -2518,7 +2532,8 @@ function resetWorld(){
 
 /* ================= main loop ================= */
 let last = performance.now(), raf = 0, tAcc = 0, frames = 0, ftSum = 0, evalT = 0, mapT = 0, titleA = .6, hudWhere = '', promptShown = false, visT = 0;
-function applyQuality(){ renderer.setPixelRatio(BASE_DPR * qScale); renderer.setSize(innerWidth, innerHeight, false); UScale.value = innerHeight * BASE_DPR * qScale * .69; U.uFog.value.set(renderDist * .38, renderDist); }
+function applyQuality(){ renderer.setPixelRatio(BASE_DPR * qScale); renderer.setSize(innerWidth, innerHeight, false); UScale.value = innerHeight * BASE_DPR * qScale * .69; setFog(); }
+function setFog(){ if (state === 'title') U.uFog.value.set(110, 300); else U.uFog.value.set(renderDist * .5, renderDist * 1.3); }
 function onResize(){ if (!glOK) return; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); applyQuality(); }
 Wn.addEventListener('resize', onResize);
 function frame(now){
@@ -2535,7 +2550,7 @@ function frame(now){
   if (state === 'title'){
     titleA += dt * (REDUCED ? .015 : .045);
     camera.position.set(96 + Math.cos(titleA) * 74, 60 + Math.sin(titleA * .7) * 4, 96 + Math.sin(titleA) * 74);
-    camera.lookAt(96, 33, 94);
+    const off = innerWidth >= 980 ? 24 : 0; camera.lookAt(96 - Math.sin(titleA) * off, 33, 94 + Math.cos(titleA) * off);
     if (camera.fov !== 60){ camera.fov = 60; camera.updateProjectionMatrix(); }
     const lb = $('#loadbar'); if (totalToMesh){ const p = Math.min(1, meshedOnce / totalToMesh); lb.firstChild.style.width = (p * 100).toFixed(0) + '%'; if (p >= 1 && !lb._done){ lb._done = true; lb.style.opacity = 0; } }
   } else {
@@ -2556,7 +2571,7 @@ function frame(now){
   if (state !== 'pause'){ updateMobs(dt, tAcc); updateDrops(dt, tAcc); updateParticles(dt); }
   renderMobs(tAcc);
   pumpMeshing(state === 'play' ? 4 : 10);
-  visT -= dt; if (visT <= 0){ visT = .25; const cx = camera.position.x, cz = camera.position.z, R = (state === 'title' ? 200 : renderDist) + 14; for (const c of chunks){ if (!c.mesh && !c.wmesh) continue; const v = Math.hypot(c.cx * 16 + 8 - cx, c.cz * 16 + 8 - cz) < R; if (c.mesh) c.mesh.visible = v; if (c.wmesh) c.wmesh.visible = v; } }
+  visT -= dt; if (visT <= 0){ visT = .25; const cx = camera.position.x, cz = camera.position.z, R = (state === 'title' ? 300 : renderDist * 1.3) + 10; for (const c of chunks){ if (!c.mesh && !c.wmesh) continue; const v = Math.hypot(c.cx * 16 + 8 - cx, c.cz * 16 + 8 - cz) < R; if (c.mesh) c.mesh.visible = v; if (c.wmesh) c.wmesh.visible = v; } }
   sky.position.copy(camera.position);
   renderer.render(scene, camera);
   // adaptive quality
