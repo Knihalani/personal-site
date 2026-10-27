@@ -295,7 +295,7 @@ var glassMat=new THREE.ShaderMaterial({uniforms:glassU,side:THREE.DoubleSide,ext
  ' col+=env(Rf)*F*(side?1.8:1.15);',
  ' col+=vec3(1.,.92,.8)*pow(max(dot(Rf,normalize(vec3(.35,.55,.75))),0.),260.)*7.;',
  ' col+=vec3(.7,1.,.9)*pow(max(dot(Rf,normalize(vec3(-.55,.35,.75))),0.),400.)*4.;',
- ' if(side){col=col*vec3(.5,1.,.84)+vec3(.05,.15,.12)+vec3(.3,.9,.75)*.25*pow(1.-ndv,2.);}',
+ ' if(side){col=col*vec3(.62,1.,.88)+vec3(.015,.05,.042)+vec3(.3,.9,.75)*.18*pow(1.-ndv,2.);}',
  ' float rim=dot(eg,normalize(vec2(-.55,.84)));',
  ' col+=vec3(1.,.82,.55)*max(rim,0.)*1.1+vec3(.55,.95,.85)*max(-rim,0.)*.22;',
  ' float e=vInfo.y;float w=max(fwidth(e)*1.2,1e-4);',
@@ -475,10 +475,10 @@ function shatterAt(x,y){
   fracture(x,y,n);
   impactX=x;impactY=y;glassU.uImpact.value.set((x+PANE.w/2)/PANE.w,(y+PANE.h/2)/PANE.h);
   for(var i=0;i<S;i++){var o=i*3;
-    var dx=sc[o]-x,dy=sc[o+1]-PANE.y-y,d=sDist[i]+1e-3,s=4.2/(.45+d*1.1);
-    sv[o]=dx/d*s*.55+(Math.random()-.5)*.4;
-    sv[o+1]=dy/d*s*.45+.6+Math.random()*1.1;
-    sv[o+2]=-s*(.35+Math.random()*.6)+(d>1.4?Math.random()*1.6:Math.random()*.4);
+    var dx=sc[o]-x,dy=sc[o+1]-PANE.y-y,d=sDist[i]+1e-3,s=2.7/(.5+d*1.2);
+    sv[o]=dx/d*s*.42+(Math.random()-.5)*.3;
+    sv[o+1]=dy/d*s*.35+.4+Math.random()*.9;
+    sv[o+2]=-s*(.45+Math.random()*.7)+(d>1.4?Math.random()*.7:0);
     var spin=(1.5+s*1.4)*(.6+Math.random());
     sw[o]=(Math.random()-.5)*spin;sw[o+1]=(Math.random()-.5)*spin;sw[o+2]=(Math.random()-.5)*spin*.6;
     sRel[i]=d*.035;
@@ -508,7 +508,7 @@ if(reduce)btn.textContent='Shatter ✶';
 var camBase=new THREE.Vector3(),look=new THREE.Vector3(0,-.15,0);
 function layout(){
   var aspect=vw/vh,portrait=aspect<1;
-  if(portrait){PANE.w=3.3;PANE.h=3.9;PANE.t=.28;}else{PANE.w=6.2;PANE.h=2.6;PANE.t=.26;}
+  if(portrait){PANE.w=3.3;PANE.h=3.9;PANE.t=.13;}else{PANE.w=6.2;PANE.h=2.6;PANE.t=.15;}
   glassU.uAspect.value=PANE.w/PANE.h;
   FLOOR_Y=PANE.y-PANE.h/2-(portrait?1.1:.95);floor.position.y=FLOOR_Y;floorU.uPaneW.value=PANE.w;
   var tn=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
@@ -558,7 +558,7 @@ function updateCaustics(active){
     var hgt=Math.max(0,y-FLOOR_Y);
     var lit=Math.pow(Math.abs(ny*.8+nx*.3),6);
     cPos[i*3]=x+nx*hgt*.4;cPos[i*3+1]=FLOOR_Y+.01;cPos[i*3+2]=z;
-    cB[i]=lit*(.35+sR[i])*Math.min(1,hgt*1.2+.15)*(sHue[i]<.8?1:.6)*active;
+    cB[i]=lit*(.5+sR[i]*1.4)*Math.min(1,hgt*1.2+.25)*(sHue[i]<.8?1:.6)*active;
     cS[i]=(.35+sR[i]*1.2)*(1+hgt*.6);
   }
   cGeo.attributes.position.needsUpdate=true;cGeo.attributes.aB.needsUpdate=true;cGeo.attributes.aS.needsUpdate=true;
