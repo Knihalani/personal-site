@@ -470,6 +470,8 @@ function makePill(r, len, color, x, y){
   o.spawn = { x, y, a:0 }; return o;
 }
 
+// matter puts bodies that start at rest to sleep mid-air; give everything a downward nudge
+function wakeFall(){ for (const o of objs){ Sleeping.set(o.body, false); Body.setVelocity(o.body, { x:o.body.velocity.x, y:Math.max(o.body.velocity.y, 6) }); } }
 function spawnLayout(){
   const sc = narrow ? 0.62 : 1;
   const letters = [['K', PAL.coral], ['A', PAL.marigold], ['I', PAL.teal], ['A', PAL.peri], ['V', PAL.gum]];
@@ -708,6 +710,7 @@ function reset(){
     Body.setVelocity(b, { x:0, y:0 }); Body.setAngularVelocity(b, 0);
     Body.setStatic(b, false); Sleeping.set(b, false);
   });
+  wakeFall();
 }
 document.getElementById('shake').addEventListener('click', shake);
 document.getElementById('reset').addEventListener('click', reset);
@@ -761,7 +764,7 @@ function tick(now){
   // keep strays in the box (thrown fast)
   for (let i = 0; i < objs.length; i++){
     const b = objs[i].body;
-    if (b.position.y > 400 || Math.abs(b.position.x) > halfW + 200){ Body.setPosition(b, { x:0, y:-VIEW_H }); Body.setVelocity(b, { x:0, y:0 }); }
+    if (b.position.y > 400 || Math.abs(b.position.x) > halfW + 200){ Body.setPosition(b, { x:0, y:-VIEW_H }); Body.setVelocity(b, { x:0, y:6 }); Sleeping.set(b, false); }
   }
   const dt = dtms / 1000;
   syncObjects(dt);
@@ -794,6 +797,7 @@ fontReady.then(() => {
     if (reduce){ // settle quietly near the floor
       objs.forEach(o => { Body.setPosition(o.body, { x:o.body.position.x, y:-o.size - 40 - Math.random() * 300 }); });
     }
+    wakeFall();
     start();
   });
 });
