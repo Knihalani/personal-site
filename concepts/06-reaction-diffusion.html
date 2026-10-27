@@ -234,10 +234,10 @@ void main(){
   vec3 Hh = normalize(L+V);
   float ndl = max(dot(n,L), 0.);
   float ndh = max(dot(n,Hh), 0.);
-  float atten = 1./(1. + dist*dist*2.2);
+  float atten = 1./(1. + dist*dist*5.);
   // materials: verdigris substrate, raised oxidised copper, polished name
   float grain = hash(floor(v*uRes*.5));
-  vec3 patina = mix(vec3(.006,.016,.015), vec3(.03,.12,.10), smoothstep(.0,.9,b2*3.)) * (.85+.3*grain);
+  vec3 patina = mix(vec3(.003,.009,.009), vec3(.012,.05,.045), smoothstep(.0,.9,b2*3.)) * (.85+.3*grain);
   vec3 copper = mix(vec3(.42,.13,.05), vec3(.85,.42,.20), hgt);
   float cav = clamp((b - b2)*6. + .5, 0., 1.);            // ridge vs cavity
   vec3 base = mix(patina, copper, hgt);
@@ -251,12 +251,12 @@ void main(){
   float shin = mix(28., 90., letter);
   float spec = pow(ndh, shin) * (shin + 8.)/25.;
   vec3 specC = mix(mix(vec3(1.,.72,.5), irid, .4), vec3(1.,.93,.8), letter);
-  vec3 col = base*(.07 + 1.25*ndl*atten) + specC*spec*atten*(.55 + .9*letter + .4*hgt);
+  vec3 col = base*(.05 + mix(1.1, .75, letter)*ndl*atten) + specC*spec*atten*(.5 + .45*letter + .4*hgt)*max(max(hgt, letter), .06);
   // rim / fresnel from a cool sky
-  col += vec3(.10,.24,.22)*pow(slope, 1.5)*.35;
+  col += vec3(.06,.20,.18)*pow(slope, 1.5)*.3;
   col *= .65 + .35*cav;
   // light pool
-  col += vec3(1.,.55,.3)*.012*exp(-dist*dist*12.);
+  col += vec3(.2,.5,.45)*.01*exp(-dist*dist*14.);
   // intro: reveal radiating from the centre
   float r = length((v-.5)*vec2(uAsp,1.));
   col *= 1. - smoothstep(uIntro*1.4 - .45, uIntro*1.4 - .05, r);

@@ -183,12 +183,12 @@ function drawPrint(){
   g.fillStyle=ink;g.textBaseline='alphabetic';
   var pad=portrait?44:64;
   g.font='500 '+(portrait?20:24)+'px '+MONO;
-  g.fillText('FOUNDER — EDEN / CO-FOUNDER — J',pad,portrait?118:124);
-  g.textAlign='right';g.fillText('Nº 01',LW-pad,portrait?118:124);g.textAlign='left';
+  g.fillText('FOUNDER \u2014 EDEN / CO-FOUNDER \u2014 J',pad,portrait?118:124);
+  g.textAlign='right';g.fillText('N\u00ba 01',LW-pad,portrait?118:124);g.textAlign='left';
   g.fillRect(pad,portrait?136:144,LW-pad*2,4);
   if(!portrait){
-    var s1=fit('KAIAV',DISP,420,LW-pad*2);g.fillText('KAIAV',pad-6,180+s1*.92);
-    var s2=fit('NIHALANI',DISP,420,LW-pad*2);g.fillText('NIHALANI',pad-6,180+s1*.92+s2*.98);
+    var s1=fit('KAIAV',DISP,300,LW-pad*2);g.fillText('KAIAV',pad-6,180+s1*.92);
+    var s2=fit('NIHALANI',DISP,300,LW-pad*2);g.fillText('NIHALANI',pad-6,180+s1*.92+s2*.98);
     var yb=180+s1*.92+s2*.98+28;
     g.fillRect(pad,yb,LW-pad*2,4);
     g.font='italic 60px '+SERIF;g.fillText('Founder of Eden. Co-founder of J: Rising Founder.',pad,yb+78);
@@ -266,15 +266,15 @@ function resetCloth(intro){
   TOPY=BH/2+.05;
   for(var j=0;j<NY;j++)for(var i=0;i<NX;i++){var k=pid(i,j)*3;
     var x=-BW/2+i*SPC,y=TOPY-j*SPC,z=0;
-    if(intro&&!reduce){ // start bunched up near the rod, then unfurl
-      var t=j/(NY-1);y=TOPY-j*SPC*.25;z=.25*Math.sin(t*9)+.6*t;x*=1-.05*t;
+    if(intro&&!reduce){ // start lifted out toward the viewer, then it drops and unfurls
+      var ang=1.25;y=TOPY-Math.cos(ang)*j*SPC;z=Math.sin(ang)*j*SPC;
     }
     P[k]=x;P[k+1]=y;P[k+2]=z;Q[k]=x;Q[k+1]=y;Q[k+2]=z;
     IM[pid(i,j)]=(j===0&&isPin(i))?0:1;}
   for(var c=0;c<NC;c++){ALV[c]=1;var a=CA[c]*3,b=CB[c]*3;
     // rest length from the flat layout
     var ia=CA[c]%NX,ja=(CA[c]/NX)|0,ib=CB[c]%NX,jb=(CB[c]/NX)|0;CR[c]=Math.hypot(ia-ib,ja-jb)*SPC;}
-  CELL.fill(1);tornCount=0;indexDirty=true;statDirty=true;grabbed=-1;
+  CELL.fill(1);tornCount=0;indexDirty=true;statDirty=true;grabbed=-1;tearArmed=0;
 }
 function killCell(c){
   if(c<0||!CELL[c])return;CELL[c]=0;indexDirty=true;
@@ -331,16 +331,16 @@ var ccC=document.createElement('canvas');ccC.width=ccC.height=512;
   for(i=0;i<40;i++){g.fillStyle='rgba(0,0,0,'+(R()*.05)+')';g.beginPath();g.arc(R()*512,R()*512,R()*90+20,0,6.2832);g.fill();}
   g.strokeStyle='rgba(0,0,0,.25)';g.lineWidth=2;g.beginPath();g.moveTo(0,256);g.lineTo(512,256);g.moveTo(256,0);g.lineTo(256,512);g.stroke();})();
 var ccTex=new THREE.CanvasTexture(ccC);ccTex.wrapS=ccTex.wrapT=THREE.RepeatWrapping;ccTex.encoding=THREE.sRGBEncoding;ccTex.anisotropy=4;
-var wallMat=new THREE.MeshStandardMaterial({map:ccTex,roughness:.95,metalness:0,envMapIntensity:.25});
-var floorTex=ccTex.clone();floorTex.needsUpdate=true;
+ccTex.repeat.set(5,2.5);var wallMat=new THREE.MeshStandardMaterial({map:ccTex,color:0x6a665e,roughness:.95,metalness:0,envMapIntensity:.2});
+var floorTex=ccTex.clone();floorTex.repeat.set(5,3);floorTex.needsUpdate=true;
 var wall=new THREE.Mesh(new THREE.PlaneGeometry(40,20),wallMat);wall.receiveShadow=true;scene.add(wall);
-var floorMat=new THREE.MeshStandardMaterial({map:floorTex,roughness:.9,metalness:0,envMapIntensity:.25,color:0xb8b2a6});
+var floorMat=new THREE.MeshStandardMaterial({map:floorTex,roughness:.9,metalness:0,envMapIntensity:.25,color:0x5e5a52});
 var floor=new THREE.Mesh(new THREE.PlaneGeometry(40,24),floorMat);floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
 
 var key=new THREE.DirectionalLight(0xfff0d8,2.3);key.castShadow=true;
 key.shadow.mapSize.set(isMobile?1024:2048,isMobile?1024:2048);key.shadow.bias=-.0006;key.shadow.normalBias=.025;key.shadow.radius=4;
 scene.add(key);scene.add(key.target);
-var fill=new THREE.HemisphereLight(0xcfd8e8,0x2a2418,.45);scene.add(fill);
+var fill=new THREE.HemisphereLight(0xcfd8e8,0x2a2418,.8);scene.add(fill);
 var back=new THREE.DirectionalLight(0x8fb0ff,.6);back.position.set(4,3,-6);scene.add(back);
 
 var rodMat=new THREE.MeshStandardMaterial({color:0x2a2a28,metalness:.9,roughness:.35});
@@ -361,14 +361,14 @@ function buildRig(){
   rig.add(rings);
   wall.position.set(0,0,-1.5);floor.position.set(0,-BH/2-1.0,4);
   FLOORY=floor.position.y+.012;WALLZ=wall.position.z+.04;
-  key.position.set(-4.5,BH/2+5,6);key.target.position.set(0,-.5,-1);key.target.updateMatrixWorld();
+  key.position.set(-5,BH/2+2.6,7.5);key.target.position.set(0,-.5,-1);key.target.updateMatrixWorld();
   var sc=key.shadow.camera;var e=Math.max(BW,BH)*.5+2.2;sc.left=-e;sc.right=e;sc.top=e;sc.bottom=-e;sc.near=1;sc.far=30;sc.updateProjectionMatrix();
 }
 var FLOORY=-3,WALLZ=-1.4;
 
 // ================= simulation =================
 var windOn=!reduce,windT=0,grabbed=-1,grabT=new Float32Array(3),statDirty=true;
-var H=1/120,acc=0,ITER=10;
+var H=1/120,acc=0,ITER=10,tearArmed=0;
 var hov={on:false,x:0,y:0,vx:0,vy:0};
 function computeNormalsAndWind(time){
   A.fill(0);
@@ -408,6 +408,7 @@ function substep(){
     P[o]+= (x-Q[o])*damp+A[o]*h2;P[o+1]+=(y-Q[o+1])*damp+A[o+1]*h2;P[o+2]+=(z-Q[o+2])*damp+A[o+2]*h2;
     Q[o]=x;Q[o+1]=y;Q[o+2]=z;
   }
+  if(grabbed>=0)tearArmed=240;else if(tearArmed>0)tearArmed--;
   if(grabbed>=0){var g=grabbed*3;P[g]+= (grabT[0]-P[g])*.6;P[g+1]+=(grabT[1]-P[g+1])*.6;P[g+2]+=(grabT[2]-P[g+2])*.6;}
   for(var it=0;it<ITER;it++){
     var first=it===0;
@@ -423,7 +424,7 @@ function substep(){
       var dx=P[b]-P[a],dy=P[b+1]-P[a+1],dz=P[b+2]-P[a+2];
       var d=Math.sqrt(dx*dx+dy*dy+dz*dz);if(d<1e-7)continue;
       var r=CR[c];
-      if(first&&t===0){
+      if(first&&t===0&&tearArmed>0){
         var weak=(CC1[c]>=0&&!CELL[CC1[c]])||(CC2[c]>=0&&!CELL[CC2[c]]);
         if(d>r*(weak?TEAR_WEAK:TEAR)){breakEdge(c);continue;}
       }

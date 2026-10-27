@@ -674,7 +674,7 @@ void main(){
   float m = mod(gl_FragCoord.x, 3.);
   vec3 mask = mix(vec3(1.), vec3(m<1.?1.:.72, (m>=1.&&m<2.)?1.:.72, m>=2.?1.:.72), .5);
   vec3 glass = vec3(.016,.017,.02) + uC0*.014;
-  vec3 scr = glass + col*sl*1.35 + glow*.85;
+  vec3 scr = glass + col*sl*1.35 + glow*.7;
   scr *= mask;
   // rolling refresh band
   float rb = fract(suv.y*.85 - uTime*.07);

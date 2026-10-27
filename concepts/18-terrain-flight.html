@@ -262,23 +262,24 @@ vec3 atmo(vec3 rd){
 float tri(float x){ return abs(fract(x)-0.5); }
 vec3 aurora(vec3 rd){
   vec3 acc = vec3(0.0);
-  if(rd.y < 0.01) return acc;
-  float dith = hash1(gl_FragCoord.xy)*0.9;
-  const int N = 22;
-  for(int i=0;i<N;i++){
-    float fi = (float(i)+dith)/float(N);
-    float hgt = 1.0 + fi*1.6;
-    vec2 q = rd.xz*(hgt/(rd.y+0.035))*1.1 + vec2(0.0, uTime*0.02);
-    float w = q.x*0.42 + 0.9*sin(q.y*0.33 + uTime*0.05) + 0.45*sin(q.y*0.9 - uTime*0.07) + 0.35*vnoise(q*0.35 + uTime*0.03);
-    float band = exp(-pow((tri(w*0.075)-0.2)*30.0, 2.0)) + 0.5*exp(-pow((tri(w*0.05+0.3)-0.22)*36.0, 2.0));
-    float rn = 0.5+0.5*vnoise(vec2(w*9.0 + uTime*0.25, 0.5));
-    float rays = 0.25 + 0.75*rn*rn;
-    float I = band*rays*(1.0-fi)*smoothstep(0.0,0.15,fi+0.05);
-    vec3 c = mix(vec3(0.12,1.0,0.55), vec3(0.15,0.75,0.85), smoothstep(0.1,0.6,fi));
-    c = mix(c, vec3(1.0,0.32,0.45), smoothstep(0.55,1.0,fi));
-    acc += c*I;
+  if(rd.y < 0.0) return acc;
+  float y = rd.y;
+  float a = atan(rd.x, rd.z);
+  for(int k=0;k<3;k++){
+    float fk = float(k), ph = fk*2.1;
+    /* folded curtain: warped azimuth gives the pleats, base line wanders */
+    float aw = a + 0.18*sin(a*3.0 + uTime*0.07 + ph) + 0.06*sin(a*9.0 - uTime*0.11 + ph);
+    float base = 0.09 + 0.07*fk + 0.05*sin(a*2.0 + ph + uTime*0.03) + 0.03*sin(a*5.3 - uTime*0.05 + ph);
+    float h = y - base;
+    float vert = smoothstep(-0.012, 0.012, h)*exp(-max(h,0.0)*(5.0 + 3.0*fk));
+    float rn = vnoise(vec2(aw*60.0 + uTime*0.25, fk))*0.5 + 0.5;
+    float rays = (0.25 + 0.75*rn*rn)*(0.65 + 0.35*(vnoise(vec2(aw*170.0, uTime*0.4 + fk))*0.5 + 0.5));
+    float seg = smoothstep(-0.25, 0.55, vnoise(vec2(a*1.4 + ph, uTime*0.035)));
+    vec3 c = mix(vec3(0.15,1.0,0.5), vec3(0.08,0.75,0.8), smoothstep(0.0, 0.14, h));
+    c = mix(c, vec3(1.0,0.3,0.45), smoothstep(0.12, 0.32, h));
+    acc += c*vert*rays*seg*(k==0 ? 1.0 : 0.55);
   }
-  return acc*(2.6/float(N))*smoothstep(0.01,0.12,rd.y);
+  return acc*0.75*smoothstep(0.0, 0.04, y);
 }
 vec3 stars(vec3 rd){
   vec3 q = rd*260.0;
@@ -344,7 +345,7 @@ vec3 lightTerrain(vec3 p, vec3 n, vec3 rd, float t, bool doShadow){
   lin += skyAmb*(0.55+0.45*n.y);
   lin += sc*0.12*max(dot(n, normalize(vec3(-uSun.x,0.0,-uSun.z))),0.0)*smoothstep(-0.05,0.1,uSun.y);
   float mdif = max(dot(n, uMoon), 0.0);
-  lin += vec3(0.06,0.085,0.13)*mdif*night*1.6;
+  lin += vec3(0.06,0.085,0.13)*mdif*night*0.9;
   lin += vec3(0.004,0.024,0.016)*night*uAur*(0.5+0.5*n.y);
   vec3 col = alb*lin;
   float sp = pow(max(dot(reflect(rd,n), uSun),0.0), 24.0)*snow*sh;
@@ -424,7 +425,7 @@ void main(){
     col = mist(col, ro, rd, 30000.0);
   }
   /* exposure that adapts with time of day */
-  float expo = mix(1.35, 1.0, dayF()) + 0.5*nightF();
+  float expo = mix(1.35, 1.0, dayF()) + 0.15*nightF();
   col = aces(col*expo);
   col = pow(col, vec3(0.4545));
   float vig = 1.0 - 0.22*dot(uv*0.55, uv*0.55);
@@ -531,8 +532,8 @@ function terrainJS(x,z,oct){
 var camZ=0, camY=90, sx=0, sy=0, psx=0, psy=0, pointerAt=-99;
 var pos=new Float32Array(3), rot=new Float32Array(9);
 addEventListener('pointermove',function(e){
-  if(e.pointerType==='touch')return;
-  psx=e.clientX/cssW*2-1;psy=e.clientY/cssH*2-1;pointerAt=now;
+  psx=e.clientX/cssW*2-1;pointerAt=now;
+  if(e.pointerType!=='touch')psy=e.clientY/cssH*2-1;
 },{passive:true});
 function norm3(v){var l=Math.hypot(v[0],v[1],v[2])||1;v[0]/=l;v[1]/=l;v[2]/=l;return v;}
 var F=[0,0,1],R=[1,0,0],Up=[0,1,0];
@@ -540,7 +541,7 @@ function updateCamera(dt,t){
   var speed=reduce?45:150;
   camZ+=speed*dt;
   var idle=(now-pointerAt)>5;
-  var tx=idle?Math.sin(t*.13)*.35:psx, ty=idle?Math.sin(t*.09)*.25-.05:psy;
+  var tx=idle?Math.sin(t*.13)*.2:psx, ty=idle?Math.sin(t*.09)*.25-.05:psy;
   var k=1-Math.exp(-dt*1.6);sx+=(tx-sx)*k;sy+=(ty-sy)*k;
   var x=pathX(camZ)+sx*150;
   var want=72-sy*55;

@@ -230,10 +230,10 @@ function drawSide(ctx,A,side){
     ctx.lineWidth=7;S('#8a909a',[.25,.2,.55]);rr(512-150,98-40,300,80,40);ctx.stroke();
     // header
     font(600,24,MONO);F('#15181d',[0,0,.55]);ctx.fillText('KAIAV / ID',56,108);
-    ctx.textAlign='right';ctx.fillText('Nº 0001',968,108);ctx.textAlign='left';
+    ctx.textAlign='right';ctx.fillText('N\u00ba 0001',968,108);ctx.textAlign='left';
     // vertical side text
-    ctx.save();ctx.translate(40,790);ctx.rotate(-Math.PI/2);font(600,15,MONO);F('rgba(18,22,30,.7)',[.3,.2,.3]);ctx.fillText('ACCESS · ALL AREAS · FOUNDER · EDEN · J',0,0);ctx.restore();
-    ctx.save();ctx.translate(986,190);ctx.rotate(Math.PI/2);font(600,15,MONO);F('rgba(18,22,30,.7)',[.3,.2,.3]);ctx.fillText('CONTEXT FOR AGENTS · RISING FOUNDER',0,0);ctx.restore();
+    ctx.save();ctx.translate(40,790);ctx.rotate(-Math.PI/2);font(600,15,MONO);F('rgba(18,22,30,.7)',[.3,.2,.3]);ctx.fillText('ACCESS \u00b7 ALL AREAS \u00b7 FOUNDER \u00b7 EDEN \u00b7 J',0,0);ctx.restore();
+    ctx.save();ctx.translate(986,190);ctx.rotate(Math.PI/2);font(600,15,MONO);F('rgba(18,22,30,.7)',[.3,.2,.3]);ctx.fillText('CONTEXT FOR AGENTS \u00b7 RISING FOUNDER',0,0);ctx.restore();
     // generative avatar: radial ticks
     var cx=512,cy=470,r0=188;
     ctx.lineWidth=5;S('#15181d',[0,0,.5]);
@@ -263,11 +263,11 @@ function drawSide(ctx,A,side){
     // bottom holo strip
     F('#c3c8d0',[1,1,0]);ctx.fillRect(0,1345,FW,161);
     font(400,12,MONO);F('rgba(18,22,30,.42)',[.7,.75,.12]);
-    for(y=1360;y<1500;y+=15){var off=(y*7)%140;for(x=-off;x<FW;x+=140)ctx.fillText('KAIAV NIHALANI ·',x,y);}
+    for(y=1360;y<1500;y+=15){var off=(y*7)%140;for(x=-off;x<FW;x+=140)ctx.fillText('KAIAV NIHALANI \u00b7',x,y);}
     F('#15181d',[0,0,.4]);
     for(x=54;x<560;){var bw=2+(R()*7|0);ctx.fillRect(x,1378,bw,64);x+=bw+2+(R()*6|0);}
     font(600,20,MONO);ctx.fillText('KN-0001',54,1478);
-    ctx.textAlign='right';font(800,34,DISP);ctx.fillText('VALID ∞',968,1418);font(600,16,MONO);ctx.fillText('RISINGFOUNDER.NET',968,1452);ctx.textAlign='left';
+    ctx.textAlign='right';font(800,34,DISP);ctx.fillText('VALID \u221e',968,1418);font(600,16,MONO);ctx.fillText('RISINGFOUNDER.NET',968,1452);ctx.textAlign='left';
   }else{
     // ===== BACK =====
     F('#15171b',[.05,.18,0]);ctx.fillRect(0,0,FW,FH);
@@ -280,12 +280,12 @@ function drawSide(ctx,A,side){
     F('#2b2f36',[0,0,.2]);ctx.fillRect(54,430,914,2);
     function wrap(txt,x,y,maxW,lh){var words=txt.split(' '),line='';for(var i=0;i<words.length;i++){var test=line?line+' '+words[i]:words[i];if(ctx.measureText(test).width>maxW&&line){ctx.fillText(line,x,y);y+=lh;line=words[i];}else line=test;}ctx.fillText(line,x,y);return y+lh;}
     // Eden
-    font(600,20,MONO);F('#ff5a1f',[0,0,.3]);ctx.fillText('01 · FOUNDER',54,500);
+    font(600,20,MONO);F('#ff5a1f',[0,0,.3]);ctx.fillText('01 \u00b7 FOUNDER',54,500);
     F('#eef0f3',[1,1,.6]);fit('Eden',800,104,DISP,900);ctx.fillText('Eden',50,600);
     font(400,30,DISP);F('#c9ced6',[0,0,.25]);ctx.fillText('Context for agents.',54,650);
     F('#2b2f36',[0,0,.2]);ctx.fillRect(54,700,914,2);
     // J
-    font(600,20,MONO);F('#ff5a1f',[0,0,.3]);ctx.fillText('02 · CO-FOUNDER',54,770);
+    font(600,20,MONO);F('#ff5a1f',[0,0,.3]);ctx.fillText('02 \u00b7 CO-FOUNDER',54,770);
     F('#eef0f3',[1,1,.6]);fit('J: Rising Founder',800,84,DISP,900);ctx.fillText('J: Rising Founder',50,858);
     font(400,30,DISP);F('#c9ced6',[0,0,.25]);ctx.fillText('An early chance for extraordinary founders.',54,908);
     font(400,20,MONO);F('#8c929c',[0,0,.15]);
@@ -327,7 +327,7 @@ function drawStrap(){
   g.fillStyle='rgba(0,0,0,.28)';g.fillRect(0,0,8,1024);g.fillRect(120,0,8,1024);
   g.fillStyle='rgba(255,230,210,.55)';for(y=0;y<1024;y+=14){g.fillRect(13,y,2,8);g.fillRect(113,y,2,8);}
   g.save();g.translate(64,0);g.rotate(Math.PI/2);
-  var txt='KAIAV NIHALANI · FOUNDER · ';g.font='800 50px '+DISP;var w=g.measureText(txt).width;var s=512/w;
+  var txt='KAIAV NIHALANI \u00b7 FOUNDER \u00b7 ';g.font='800 50px '+DISP;var w=g.measureText(txt).width;var s=512/w;
   g.scale(s,1);g.fillStyle='#130703';g.textBaseline='middle';
   for(var k=0;k<2;k++)g.fillText(txt,k*w,2);
   g.restore();
