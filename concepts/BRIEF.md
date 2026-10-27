@@ -4,7 +4,7 @@
 - Kaiav Nihalani (he/him). Founder.
 - **Eden** — he is the founder. Describe it ONLY as "Context for agents." No link, no other detail.
 - **J: Rising Founder** — he is co-founder (with Jose Cruz-Lopez). https://risingfounder.net. "An early chance for extraordinary founders." A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world. No fee, no equity.
-- Links: LinkedIn https://www.linkedin.com/in/kaiav-nihalani-594703356/ · X https://x.com/KaiavRNihalani · Email kaiav.nihalani@gmail.com
+- Links: LinkedIn https://www.linkedin.com/in/kaiav-nihalani-594703356/ · X https://x.com/KaiavRNihalani
 - Do NOT mention or reference any other projects (no WebProbe, Anvil, Folio, Eden Know, Nodely, StudyShare, GitHub repos, Rust gears, phones-as-Folio, "8,299 facts", KPK8, etc.). Replace any such content with Eden / J or with neutral content.
 - Tagline suggestions: "Founder of Eden. Co-founder of J." / "Building context for agents."
 
@@ -40,3 +40,8 @@ Use Playwright (pre-installed: `require('playwright')` works; `chromium.launch()
 WebGL in headless chromium: launch with `args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']` if WebGL fails to init.
 
 Do NOT git commit. Do NOT publish artifacts. Report back: file path, a 1-sentence description of the concept, the title, and any known limitations.
+
+## Contact (UPDATED — mandatory)
+- NEVER write any email address anywhere in the page (not in text, attributes, comments or JS). Emails are unlocked by mini-games via a shared module that will be injected later.
+- In the contact area put exactly this placeholder element: `<div data-contact-gate></div>` (it will render two retro "unlock" buttons: J enquiries, and everything else). Give it room (~min 120px tall area); style around it, but do not style its contents. Keep the LinkedIn and X links as normal links.
+- Any terminal/command-based contact output should say: "Emails are locked behind a game — click Contact" and call `window.KaiavContact && KaiavContact.open('j')` or `('general')` where it makes sense.
