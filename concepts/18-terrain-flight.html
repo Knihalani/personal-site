@@ -241,8 +241,8 @@ vec3 atmo(vec3 rd){
   float day = dayF(), gold = goldF(), night = nightF();
   vec3 zen = mix(vec3(0.07,0.13,0.27), vec3(0.14,0.33,0.68), day);
   vec3 hor = mix(vec3(0.42,0.48,0.56), vec3(0.62,0.74,0.88), day);
-  hor = mix(hor, vec3(1.0,0.55,0.30), gold*0.85);
-  zen = mix(zen, vec3(0.10,0.17,0.30), gold*0.45);
+  hor = mix(hor, vec3(1.0,0.42,0.14), gold*0.9);
+  zen = mix(zen, vec3(0.05,0.11,0.22), gold*0.6);
   zen = mix(zen, vec3(0.003,0.008,0.02), night);
   hor = mix(hor, vec3(0.018,0.032,0.05), night);
   float y = max(rd.y, 0.0);
@@ -270,14 +270,15 @@ vec3 aurora(vec3 rd){
     float hgt = 1.0 + fi*1.6;
     vec2 q = rd.xz*(hgt/(rd.y+0.035))*1.1 + vec2(0.0, uTime*0.02);
     float w = q.x*0.42 + 0.9*sin(q.y*0.33 + uTime*0.05) + 0.45*sin(q.y*0.9 - uTime*0.07) + 0.35*vnoise(q*0.35 + uTime*0.03);
-    float band = exp(-pow((tri(w*0.16)-0.18)*20.0, 2.0)) + 0.35*exp(-pow((tri(w*0.11+0.3)-0.2)*26.0, 2.0));
-    float rays = 0.55 + 0.45*vnoise(vec2(w*7.0 + uTime*0.2, fi*3.0));
+    float band = exp(-pow((tri(w*0.075)-0.2)*30.0, 2.0)) + 0.5*exp(-pow((tri(w*0.05+0.3)-0.22)*36.0, 2.0));
+    float rn = 0.5+0.5*vnoise(vec2(w*9.0 + uTime*0.25, 0.5));
+    float rays = 0.25 + 0.75*rn*rn;
     float I = band*rays*(1.0-fi)*smoothstep(0.0,0.15,fi+0.05);
     vec3 c = mix(vec3(0.12,1.0,0.55), vec3(0.15,0.75,0.85), smoothstep(0.1,0.6,fi));
     c = mix(c, vec3(1.0,0.32,0.45), smoothstep(0.55,1.0,fi));
     acc += c*I;
   }
-  return acc*(1.7/float(N))*smoothstep(0.01,0.12,rd.y);
+  return acc*(2.6/float(N))*smoothstep(0.01,0.12,rd.y);
 }
 vec3 stars(vec3 rd){
   vec3 q = rd*260.0;
@@ -312,7 +313,7 @@ vec3 sky(vec3 rd, bool full){
   if(night>0.001){
     col += stars(rd)*night*(1.0-cl);
     float md = dot(rd, uMoon);
-    float moon = smoothstep(0.99955,0.9997,md);
+    float moon = smoothstep(0.99985,0.99992,md);
     col += vec3(0.9,0.92,1.0)*moon*night*(0.75+0.25*vnoise(rd.xy*900.0));
     col += vec3(0.15,0.2,0.3)*pow(max(md,0.0),300.0)*night;
     if(full && uAur>0.001) col += aurora(rd)*night*uAur*(1.0-cl*0.7);
@@ -466,7 +467,7 @@ function elev(t){for(var i=0;i<EK.length-1;i++){var a=EK[i],b=EK[i+1];if(t<=b[0]
 var sun=new Float32Array(3), moon=new Float32Array([.42,.36,.83]);
 (function(){var l=Math.hypot(moon[0],moon[1],moon[2]);moon[0]/=l;moon[1]/=l;moon[2]/=l;})();
 function setSun(t){
-  var el=elev(t), az=.62-1.24*Math.min(1,t/.72);
+  var el=elev(t), az=.34-.68*Math.min(1,t/.72);
   var c=Math.cos(el);sun[0]=Math.sin(az)*c;sun[1]=Math.sin(el);sun[2]=Math.cos(az)*c;
 }
 

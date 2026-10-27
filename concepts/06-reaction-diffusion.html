@@ -185,7 +185,8 @@ void main(){ float s = texture(uSeed, v).r; o = vec4(1.-s*.5, s*.9, 0., 1.); }`;
 const FS_SIM = `#version 300 es
 precision highp float; in vec2 v; out vec4 o;
 uniform sampler2D uS, uSeed; uniform vec2 uPx; uniform float uF, uK, uMoat, uAsp;
-uniform vec4 uBr; uniform float uBrR, uBrOn;
+uniform vec4 uBr; uniform float uBrR, uBrOn, uSpore, uTick; uniform vec2 uSz;
+float hash(vec2 p){ p = fract(p*vec2(443.897,441.423)); p += dot(p, p.yx+19.19); return fract((p.x+p.y)*p.x); }
 float segd(vec2 p, vec2 a, vec2 b){ vec2 pa=p-a, ba=b-a; float h=clamp(dot(pa,ba)/max(dot(ba,ba),1e-8),0.,1.); return length(pa-ba*h); }
 void main(){
   vec2 ab = texture(uS, v).xy;
@@ -193,13 +194,15 @@ void main(){
     + .2*(texture(uS, v+vec2(uPx.x,0.)).xy + texture(uS, v-vec2(uPx.x,0.)).xy + texture(uS, v+vec2(0.,uPx.y)).xy + texture(uS, v-vec2(0.,uPx.y)).xy)
     + .05*(texture(uS, v+uPx).xy + texture(uS, v-uPx).xy + texture(uS, v+vec2(uPx.x,-uPx.y)).xy + texture(uS, v+vec2(-uPx.x,uPx.y)).xy);
   float a = ab.x, b = ab.y, abb = a*b*b;
-  vec2 sd = texture(uSeed, v).rg;
+  vec3 sd = texture(uSeed, v).rgb;
   float k = uK + max(sd.g - sd.r, 0.)*uMoat;
   float na = a + (lap.x - abb + uF*(1.-a));
   float nb = b + (.5*lap.y + abb - (k+uF)*b);
   // the name is a persistent feed region: it never erodes, it keeps seeding
   na = mix(na, .32, sd.r*.8);
   nb = mix(nb, .42, sd.r*.8);
+  // spores: sparse blobs budding in a ring around the name, so spot/worm regimes also grow out of it
+  if (uSpore > 0. && sd.b > .5 && sd.g < .5 && hash(floor(v*uSz/5.) + uTick) < .04) { nb = .8; na = .25; }
   if (uBrOn > 0.) {
     float d = segd(v*vec2(uAsp,1.), uBr.xy*vec2(uAsp,1.), uBr.zw*vec2(uAsp,1.));
     float m = 1.-smoothstep(uBrR*.55, uBrR, d);
@@ -276,7 +279,7 @@ function prog(fs, names){
 let PI, PS, PV;
 try {
   PI = prog(FS_INIT, ['uSeed']);
-  PS = prog(FS_SIM, ['uS','uSeed','uPx','uF','uK','uMoat','uAsp','uBr','uBrR','uBrOn']);
+  PS = prog(FS_SIM, ['uS','uSeed','uPx','uF','uK','uMoat','uAsp','uBr','uBrR','uBrOn','uSpore','uTick','uSz']);
   PV = prog(FS_VIEW, ['uS','uSeed','uPx','uRes','uL','uT','uAsp','uIntro']);
 } catch (e) { fail(e.message); return; }
 
@@ -314,7 +317,11 @@ function drawSeed(){
   const lh = size * 0.98, cy = SH * (portrait ? 0.42 : 0.44);
   const moat = Math.max(3, size * 0.06);
   sctx.lineJoin = 'round';
-  // G: dilated halo (moat band), R: crisp glyphs
+  const each = fn => lines.forEach((l, i) => fn(l, cy + (i - (lines.length - 1) / 2) * lh));
+  // B: wide spore ring, G: dilated halo (moat band), R: crisp glyphs
+  sctx.fillStyle = sctx.strokeStyle = '#00f'; sctx.lineWidth = Math.max(16, size * 0.42);
+  each((l, y) => { sctx.strokeText(l, SW / 2, y); sctx.fillText(l, SW / 2, y); });
+  sctx.globalCompositeOperation = 'lighter';
   sctx.fillStyle = '#0f0'; sctx.strokeStyle = '#0f0'; sctx.lineWidth = moat * 2;
   lines.forEach((l, i) => { const y = cy + (i - (lines.length - 1) / 2) * lh; sctx.strokeText(l, SW / 2, y); sctx.fillText(l, SW / 2, y); });
   sctx.globalCompositeOperation = 'lighter';
@@ -402,7 +409,7 @@ addEventListener('keydown', e => {
 
 /* ---------------- loop ---------------- */
 let raf = 0, running = false, visible = true, inView = true, last = 0, t0 = performance.now(), intro = 0;
-let fcount = 0, facc = 0, adapted = false;
+let fcount = 0, facc = 0, adapted = false, simTick = 1;
 function frame(now){
   raf = requestAnimationFrame(frame);
   const dt = Math.min(100, last ? now - last : 16); last = now;
@@ -426,12 +433,15 @@ function frame(now){
     gl.uniform1f(PS.u.uF, cur.f); gl.uniform1f(PS.u.uK, cur.k);
     gl.uniform1f(PS.u.uMoat, 0.0045);
     gl.uniform1f(PS.u.uAsp, simAsp);
+    gl.uniform2f(PS.u.uSz, SW, SH); gl.uniform1f(PS.u.uSpore, 0);
     gl.uniform4fv(PS.u.uBr, br); gl.uniform1f(PS.u.uBrR, MOBILE ? 0.035 : 0.022);
     gl.uniform1i(PS.u.uS, 0); gl.uniform1i(PS.u.uSeed, 1);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, seedTex);
     gl.viewport(0, 0, SW, SH);
     for (let i = 0; i < steps; i++) {
       gl.uniform1f(PS.u.uBrOn, brushOn > 0 && i < 4 ? 1 : 0);
+      simTick++;
+      if (simTick % 48 === 0) { gl.uniform1f(PS.u.uSpore, 1); gl.uniform1f(PS.u.uTick, (simTick * 0.618) % 97); } else if (simTick % 48 === 1) gl.uniform1f(PS.u.uSpore, 0);
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, state[cur_i]);
       gl.bindFramebuffer(gl.FRAMEBUFFER, fb[1 - cur_i]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
