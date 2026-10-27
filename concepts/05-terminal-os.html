@@ -47,7 +47,6 @@ body{background:var(--bg);color:var(--ink);font-family:"Chakra Petch",ui-monospa
 .crt:focus-within{box-shadow:0 0 0 1px #000,0 0 0 9px #0e0d10,0 0 0 11px var(--phos),inset 0 0 40px #000,0 30px 60px -20px rgba(0,0,0,.8)}
 .crt canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #cmd{position:absolute;left:0;bottom:0;width:100%;height:2em;opacity:0;font-size:16px;border:0;padding:0;background:transparent;color:transparent;caret-color:transparent;pointer-events:none}
-.deck{display:flex;flex-direction:column;gap:9px;min-width:0}
 .chips{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding:2px 2px 4px;-webkit-overflow-scrolling:touch;min-width:0}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:0 0 auto;font:600 12px/1 "Chakra Petch",ui-monospace,monospace;letter-spacing:.08em;text-transform:lowercase;color:var(--ink);
@@ -58,13 +57,14 @@ body{background:var(--bg);color:var(--ink);font-family:"Chakra Petch",ui-monospa
 .chip b{color:var(--phos);font-weight:600}
 .row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 16px;font-size:12px;color:var(--muted);min-width:0}
 .tray{display:flex;flex-wrap:wrap;gap:6px 14px;min-width:0}
-.tray a,.mail button{color:var(--muted);text-decoration:none;letter-spacing:.06em}
+.tray a{color:var(--muted);text-decoration:none;letter-spacing:.06em}
 .tray a:hover{color:var(--phos-hi)}
 .tray a.new{color:var(--phos-hi);text-shadow:0 0 10px var(--phos-glow)}
-.mail{display:flex;align-items:center;gap:8px;min-width:0}
-.mail span{user-select:all;color:var(--ink);font-family:"VT323",ui-monospace,monospace;font-size:17px;overflow:hidden;text-overflow:ellipsis}
-.mail button{font:600 11px/1 "Chakra Petch",monospace;text-transform:uppercase;letter-spacing:.14em;background:none;border:1px solid var(--case-edge);border-radius:4px;padding:6px 9px;cursor:pointer}
-.mail button:hover{color:var(--phos-hi);border-color:var(--phos)}
+.deck{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 20px;align-items:center}
+.deck-l{display:flex;flex-direction:column;gap:9px;min-width:0}
+.gate{min-height:120px;min-width:min(340px,100%);display:flex;flex-direction:column;justify-content:center;gap:6px;border-left:1px solid var(--case-edge);padding-left:18px}
+.gate-l{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--emboss)}
+@media (max-width:860px){.deck{grid-template-columns:minmax(0,1fr)}.gate{border-left:0;border-top:1px solid var(--case-edge);padding:8px 0 0;min-height:120px;min-width:0}}
 a:focus-visible,button:focus-visible{outline:2px solid var(--phos-hi);outline-offset:2px;border-radius:4px}
 .nogl .crt{background:radial-gradient(120% 90% at 50% 40%,#17110a,#050404)}
 @media (max-width:640px){
@@ -95,6 +95,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--phos-hi);outline-of
   </div>
 
   <nav class="deck" aria-label="Terminal shortcuts and links">
+   <div class="deck-l">
     <div class="chips" id="chips">
       <button class="chip" data-cmd="help"><b>$</b> help</button>
       <button class="chip" data-cmd="cat about.md">about</button>
@@ -112,11 +113,12 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--phos-hi);outline-of
         <a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">linkedin ↗</a>
         <a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">x ↗</a>
       </div>
-      <div class="mail">
-        <span id="email">kaiav.nihalani@gmail.com</span>
-        <button type="button" id="copy">copy</button>
-      </div>
     </div>
+   </div>
+   <section class="gate" id="contact" aria-label="Contact">
+     <span class="gate-l">contact &middot; email unlocks</span>
+     <div data-contact-gate></div>
+   </section>
   </nav>
 </div>
 <div id="mirror" class="sr" role="log" aria-live="polite" aria-label="Terminal output"></div>
@@ -132,7 +134,8 @@ const crt = $('crt'), glc = $('gl'), input = $('cmd'), mirror = $('mirror'), tra
 const ledAct = $('ledAct');
 
 /* ---------------- content ---------------- */
-const EMAIL = 'kaiav.nihalani@gmail.com';
+const GATE_MSG = 'Emails are locked behind a game \u2014 click Contact';
+const unlock = w => { try { window.KaiavContact && window.KaiavContact.open(w); } catch (e) {} };
 const LINKS = {
   j:['https://risingfounder.net','risingfounder.net'],
   linkedin:['https://www.linkedin.com/in/kaiav-nihalani-594703356/','linkedin'],
@@ -167,7 +170,7 @@ const FILES = {
   ],
   links: {
     'contact.txt': [
-      'email     {a:' + EMAIL + '}',
+      'email     {d:locked}  try {a:unlock j} or {a:unlock mail}',
       'linkedin  {a:linkedin.com/in/kaiav-nihalani-594703356}',
       'x         {a:x.com/KaiavRNihalani}'
     ]
@@ -260,7 +263,7 @@ let fontFamily = '"VT323", ui-monospace, Menlo, monospace';
 let useGL = true;
 
 function measure(){
-  const css = Math.max(15, Math.min(28, cssW / 54));
+  const css = Math.max(16, Math.min(28, cssW / 54));
   fontPx = Math.round(css * scaleTxt);
   tx.font = fontPx + 'px ' + fontFamily;
   cw = tx.measureText('M').width || fontPx * 0.5;
@@ -363,6 +366,7 @@ const CMDS = {
     '  {a:whoami}            who is this',
     '  {a:neofetch}          system info',
     '  {a:contact}           how to reach Kaiav',
+    '  {a:unlock} j|mail     unlock an email via a mini-game',
     '  {a:theme} [name]      amber | green | ice',
     '  {a:history}           past commands',
     '  {a:clear}             wipe the screen',
@@ -409,7 +413,7 @@ const CMDS = {
       '{a:Founder}  Eden',
       '{a:Co-fndr}  J: Rising Founder',
       '{a:Display}  WebGL CRT, ' + themeKey,
-      '{a:Mail}     ' + EMAIL,
+      '{a:Mail}     locked (try {a:unlock mail})',
       '',
       '{i:   }{d:{i:   }}{a:###}{b:###}'
     ];
@@ -419,10 +423,22 @@ const CMDS = {
     return out;
   },
   contact(){
-    let copied = false;
-    try { navigator.clipboard.writeText(EMAIL).then(()=>{}, ()=>{}); copied = true; } catch (e) {}
     trayLink('contact');
-    return ['email     {a:' + EMAIL + '}' + (copied ? '  {d:(copied to clipboard)}' : ''), 'linkedin  {a:linkedin.com/in/kaiav-nihalani-594703356}', 'x         {a:x.com/KaiavRNihalani}', '{d:links are live in the tray below the screen.}'];
+    return [
+      'linkedin  {a:linkedin.com/in/kaiav-nihalani-594703356}',
+      'x         {a:x.com/KaiavRNihalani}',
+      '',
+      '{b:' + GATE_MSG + '}',
+      '  {a:unlock j}      J: Rising Founder enquiries',
+      '  {a:unlock mail}   everything else',
+      '{d:links are live in the tray below the screen.}'
+    ];
+  },
+  unlock(a){
+    const k = (a[0] || '').toLowerCase();
+    if (k === 'j') { unlock('j'); return ['launching the J enquiries unlock game...']; }
+    if (k === 'mail' || k === 'general') { unlock('general'); return ['launching the mail unlock game...']; }
+    return ['usage: {a:unlock j} | {a:unlock mail}'];
   },
   history(){ return hist.map((h, i) => '{d:' + String(i + 1).padStart(4) + '}  ' + escapeMarkup(h)); },
   clear(){ lines.length = 0; return []; },
@@ -594,11 +610,6 @@ document.getElementById('chips').addEventListener('click', e => {
   flushPending();
   startTask(typeCmd(b.dataset.cmd));
 });
-$('copy').addEventListener('click', e => {
-  const b = e.currentTarget;
-  const done = ok => { b.textContent = ok ? 'copied' : 'select text'; setTimeout(() => b.textContent = 'copy', 1600); };
-  try { navigator.clipboard.writeText(EMAIL).then(() => done(true), () => done(false)); } catch (err) { done(false); }
-});
 function flushPending(){ while (pending.length) push(pending.shift()); }
 let ledT = 0;
 function blinkLed(){ ledT = performance.now() + 140; }
@@ -632,8 +643,8 @@ void main(){
   vec2 c = vUv*2.-1.;
   float asp = uRes.x/uRes.y;
   if (uDeg > 0.) c += uDeg*uDeg*.035*vec2(sin(c.y*11.+uTime*47.), sin(c.x*8.-uTime*39.));
-  vec2 cc = c + c*(c.yx*c.yx)*vec2(.045,.07);
-  cc *= 1.015;
+  vec2 q = c*vec2(asp,1.)/max(asp,1.);
+  vec2 cc = c*(1. + .055*dot(q,q))*.975;
   float d = sdBox(cc*vec2(asp,1.), vec2(asp,1.), .09);
   float inside = 1.-smoothstep(-.006, .004, d);
   vec2 suv = cc*.5+.5;

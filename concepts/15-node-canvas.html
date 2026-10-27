@@ -65,8 +65,7 @@ pre.term div:last-child::after{content:'';display:inline-block;width:6px;height:
 .list a{font:600 13.5px/1.2 var(--sans);text-decoration:none}
 .list a:hover{color:var(--a)}
 .list small{font:400 10.5px/1.3 var(--mono);color:var(--mute);text-align:right}
-.mail{display:flex;align-items:center;gap:6px;margin:2px 0 8px}
-.mail code{flex:1;min-width:0;font:500 12px/1.2 var(--mono);color:var(--ink);user-select:text;-webkit-user-select:text;overflow-wrap:anywhere;padding:7px 8px;background:#0a0c0f;border:1px solid #1e232b;border-radius:6px}
+.gate{min-height:120px;margin:2px 0 10px}
 button{font:inherit;color:inherit}
 .btn{font:500 11px/1 var(--mono);letter-spacing:.04em;padding:7px 9px;border-radius:6px;border:1px solid var(--edge-hi);background:#1a1e25;color:var(--ink);cursor:pointer}
 .btn:hover{border-color:var(--amber)}
@@ -190,7 +189,7 @@ button{font:inherit;color:inherit}
       <div class="nh"><span class="led"></span><b>Contact</b><span class="tag">sink</span></div>
       <div class="ports top"><div class="pr">in<span class="port in" data-p="contact:in" data-c="rose" style="--c:var(--rose)"></span></div></div>
       <div class="nb">
-        <div class="mail"><code id="email">kaiav.nihalani@gmail.com</code><button class="btn" id="copy" type="button">Copy</button></div>
+        <div class="gate"><div data-contact-gate></div></div>
         <div class="k">signals received</div>
         <div class="big" id="count">0</div>
       </div>
@@ -828,15 +827,12 @@ $('#zout').addEventListener('click', () => { stopAuto(); zoomGoal = Math.log(cam
 $('#fit').addEventListener('click', () => fitTarget(false));
 $('#rewire').addEventListener('click', () => { resetWires(false); });
 document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => flyTo(byId[b.dataset.go])));
-const copyBtn = $('#copy');
-copyBtn.addEventListener('click', () => {
-  const txt = $('#email').textContent;
-  const done = ok => { copyBtn.textContent = ok ? 'Copied' : 'Select ↑'; setTimeout(() => copyBtn.textContent = 'Copy', 1600); };
-  try {
-    navigator.clipboard.writeText(txt).then(() => done(true)).catch(() => { selectEmail(); done(false); });
-  } catch (_) { selectEmail(); done(false); }
-});
-function selectEmail() { const r = document.createRange(); r.selectNodeContents($('#email')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+// contact gate content is injected later; keep node geometry in sync when it changes size
+if ('ResizeObserver' in window) {
+  let roT = 0, first = true;
+  const ro = new ResizeObserver(() => { if (first) { first = false; return; } clearTimeout(roT); roT = setTimeout(measure, 60); });
+  nodes.forEach(n => ro.observe(n.el));
+}
 
 /* ---------- render ---------- */
 const zrEl = $('#zr'); let zrShown = -1;

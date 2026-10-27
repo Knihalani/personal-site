@@ -80,10 +80,8 @@ main{position:relative;background:var(--bg);border-top:1px solid var(--rule)}
 .ls .desc{color:var(--ink-dim)}
 .about p{max-width:62ch;color:var(--ink-dim);line-height:1.7;margin:0 0 12px}
 .about p.lead{color:var(--ink);font-size:18px}
-.contact{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.email{user-select:all;background:var(--bg-2);border:1px solid var(--rule);padding:10px 12px;font-size:15px;overflow-wrap:anywhere}
-.btn{font:inherit;font-size:13px;color:#000;background:var(--signal);border:0;padding:11px 14px;cursor:pointer}
-.btn:hover{filter:brightness(1.1)}
+.gate-note{color:var(--ink-dim);font-size:14px;line-height:1.7;margin:0 0 14px}
+.gate-wrap{min-height:140px;border:1px dashed var(--rule);padding:16px;background:var(--bg-2)}
 .links a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--rule);margin-right:16px}
 .links a:hover{border-color:var(--signal)}
 footer{color:var(--ink-faint);font-size:12px;padding-top:48px}
@@ -157,10 +155,8 @@ footer{color:var(--ink-faint);font-size:12px;padding-top:48px}
     </section>
     <section id="contact" aria-labelledby="contact-h" style="margin-top:72px">
       <h2 class="sec-h" id="contact-h">echo $CONTACT</h2>
-      <div class="contact">
-        <span class="email" id="email">kaiav.nihalani@gmail.com</span>
-        <button class="btn" id="copy" type="button">copy</button>
-      </div>
+      <p class="gate-note">$ mail --to kaiav<br>&gt; Emails are locked behind a game. Unlock one below.</p>
+      <div class="gate-wrap"><div data-contact-gate></div></div>
       <p class="links" style="margin-top:20px">
         <a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">linkedin/kaiav-nihalani</a>
         <a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">x/@KaiavRNihalani</a>
@@ -174,14 +170,6 @@ footer{color:var(--ink-faint);font-size:12px;padding-top:48px}
 <script>
 (function(){
   "use strict";
-  // ---------- copy email (works without WebGL) ----------
-  var copyBtn = document.getElementById('copy');
-  copyBtn.addEventListener('click', function(){
-    var txt = document.getElementById('email').textContent;
-    var done = function(ok){ copyBtn.textContent = ok ? 'copied ✓' : 'select + ⌘C'; setTimeout(function(){ copyBtn.textContent='copy'; }, 1600); };
-    try { navigator.clipboard.writeText(txt).then(function(){done(true);}).catch(function(){done(false);}); } catch(e){ done(false); }
-  });
-
   var hero = document.getElementById('hero');
   var canvas = document.getElementById('gl');
   if (!window.THREE) { hero.classList.add('no-gl'); return; }

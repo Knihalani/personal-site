@@ -83,10 +83,10 @@ nav.index button:hover i{color:var(--paper)}
 .panel dt{color:var(--paper-soft);text-transform:uppercase;letter-spacing:.08em;font-size:11px}
 .panel dd{margin:0}
 .panel .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
-.panel .links a,.panel .copy{all:unset;cursor:pointer;font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:10px 14px;background:var(--paper);color:var(--ink)}
-.panel .links a:hover,.panel .copy:hover{background:var(--red);color:var(--paper)}
-.email{font-family:var(--mono);font-size:clamp(15px,2.4vw,18px);user-select:all;-webkit-user-select:all;color:var(--paper);display:block;margin:6px 0 10px;overflow-wrap:anywhere}
-.copied{color:var(--red);font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-left:10px}
+.panel .links a{all:unset;cursor:pointer;font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:10px 14px;background:var(--paper);color:var(--ink)}
+.panel .links a:hover{background:var(--red);color:var(--paper)}
+.gate{min-height:140px;margin:18px 0 6px;padding:14px 0;border-top:1px solid rgba(241,241,238,.2);border-bottom:1px solid rgba(241,241,238,.2)}
+.panel article[hidden]{display:none}
 :focus-visible{outline:2px solid var(--red)!important;outline-offset:3px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
@@ -134,9 +134,10 @@ nav.index button:hover i{color:var(--paper)}
   </div>
 </div>
 
-<aside class="panel" id="panel" role="dialog" aria-modal="false" aria-labelledby="ptitle" aria-hidden="true">
+<aside class="panel" id="panel" role="dialog" aria-modal="false" aria-labelledby="ptitle-0" aria-hidden="true">
   <div class="top"><span id="pkick">01 / 04</span><button class="close" id="pclose" type="button">Close &times;</button></div>
   <div id="pbody"></div>
+  <div class="gate" id="gatehold"><div data-contact-gate></div></div>
 </aside>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
@@ -146,14 +147,13 @@ nav.index button:hover i{color:var(--paper)}
 const docEl = document.documentElement;
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const mobile = matchMedia('(pointer:coarse)').matches || innerWidth < 720;
-const EMAIL = 'kaiav.nihalani@gmail.com';
 
 /* ---------- content ---------- */
 // word: [text, font a=Anton s=serif-italic m=mono, red?]
 const SECTIONS = [
   { name:'Index', gate:['KAIAV','NIHALANI'],
     words:[['KAIAV NIHALANI','a',1],['founder','s'],['FOUNDER OF EDEN','a'],['co-founder of J','s'],['CONTEXT FOR AGENTS','a'],['KAIAV','a'],['building context for agents','s'],['NIHALANI','a'],['FOUNDER','a'],['he / him','m'],['EDEN','a',1],['RISING FOUNDER','a']],
-    panel(){ return `<h2 id="ptitle">Kaiav <em>Nihalani</em></h2>
+    panel(){ return `<h2>Kaiav <em>Nihalani</em></h2>
       <p class="lede">Founder of Eden. Co-founder of J.</p>
       <p>Building context for agents.</p>
       <p>Longer bio coming soon.</p>
@@ -161,22 +161,21 @@ const SECTIONS = [
       <div class="links"><a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn &nearr;</a><a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X &nearr;</a></div>`; } },
   { name:'Eden', gate:['EDEN'],
     words:[['EDEN','a',1],['context for agents.','s'],['CONTEXT','a'],['FOR AGENTS','a'],['CONTEXT FOR AGENTS','a'],['founder','s'],['EDEN','a'],['AGENTS','a'],['context.','s'],['FOUNDER','a']],
-    panel(){ return `<h2 id="ptitle">Eden</h2>
+    panel(){ return `<h2>Eden</h2>
       <p class="lede">Context for agents.</p>
       <dl><div><dt>Role</dt><dd>Founder</dd></div></dl>`; } },
   { name:'J', gate:['J'],
     words:[['J','a',1],['RISING FOUNDER','a',1],['an early chance for extraordinary founders','s'],['FREE','a'],['REMOTE','a'],['THREE MONTHS','a'],['NO FEE','a'],['NO EQUITY','a'],['23 AND UNDER','a'],['anywhere in the world','s'],['risingfounder.net','m'],['CO-FOUNDER','a'],['ambitious founders','s'],['J: RISING FOUNDER','a']],
-    panel(){ return `<h2 id="ptitle"><em>J</em>: Rising Founder</h2>
+    panel(){ return `<h2><em>J</em>: Rising Founder</h2>
       <p class="lede">An early chance for extraordinary founders.</p>
       <p>A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world. No fee, no equity.</p>
       <dl><div><dt>Role</dt><dd>Co-founder, with Jose Cruz-Lopez</dd></div><div><dt>Format</dt><dd>Free &middot; remote &middot; three months</dd></div><div><dt>Who</dt><dd>Founders aged 23 and under, anywhere</dd></div><div><dt>Terms</dt><dd>No fee, no equity</dd></div></dl>
       <div class="links"><a href="https://risingfounder.net" target="_blank" rel="noopener">risingfounder.net &nearr;</a></div>`; } },
   { name:'Contact', gate:['SAY HELLO'],
-    words:[['SAY HELLO','a',1],['kaiav.nihalani@gmail.com','m'],['LINKEDIN','a'],['x.com/KaiavRNihalani','m'],['write in.','s'],['CONTACT','a'],['EMAIL','a'],['say hello','s']],
-    panel(){ return `<h2 id="ptitle">Say <em>hello</em></h2>
-      <p class="lede">The quickest way is email.</p>
-      <span class="email" id="email">${EMAIL}</span>
-      <button class="copy" id="copy" type="button">Copy email</button><span class="copied" id="copied" aria-live="polite"></span>
+    words:[['SAY HELLO','a',1],['J ENQUIRIES','a'],['unlock the inbox','s'],['LINKEDIN','a'],['x.com/KaiavRNihalani','m'],['write in.','s'],['CONTACT','a'],['PLAY TO UNLOCK','a'],['say hello','s']],
+    panel(){ return `<h2>Say <em>hello</em></h2>
+      <p class="lede">Email is locked behind a small game. One for J enquiries, one for everything else.</p>
+      <div class="gate-slot"></div>
       <div class="links"><a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn &nearr;</a><a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X &nearr;</a></div>`; } }
 ];
 const NZ = SECTIONS.length;
@@ -193,22 +192,22 @@ const navBtns = SECTIONS.map((s, i) => {
 });
 const panel = document.getElementById('panel'), pbody = document.getElementById('pbody'), pkick = document.getElementById('pkick');
 let panelOpen = false, lastFocus = null;
+SECTIONS.forEach((s, i) => {
+  const a = document.createElement('article');
+  a.id = 'p-' + i; a.hidden = true; a.innerHTML = s.panel();
+  const h = a.querySelector('h2'); if (h) h.id = 'ptitle-' + i;
+  pbody.appendChild(a);
+});
+const arts = pbody.querySelectorAll('article');
+{ const gh = document.getElementById('gatehold'), slot = pbody.querySelector('.gate-slot'); if (gh && slot) slot.replaceWith(gh); }
 function openPanel(i){
-  pbody.innerHTML = SECTIONS[i].panel();
-  pkick.textContent = pad2(i) + ' / ' + pad2(NZ - 1) + ' — ' + SECTIONS[i].name;
+  arts.forEach((a, j) => { a.hidden = j !== i; });
+  panel.setAttribute('aria-labelledby', 'ptitle-' + i);
+  pkick.textContent = pad2(i) + ' / ' + pad2(NZ - 1) + ' \u2014 ' + SECTIONS[i].name;
   panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false'); panelOpen = true;
-  const c = document.getElementById('copy');
-  if (c) c.addEventListener('click', () => {
-    const out = document.getElementById('copied');
-    try {
-      navigator.clipboard.writeText(EMAIL).then(() => { out.textContent = 'Copied'; })
-        .catch(() => { selectEmail(); out.textContent = 'Press Ctrl/Cmd+C'; });
-    } catch (e) { selectEmail(); out.textContent = 'Press Ctrl/Cmd+C'; }
-  });
   lastFocus = document.activeElement;
   document.getElementById('pclose').focus({ preventScroll:true });
 }
-function selectEmail(){ const r = document.createRange(); r.selectNodeContents(document.getElementById('email')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
 function closePanel(){
   if (!panelOpen) return;
   panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); panelOpen = false;
@@ -418,7 +417,7 @@ function buildInstances(st){
   tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   tex.needsUpdate = true;
   const rects = st.rects;
-  const A = [], B = [], C = [], D = [];
+  let A = [], B = [], C = [], D = [];
   idZone = []; idText = [];
   const rand = rng(7);
   const push = (r, a, c, d, zone, txt) => { A.push(...a); B.push(r.u0, r.v0, r.u1, r.v1); C.push(...c); D.push(...d); idZone.push(zone); idText.push(txt); return idZone.length - 1; };
@@ -460,6 +459,13 @@ function buildInstances(st){
       push(r, [Math.cos(aa) * rr, z0 + 16 + rand() * (Z - 22), w, h], [1, rand() < .3 ? 1 : 0, Math.sin(aa) * rr, 0], [(rand() - .5) * (reduce ? 0 : .25), rand()], zi, wd[0]);
     }
   }
+  // sort far-to-near (descending s) so nearer type composites over farther type
+  const N0 = idZone.length, ord = new Array(N0);
+  for (let i = 0; i < N0; i++) ord[i] = i;
+  ord.sort((p, q) => A[q * 4 + 1] - A[p * 4 + 1]);
+  const reord = (src, n) => { const o = new Array(src.length); ord.forEach((k, i) => { for (let j = 0; j < n; j++) o[i * n + j] = src[k * n + j]; }); return o; };
+  A = reord(A, 4); B = reord(B, 4); C = reord(C, 4); D = reord(D, 2);
+  idZone = ord.map(k => idZone[k]); idText = ord.map(k => idText[k]);
   const N = idZone.length;
   // ids
   for (let i = 0; i < N; i++) C[i * 4 + 3] = i;
@@ -479,13 +485,13 @@ function buildInstances(st){
   const VS = `
     attribute vec4 aA; attribute vec4 aB; attribute vec4 aC; attribute vec2 aD;
     uniform float uCam, uL, uR, uFar, uTime, uStretch, uHover, uHoverT; uniform vec2 uBend;
-    varying vec2 vUv; varying float vFog; varying float vNear; varying float vStyle; varying float vHov; varying float vId;
+    varying vec2 vUv; varying float vFog; varying float vNear; varying float vStyle; varying float vRed; varying float vHov; varying float vId;
     void main(){
       vec2 uv = position.xy;
       float mode = aC.x;
       float d0 = mod(aA.y - uCam, uL);
       if(d0 > uL - 24.0) d0 -= uL;
-      vId = aC.w; vStyle = aC.y;
+      vId = aC.w; float st = floor(aC.y + 0.5); vStyle = mod(st, 2.0); vRed = step(1.5, st);
       float hov = step(abs(aC.w - uHover), 0.5) * uHoverT; vHov = hov;
       if(d0 > uFar || d0 < -22.0){ gl_Position = vec4(2.0,2.0,2.0,1.0); vUv=vec2(0.); vFog=1.; vNear=0.; return; }
       vec2 xy; float depth;
@@ -515,15 +521,15 @@ function buildInstances(st){
     #endif
     precision highp float;
     uniform sampler2D uAtlas; uniform vec3 uInk, uPaper, uRed; uniform float uBlur;
-    varying vec2 vUv; varying float vFog; varying float vNear; varying float vStyle; varying float vHov; varying float vId;
+    varying vec2 vUv; varying float vFog; varying float vNear; varying float vStyle; varying float vRed; varying float vHov; varying float vId;
     void main(){
       float d = texture2D(uAtlas, vUv).r;
       float w = max(fwidth(d) * 0.75, 0.004) + uBlur * 0.09;
       float fill = smoothstep(0.5 - w, 0.5 + w, d);
       float ol = 1.0 - smoothstep(0.075 - w, 0.075 + w, abs(d - 0.5));
-      float isO = mod(vStyle, 2.0);
+      float isO = step(0.5, vStyle);
       float cov = mix(fill, ol, isO * (1.0 - vHov));
-      vec3 col = (vStyle > 1.5 || vHov > 0.5) ? uRed : uInk;
+      vec3 col = mix(uInk, uRed, max(step(0.5, vRed), step(0.5, vHov)));
       col = mix(col, uPaper, vFog * vFog);
       float a = cov * vNear * (1.0 - vFog);
       if(a < 0.003) discard;
@@ -535,11 +541,11 @@ function buildInstances(st){
     #endif
     precision highp float;
     uniform sampler2D uAtlas;
-    varying vec2 vUv; varying float vFog; varying float vNear; varying float vStyle; varying float vHov; varying float vId;
+    varying vec2 vUv; varying float vFog; varying float vNear; varying float vStyle; varying float vRed; varying float vHov; varying float vId;
     void main(){
       float d = texture2D(uAtlas, vUv).r;
       if(d < 0.38 || vFog > 0.7 || vNear < 0.4) discard;
-      float id = vId + 1.0;
+      float id = floor(vId + 0.5) + 1.0;
       gl_FragColor = vec4(mod(id, 256.0) / 255.0, floor(id / 256.0) / 255.0, 0.0, 1.0);
     }`;
   const mat = new THREE.ShaderMaterial({ uniforms, vertexShader:VS, fragmentShader:FS, transparent:true, depthWrite:false, depthTest:false, premultipliedAlpha:true, extensions:{ derivatives:true } });

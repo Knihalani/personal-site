@@ -1,0 +1,561 @@
+<title>Unpacked Monolith</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0b0c0e;
+  --bg-2:#121417;
+  --ink:#ece6da;
+  --muted:#8d8a84;
+  --line:#2a2c30;
+  --signal:#ff6a2b;
+  --signal-2:#ffb07a;
+  --card:rgba(13,14,16,.84);
+  --focus:#ffb07a;
+  --display:'Syne', 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+  --mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:auto}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0;
+  background:radial-gradient(120% 90% at 65% 45%, #17191d 0%, var(--bg) 60%)}
+.nogl #c{display:none}
+.fallback{display:none}
+.nogl .fallback{display:block;position:fixed;inset:0;z-index:0;background:radial-gradient(60% 50% at 66% 46%, rgba(255,106,43,.25), transparent 70%), var(--bg)}
+a{color:var(--ink)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:4px;border-radius:2px}
+.wrap{position:relative;z-index:1;padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px))}
+.nav{position:fixed;top:0;left:0;right:0;z-index:3;display:flex;justify-content:space-between;align-items:center;gap:16px;
+  padding:16px max(16px, env(safe-area-inset-right,0px)) 14px max(16px, env(safe-area-inset-left,0px));
+  background:linear-gradient(180deg, rgba(11,12,14,.92), rgba(11,12,14,0))}
+.nav .name{font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.02em;text-decoration:none;white-space:nowrap}
+.nav .name i{display:inline-block;width:9px;height:9px;background:var(--signal);margin-right:9px;vertical-align:1px;box-shadow:0 0 12px var(--signal)}
+.nav ul{list-style:none;margin:0;padding:0;display:flex;gap:18px;font-size:12px}
+.nav a{text-decoration:none;color:var(--muted);transition:color .2s}
+.nav a:hover,.nav a.on{color:var(--ink)}
+.nav a.on::before{content:"";display:inline-block;width:5px;height:5px;background:var(--signal);margin-right:6px;vertical-align:2px}
+.rail{position:fixed;right:max(18px, env(safe-area-inset-right,0px));top:50%;z-index:3;transform:translateY(-50%);display:flex;flex-direction:column;align-items:flex-end;gap:10px;font-size:10.5px;color:var(--muted);pointer-events:none}
+.rail .bar{position:relative;width:2px;height:180px;background:var(--line)}
+.rail .fill{position:absolute;left:0;top:0;width:2px;height:100%;background:var(--signal);transform-origin:50% 0;transform:scaleY(0);will-change:transform}
+.rail .lbl{writing-mode:vertical-rl;letter-spacing:.2em;text-transform:uppercase}
+section.st{min-height:125vh;display:flex;align-items:center;padding:110px 0 80px}
+section.st:first-child{min-height:100vh}
+.txt{max-width:440px;margin-left:clamp(0px, 5vw, 80px)}
+.k{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--signal-2);margin:0 0 18px;display:flex;align-items:center;gap:10px}
+.k::before{content:"";width:22px;height:1px;background:var(--signal)}
+h1,h2{font-family:var(--display);font-weight:800;letter-spacing:-.02em;margin:0 0 18px;line-height:.95}
+h1{font-size:clamp(46px, 7.4vw, 104px)}
+h2{font-size:clamp(32px, 4.2vw, 56px)}
+.lead{font-size:15px;line-height:1.65;color:var(--ink);margin:0 0 14px}
+p{font-size:13.5px;line-height:1.7;color:#c9c3b8;margin:0 0 12px}
+.ph{color:var(--muted);font-style:italic}
+.hint{margin-top:34px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:12px}
+.hint span{display:inline-block;width:1px;height:34px;background:linear-gradient(var(--signal), transparent)}
+.cards{display:grid;gap:12px;margin-top:22px}
+.card{border:1px solid var(--line);background:rgba(18,20,23,.72);padding:16px 18px;border-radius:2px;position:relative}
+.card::before{content:"";position:absolute;left:-1px;top:-1px;width:10px;height:10px;border-left:2px solid var(--signal);border-top:2px solid var(--signal)}
+.card h3{font-family:var(--display);font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
+.card .role{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.card p{margin:0 0 8px}
+.card a{font-size:12.5px;text-underline-offset:4px;text-decoration-color:var(--signal)}
+.tl{list-style:none;margin:20px 0 0;padding:0;border-left:1px solid var(--line)}
+.tl li{position:relative;padding:0 0 18px 20px;font-size:13px;line-height:1.6;color:#c9c3b8}
+.tl li::before{content:"";position:absolute;left:-4px;top:7px;width:7px;height:7px;background:var(--bg);border:1px solid var(--signal)}
+.tl li.now::before{background:var(--signal);box-shadow:0 0 10px var(--signal)}
+.tl b{font-family:var(--display);color:var(--ink);font-size:15px;margin-right:8px}
+.gate{min-height:132px;margin:22px 0 18px;padding:14px;border:1px dashed #3a3d42;background:rgba(18,20,23,.6)}
+.links{display:flex;gap:20px;flex-wrap:wrap;font-size:13px}
+.links a{text-underline-offset:5px;text-decoration-color:var(--signal)}
+footer{position:relative;z-index:1;padding:40px max(16px, env(safe-area-inset-right,0px)) 40px max(16px, env(safe-area-inset-left,0px));font-size:11px;color:var(--muted);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+@media (max-width:820px){
+  .nav ul{gap:12px;font-size:11px}
+  .nav ul li.hide-s{display:none}
+  .rail{display:none}
+  section.st{min-height:118vh;align-items:flex-end;padding:56vh 0 56px}
+  section.st:first-child{min-height:100vh;padding-top:52vh}
+  .txt{margin-left:0;max-width:none;width:100%;background:var(--card);border:1px solid var(--line);padding:20px 18px;border-radius:2px}
+  h1{font-size:44px}
+  h2{font-size:32px}
+  .lead{font-size:14px}
+}
+@media (max-width:380px){ .nav .name{font-size:13px} .nav ul{gap:9px} }
+</style>
+
+<canvas id="c" aria-hidden="true"></canvas>
+<div class="fallback" aria-hidden="true"></div>
+
+<nav class="nav" aria-label="Primary">
+  <a class="name" href="#s0"><i></i>Kaiav Nihalani</a>
+  <ul>
+    <li class="hide-s"><a href="#s1" data-s="1">About</a></li>
+    <li><a href="#s2" data-s="2">Work</a></li>
+    <li class="hide-s"><a href="#s3" data-s="3">Timeline</a></li>
+    <li><a href="#s4" data-s="4">Contact</a></li>
+  </ul>
+</nav>
+<div class="rail" aria-hidden="true"><span class="lbl" id="stageLbl">00 · Monolith</span><div class="bar"><div class="fill" id="fill"></div></div></div>
+
+<main class="wrap">
+  <section class="st" id="s0">
+    <div class="txt">
+      <p class="k">00 — Monolith</p>
+      <h1>Kaiav<br>Nihalani</h1>
+      <p class="lead">Founder of Eden. Co-founder of J.</p>
+      <p>Building context for agents.</p>
+      <div class="hint"><span></span>Scroll to unpack</div>
+    </div>
+  </section>
+
+  <section class="st" id="s1">
+    <div class="txt">
+      <p class="k">01 — Unpack</p>
+      <h2>Everything starts dense.</h2>
+      <p class="lead">Kaiav Nihalani (he/him). Founder.</p>
+      <p>Every idea arrives as one heavy block. The work is splitting it into layers until each piece has a job.</p>
+      <p class="ph">A longer bio is on its way.</p>
+    </div>
+  </section>
+
+  <section class="st" id="s2">
+    <div class="txt">
+      <p class="k">02 — Arrange</p>
+      <h2>What he's building.</h2>
+      <div class="cards">
+        <article class="card">
+          <h3>Eden</h3>
+          <p class="role">Founder</p>
+          <p>Context for agents.</p>
+        </article>
+        <article class="card">
+          <h3>J: Rising Founder</h3>
+          <p class="role">Co-founder · with Jose Cruz-Lopez</p>
+          <p>An early chance for extraordinary founders. A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world. No fee, no equity.</p>
+          <a href="https://risingfounder.net" target="_blank" rel="noopener">risingfounder.net ↗</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="st" id="s3">
+    <div class="txt">
+      <p class="k">03 — Timeline</p>
+      <h2>A helix, still being written.</h2>
+      <p>Two strands, wound together: the companies and the people around them.</p>
+      <ol class="tl">
+        <li class="now"><b>Now</b>Building Eden. Running J.</li>
+        <li><b>Next</b><span class="ph">Chapters to be added.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="st" id="s4">
+    <div class="txt">
+      <p class="k">04 — Signal</p>
+      <h2>Collapse to a point. Say hello.</h2>
+      <p>Everything folds down to one place to reach him.</p>
+      <div class="gate"><div data-contact-gate></div></div>
+      <div class="links">
+        <a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn ↗</a>
+        <a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X ↗</a>
+        <a href="https://risingfounder.net" target="_blank" rel="noopener">J: Rising Founder ↗</a>
+      </div>
+    </div>
+  </section>
+</main>
+<footer><span>Kaiav Nihalani</span><span>Scroll back up to rebuild the monolith.</span></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+const isMobile = matchMedia('(max-width: 820px)').matches || matchMedia('(pointer: coarse)').matches;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sections = Array.prototype.slice.call(document.querySelectorAll('section.st'));
+const navLinks = Array.prototype.slice.call(document.querySelectorAll('.nav a[data-s]'));
+const fill = document.getElementById('fill'), stageLbl = document.getElementById('stageLbl');
+const NAMES = ['Monolith','Unpack','Arrange','Helix','Signal'];
+
+/* ---------- scroll mapping (layout read only on resize) ---------- */
+let anchors = [0,1,2,3,4], scrollY = window.scrollY, target = 0, prog = 0, lastStage = -1;
+function measure(){
+  const vh = innerHeight;
+  anchors = sections.map(s => { const r = s.getBoundingClientRect(); return r.top + window.scrollY + r.height/2 - vh/2; });
+  anchors[0] = 0;
+  const max = document.documentElement.scrollHeight - vh;
+  anchors[4] = Math.min(anchors[4], max);
+}
+function mapScroll(y){
+  if (y <= anchors[0]) return 0;
+  for (let k=0;k<4;k++){
+    if (y < anchors[k+1]){
+      const t = (y - anchors[k]) / Math.max(1, anchors[k+1] - anchors[k]);
+      const u = Math.min(1, Math.max(0, (t - .12) / .76));
+      return k + u;
+    }
+  }
+  return 4;
+}
+function onScroll(){ scrollY = window.scrollY; target = mapScroll(scrollY); }
+window.addEventListener('scroll', onScroll, { passive: true });
+measure(); onScroll(); prog = target;
+function setStageUI(p){
+  const s = Math.min(4, Math.round(p));
+  fill.style.transform = 'scaleY(' + (p/4).toFixed(4) + ')';
+  if (s !== lastStage){
+    lastStage = s;
+    stageLbl.textContent = '0' + s + ' · ' + NAMES[s];
+    navLinks.forEach(a => a.classList.toggle('on', +a.dataset.s === s));
+  }
+}
+setStageUI(prog);
+
+/* ---------- WebGL ---------- */
+function fail(){ document.documentElement.classList.add('nogl'); document.body.classList.add('nogl'); }
+function init(){
+  if (!window.THREE){ fail(); startUIOnly(); return; }
+  const canvas = document.getElementById('c');
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' }); }
+  catch(e){ fail(); startUIOnly(); return; }
+  let DPR = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+  renderer.setPixelRatio(DPR);
+  renderer.setClearColor(0x0b0c0e, 1);
+  let W = innerWidth, H = innerHeight;
+  renderer.setSize(W, H, false);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, W/H, .1, 200);
+  const group = new THREE.Group(); scene.add(group);
+
+  /* ----- layout data ----- */
+  const n = isMobile ? 7 : 10;
+  const N = n*n*n;
+  const C = .8;                                   // cube size in the monolith
+  let s = 20240611; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  const P0 = new Float32Array(N*3), P1 = new Float32Array(N*3), P2 = new Float32Array(N*3), AH = new Float32Array(N*3), AD = new Float32Array(N*4);
+  const mid = (n-1)/2;
+  for (let i=0;i<N;i++){
+    const x = i % n, y = Math.floor(i/n) % n, z = Math.floor(i/(n*n));
+    const px = (x-mid)*C, py = (y-mid)*C, pz = (z-mid)*C;
+    P0[i*3] = px; P0[i*3+1] = py; P0[i*3+2] = pz;
+    // stage 1: stratified layers, each slab rotated and spread
+    const ang = (y - mid) * .22, ca = Math.cos(ang), sa = Math.sin(ang), sp = 1.42;
+    const lx = px*sp, lz = pz*sp;
+    P1[i*3] = lx*ca - lz*sa; P1[i*3+1] = (y-mid)*C*2.05; P1[i*3+2] = lx*sa + lz*ca;
+    // distance from monolith centre controls stagger
+    const dc = Math.sqrt(px*px + py*py + pz*pz) / (mid*C*1.733);
+    AD[i*4] = rnd(); AD[i*4+1] = Math.min(1, dc*.65 + rnd()*.35);
+  }
+  // stage 2: 2x2 tiles, each a TxT plate with a glyph
+  const T = Math.floor(Math.sqrt(N/4));
+  const U2 = isMobile ? .44 : .4, GAP = 1.3;
+  const tileW = T*U2;
+  const glyphs = ['E','J','K','@'];
+  const gc = document.createElement('canvas'); gc.width = gc.height = 128;
+  const gx = gc.getContext('2d', { willReadFrequently: true });
+  const masks = glyphs.map(g => {
+    gx.clearRect(0,0,128,128); gx.fillStyle = '#fff'; gx.textAlign = 'center'; gx.textBaseline = 'middle';
+    gx.font = '800 104px Syne, "Arial Black", Arial, sans-serif'; gx.fillText(g, 64, 70);
+    const d = gx.getImageData(0,0,128,128).data, m = new Uint8Array(T*T);
+    for (let a=0;a<T;a++) for (let b=0;b<T;b++){
+      const sx = Math.floor((a+.5)/T*128), sy = Math.floor((b+.5)/T*128);
+      m[b*T+a] = d[(sy*128+sx)*4+3] > 110 ? 1 : 0;
+    }
+    return m;
+  });
+  const order = []; for (let i=0;i<N;i++) order.push(i);
+  for (let i=N-1;i>0;i--){ const j = Math.floor(rnd()*(i+1)); const t = order[i]; order[i] = order[j]; order[j] = t; }
+  for (let k=0;k<N;k++){
+    const i = order[k];
+    if (k < 4*T*T){
+      const tile = Math.floor(k/(T*T)), c = k % (T*T), a = c % T, b = Math.floor(c / T);
+      const tx = (tile % 2 ? 1 : -1) * (tileW/2 + GAP/2), ty = (tile < 2 ? 1 : -1) * (tileW/2 + GAP/2);
+      const on = masks[tile][b*T + a];
+      P2[i*3] = tx + (a - (T-1)/2)*U2; P2[i*3+1] = ty - (b - (T-1)/2)*U2; P2[i*3+2] = on ? .38 : 0;
+      AD[i*4+2] = on;
+    } else {
+      // leftovers orbit as debris
+      const th = rnd()*Math.PI*2, r = tileW + 2 + rnd()*4;
+      P2[i*3] = Math.cos(th)*r; P2[i*3+1] = Math.sin(th)*r*.8; P2[i*3+2] = -2 - rnd()*4;
+    }
+  }
+  // stage 3: double helix with rungs
+  const HEL = 15;
+  for (let k=0;k<N;k++){
+    const i = order[(k*7919) % N];
+    const t = k / N;
+    const strand = k % 2;
+    let rf = 1, a;
+    if ((k % 9) === 0){ a = t*Math.PI*2*3.2; rf = (rnd()*2-1); }
+    else a = t*Math.PI*2*3.2 + strand*Math.PI;
+    const y = (t - .5) * HEL + (rnd()-.5)*.12;
+    AH[i*3] = a; AH[i*3+1] = y; AH[i*3+2] = rf;
+    const ym = ((y + HEL/2) / HEL) * 4;
+    AD[i*4+3] = (Math.abs(ym - Math.round(ym)) < .045 && rf === 1) ? 1 : 0;
+  }
+
+  /* ----- cube instancing ----- */
+  const base = new THREE.BoxGeometry(1,1,1);
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.index = base.index;
+  geo.setAttribute('position', base.getAttribute('position'));
+  geo.setAttribute('normal', base.getAttribute('normal'));
+  geo.setAttribute('p0', new THREE.InstancedBufferAttribute(P0, 3));
+  geo.setAttribute('p1', new THREE.InstancedBufferAttribute(P1, 3));
+  geo.setAttribute('p2', new THREE.InstancedBufferAttribute(P2, 3));
+  geo.setAttribute('aH', new THREE.InstancedBufferAttribute(AH, 3));
+  geo.setAttribute('aD', new THREE.InstancedBufferAttribute(AD, 4));
+  geo.instanceCount = N;
+  const U = {
+    uP: { value: prog }, uT: { value: 0 }, uMouse: { value: new THREE.Vector3(99,99,0) }, uMouseOn: { value: 0 },
+    uC: { value: C }, uU2: { value: U2 }
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: U,
+    vertexShader: `
+      uniform float uP; uniform float uT; uniform vec3 uMouse; uniform float uMouseOn; uniform float uC; uniform float uU2;
+      attribute vec3 p0; attribute vec3 p1; attribute vec3 p2; attribute vec3 aH; attribute vec4 aD;
+      varying vec3 vL; varying vec3 vN; varying vec3 vWP; varying float vGlow; varying float vFill; varying float vHeat;
+      const float PI = 3.14159265;
+      float ease(float x){ return x * x * x * (x * (x * 6.0 - 15.0) + 10.0); }
+      float tr(float k){ return ease(clamp((uP - k - aD.y * 0.42) / 0.58 + 0.0, 0.0, 1.0)); }
+      vec3 rotA(vec3 v, vec3 ax, float a){ float c = cos(a), s = sin(a); return v * c + cross(ax, v) * s + ax * dot(ax, v) * (1.0 - c); }
+      vec3 rotY(vec3 v, float a){ float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
+      void main(){
+        float t0 = tr(0.0), t1 = tr(1.0), t2 = tr(2.0), t3 = tr(3.0);
+        float a = aH.x + uT * 0.35;
+        vec3 p3 = vec3(cos(a) * 3.3 * aH.z, aH.y * 0.62 + aH.y * 0.38 * (1.0 - t3), sin(a) * 3.3 * aH.z);
+        vec3 b1 = p1 + vec3(0.0, sin(uT * 0.9 + p1.y * 0.45) * 0.18, 0.0);
+        vec3 b2 = p2 + vec3(0.0, 0.0, sin(uT * 1.3 + p2.x * 0.6 + p2.y * 0.4) * 0.08);
+        vec3 pos = p0;
+        pos = mix(pos, b1, t0);
+        pos = mix(pos, b2, t1);
+        pos = mix(pos, p3, t2);
+        pos = mix(pos, vec3(0.0), t3);
+        vec3 sw = normalize(vec3(aD.x - 0.5, fract(aD.x * 7.31) - 0.5, fract(aD.x * 13.7) - 0.5) + 0.001);
+        float w0 = sin(t0 * PI), w1 = sin(t1 * PI), w2 = sin(t2 * PI), w3 = sin(t3 * PI);
+        pos += sw * (w0 * 0.9 + w1 * 3.2 + w2 * 2.6 + w3 * 1.2);
+        float sc = mix(mix(mix(mix(uC * 0.985, uC * 0.82, t0), uU2 * 0.9, t1), 0.42, t2), 0.0, t3);
+        vec3 scl = vec3(sc);
+        scl.z *= mix(1.0, mix(0.55, 1.4, aD.z), t1 * (1.0 - t2));
+        float spin = (w0 * 0.6 + w1 + w2 + w3) * (aD.x * 6.2832 + 1.0);
+        vec3 l = position * scl;
+        l = rotA(l, sw, spin);
+        vec3 n = rotA(normal, sw, spin);
+        float yaw = -a * t2 * (1.0 - t3);
+        l = rotY(l, yaw); n = rotY(n, yaw);
+        vec4 wp = modelMatrix * vec4(pos + l, 1.0);
+        vec2 d = wp.xy - uMouse.xy;
+        float push = exp(-dot(d, d) * 0.22) * uMouseOn;
+        wp.z += push * (0.9 + 1.4 * t1 * (1.0 - t2));
+        wp.xy += normalize(d + 0.0001) * push * 0.35;
+        vWP = wp.xyz;
+        vN = normalize(mat3(modelMatrix) * n);
+        vL = position;
+        float seam = smoothstep(0.25, 0.9, uP) * (1.0 - smoothstep(0.9, 1.4, uP));
+        vGlow = clamp(seam * 0.85 + aD.z * t1 * (1.0 - t2) + aD.w * t2 * (1.0 - t3) * 1.2 + t3 * 0.9 + push * 0.6, 0.0, 1.6);
+        vFill = aD.z * t1 * (1.0 - t2) + aD.w * t2 * (1.0 - t3) + t3;
+        vHeat = t3;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      varying vec3 vL; varying vec3 vN; varying vec3 vWP; varying float vGlow; varying float vFill; varying float vHeat;
+      void main(){
+        vec3 al = abs(vL);
+        float mx = max(al.x, max(al.y, al.z));
+        float mn = min(al.x, min(al.y, al.z));
+        float md = al.x + al.y + al.z - mx - mn;
+        float edge = smoothstep(0.43, 0.485, md);
+        vec3 N = normalize(vN);
+        vec3 V = normalize(cameraPosition - vWP);
+        vec3 key = normalize(vec3(-0.45, 0.75, 0.55));
+        vec3 H = normalize(key + V);
+        float dif = max(dot(N, key), 0.0);
+        float spec = pow(max(dot(N, H), 0.0), 48.0);
+        float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+        float under = max(dot(N, vec3(0.3, -0.8, 0.2)), 0.0);
+        vec3 baseC = vec3(0.095, 0.1, 0.11);
+        vec3 sig = vec3(1.0, 0.415, 0.17);
+        vec3 bone = vec3(0.925, 0.9, 0.855);
+        vec3 col = baseC * (0.5 + 1.45 * dif) + bone * spec * 0.35 + sig * under * 0.12 + bone * fres * 0.08;
+        col = mix(col, sig * (0.55 + 0.6 * dif) + vec3(1.0, 0.8, 0.6) * spec * 0.5, clamp(vFill, 0.0, 1.0) * 0.85);
+        vec3 edgeC = mix(bone * 0.28, sig * 1.6, clamp(vGlow, 0.0, 1.0));
+        edgeC = mix(edgeC, vec3(1.0, 0.85, 0.65) * 1.8, vHeat * 0.6);
+        col = mix(col, edgeC, edge * (0.55 + 0.45 * clamp(vGlow, 0.0, 1.0)));
+        float fog = smoothstep(18.0, 46.0, length(cameraPosition - vWP));
+        col = mix(col, vec3(0.043, 0.047, 0.055), fog * 0.85);
+        gl_FragColor = vec4(col, 1.0);
+      }`
+  });
+  const cubes = new THREE.Mesh(geo, mat);
+  cubes.frustumCulled = false;
+  group.add(cubes);
+
+  /* ----- dust ----- */
+  const ND = isMobile ? 500 : 1400;
+  const dp = new Float32Array(ND*3), ds = new Float32Array(ND);
+  for (let i=0;i<ND;i++){ const r = 7 + Math.pow(rnd(), .7)*26, th = rnd()*Math.PI*2, ph = Math.acos(rnd()*2-1); dp[i*3] = r*Math.sin(ph)*Math.cos(th); dp[i*3+1] = r*Math.cos(ph)*.7; dp[i*3+2] = r*Math.sin(ph)*Math.sin(th); ds[i] = rnd(); }
+  const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.BufferAttribute(dp, 3)); dg.setAttribute('aS', new THREE.BufferAttribute(ds, 1));
+  const DU = { uP: U.uP, uT: U.uT, uPx: { value: DPR } };
+  const dust = new THREE.Points(dg, new THREE.ShaderMaterial({
+    uniforms: DU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `uniform float uP; uniform float uT; uniform float uPx; attribute float aS; varying float vA; varying float vH;
+      void main(){
+        float k = smoothstep(3.0, 4.0, uP);
+        float ang = uT * (0.03 + aS * 0.05) + k * (3.0 + aS * 4.0);
+        float c = cos(ang), s = sin(ang);
+        vec3 p = vec3(c * position.x + s * position.z, position.y, -s * position.x + c * position.z);
+        p = mix(p, p * (0.04 + aS * 0.1), k * k);
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = uPx * (1.2 + aS * 2.2) * (24.0 / -mv.z) * (1.0 + k * 1.5);
+        vA = (0.18 + 0.5 * aS) * (0.6 + 0.4 * sin(uT * 2.0 + aS * 30.0)); vH = k;
+      }`,
+    fragmentShader: `varying float vA; varying float vH; void main(){ float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.1, d) * vA;
+      gl_FragColor = vec4(mix(vec3(0.93, 0.9, 0.85), vec3(1.0, 0.55, 0.25), vH), a); }`
+  }));
+  dust.frustumCulled = false;
+  group.add(dust);
+
+  /* ----- the singularity (billboard, additive) ----- */
+  const GU = { uG: { value: 0 }, uT: U.uT, uAsp: { value: 1 } };
+  const core = new THREE.Mesh(new THREE.PlaneGeometry(2,2), new THREE.ShaderMaterial({
+    uniforms: GU, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+    vertexShader: `uniform float uG; varying vec2 vUv;
+      void main(){ vUv = position.xy; vec4 c = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0); c.xy += position.xy * (1.5 + 9.0 * uG); gl_Position = projectionMatrix * c; }`,
+    fragmentShader: `uniform float uG; uniform float uT; varying vec2 vUv;
+      void main(){
+        float r = length(vUv);
+        float pulse = 0.85 + 0.15 * sin(uT * 2.4);
+        float coreI = exp(-r * r * 260.0) * 2.2 + exp(-r * 22.0) * 0.9 + exp(-r * 7.0) * 0.28;
+        float ang = atan(vUv.y, vUv.x);
+        float rays = pow(max(0.0, cos(ang * 2.0)), 60.0) * exp(-r * 6.0) * 0.6 + pow(max(0.0, cos(ang * 2.0 + 1.5708)), 90.0) * exp(-r * 9.0) * 0.35;
+        float ring = exp(-pow((r - fract(uT * 0.25) * 0.9) * 26.0, 2.0)) * (1.0 - fract(uT * 0.25)) * 0.25;
+        vec3 c = vec3(1.0, 0.93, 0.85) * exp(-r * r * 180.0) * 1.5 + vec3(1.0, 0.45, 0.18) * (coreI + rays + ring);
+        float a = uG * pulse * (1.0 - smoothstep(0.75, 1.0, r));
+        gl_FragColor = vec4(c * a, 1.0);
+      }`
+  }));
+  core.frustumCulled = false; core.renderOrder = 10;
+  scene.add(core);
+
+  /* ----- backdrop: faint dot field + vignette (screen space) ----- */
+  const BU = { uT: U.uT, uP: U.uP, uRes: { value: new THREE.Vector2(W*DPR, H*DPR) } };
+  const bg = new THREE.Mesh(new THREE.PlaneGeometry(2,2), new THREE.ShaderMaterial({
+    uniforms: BU, depthTest: false, depthWrite: false,
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.9999, 1.0); }',
+    fragmentShader: `uniform float uT; uniform float uP; uniform vec2 uRes; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      void main(){
+        vec2 px = vUv * uRes;
+        float cell = 26.0 * (uRes.y / 900.0 + 0.4);
+        vec2 g = px / cell; g.y += uP * 2.0;
+        vec2 f = fract(g) - 0.5;
+        float dt0 = smoothstep(0.075, 0.0, length(f)) * 0.5;
+        vec2 cp = vec2(0.64, 0.5);
+        float vig = 1.0 - smoothstep(0.15, 0.95, length((vUv - cp) * vec2(uRes.x / uRes.y, 1.0)));
+        float heat = smoothstep(3.0, 4.0, uP);
+        vec3 col = vec3(0.043, 0.047, 0.055);
+        col += vec3(0.08, 0.085, 0.095) * vig;
+        col += vec3(0.16, 0.06, 0.02) * vig * vig * heat * 0.6;
+        col += vec3(0.2, 0.2, 0.22) * dt0 * vig * 0.35;
+        col += (h(px + uT) - 0.5) / 255.0 * 2.0;
+        gl_FragColor = vec4(col, 1.0);
+      }`
+  }));
+  bg.frustumCulled = false; bg.renderOrder = -10;
+  scene.add(bg);
+
+  /* ----- resize, view offset ----- */
+  let wide = W > 820;
+  function resize(){
+    W = innerWidth; H = innerHeight; wide = W > 820;
+    renderer.setSize(W, H, false);
+    camera.aspect = W/H;
+    if (wide) camera.setViewOffset(W, H, -W*.18, 0, W, H);
+    else camera.setViewOffset(W, H, 0, H*.2, W, H);
+    camera.updateProjectionMatrix();
+    BU.uRes.value.set(W*DPR, H*DPR);
+    measure(); onScroll();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  /* ----- pointer ----- */
+  const mouse = { x: 0, y: 0, on: 0, tx: 0, ty: 0, ton: 0 };
+  const ndc = new THREE.Vector3(), dir = new THREE.Vector3();
+  window.addEventListener('pointermove', e => { mouse.tx = e.clientX / W * 2 - 1; mouse.ty = -(e.clientY / H) * 2 + 1; mouse.ton = 1; }, { passive: true });
+  document.addEventListener('pointerleave', () => { mouse.ton = 0; });
+  window.addEventListener('blur', () => { mouse.ton = 0; });
+
+  /* ----- per-stage rest poses ----- */
+  const camD = [29, 35, 27.5, 31, 22];
+  const rotX = [.52, .36, 0, .1, 0];
+  function stageLerp(arr, p){ const i = Math.min(3, Math.floor(p)), f = p - i; const k = f*f*(3-2*f); return arr[i] + (arr[i+1]-arr[i])*k; }
+
+  /* ----- adaptive quality ----- */
+  let qF = 0, qA = 0, qOn = true;
+  function lowerQuality(){ DPR = Math.max(.75, DPR * .7); renderer.setPixelRatio(DPR); dust.geometry.setDrawRange(0, Math.floor(ND/2)); resize(); }
+
+  /* ----- loop ----- */
+  let running = true, vis = true, onscr = true, raf = 0, last = performance.now(), time = 0;
+  function frame(now){
+    raf = 0; if (!running) return;
+    raf = requestAnimationFrame(frame);
+    let dt = (now - last)/1000; last = now; if (dt > .05) dt = .05;
+    time += dt * (reduced ? .25 : 1);
+    if (qOn){ qF++; if (qF > 15) qA += dt; if (qF === 75){ if (qA/60*1000 > 22) { lowerQuality(); qF = 0; qA = 0; } else qOn = false; } }
+
+    prog += (target - prog) * (1 - Math.exp(-dt * (reduced ? 14 : 5.5)));
+    if (Math.abs(target - prog) < 1e-4) prog = target;
+    U.uP.value = prog; U.uT.value = time;
+    setStageUI(prog);
+
+    mouse.x += (mouse.tx - mouse.x) * Math.min(1, dt*6); mouse.y += (mouse.ty - mouse.y) * Math.min(1, dt*6);
+    mouse.on += (mouse.ton - mouse.on) * Math.min(1, dt*4);
+
+    const d = stageLerp(camD, prog) * (wide ? 1 : 1.45) * (W/H < .6 ? 1.12 : 1);
+    camera.position.set(mouse.x * 1.6, mouse.y * 1.0, d);
+    camera.lookAt(0, 0, 0);
+
+    const tumble = 1 - Math.min(1, prog);                     // monolith tumbles, others settle
+    const helixK = Math.max(0, 1 - Math.abs(prog - 3));
+    group.rotation.x = stageLerp(rotX, prog) + mouse.y * .12;
+    group.rotation.y = (time * .22 + .75) * tumble + (1 - tumble) * (.42 * Math.max(0, 1 - Math.abs(prog - 1)) + .0) + mouse.x * .22;
+    group.rotation.z = .08 * helixK;
+    group.updateMatrixWorld();
+
+    // mouse onto plane z=0 in world space (cheap, no allocation)
+    ndc.set(mouse.x, mouse.y, .5).unproject(camera); dir.copy(ndc).sub(camera.position).normalize();
+    const tt = -camera.position.z / (dir.z || -1e-4);
+    U.uMouse.value.set(camera.position.x + dir.x*tt, camera.position.y + dir.y*tt, 0);
+    U.uMouseOn.value = mouse.on * (isMobile ? 0 : 1);
+
+    const g = Math.min(1, Math.max(0, (prog - 3.25) / .75));
+    GU.uG.value = g*g*(3-2*g);
+
+    renderer.render(scene, camera);
+  }
+  function setRun(){
+    const should = vis && onscr;
+    if (should && !running){ running = true; last = performance.now(); if (!raf) raf = requestAnimationFrame(frame); }
+    else if (!should){ running = false; if (raf){ cancelAnimationFrame(raf); raf = 0; } }
+  }
+  document.addEventListener('visibilitychange', () => { vis = !document.hidden; setRun(); });
+  if ('IntersectionObserver' in window) new IntersectionObserver(en => { onscr = en[0].isIntersecting; setRun(); }).observe(canvas);
+  canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); running = false; fail(); });
+  raf = requestAnimationFrame(frame);
+}
+function startUIOnly(){
+  // keep the progress rail alive without WebGL
+  window.addEventListener('scroll', () => setStageUI(target), { passive: true });
+}
+window.addEventListener('resize', () => { measure(); onScroll(); });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measure(); onScroll(); });
+requestAnimationFrame(() => setTimeout(() => { try { init(); } catch(err){ console.error(err); fail(); startUIOnly(); } }, 0));
+})();
+</script>

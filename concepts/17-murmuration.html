@@ -37,12 +37,12 @@ nav a:hover{color:var(--ink)}
 .hero{position:relative;min-height:100vh;min-height:100svh;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
 .hero a,.hero button,.hero nav{pointer-events:auto}
 .hero-copy{padding-bottom:max(36px, env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:1fr auto;align-items:end;gap:24px}
-.kicker{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 10px;display:flex;align-items:center;gap:10px}
+.kicker{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--ink);text-shadow:0 1px 12px rgba(40,15,10,.55);margin:0 0 10px;display:flex;align-items:center;gap:10px}
 .kicker::before{content:"";width:28px;height:1px;background:var(--amber)}
 h1{font-family:var(--serif);font-weight:400;font-size:clamp(54px,11vw,168px);line-height:.86;margin:0;letter-spacing:-.015em;text-shadow:0 2px 30px rgba(20,10,10,.25)}
 h1 em{font-style:italic;color:var(--amber)}
 .tag{font-family:var(--serif);font-style:italic;font-size:clamp(20px,2.4vw,30px);margin:14px 0 0;color:var(--ink)}
-.hint{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);opacity:.82;text-align:right;max-width:240px;line-height:1.7}
+.hint{text-shadow:0 1px 10px rgba(15,10,10,.6);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);opacity:.82;text-align:right;max-width:240px;line-height:1.7}
 .hint b{color:var(--amber);font-weight:500}
 .hint .ph{display:block;margin-top:6px;color:var(--ink-soft)}
 .scrollcue{display:inline-block;margin-top:14px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;text-decoration:none;color:var(--ink-soft)}
@@ -155,6 +155,7 @@ var coarse=matchMedia('(pointer:coarse)').matches;
 var small=Math.min(innerWidth,innerHeight)<700||coarse;
 var canvas=document.getElementById('sky');
 var phaseEl=document.getElementById('phase');
+if(coarse){var hb=document.querySelector('.hint');if(hb)hb.firstChild.textContent='Touch the sky. ';}
 
 var renderer;
 try{
@@ -271,7 +272,7 @@ var velMat=new THREE.ShaderMaterial({
   uniforms:{
     tPos:{value:null},tVel:{value:null},tGrid:{value:gridRT.texture},tTarget:{value:targetTex},
     uRes:{value:new THREE.Vector2(SW,SH)},uDt:{value:0.016},uTime:{value:0},uForm:{value:0},
-    uD0:{value:5.0*COUNT/16384},uCell:{value:CELL},uGridMin:{value:GRID_MIN},
+    uD0:{value:11.0*COUNT/16384},uCell:{value:CELL},uGridMin:{value:GRID_MIN},
     uCenter:{value:new THREE.Vector3().copy(DOMAIN_C)},uPred:{value:new THREE.Vector3(0,-2000,0)},uPredOn:{value:0},
     uTextC:{value:new THREE.Vector3(0,200,0)},uTextW:{value:560},
     uRip:{value:[new THREE.Vector4(0,-9999,0,-99),new THREE.Vector4(0,-9999,0,-99),new THREE.Vector4(0,-9999,0,-99),new THREE.Vector4(0,-9999,0,-99)]},
@@ -298,7 +299,7 @@ var velMat=new THREE.ShaderMaterial({
     ' acc+=(avg-v)*2.2*clamp(dn,0.,1.);',                         /* alignment via grid */
     ' acc+=-grad*clamp(dn-1.,-1.5,4.)*70.;',                      /* density equalisation: separation+cohesion */
     ' vec3 tc=uCenter-p;float dc=length(tc);',
-    ' acc+=tc*.045+tc/max(dc,1.)*max(dc-230.,0.)*.5;',
+    ' acc+=tc*.05+tc/max(dc,1.)*max(dc-190.,0.)*.9;',
     ' acc+=cross(normalize(uSwirl),tc)*.05;',
     ' vec3 q=p*.0055+vec3(0.,0.,uTime*.12);',
     ' acc+=(vec3(vn(q),vn(q+17.1),vn(q+31.7))-.5)*110.;',
@@ -313,8 +314,8 @@ var velMat=new THREE.ShaderMaterial({
     '  acc+=(d/max(dl,1.)*.55+vec3(0.,.9,0.))*b*280.*(.35+.65*fr);}',
     ' if(uForm>.001){vec4 T=texture2D(tTarget,uv);vec3 tp=uTextC+vec3(T.xy*uTextW,T.z);',
     '  tp+=(vec3(vn(tp*.04+uTime*.6),vn(tp*.04+9.+uTime*.6),vn(tp*.04+5.+uTime*.6))-.5)*5.;',
-    '  vec3 des=(tp-p)*2.6;float L=length(des);des*=min(L,210.)/max(L,.001);',
-    '  acc+=(des-v)*5.5*uForm;}',
+    '  vec3 des=(tp-p)*3.2;float L=length(des);des*=min(L,230.)/max(L,.001);',
+    '  acc+=(des-v)*7.*uForm;}',
     ' v+=acc*uDt;',
     ' float s=length(v);float mn=mix(36.,3.,uForm);float mx=mix(105.,200.,uForm)+band*60.;',
     ' v*=clamp(s,mn,mx)/max(s,.001);',
@@ -338,7 +339,7 @@ var posMat=new THREE.ShaderMaterial({
 /* ---------- main scene ---------- */
 var scene=new THREE.Scene();
 var camera=new THREE.PerspectiveCamera(50,1,1,6000);
-var SUN=new THREE.Vector3(-0.32,0.045,-1).normalize();
+var SUN=new THREE.Vector3(0.36,0.045,-1).normalize();
 var HAZE=new THREE.Color(0.80,0.54,0.45);
 
 /* sky / landscape backdrop */
@@ -512,6 +513,7 @@ function frame(now){
       }
     }
   }
+  if(window.__murmurFixedDt)rdt=window.__murmurFixedDt;
   var dt=rdt*(reduce?.35:1);
   clock+=rdt;simTime+=dt;
   var t=simTime;
@@ -523,7 +525,7 @@ function frame(now){
   velMat.uniforms.uTextC.value.set(0,camera.aspect<1?185:205,40);
 
   var form=formAmount(t);
-  if(prevForm>.5&&form<=.5){emitRipple(velMat.uniforms.uTextC.value,1.4);}
+  if(prevForm>.5&&form<=.5){emitRipple(velMat.uniforms.uTextC.value,.8);}
   var rising=form>=prevForm;
   prevForm=form;
   velMat.uniforms.uForm.value=form;

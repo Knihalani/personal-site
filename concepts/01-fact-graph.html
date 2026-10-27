@@ -106,10 +106,7 @@ section.block{max-width:1100px;margin:0 auto;padding-top:88px;padding-bottom:40p
 .also a{color:var(--ink);text-decoration-color:var(--ink-faint);text-underline-offset:3px}
 .bio{font-family:var(--serif);font-size:clamp(22px,2.6vw,30px);line-height:1.25;margin:0;max-width:30ch}
 .bio + p{color:var(--ink-faint);font-size:12px;margin-top:12px}
-.contact{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.email{font-family:var(--serif);font-size:clamp(22px,3.2vw,36px);user-select:all;-webkit-user-select:all;word-break:break-all}
-.btn{font-family:var(--mono);font-size:12px;color:var(--bg);background:var(--gold);border:0;border-radius:999px;padding:8px 14px;cursor:pointer}
-.btn:hover{background:var(--ink)}
+.gate{min-height:132px;padding:8px 0}
 .links{display:flex;gap:18px;margin-top:16px;font-size:13px}
 .links a{color:var(--ink-dim);text-underline-offset:3px}
 footer{max-width:1100px;margin:0 auto;padding-top:80px;padding-bottom:max(28px, env(safe-area-inset-bottom,0px));color:var(--ink-faint);font-size:11px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
@@ -168,7 +165,7 @@ footer{max-width:1100px;margin:0 auto;padding-top:80px;padding-bottom:max(28px, 
   <section class="block wrap" id="contact">
     <h2>Contact<small>say hello</small></h2>
     <div>
-      <div class="contact"><span class="email" id="email">kaiav.nihalani@gmail.com</span><button class="btn" id="copy" type="button">Copy email</button></div>
+      <div class="gate"><div data-contact-gate></div></div>
       <div class="links"><a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn</a><a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X</a></div>
     </div>
   </section>
@@ -177,15 +174,6 @@ footer{max-width:1100px;margin:0 auto;padding-top:80px;padding-bottom:max(28px, 
 
 <script>
 (function(){
-  /* copy email */
-  var copyBtn=document.getElementById('copy');
-  copyBtn.addEventListener('click',function(){
-    var t=document.getElementById('email').textContent;
-    try{
-      navigator.clipboard.writeText(t).then(function(){copyBtn.textContent='Copied';setTimeout(function(){copyBtn.textContent='Copy email'},1600)})
-      .catch(function(){copyBtn.textContent='Select & copy above'});
-    }catch(e){copyBtn.textContent='Select & copy above'}
-  });
 
   var hero=document.getElementById('hero');
   var coarse=matchMedia('(pointer: coarse)').matches;

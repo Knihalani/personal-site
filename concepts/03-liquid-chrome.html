@@ -80,8 +80,7 @@
   .about p{font-family:var(--serif);font-size:clamp(20px,2.2vw,28px);line-height:1.35;margin:0;color:var(--ink)}
   .about p small{display:block;margin-top:14px;font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);letter-spacing:.06em}
   .contact{display:flex;flex-wrap:wrap;gap:14px 28px;align-items:center;margin-top:28px}
-  .email{font-family:var(--serif);font-size:clamp(20px,3vw,40px);user-select:all;-webkit-user-select:all;word-break:break-all}
-  .copy{font:inherit;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--bg);background:var(--ink);border:0;border-radius:999px;padding:10px 16px;cursor:pointer}
+  .gate{min-height:140px;margin-top:28px;display:block}
   .links{display:flex;gap:22px;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
   .links a{color:var(--ink-dim);text-decoration:none;border-bottom:1px solid var(--line-strong);padding-bottom:3px}
   .links a:hover{color:var(--ink)}
@@ -150,10 +149,7 @@
 
   <section class="wrap" id="contact">
     <div class="sec-head"><h2>Say hello</h2><span class="count">GET IN TOUCH</span></div>
-    <div class="contact">
-      <span class="email" id="email">kaiav.nihalani@gmail.com</span>
-      <button class="copy" id="copyBtn" type="button">Copy email</button>
-    </div>
+    <div class="gate"><div data-contact-gate></div></div>
     <div class="contact links">
       <a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn</a>
       <a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X</a>
@@ -165,14 +161,6 @@
 <script>
 (function(){
   'use strict';
-  /* ---------- copy email ---------- */
-  var copyBtn=document.getElementById('copyBtn');
-  copyBtn.addEventListener('click',function(){
-    var txt='kaiav.nihalani@gmail.com';
-    var done=function(ok){copyBtn.textContent=ok?'Copied':'Select & copy';setTimeout(function(){copyBtn.textContent='Copy email';},1600);};
-    try{ navigator.clipboard.writeText(txt).then(function(){done(true);}).catch(function(){done(false);}); }catch(e){ done(false); }
-  });
-
   var hero=document.getElementById('hero');
   var canvas=document.getElementById('gl');
   var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;

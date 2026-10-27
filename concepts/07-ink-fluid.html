@@ -39,7 +39,7 @@ a{color:inherit}
 .top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:max(18px, env(safe-area-inset-top,0px))}
 .mark{background:rgba(239,238,233,.9);border:1px solid var(--rule);border-radius:999px;padding:8px 14px;font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.18em;text-transform:uppercase;text-decoration:none;display:flex;align-items:center;gap:10px}
 .mark i{display:inline-block;width:9px;height:9px;background:var(--verm);border-radius:1px;transform:rotate(45deg)}
-nav ul{background:rgba(239,238,233,.9);border:1px solid var(--rule);border-radius:999px;padding:4px 16px;display:flex;gap:clamp(12px,2.4vw,28px);list-style:none;margin:0;padding:0;font-size:13px;letter-spacing:.08em}
+nav ul{background:rgba(239,238,233,.9);border:1px solid var(--rule);border-radius:999px;padding:4px 16px;display:flex;gap:clamp(12px,2.4vw,28px);list-style:none;margin:0;padding:6px 18px;font-size:13px;letter-spacing:.08em}
 nav a{text-decoration:none;color:var(--ink-soft);padding:6px 0;background:linear-gradient(var(--ink),var(--ink)) 0 100%/0 1px no-repeat;transition:background-size .35s ease,color .2s}
 nav a:hover{color:var(--ink);background-size:100% 1px}
 
@@ -80,8 +80,7 @@ h2{font-family:var(--display);font-weight:800;font-size:clamp(34px,5.4vw,64px);l
 .about{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:clamp(24px,6vw,80px);align-items:start}
 .about p{font-size:17px;line-height:1.7;color:var(--ink-soft);margin:0 0 14px}
 .placeholder{color:var(--muted);font-style:italic}
-.contact{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;margin-top:8px}
-.email{font-family:var(--display);font-weight:500;font-size:clamp(18px,3.4vw,34px);user-select:all;-webkit-user-select:all;word-break:break-all}
+.contact{min-height:140px;margin-top:8px;display:block}
 .btn{font:inherit;font-size:12px;letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--ink);background:transparent;color:var(--ink);padding:10px 16px;border-radius:999px;cursor:pointer;transition:background .2s,color .2s}
 .btn:hover{background:var(--ink);color:var(--paper)}
 .links{display:flex;gap:22px;flex-wrap:wrap;margin-top:22px;font-size:14px}
@@ -183,11 +182,7 @@ footer{padding:28px 0 max(28px, env(safe-area-inset-bottom,0px));border-top:1px 
   <section class="wrap" id="contact">
     <p class="eyebrow"><b>三</b>Contact</p>
     <h2>Say hello.</h2>
-    <div class="contact">
-      <span class="email" id="email">kaiav.nihalani@gmail.com</span>
-      <button class="btn" type="button" id="copy">Copy email</button>
-      <span class="hint" id="copied" aria-live="polite"></span>
-    </div>
+    <div class="contact"><div data-contact-gate></div></div>
     <div class="links">
       <a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn</a>
       <a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X / @KaiavRNihalani</a>
@@ -196,17 +191,6 @@ footer{padding:28px 0 max(28px, env(safe-area-inset-bottom,0px));border-top:1px 
 
   <footer class="wrap"><span>© Kaiav Nihalani</span><span>Ink simulated live on your GPU.</span></footer>
 </main>
-
-<script>
-/* copy email */
-document.getElementById('copy').addEventListener('click',function(){
-  var out=document.getElementById('copied');
-  var t=document.getElementById('email').textContent;
-  try{
-    navigator.clipboard.writeText(t).then(function(){out.textContent='Copied';},function(){out.textContent='Select the address to copy';});
-  }catch(e){out.textContent='Select the address to copy';}
-});
-</script>
 
 <script>
 (function(){

@@ -79,9 +79,7 @@
   .v .go{font-size:11px;color:var(--ink);letter-spacing:.06em}
   .about p{font-family:var(--display);font-weight:300;font-size:clamp(20px,2.6vw,34px);line-height:1.3;margin:0;max-width:30ch}
   .about small{display:block;margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--ink-faint)}
-  .contact-row{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px}
-  .email{font-family:var(--display);font-weight:500;font-size:clamp(18px,3.2vw,40px);letter-spacing:-.01em;user-select:all;-webkit-user-select:all;word-break:break-all}
-  .copy{font:inherit;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--bg);background:var(--sand);border:0;border-radius:999px;padding:10px 16px;cursor:pointer}
+  .gate{min-height:140px;display:block}
   .socials{display:flex;gap:22px;margin-top:22px;font-size:12px}
   .socials a{color:var(--ink-dim);text-decoration:none;border-bottom:1px solid var(--line-strong);padding-bottom:2px}
   .socials a:hover{color:var(--ink)}
@@ -147,10 +145,7 @@
   </section>
   <section class="wrap" id="contact">
     <p class="kicker">Contact</p>
-    <div class="contact-row">
-      <span class="email">kaiav.nihalani@gmail.com</span>
-      <button class="copy" id="copy" type="button">Copy email</button>
-    </div>
+    <div class="gate"><div data-contact-gate></div></div>
     <div class="socials">
       <a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn ↗</a>
       <a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X ↗</a>
@@ -162,13 +157,6 @@
 <script>
 (function(){
 'use strict';
-/* ---------------- copy ---------------- */
-var cb=document.getElementById('copy');
-cb.addEventListener('click',function(){
-  var done=function(ok){cb.textContent=ok?'Copied':'Select to copy';setTimeout(function(){cb.textContent='Copy email';},1600);};
-  try{navigator.clipboard.writeText('kaiav.nihalani@gmail.com').then(function(){done(true);}).catch(function(){done(false);});}catch(e){done(false);}
-});
-
 var hero=document.getElementById('hero'), canvas=document.getElementById('c');
 var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 var isMobile=Math.min(screen.width,screen.height)<760||/Mobi|Android/i.test(navigator.userAgent);
@@ -332,7 +320,8 @@ function shapeRot(){
 
 /* ---------------- loop / visibility (shared) ---------------- */
 var visible=!document.hidden,onscreen=true,raf=0,last=0,frameFn=null;
-function loop(now){raf=0;var dt=last?Math.min(1/30,(now-last)/1000):1/60;last=now;frameFn(dt);schedule();}
+var rawDt=1/60;
+function loop(now){raf=0;rawDt=last?Math.min(.25,(now-last)/1000):1/60;var dt=Math.min(1/30,rawDt);last=now;frameFn(dt);schedule();}
 function schedule(){if(!raf&&visible&&onscreen&&frameFn)raf=requestAnimationFrame(loop);}
 function stop(){if(raf){cancelAnimationFrame(raf);raf=0;}last=0;}
 document.addEventListener('visibilitychange',function(){visible=!document.hidden;visible?schedule():stop();});
@@ -398,7 +387,7 @@ function tryGPU(){
   ' vec3 c=mix(base,ember,smoothstep(.04,.45,s));c=mix(c,hot,smoothstep(.55,1.,s));\n'+
   ' float tw=.75+.25*sin(uTime*(1.5+P.w*3.)+P.w*90.);\n'+
   ' vCol=c*uI*tw*(1.+s*1.6);\n'+
-  ' gl_PointSize=max(1.,uSize*(3.2/cp.w)*(1.+s*.5));}';
+  ' gl_PointSize=clamp(uSize*(3.2/max(cp.w,.1))*(1.+s*.5),1.,uSize*3.);\n if(cp.w<.3)gl_Position=vec4(2.,2.,2.,1.);}';
   var PF='#version 300 es\nprecision mediump float;in vec3 vCol;out vec4 o;void main(){vec2 d=gl_PointCoord-.5;float r=dot(d,d)*4.;float a=max(0.,1.-r);o=vec4(vCol*a*a,1.);}';
   var FADE='#version 300 es\nprecision mediump float;uniform float uKeep;out vec4 o;void main(){o=vec4(0.,0.,0.,uKeep);}';
   var COMP='#version 300 es\nprecision highp float;in vec2 vUv;uniform sampler2D uT;uniform float uExp,uTime;uniform vec2 uRes;out vec4 o;\n'+
@@ -425,7 +414,7 @@ function tryGPU(){
   var init=new Float32Array(N*4);
   for(var i=0;i<N;i++){
     if(reduce){init[i*4]=homes[0][i*4];init[i*4+1]=homes[0][i*4+1];init[i*4+2]=homes[0][i*4+2];}
-    else{var a=Math.random()*6.283,r=1.5+Math.random()*2.5;init[i*4]=Math.cos(a)*r*aspect;init[i*4+1]=(Math.random()-.5)*3;init[i*4+2]=Math.sin(a)*r-1;}
+    else{var a=Math.random()*6.283,r=1.5+Math.random()*2.5;init[i*4]=Math.cos(a)*r*aspect;init[i*4+1]=(Math.random()-.5)*3;init[i*4+2]=Math.sin(a)*.8-.9;}
     init[i*4+3]=homes[0][i*4+3];
   }
   var posT=[tex(TW,TH,SIM_FMT,init),tex(TW,TH,SIM_FMT,init)];
@@ -464,18 +453,23 @@ function tryGPU(){
 
   var vao=gl.createVertexArray();gl.bindVertexArray(vao);
   var cur=0, frames=0, accT=0, accN=0, tier=0;
+  // software rasterisers (SwiftShader, llvmpipe...) start on the lightest tier
+  try{var dri=gl.getExtension('WEBGL_debug_renderer_info');var ren=dri?gl.getParameter(dri.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);
+    if(/swiftshader|llvmpipe|software|basic render/i.test(ren||'')){tier=3;rows=Math.min(rows,48);rscale=.5;sizeTargets();}}catch(e){}
   document.getElementById('foot-count').textContent=(N).toLocaleString()+' particles simulated on the GPU';
 
   frameFn=function(dt){
     stepCommon(dt);
     // adaptive quality: measure frame time early, step down particle rows / render scale if slow
     frames++;
-    if(frames>10){accT+=dt;accN++;if(accN>=60){var avg=accT/accN*1000;accT=0;accN=0;
+    if(frames>6){accT+=rawDt;accN++;if(accN>=(frames<80?20:60)||(accN>=4&&accT>.6)){var avg=accT/accN*1000;accT=0;accN=0;
+      if(avg>45&&tier<2)tier=2; // very slow device: skip straight to a lower tier
       if(avg>21&&tier<3){tier++;
         if(tier===1){rscale=.75;sizeTargets();}
-        else if(tier===2){rows=Math.max(32,rows>>1);}
+        else if(tier===2){rows=Math.max(32,rows>>1);rscale=Math.min(rscale,.75);sizeTargets();}
         else {rows=Math.max(32,rows>>1);rscale=.6;sizeTargets();}
       }}}
+    window.__dbg={frames:frames,tier:tier,rows:rows,rscale:rscale};
     var rot=shapeRot();
     // --- simulate
     gl.disable(gl.BLEND);
@@ -527,14 +521,14 @@ function startCPU(){
   buildShapes(homes,N);
   var P=new Float32Array(N*3),V=new Float32Array(N*3),S=new Float32Array(N),G=new Float32Array(N*4);
   for(var i=0;i<N;i++){S[i]=homes[0][i*4+3];
-    if(reduce){P[i*3]=homes[0][i*4];P[i*3+1]=homes[0][i*4+1];}else{P[i*3]=(Math.random()-.5)*6*aspect;P[i*3+1]=(Math.random()-.5)*3;P[i*3+2]=-1;}}
+    if(reduce){P[i*3]=homes[0][i*4];P[i*3+1]=homes[0][i*4+1];}else{P[i*3]=(Math.random()-.5)*6*aspect;P[i*3+1]=(Math.random()-.5)*3;P[i*3+2]=-.9;}}
   var ctx2=null,prog,buf,uVP,uSize,CWp=1,CHp=1;
   function size(){measure();CWp=Math.round(cssW*dpr);CHp=Math.round(cssH*dpr);canvas.width=CWp;canvas.height=CHp;if(gl)gl.viewport(0,0,CWp,CHp);}
   size();
   window.addEventListener('resize',function(){clearTimeout(size.t);size.t=setTimeout(function(){size();buildShapes(homes,N);},220);});
   if(gl){
     var vs='attribute vec4 a;uniform mat4 uVP;uniform float uSize;varying vec3 c;void main(){gl_Position=uVP*vec4(a.xyz,1.);float s=clamp(a.w*.45,0.,1.);'+
-      'c=mix(vec3(1.,.8,.55),vec3(1.,.28,.08),smoothstep(.04,.45,s));c=mix(c,vec3(1.,.9,.78),smoothstep(.55,1.,s));c*=.55+s;gl_PointSize=uSize*(3.2/gl_Position.w);}';
+      'c=mix(vec3(1.,.8,.55),vec3(1.,.28,.08),smoothstep(.04,.45,s));c=mix(c,vec3(1.,.9,.78),smoothstep(.55,1.,s));c*=.55+s;gl_PointSize=clamp(uSize*(3.2/max(gl_Position.w,.1)),1.,uSize*3.);}';
     var fs='precision mediump float;varying vec3 c;void main(){vec2 d=gl_PointCoord-.5;float a=max(0.,1.-dot(d,d)*4.);gl_FragColor=vec4(c*a,1.);}';
     function cs(t,s){var o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);return o;}
     prog=gl.createProgram();gl.attachShader(prog,cs(gl.VERTEX_SHADER,vs));gl.attachShader(prog,cs(gl.FRAGMENT_SHADER,fs));gl.linkProgram(prog);

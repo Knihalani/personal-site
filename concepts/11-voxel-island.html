@@ -344,7 +344,7 @@ function init(){
     if (dw < 0){ water = true; h = (dl < lake.r - 1.7) ? WY - 2 : WY - 1; }
     else if (dw < 4.5){ h = Math.min(h, WY + 1 + Math.floor(dw*1.15)); sand = dw < 1.4; }
     const e1 = clamp(edge, 0, 1);
-    let bot = Math.round(WY - 1 - Math.pow(e1, 1.2)*24 - fbm(x*.21+9, z*.21+4)*7);
+    let bot = Math.round(WY - 1 - Math.pow(e1, 1.2)*17 - fbm(x*.21+9, z*.21+4)*6);
     if (hash2(x+99, z-7) < .07) bot -= 2 + Math.floor(hash2(x, z+5)*6);
     cols.set(CK(x,z), { x, z, h, bot, water, sand, edge, n, path:false });
   }
@@ -800,6 +800,7 @@ function init(){
   const clouds = [];
   const cmat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x3a4250 });
   const cgeo = new THREE.BoxGeometry(1.5,1.5,1.5);
+  // clouds drift around the island's flanks (they never cover the buildings)
   const NCL = isMobile ? 5 : 8;
   for (let k=0;k<NCL;k++){
     const cells = [];
@@ -812,7 +813,9 @@ function init(){
     const im = new THREE.InstancedMesh(cgeo, cmat, uniq.length);
     uniq.forEach((s,i) => { const p = s.split('|'); m4.makeTranslation(+p[0], +p[1], +p[2]); im.setMatrixAt(i, m4); });
     im.castShadow = true;
-    im.position.set(-45 + k*(90/NCL) + rnd()*6, 19 + rnd()*9, -22 + rnd()*44);
+    const side = k % 2 ? 1 : -1;
+    im.position.set(-45 + k*(90/NCL) + rnd()*6, -8 + rnd()*16, side*(27 + rnd()*12));
+    im.scale.setScalar(.75 + rnd()*.4);
     im.userData.v = .8 + rnd()*1.1;
     scene.add(im); clouds.push(im);
   }
@@ -877,7 +880,7 @@ function init(){
 
   /* ---------- camera + controls ---------- */
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -300, 400);
-  const target0 = new V3(0, 5, 0);
+  const target0 = new V3(0, 4, 0);
   const shift = { x: 0, y: 0 };
   const CAM_R = 120;
   let az0 = 0.72, pol0 = 0.98;

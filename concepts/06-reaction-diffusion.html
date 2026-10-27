@@ -1,0 +1,476 @@
+<title>Kaiav Copper Bloom</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0a0c0b;
+  --bg-2:#101412;
+  --ink:#f0e7da;
+  --muted:#9ea69f;
+  --copper:#d0834f;
+  --copper-hi:#f2b27e;
+  --verdigris:#5fb3a0;
+  --line:rgba(240,231,218,.14);
+  --glass:rgba(10,12,11,.55);
+  --focus:#f2b27e;
+}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+*{box-sizing:border-box}
+.sr{position:absolute!important;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;padding:0}
+#rd{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0;
+  background:radial-gradient(90% 70% at 50% 45%,#1b2421,#0a0c0b 70%)}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.hero{position:relative;z-index:1;height:100vh;height:100dvh;display:flex;flex-direction:column;justify-content:space-between;
+  padding-top:max(16px,env(safe-area-inset-top,0px));padding-bottom:max(18px,env(safe-area-inset-bottom,0px));touch-action:pan-y;cursor:crosshair}
+.nav{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.mark{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:17px;letter-spacing:.01em;color:var(--ink);text-decoration:none}
+.mark em{font-style:italic;color:var(--copper-hi);font-weight:400}
+.nav ul{display:flex;gap:clamp(12px,3vw,28px);list-style:none;margin:0;padding:0;font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+.nav a{color:var(--muted);text-decoration:none}
+.nav a:hover{color:var(--copper-hi)}
+.bigname{display:none}
+.nogl .bigname{display:block;font-family:"Fraunces",Georgia,serif;font-weight:900;font-size:clamp(48px,11vw,170px);line-height:.9;text-align:center;margin:0;
+  background:linear-gradient(160deg,var(--copper-hi),var(--copper) 45%,var(--verdigris));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hud{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:14px 24px}
+.tag{max-width:30ch}
+.tag p{text-shadow:0 2px 14px rgba(0,0,0,.8);margin:0;font-family:"Fraunces",Georgia,serif;font-size:clamp(19px,2.2vw,26px);line-height:1.2;font-weight:400}
+.tag p b{font-weight:600;color:var(--copper-hi)}
+.tag small{text-shadow:0 1px 8px #000,0 0 2px #000;display:block;margin-top:8px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.panel{display:flex;flex-direction:column;gap:10px;align-items:flex-end;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.chip{font:600 11px/1 "JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);background:var(--glass);
+  border:1px solid var(--line);border-radius:999px;padding:9px 13px;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:border-color .2s,color .2s,background .2s}
+.chip:hover{border-color:var(--copper)}
+.chip[aria-pressed="true"]{background:linear-gradient(135deg,rgba(208,131,79,.4),rgba(95,179,160,.25));border-color:var(--copper-hi);color:#fff}
+.ctrl{display:flex;gap:6px}
+.ctrl .chip{color:var(--muted)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.below{position:relative;z-index:2;background:linear-gradient(to bottom,rgba(10,12,11,0),var(--bg) 120px);padding-top:120px;padding-bottom:max(40px,env(safe-area-inset-bottom,0px))}
+.below .inner{max-width:1080px;margin:0 auto}
+.sec{display:grid;grid-template-columns:180px minmax(0,1fr);gap:24px;border-top:1px solid var(--line);padding:34px 0}
+.sec h2{margin:0;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.items{display:grid;gap:26px}
+.item h3{margin:0 0 6px;font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:clamp(24px,3.4vw,36px);line-height:1.05}
+.item h3 a{color:var(--ink);text-decoration:none;background:linear-gradient(var(--copper),var(--copper)) 0 100%/0 2px no-repeat;transition:background-size .35s}
+.item h3 a:hover{background-size:100% 2px}
+.item .role{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--verdigris)}
+.item p{margin:8px 0 0;color:var(--muted);font-size:14px;line-height:1.6;max-width:62ch}
+.links{display:flex;flex-wrap:wrap;gap:10px 22px;font-size:14px}
+.links a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}
+.links a:hover{border-color:var(--copper)}
+.gatebox{margin-top:22px;min-height:120px;border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--bg-2)}
+.gatebox .lbl{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+footer{border-top:1px solid var(--line);padding-top:20px;font-size:11px;color:var(--muted);letter-spacing:.08em;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+@media (max-width:720px){
+  .hud{grid-template-columns:minmax(0,1fr)}
+  .panel{align-items:flex-start}
+  .chips{justify-content:flex-start}
+  .sec{grid-template-columns:minmax(0,1fr);gap:14px}
+  .nav ul{gap:14px}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+
+<canvas id="rd" aria-hidden="true"></canvas>
+
+<div class="hero wrap" id="hero">
+  <header class="nav">
+    <a class="mark" href="#top" id="top">Kaiav <em>Nihalani</em></a>
+    <nav aria-label="Primary"><ul>
+      <li><a href="#work">Work</a></li>
+      <li><a href="https://risingfounder.net" target="_blank" rel="noopener">J ↗</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ul></nav>
+  </header>
+
+  <h1 class="bigname">Kaiav Nihalani</h1>
+  <h1 class="sr" id="srname">Kaiav Nihalani</h1>
+
+  <div class="hud">
+    <div class="tag">
+      <p>Founder of <b>Eden</b>.<br>Co-founder of <b>J</b>.</p>
+      <small id="hint">Drag to seed new growth · light follows you</small>
+    </div>
+    <div class="panel" role="group" aria-label="Reaction-diffusion presets">
+      <div class="chips" id="presets">
+        <button class="chip" data-p="coral" aria-pressed="true">Coral</button>
+        <button class="chip" data-p="mitosis" aria-pressed="false">Mitosis</button>
+        <button class="chip" data-p="worms" aria-pressed="false">Worms</button>
+        <button class="chip" data-p="fingerprint" aria-pressed="false">Fingerprint</button>
+      </div>
+      <div class="ctrl">
+        <button class="chip" id="reset" type="button">Regrow</button>
+        <button class="chip" id="pause" type="button" aria-pressed="false">Pause</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<main class="below wrap">
+  <div class="inner">
+    <section class="sec" id="work" aria-labelledby="w-h">
+      <h2 id="w-h">Work</h2>
+      <div class="items">
+        <article class="item">
+          <span class="role">Founder</span>
+          <h3>Eden</h3>
+          <p>Context for agents.</p>
+        </article>
+        <article class="item">
+          <span class="role">Co-founder · with Jose Cruz-Lopez</span>
+          <h3><a href="https://risingfounder.net" target="_blank" rel="noopener">J: Rising Founder ↗</a></h3>
+          <p>An early chance for extraordinary founders. A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world. No fee, no equity.</p>
+        </article>
+      </div>
+    </section>
+    <section class="sec" aria-labelledby="a-h">
+      <h2 id="a-h">About</h2>
+      <div class="items"><p style="margin:0;color:var(--muted);font-size:14px;line-height:1.6">Building context for agents. <em>Longer bio coming soon.</em></p></div>
+    </section>
+    <section class="sec" id="contact" aria-labelledby="c-h">
+      <h2 id="c-h">Contact</h2>
+      <div>
+        <div class="links">
+          <a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn ↗</a>
+          <a href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X ↗</a>
+        </div>
+        <div class="gatebox">
+          <p class="lbl">Email · unlock with a game</p>
+          <div data-contact-gate></div>
+        </div>
+      </div>
+    </section>
+    <footer><span>Kaiav Nihalani</span><span>Gray-Scott reaction-diffusion, grown live on your GPU</span></footer>
+  </div>
+</main>
+
+<script>
+(() => {
+'use strict';
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const MOBILE = matchMedia('(pointer:coarse)').matches || innerWidth < 720;
+const DPR_CAP = MOBILE ? 1.5 : 2;
+const canvas = document.getElementById('rd'), hero = document.getElementById('hero');
+
+const PRESETS = {
+  coral:       {f:0.0545, k:0.0620},
+  mitosis:     {f:0.0367, k:0.0649},
+  worms:       {f:0.0780, k:0.0610},
+  fingerprint: {f:0.0370, k:0.0600}
+};
+let cur = {f:PRESETS.coral.f, k:PRESETS.coral.k}, target = {...cur};
+
+function fail(msg){
+  document.documentElement.classList.add('nogl');
+  document.getElementById('srname').remove();
+  document.querySelector('.bigname').classList.remove('sr');
+  document.getElementById('hint').textContent = 'Live simulation unavailable on this device';
+  console.warn(msg);
+}
+
+const gl = canvas.getContext('webgl2', {antialias:false, alpha:false, depth:false, stencil:false, powerPreference:'high-performance'});
+if (!gl || !gl.getExtension('EXT_color_buffer_float')) { fail('WebGL2 float render targets unavailable'); return; }
+gl.getExtension('OES_texture_float_linear');
+
+/* ---------------- shaders ---------------- */
+const VS = `#version 300 es
+in vec2 p; out vec2 v; void main(){ v = p*.5+.5; gl_Position = vec4(p,0.,1.); }`;
+const FS_INIT = `#version 300 es
+precision highp float; in vec2 v; out vec4 o; uniform sampler2D uSeed;
+void main(){ float s = texture(uSeed, v).r; o = vec4(1.-s*.5, s*.9, 0., 1.); }`;
+const FS_SIM = `#version 300 es
+precision highp float; in vec2 v; out vec4 o;
+uniform sampler2D uS, uSeed; uniform vec2 uPx; uniform float uF, uK, uMoat, uAsp;
+uniform vec4 uBr; uniform float uBrR, uBrOn;
+float segd(vec2 p, vec2 a, vec2 b){ vec2 pa=p-a, ba=b-a; float h=clamp(dot(pa,ba)/max(dot(ba,ba),1e-8),0.,1.); return length(pa-ba*h); }
+void main(){
+  vec2 ab = texture(uS, v).xy;
+  vec2 lap = -ab
+    + .2*(texture(uS, v+vec2(uPx.x,0.)).xy + texture(uS, v-vec2(uPx.x,0.)).xy + texture(uS, v+vec2(0.,uPx.y)).xy + texture(uS, v-vec2(0.,uPx.y)).xy)
+    + .05*(texture(uS, v+uPx).xy + texture(uS, v-uPx).xy + texture(uS, v+vec2(uPx.x,-uPx.y)).xy + texture(uS, v+vec2(-uPx.x,uPx.y)).xy);
+  float a = ab.x, b = ab.y, abb = a*b*b;
+  vec2 sd = texture(uSeed, v).rg;
+  float k = uK + max(sd.g - sd.r, 0.)*uMoat;
+  float na = a + (lap.x - abb + uF*(1.-a));
+  float nb = b + (.5*lap.y + abb - (k+uF)*b);
+  // the name is a persistent feed region: it never erodes, it keeps seeding
+  na = mix(na, .32, sd.r*.8);
+  nb = mix(nb, .42, sd.r*.8);
+  if (uBrOn > 0.) {
+    float d = segd(v*vec2(uAsp,1.), uBr.xy*vec2(uAsp,1.), uBr.zw*vec2(uAsp,1.));
+    float m = 1.-smoothstep(uBrR*.55, uBrR, d);
+    nb = mix(nb, .9, m); na = mix(na, .2, m);
+  }
+  o = vec4(clamp(na,0.,1.), clamp(nb,0.,1.), 0., 1.);
+}`;
+const FS_VIEW = `#version 300 es
+precision highp float; in vec2 v; out vec4 o;
+uniform sampler2D uS, uSeed; uniform vec2 uPx, uRes; uniform vec3 uL; uniform float uT, uAsp, uIntro;
+float H(vec2 p){ return texture(uS, p).y; }
+float hash(vec2 p){ p = fract(p*vec2(443.897,441.423)); p += dot(p, p.yx+19.19); return fract((p.x+p.y)*p.x); }
+void main(){
+  vec2 e = uPx*1.25;
+  float b  = H(v);
+  float bx = H(v+vec2(e.x,0.)) - H(v-vec2(e.x,0.));
+  float by = H(v+vec2(0.,e.y)) - H(v-vec2(0.,e.y));
+  float b2 = (H(v+e*3.) + H(v-e*3.) + H(v+vec2(e.x,-e.y)*3.) + H(v+vec2(-e.x,e.y)*3.))*.25;
+  vec2 sd = texture(uSeed, v).rg;
+  float letter = smoothstep(.25, .75, sd.r);
+  float sx = texture(uSeed, v+vec2(e.x,0.)).r - texture(uSeed, v-vec2(e.x,0.)).r;
+  float sy = texture(uSeed, v+vec2(0.,e.y)).r - texture(uSeed, v-vec2(0.,e.y)).r;
+  vec3 n = normalize(vec3(-(bx*3.2 + sx*1.1), -(by*3.2 + sy*1.1), 1.));
+  float hgt = smoothstep(.06, .34, b);
+  vec3 P = vec3(v.x*uAsp, v.y, hgt*.015 + letter*.01);
+  vec3 Lp = vec3(uL.x*uAsp, uL.y, uL.z);
+  vec3 Ld = Lp - P; float dist = length(Ld); vec3 L = Ld/dist;
+  vec3 V = normalize(vec3((v.x-.5)*uAsp*.25, (v.y-.5)*.25, 1.));
+  vec3 Hh = normalize(L+V);
+  float ndl = max(dot(n,L), 0.);
+  float ndh = max(dot(n,Hh), 0.);
+  float atten = 1./(1. + dist*dist*2.2);
+  // materials: verdigris substrate, raised oxidised copper, polished name
+  float grain = hash(floor(v*uRes*.5));
+  vec3 patina = mix(vec3(.006,.016,.015), vec3(.03,.12,.10), smoothstep(.0,.9,b2*3.)) * (.85+.3*grain);
+  vec3 copper = mix(vec3(.42,.13,.05), vec3(.85,.42,.20), hgt);
+  float cav = clamp((b - b2)*6. + .5, 0., 1.);            // ridge vs cavity
+  vec3 base = mix(patina, copper, hgt);
+  // thin-film iridescence on the slopes (bismuth/oil-on-copper)
+  float slope = 1. - n.z;
+  float film = hgt*1.6 + dot(n.xy, L.xy)*1.1 + uT*.04;
+  vec3 irid = .5 + .5*cos(6.2831*(film + vec3(.0,.33,.67)));
+  base = mix(base, irid*(.35+.65*hgt), clamp(slope*3.2, 0., .75)*(1.-letter*.8));
+  vec3 gold = mix(vec3(.80,.40,.14), vec3(1.,.74,.40), cav);
+  base = mix(base, gold, letter);
+  float shin = mix(28., 90., letter);
+  float spec = pow(ndh, shin) * (shin + 8.)/25.;
+  vec3 specC = mix(mix(vec3(1.,.72,.5), irid, .4), vec3(1.,.93,.8), letter);
+  vec3 col = base*(.07 + 1.25*ndl*atten) + specC*spec*atten*(.55 + .9*letter + .4*hgt);
+  // rim / fresnel from a cool sky
+  col += vec3(.10,.24,.22)*pow(slope, 1.5)*.35;
+  col *= .65 + .35*cav;
+  // light pool
+  col += vec3(1.,.55,.3)*.012*exp(-dist*dist*12.);
+  // intro: reveal radiating from the centre
+  float r = length((v-.5)*vec2(uAsp,1.));
+  col *= 1. - smoothstep(uIntro*1.4 - .45, uIntro*1.4 - .05, r);
+  // vignette, tonemap, grain
+  vec2 q = v - .5; col *= 1. - dot(q*vec2(uAsp*.6,1.), q*vec2(uAsp*.6,1.))*.9;
+  col = col*(2.51*col+.03)/(col*(2.43*col+.59)+.14);
+  col = pow(max(col, 0.), vec3(1./2.2));
+  col += (hash(v*uRes + fract(uT)*61.) - .5)*.025;
+  o = vec4(col, 1.);
+}`;
+
+function sh(type, src){ const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+function prog(fs, names){
+  const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+  gl.bindAttribLocation(p, 0, 'p'); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; for (const n of names) u[n] = gl.getUniformLocation(p, n);
+  return {p, u};
+}
+let PI, PS, PV;
+try {
+  PI = prog(FS_INIT, ['uSeed']);
+  PS = prog(FS_SIM, ['uS','uSeed','uPx','uF','uK','uMoat','uAsp','uBr','uBrR','uBrOn']);
+  PV = prog(FS_VIEW, ['uS','uSeed','uPx','uRes','uL','uT','uAsp','uIntro']);
+} catch (e) { fail(e.message); return; }
+
+const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+function tex(w, h, internal, format, type, filter){
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  if (w) gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, type, null);
+  return t;
+}
+
+/* ---------------- sizing ---------------- */
+let vw = innerWidth, vh = innerHeight, quality = 1, steps = RM ? 2 : (MOBILE ? 8 : 12);
+let SW = 0, SH = 0, simAsp = 1;
+let state = [null, null], fb = [null, null], seedTex = null, cur_i = 0;
+const seedCanvas = document.createElement('canvas'), sctx = seedCanvas.getContext('2d');
+let fontReady = false;
+
+function simScale(){ return MOBILE ? 0.72 : 0.5; }
+function drawSeed(){
+  seedCanvas.width = SW; seedCanvas.height = SH;
+  sctx.fillStyle = '#000'; sctx.fillRect(0, 0, SW, SH);
+  const portrait = SW / SH < 1.15;
+  const lines = portrait ? ['KAIAV', 'NIHALANI'] : ['KAIAV NIHALANI'];
+  const fam = fontReady ? '"Fraunces", Georgia, serif' : 'Georgia, "Times New Roman", serif';
+  sctx.font = '900 100px ' + fam;
+  const wmax = Math.max(...lines.map(l => sctx.measureText(l).width));
+  let size = Math.min(SW * (portrait ? 0.86 : 0.84) / wmax * 100, SH * (portrait ? 0.15 : 0.24));
+  sctx.font = '900 ' + size + 'px ' + fam;
+  sctx.textAlign = 'center'; sctx.textBaseline = 'middle';
+  const lh = size * 0.98, cy = SH * (portrait ? 0.42 : 0.44);
+  const moat = Math.max(3, size * 0.06);
+  sctx.lineJoin = 'round';
+  // G: dilated halo (moat band), R: crisp glyphs
+  sctx.fillStyle = '#0f0'; sctx.strokeStyle = '#0f0'; sctx.lineWidth = moat * 2;
+  lines.forEach((l, i) => { const y = cy + (i - (lines.length - 1) / 2) * lh; sctx.strokeText(l, SW / 2, y); sctx.fillText(l, SW / 2, y); });
+  sctx.globalCompositeOperation = 'lighter';
+  sctx.fillStyle = '#f00';
+  lines.forEach((l, i) => { const y = cy + (i - (lines.length - 1) / 2) * lh; sctx.fillText(l, SW / 2, y); });
+  sctx.globalCompositeOperation = 'source-over';
+  if (!seedTex) seedTex = tex(0, 0, 0, 0, 0, gl.LINEAR);
+  gl.bindTexture(gl.TEXTURE_2D, seedTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, seedCanvas);
+}
+function allocSim(){
+  const s = simScale();
+  let w = Math.round(vw * s), h = Math.round(vh * s);
+  const cap = 960 / Math.max(w, h); if (cap < 1) { w = Math.round(w * cap); h = Math.round(h * cap); }
+  SW = w; SH = h; simAsp = w / h;
+  for (let i = 0; i < 2; i++) {
+    if (state[i]) gl.deleteTexture(state[i]);
+    state[i] = tex(w, h, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.LINEAR);
+    if (!fb[i]) fb[i] = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb[i]);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, state[i], 0);
+  }
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) { fail('float framebuffer incomplete'); return false; }
+  drawSeed(); reseed();
+  return true;
+}
+function reseed(){
+  gl.useProgram(PI.p);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, seedTex); gl.uniform1i(PI.u.uSeed, 1);
+  for (let i = 0; i < 2; i++) { gl.bindFramebuffer(gl.FRAMEBUFFER, fb[i]); gl.viewport(0, 0, SW, SH); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+  intro = RM ? 1 : 0;
+}
+function sizeCanvas(){
+  const dpr = Math.min(devicePixelRatio || 1, DPR_CAP) * quality;
+  canvas.width = Math.round(vw * dpr); canvas.height = Math.round(vh * dpr);
+}
+let resizeT = 0;
+addEventListener('resize', () => {
+  clearTimeout(resizeT);
+  resizeT = setTimeout(() => {
+    const nw = innerWidth, nh = innerHeight;
+    const aspChange = Math.abs(nw / nh - vw / vh) / (vw / vh);
+    const wChange = Math.abs(nw - vw) / vw;
+    vw = nw; vh = nh; sizeCanvas();
+    if (aspChange > 0.12 || wChange > 0.2) allocSim();
+  }, 120);
+});
+
+/* ---------------- interaction ---------------- */
+const light = {x:.5, y:.62, tx:.5, ty:.62};
+let lastMove = -1e9, painting = false, brushOn = 0;
+const br = new Float32Array(4); // x0,y0,x1,y1 in uv
+function toUv(e){ return [e.clientX / vw, 1 - e.clientY / vh]; }
+addEventListener('pointermove', e => {
+  const [x, y] = toUv(e); light.tx = x; light.ty = y; lastMove = performance.now();
+  if (painting) { br[2] = x; br[3] = y; brushOn = 2; }
+}, {passive:true});
+hero.addEventListener('pointerdown', e => {
+  if (e.target.closest('a,button')) return;
+  const [x, y] = toUv(e);
+  br[0] = br[2] = x; br[1] = br[3] = y; brushOn = 3;
+  light.tx = x; light.ty = y; lastMove = performance.now();
+  painting = e.pointerType !== 'touch';
+});
+addEventListener('pointerup', () => { painting = false; });
+addEventListener('pointercancel', () => { painting = false; });
+
+const chips = [...document.querySelectorAll('#presets .chip')];
+function setPreset(name){
+  target = {...PRESETS[name]};
+  chips.forEach(c => c.setAttribute('aria-pressed', String(c.dataset.p === name)));
+}
+document.getElementById('presets').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (b) setPreset(b.dataset.p); });
+document.getElementById('reset').addEventListener('click', () => reseed());
+let paused = false;
+const pauseBtn = document.getElementById('pause');
+pauseBtn.addEventListener('click', () => { paused = !paused; pauseBtn.setAttribute('aria-pressed', String(paused)); pauseBtn.textContent = paused ? 'Resume' : 'Pause'; });
+addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input,textarea')) return;
+  const map = {'1':'coral','2':'mitosis','3':'worms','4':'fingerprint'};
+  if (map[e.key]) setPreset(map[e.key]);
+  else if (e.key === 'r' || e.key === 'R') reseed();
+});
+
+/* ---------------- loop ---------------- */
+let raf = 0, running = false, visible = true, inView = true, last = 0, t0 = performance.now(), intro = 0;
+let fcount = 0, facc = 0, adapted = false;
+function frame(now){
+  raf = requestAnimationFrame(frame);
+  const dt = Math.min(100, last ? now - last : 16); last = now;
+  const t = (now - t0) / 1000;
+  // ease parameters toward preset (live morph)
+  const a = 1 - Math.exp(-dt / 500);
+  cur.f += (target.f - cur.f) * a; cur.k += (target.k - cur.k) * a;
+  // light: follows pointer; idles in a slow lissajous
+  if (now - lastMove > 3500) {
+    const s = RM ? 0.05 : 0.18;
+    light.tx = .5 + .36 * Math.cos(t * s * 1.3); light.ty = .5 + .28 * Math.sin(t * s * 1.9);
+  }
+  const la = 1 - Math.exp(-dt / (RM ? 400 : 110));
+  light.x += (light.tx - light.x) * la; light.y += (light.ty - light.y) * la;
+  if (intro < 1) intro = Math.min(1, intro + dt / 2200);
+
+  gl.disable(gl.BLEND);
+  if (!paused) {
+    gl.useProgram(PS.p);
+    gl.uniform2f(PS.u.uPx, 1 / SW, 1 / SH);
+    gl.uniform1f(PS.u.uF, cur.f); gl.uniform1f(PS.u.uK, cur.k);
+    gl.uniform1f(PS.u.uMoat, 0.0045);
+    gl.uniform1f(PS.u.uAsp, simAsp);
+    gl.uniform4fv(PS.u.uBr, br); gl.uniform1f(PS.u.uBrR, MOBILE ? 0.035 : 0.022);
+    gl.uniform1i(PS.u.uS, 0); gl.uniform1i(PS.u.uSeed, 1);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, seedTex);
+    gl.viewport(0, 0, SW, SH);
+    for (let i = 0; i < steps; i++) {
+      gl.uniform1f(PS.u.uBrOn, brushOn > 0 && i < 4 ? 1 : 0);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, state[cur_i]);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb[1 - cur_i]);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      cur_i = 1 - cur_i;
+    }
+    if (brushOn > 0) { brushOn--; br[0] = br[2]; br[1] = br[3]; if (painting) brushOn = Math.max(brushOn, 1); }
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.useProgram(PV.p);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, state[cur_i]); gl.uniform1i(PV.u.uS, 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, seedTex); gl.uniform1i(PV.u.uSeed, 1);
+  gl.uniform2f(PV.u.uPx, 1 / SW, 1 / SH);
+  gl.uniform2f(PV.u.uRes, canvas.width, canvas.height);
+  gl.uniform3f(PV.u.uL, light.x, light.y, 0.32);
+  gl.uniform1f(PV.u.uT, t); gl.uniform1f(PV.u.uAsp, vw / vh);
+  gl.uniform1f(PV.u.uIntro, intro);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  if (!adapted) {
+    fcount++; if (fcount > 10) facc += dt;
+    if (fcount === 70) {
+      adapted = true; const avg = facc / 60;
+      if (avg > 22) { steps = Math.max(4, Math.round(steps * 0.5)); if (avg > 34) { quality = 0.6; sizeCanvas(); } }
+    }
+  }
+}
+function start(){ if (running || !visible || !inView) return; running = true; last = 0; raf = requestAnimationFrame(frame); }
+function stop(){ running = false; cancelAnimationFrame(raf); }
+document.addEventListener('visibilitychange', () => { visible = !document.hidden; visible ? start() : stop(); });
+new IntersectionObserver(es => { inView = es[0].isIntersecting; inView ? start() : stop(); }).observe(hero);
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); stop(); fail('context lost'); });
+
+/* ---------------- boot (after first paint; wait briefly for the display font) ---------------- */
+sizeCanvas();
+const fontP = document.fonts && document.fonts.load ? document.fonts.load('900 100px "Fraunces"') : Promise.resolve();
+Promise.race([fontP, new Promise(r => setTimeout(r, 1200))]).then(() => {
+  fontReady = !!(document.fonts && document.fonts.check && document.fonts.check('900 100px "Fraunces"'));
+  requestAnimationFrame(() => { if (allocSim()) start(); });
+}).catch(() => { if (allocSim()) start(); });
+})();
+</script>
