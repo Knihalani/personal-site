@@ -522,7 +522,7 @@ function frame(now){
   var C=velMat.uniforms.uCenter.value;
   C.set(Math.sin(t*.11)*150,195+Math.sin(t*.17)*45,Math.cos(t*.09)*110);
   velMat.uniforms.uSwirl.value.set(Math.sin(t*.07)*.5,1,Math.cos(t*.05)*.6);
-  velMat.uniforms.uTextC.value.set(0,camera.aspect<1?185:205,40);
+  velMat.uniforms.uTextC.value.set(0,camera.aspect<1?185:228,40);
 
   var form=formAmount(t);
   if(prevForm>.5&&form<=.5){emitRipple(velMat.uniforms.uTextC.value,.8);}

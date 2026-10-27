@@ -358,7 +358,7 @@ vec3 fog(vec3 col, vec3 ro, vec3 rd, float t){
   vec3 f = 1.0 - exp(-t*ext);
   col = mix(col, fc, f);
   /* valley mist: thick at dawn, faint by day, moonlit at night */
-  float mistAmt = mix(0.006, 0.0012, day) + 0.006*goldF()*step(uSun.x, 0.0)*0.0;
+  float mistAmt = mix(0.0032, 0.0008, day);
   float b = 0.022;
   float m = mistAmt*exp(-ro.y*b)*(1.0-exp(-t*rd.y*b))/max(rd.y, 1e-3);
   if(abs(rd.y)<1e-3) m = mistAmt*exp(-ro.y*b)*t;
@@ -385,14 +385,14 @@ void main(){
     vec3 n = calcNormal(p, t);
     col = lightTerrain(p, n, rd, t, true);
     col = fog(col, ro, rd, t);
-  } else if(tw < tmax){
+  } else if(rd.y < 0.0){
     /* the lake */
     t = tw;
     vec3 p = ro + rd*t;
     float fade = exp(-t*0.0012);
     vec2 w1 = noised(p.xz*0.045 + vec2(uTime*0.35, uTime*0.2)).yz;
     vec2 w2 = noised(p.xz*0.13 - vec2(uTime*0.5, -uTime*0.3)).yz;
-    vec3 wn = normalize(vec3(-(w1.x*0.06+w2.x*0.035)*fade, 1.0, -(w1.y*0.06+w2.y*0.035)*fade));
+    vec3 wn = normalize(vec3(-(w1.x*0.022+w2.x*0.012)*fade, 1.0, -(w1.y*0.022+w2.y*0.012)*fade));
     vec3 rr = reflect(rd, wn); rr.y = abs(rr.y);
     bool rh;
     float trf = march(p + vec3(0.0,0.6,0.0), rr, 6000.0, int(36.0+44.0*uQ), rh);
@@ -416,7 +416,7 @@ void main(){
     col = sky(rd, true);
   }
   /* exposure that adapts with time of day */
-  float expo = mix(2.4, 1.15, dayF());
+  float expo = mix(1.9, 1.0, dayF()) + 0.6*nightF();
   col = aces(col*expo);
   col = pow(col, vec3(0.4545));
   float vig = 1.0 - 0.22*dot(uv*0.55, uv*0.55);
@@ -574,6 +574,7 @@ function frame(ts){
       lastAdj=t;
     }
   }
+  if(window.__tfTod!=null){tod=todTarget=window.__tfTod;}
   tod+=(todTarget-tod)*(1-Math.exp(-dt*3));
   setSun(tod);
   updateCamera(dt*(reduce?.4:1),simT);

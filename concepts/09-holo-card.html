@@ -477,7 +477,7 @@ stripGeo.setAttribute('position',new THREE.BufferAttribute(stripPos,3).setUsage(
 stripGeo.setAttribute('normal',new THREE.BufferAttribute(stripNor,3).setUsage(THREE.DynamicDrawUsage));
 stripGeo.setAttribute('uv',new THREE.BufferAttribute(stripUV,2).setUsage(THREE.DynamicDrawUsage));
 stripGeo.setIndex(stripIdx);
-var strap=new THREE.Mesh(stripGeo,new THREE.MeshStandardMaterial({map:stTex,roughness:.62,metalness:0,side:THREE.DoubleSide,envMapIntensity:.6}));
+var strap=new THREE.Mesh(stripGeo,new THREE.MeshStandardMaterial({map:stTex,emissiveMap:stTex,emissive:0xffffff,emissiveIntensity:.22,roughness:.55,metalness:0,side:THREE.DoubleSide,envMapIntensity:.9}));
 strap.castShadow=true;strap.frustumCulled=false;scene.add(strap);
 
 // studio cyclorama

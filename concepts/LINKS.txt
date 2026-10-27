@@ -1,3 +1,5 @@
 15 https://claude.ai/artifact/BUqsZZzq2SLqv4oXNUTdta
 16 https://claude.ai/artifact/N3x4TvqtKfJfusdoQyNC6C
 gate https://claude.ai/artifact/QvEVbRQ7CqYWPk8GbL3ZUX
+13 https://claude.ai/artifact/DBMs3sTpN554EnVVQZv4BT
+14 https://claude.ai/artifact/Vz6QUSfPGwRT6oh8W12Q8y

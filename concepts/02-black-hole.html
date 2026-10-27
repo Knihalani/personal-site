@@ -66,6 +66,7 @@ nav.top-nav a:hover{color:var(--ink);border-color:var(--rule)}
   .readout .bar{width:80px}
   .readout .hint{display:none}
   .caps{min-height:170px}
+  .cap .eyebrow{letter-spacing:.1em;font-size:10px}
   nav.top-nav a.opt{display:none}
 }
 
@@ -247,7 +248,7 @@ footer{max-width:1120px;margin:0 auto;padding-top:96px;padding-bottom:max(28px, 
   ' col+=vec3(.004,.003,.0025)*fbm3(d*1.5+9.);return col;}\n'+
   'vec3 sky(vec3 d){vec3 c=stars(d);float z=dot(d,uF);'+
   ' if(z>.05&&uTextOn>0.){vec2 q=vec2(dot(d,uR),dot(d,uU))/z;vec2 uv=vec2(q.x/(2.*uTxt.x)+.5,(q.y-uTxt.y)/(2.*uTxt.x/uTxt.z)+.5);'+
-  '  if(uv.x>0.&&uv.x<1.&&uv.y>0.&&uv.y<1.){float t=texture(uText,vec2(uv.x,1.-uv.y)).r;c+=t*vec3(1.,.88,.74)*.95*uTextOn;}}'+
+  '  if(uv.x>0.&&uv.x<1.&&uv.y>0.&&uv.y<1.){float t=texture(uText,vec2(uv.x,1.-uv.y)).r;c+=t*vec3(1.,.88,.74)*.8*uTextOn;}}'+
   ' return c;}\n'+
   /* accretion disk */
   'vec4 disk(vec3 p,vec3 rd){float r=length(p.xz);if(r<2.2||r>12.)return vec4(0);'+
@@ -280,10 +281,10 @@ footer{max-width:1120px;margin:0 auto;padding-top:96px;padding-bottom:max(28px, 
   ' vec3 col=acc;'+
   ' if(!cap){col+=(1.-al)*sky(normalize(v));}'+
   ' col+=(1.-al)*vec3(1.,.78,.55)*exp(-abs(minR-1.53)*22.)*.55;'+
-  ' col=max(col,0.);o=vec4(col/(1.+col),1.);}';
+  ' col=max(col,0.);o=vec4(sqrt(col/(1.+col)),1.);}';
 
   var FS_COMP='#version 300 es\nprecision highp float;\nout vec4 o;\nuniform sampler2D uS;uniform vec2 uRes;uniform float uTime,uProg,uFade,uMaxLod;\n'+
-  'vec3 dec(vec3 s){s=min(s,vec3(.995));return s/(1.-s);}\n'+
+  'vec3 dec(vec3 s){s=min(s*s,vec3(.995));return s/(1.-s);}\n'+
   'vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}\n'+
   'float hash(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}\n'+
   'void main(){vec2 uv=gl_FragCoord.xy/uRes;vec2 d=uv-.5;float rr=length(d*vec2(uRes.x/uRes.y,1.));'+
@@ -358,7 +359,7 @@ footer{max-width:1120px;margin:0 auto;padding-top:96px;padding-bottom:max(28px, 
     var asp=w/h;
     tanV=asp<1?Math.min(1.25,0.62/Math.pow(asp,0.75)):0.6;
     /* text half-width in tan space ~ 43% of horizontal view, sits above the hole */
-    var halfX=tanV*asp;txt[0]=halfX*(asp<1?0.84:0.52);txt[1]=asp<1?tanV*0.42:tanV*0.47;
+    var halfX=tanV*asp;txt[0]=halfX*(asp<1?0.74:0.52);txt[1]=asp<1?tanV*0.42:tanV*0.47;
     if(fontReady&&textPortrait!==(asp<1))drawText(asp<1);
     measure();readScroll();
   }

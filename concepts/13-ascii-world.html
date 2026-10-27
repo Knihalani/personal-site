@@ -81,6 +81,7 @@ main{position:relative;background:var(--bg);border-top:1px solid var(--rule)}
 .about p{max-width:62ch;color:var(--ink-dim);line-height:1.7;margin:0 0 12px}
 .about p.lead{color:var(--ink);font-size:18px}
 .gate-note{color:var(--ink-dim);font-size:14px;line-height:1.7;margin:0 0 14px}
+.term-link{font:inherit;color:var(--signal);background:none;border:0;border-bottom:1px solid var(--signal);padding:0;cursor:pointer}
 .gate-wrap{min-height:140px;border:1px dashed var(--rule);padding:16px;background:var(--bg-2)}
 .links a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--rule);margin-right:16px}
 .links a:hover{border-color:var(--signal)}
@@ -155,7 +156,7 @@ footer{color:var(--ink-faint);font-size:12px;padding-top:48px}
     </section>
     <section id="contact" aria-labelledby="contact-h" style="margin-top:72px">
       <h2 class="sec-h" id="contact-h">echo $CONTACT</h2>
-      <p class="gate-note">$ mail --to kaiav<br>&gt; Emails are locked behind a game. Unlock one below.</p>
+      <p class="gate-note">$ mail --to kaiav<br>&gt; Emails are locked behind a game — click <button type="button" class="term-link" id="term-contact">Contact</button></p>
       <div class="gate-wrap"><div data-contact-gate></div></div>
       <p class="links" style="margin-top:20px">
         <a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">linkedin/kaiav-nihalani</a>
@@ -170,6 +171,7 @@ footer{color:var(--ink-faint);font-size:12px;padding-top:48px}
 <script>
 (function(){
   "use strict";
+  document.getElementById('term-contact').addEventListener('click', function(){ if (window.KaiavContact) window.KaiavContact.open('general'); });
   var hero = document.getElementById('hero');
   var canvas = document.getElementById('gl');
   if (!window.THREE) { hero.classList.add('no-gl'); return; }

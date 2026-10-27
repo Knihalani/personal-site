@@ -298,7 +298,7 @@ var glassMat=new THREE.ShaderMaterial({uniforms:glassU,side:THREE.DoubleSide,ext
  ' if(side){col=col*vec3(.5,1.,.84)+vec3(.05,.15,.12)+vec3(.3,.9,.75)*.25*pow(1.-ndv,2.);}',
  ' float rim=dot(eg,normalize(vec2(-.55,.84)));',
  ' col+=vec3(1.,.82,.55)*max(rim,0.)*1.1+vec3(.55,.95,.85)*max(-rim,0.)*.22;',
- ' float e=vInfo.y;float w=fwidth(e)*1.4;',
+ ' float e=vInfo.y;float w=max(fwidth(e)*1.2,1e-4);',
  ' float crack=(1.-smoothstep(0.,w,e))*vCrack;',
  ' col+=vec3(.85,1.,.95)*crack*2.4;',
  ' float s=exp(-pow((vUv.x*1.15+vUv.y*.45-uSweep)*6.,2.));',

@@ -193,7 +193,7 @@ function computeVP(px,py){
 function screenToWorld(nx,ny,out){
   var ux=nx*aspect*TANH,uy=ny*TANH;
   var dx=fwd[0]+ux*rgt[0]+uy*up[0],dy=fwd[1]+ux*rgt[1]+uy*up[1],dz=fwd[2]+ux*rgt[2]+uy*up[2];
-  var t=-eye[2]/dz;out[0]=eye[0]+dx*t;out[1]=eye[1]+dy*t;
+  if(dz>-1e-4)return;var t=-eye[2]/dz;out[0]=eye[0]+dx*t;out[1]=eye[1]+dy*t;
 }
 
 /* ---------------- shape generation ---------------- */
@@ -296,9 +296,10 @@ function updatePointer(dt){
     var sp=Math.hypot(ivx,ivy);if(sp>14){ivx*=14/sp;ivy*=14/sp;}
     ptr.vx+=(ivx-ptr.vx)*.5;ptr.vy+=(ivy-ptr.vy)*.5;ptr.act=1;ptr.moved=false;lastInteract=t;
   }else{ptr.vx*=Math.exp(-dt*8);ptr.vy*=Math.exp(-dt*8);ptr.act*=Math.exp(-dt*3);}
+  if(!isFinite(ptr.vx+ptr.vy)){ptr.vx=ptr.vy=0;}
   ptr.px=wx;ptr.py=wy;ptr.wx=wx;ptr.wy=wy;
 }
-var camX=0,camY=0;
+var camX=0,camY=0;computeVP(0,0);
 function stepCommon(dt){
   t+=dt;morphT+=dt;introT+=dt;
   updatePointer(dt);
@@ -470,7 +471,6 @@ function tryGPU(){
         else if(tier===2){rows=Math.max(32,rows>>1);rscale=Math.min(rscale,.75);sizeTargets();}
         else {rows=Math.max(32,rows>>1);rscale=.6;sizeTargets();}
       }}}
-    window.__dbg={frames:frames,tier:tier,rows:rows,rscale:rscale};
     var rot=shapeRot();
     // --- simulate
     gl.disable(gl.BLEND);

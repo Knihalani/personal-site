@@ -618,7 +618,7 @@ function init(){
         vec3 dayC = vK < 0.5 ? vec3(0.17, 0.25, 0.34) + g * 0.1 : g * 0.95;
         float blink = vK > 1.5 ? (0.25 + 0.75 * smoothstep(0.0, 0.08, fract(uTime * 0.7)) * (1.0 - smoothstep(0.25, 0.4, fract(uTime * 0.7)))) : 1.0;
         float flick = vK < 0.5 ? 0.93 + 0.07 * sin(uTime * 7.0 + g.g * 40.0) : 1.0;
-        diffuseColor.rgb = mix(dayC, g * 2.1 * flick, uNight) * (vK > 1.5 ? (0.6 + 1.6 * blink) : 1.0);`);
+        diffuseColor.rgb = mix(dayC, g * 1.65 * flick, uNight) * (vK > 1.5 ? (0.6 + 1.6 * blink) : 1.0);`);
   };
   gmat.customProgramCacheKey = () => 'glow';
   const ggeo = new THREE.BoxGeometry(1,1,1);
@@ -961,7 +961,7 @@ function init(){
       U.uSel.value = i + 1;
       const az = Math.atan2(a.center.x, a.center.z) + .55;
       const nz = narrow();
-      startTween(a.center, az, 1.0, nz ? 1.55 : 2.0, nz ? 0 : Math.min(.36, (Math.min(410, W-32) + 24) / W), nz ? -Math.min(.6, (Math.min(H*.58, 520) + 12) / H) : 0);
+      startTween(a.center, az, 1.0, nz ? 1.45 : 1.75, nz ? 0 : Math.min(.36, (Math.min(410, W-32) + 24) / W), nz ? -Math.min(.6, (Math.min(H*.58, 520) + 12) / H) : 0);
     },
     home(){ U.uSel.value = 0; startTween(target0, az0 + (Math.random()-.5)*.6, pol0, 1, 0, 0); }
   };
@@ -1017,7 +1017,7 @@ function init(){
     raf = 0;
     if (!running) return;
     raf = requestAnimationFrame(frame);
-    let dt = (now - last) / 1000; last = now; if (dt > .05) dt = .05;
+    let dt = (now - last) / 1000; last = now; const rawDt = Math.min(dt, .5); if (dt > .05) dt = .05;
     const speed = reduced ? .3 : 1;
     time += dt * speed;
     U.uTime.value = time;
@@ -1026,7 +1026,7 @@ function init(){
 
     if (Math.abs(nf - nightTarget) > .0005){ nf += (nightTarget - nf) * Math.min(1, dt * 2.4); if (Math.abs(nf - nightTarget) < .002) nf = nightTarget; applyNight(); }
 
-    if (tw.active) stepTween(dt);
+    if (tw.active) stepTween(rawDt);
     else {
       controls.autoRotate = !reduced && !openId && (now - lastInteract > 3500);
       controls.update();
