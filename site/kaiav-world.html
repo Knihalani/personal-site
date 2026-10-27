@@ -3282,13 +3282,15 @@ const PAL_N = { z: [.05, .07, .16], h: [.16, .19, .31], s: [.3, .36, .55], as: [
 const _c3 = [0, 0, 0];
 function mix3(key, g, n){ const a = PAL_D[key], b = PAL_G[key], c = PAL_N[key]; for (let i = 0; i < 3; i++){ const v = a[i] + (b[i] - a[i]) * g; _c3[i] = v + (c[i] - v) * n; } return _c3; }
 function updateSky(){
-  const p = dayT; let el, az, nightAmt;
-  if (p < .68){ const u = p / .68; el = Math.sin(Math.PI * u); az = Math.PI * u; nightAmt = 1 - sstep(-.02, .2, el); }
-  else { const u = (p - .68) / .32; el = Math.sin(Math.PI * u); az = Math.PI * (1 - u); nightAmt = sstep(-.02, .2, el); el = Math.max(el, .05); }
-  const golden = p < .68 ? 1 - sstep(.08, .5, Math.sin(Math.PI * p / .68)) : 1;
-  U.uSunDir.value.set(Math.cos(az) * .82, Math.max(el, .04), .52 * (p < .68 ? 1 : -1)).normalize();
+  // sunEl is continuous through the whole cycle (negative at night), so nothing jumps at sunset or sunrise.
+  const p = dayT; let el, az, sunEl;
+  if (p < .68){ const u = p / .68; sunEl = Math.sin(Math.PI * u); el = sunEl; az = Math.PI * u; }
+  else { const u = (p - .68) / .32; sunEl = -Math.sin(Math.PI * u); el = Math.max(-sunEl, .05); az = Math.PI * (1 - u); }
+  const nightAmt = 1 - sstep(-.16, .14, sunEl);
+  const golden = 1 - sstep(.08, .5, Math.max(sunEl, 0));
+  U.uSunDir.value.set(Math.cos(az) * .82, Math.max(el, .04), .52).normalize();
   U.uNight.value = nightAmt;
-  const sunK = p < .68 ? sstep(-.05, .25, Math.sin(Math.PI * p / .68)) : 1, gg = golden * (1 - nightAmt * .5);
+  const sunK = Math.max(sstep(-.05, .25, sunEl), sstep(.05, .35, -sunEl)), gg = golden * (1 - nightAmt * .5);
   const set = (col, key, mul) => { const c = mix3(key, gg, nightAmt); col.setRGB(c[0] * mul, c[1] * mul, c[2] * mul); };
   set(U.uZenith.value, 'z', 1); set(U.uHorizon.value, 'h', 1); set(U.uSunCol.value, 's', .25 + .75 * sunK); set(U.uAmbSky.value, 'as', 1); set(U.uAmbGround.value, 'ag', 1); set(U.uAbyss.value, 'ab', 1);
   renderer.setClearColor(U.uHorizon.value);
@@ -3337,8 +3339,9 @@ function resetWorld(){
 let last = performance.now(), raf = 0, tAcc = 0, physAcc = 0, mapT = 0, titleA = .6, hudWhere = '', visT = 0, lastSave = 0;
 let frames = 0, ftSum = 0, evalT = 0;
 function applyQuality(){ renderer.setPixelRatio(BASE_DPR * qScale); renderer.setSize(innerWidth, innerHeight, false); UScale.value = innerHeight * BASE_DPR * qScale * .69; setFog(); }
-function setFog(){ if (state === 'title') U.uFog.value.set(110, 300); else U.uFog.value.set(renderDist * .5, renderDist * 1.3); }
-function onResize(){ if (!glOK) return; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); applyQuality(); }
+let qPending = false, qCool = 0, qBad = 0, qGood = 0, fogNear = 60, fogFar = 160;
+function setFog(){ fogNear = state === 'title' ? 110 : renderDist * .5; fogFar = state === 'title' ? 300 : renderDist * 1.3; }
+function onResize(){ if (!glOK) return; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); applyQuality(); if (sky) renderer.render(scene, camera); }
 Wn.addEventListener('resize', onResize);
 Wn.addEventListener('orientationchange', () => setTimeout(onResize, 120));
 function frame(now){
@@ -3349,6 +3352,8 @@ function frame(now){
   last = now;
   const dt = Math.min(raw, .1);
   tAcc += dt; U.uTime.value = tAcc;
+  if (qPending){ qPending = false; applyQuality(); }
+  { const f = U.uFog.value, k = 1 - Math.exp(-2 * dt); f.x += (fogNear - f.x) * k; f.y += (fogFar - f.y) * k; }
   if (state !== 'pause') dayT = (dayT + dt / DAYLEN) % 1;
   updateSky();
   if (state === 'title'){
@@ -3396,9 +3401,11 @@ function frame(now){
   if (state === 'play'){
     frames++; ftSum += raw; evalT += raw;
     if (evalT > 2){
-      const avg = ftSum / frames; frames = 0; ftSum = 0; evalT = 0;
-      if (avg > .024){ if (qScale > .6){ qScale = Math.max(.6, qScale * .86); applyQuality(); } else if (renderDist > (LOW ? 44 : 60)){ renderDist -= 12; applyQuality(); } }
-      else if (avg < .0145){ if (qScale < 1){ qScale = Math.min(1, qScale * 1.08); applyQuality(); } else if (renderDist < (LOW ? 76 : 120)){ renderDist += 8; applyQuality(); } }
+      // hysteresis: two bad windows to step down, five good windows to step up, and a cooldown after any change
+      const avg = ftSum / frames; frames = 0; ftSum = 0; evalT = 0; qCool -= 2;
+      qBad = avg > .026 ? qBad + 1 : 0; qGood = avg < .0125 ? qGood + 1 : 0;
+      if (qCool <= 0 && qBad >= 2){ qBad = 0; qCool = 12; if (renderDist > (LOW ? 48 : 72)){ renderDist -= 12; setFog(); } else if (qScale > .62){ qScale = Math.max(.62, qScale - .12); qPending = true; } }
+      else if (qCool <= 0 && qGood >= 5){ qGood = 0; qCool = 20; if (qScale < 1){ qScale = Math.min(1, qScale + .12); qPending = true; } else if (renderDist < (LOW ? 76 : 120)){ renderDist += 8; setFog(); } }
     }
   }
   if (saveDirty && now - lastSave > 6000){ lastSave = now; saveGame(); }
