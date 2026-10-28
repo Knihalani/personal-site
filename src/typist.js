@@ -147,16 +147,16 @@ function palmGeo(ts, KX){
     const uz = Math.sign(uz0) * Math.pow(Math.abs(uz0), .55);
     const t = (uz + 1) / 2;                                    // 0 = knuckle end, 1 = wrist end
     const z = -.093 + t * .097;
-    const w = .0415 - .011 * smooth(.3, 1, t) + .002 * (ux * ts > 0 ? smooth(.2, .7, t) * (1 - smooth(.7, 1, t)) : 0);
+    const w = .0405 - .0135 * smooth(.3, 1, t) + .002 * (ux * ts > 0 ? smooth(.2, .7, t) * (1 - smooth(.7, 1, t)) : 0);
     const x = Math.sign(ux) * Math.pow(Math.abs(ux), .7) * w, xn = x / .0415;
-    const top = .0142 * (1 - .5 * xn * xn) * (1 - .3 * smooth(.6, 1, t)) + .0015;
-    const bot = .0118 * (1 - .35 * xn * xn) + .0065 * gauss(x - ts * .02, .014) * gauss(z + .035, .03) + .003 * gauss(x + ts * .022, .012) * gauss(z + .04, .035);
+    const top = .0108 * (1 - .45 * xn * xn) * (1 - .25 * smooth(.6, 1, t)) + .0014;
+    const bot = .0102 * (1 - .35 * xn * xn) + .0065 * gauss(x - ts * .02, .014) * gauss(z + .035, .03) + .003 * gauss(x + ts * .022, .012) * gauss(z + .04, .035);
     let y = uy > 0 ? Math.pow(uy, .75) * top : -Math.pow(-uy, .75) * bot;
     let red = 0;
     if (uy > 0){
       for (const kx of KX){
-        const b = gauss(x - kx, .0072) * gauss(z + .085, .0085);
-        y += .0042 * b * uy; red = Math.max(red, b);
+        const b = gauss(x - kx, .0062) * gauss(z + .086, .008);
+        y += .0052 * b * uy; red = Math.max(red, b);
         y += .0011 * gauss(x - kx * (1 - .35 * t), .0026) * smooth(.15, .45, t) * (1 - smooth(.6, .95, t)) * uy;   // extensor tendons
       }
     }
@@ -255,7 +255,7 @@ M.createTypist = function createTypist(api){
   const keyLocal = code => { const p = wpos(code) || layoutWorld(code); return p ? toLocal(p) : null; };
 
   const n = dirLocal(nW), lat = dirLocal(latW), kfw = dirLocal(fwdW);
-  const U_KEY = uW, TRAVEL = .0032, HOVER = .0045, HAND_W = 30;
+  const U_KEY = uW, TRAVEL = .0032, HOVER = .0045, HAND_W = 36;
 
   /* the desk surface just in front of the keyboard (for a hand resting there during long idles) */
   const spaceW = wpos('Space') || layoutWorld('Space');
@@ -305,7 +305,7 @@ M.createTypist = function createTypist(api){
 
   /* ---------- arms: sleeve, elbow bunching, cuff, wrist ---------- */
   const L1 = .29, L2 = .265;
-  const upperGeo = capsule(.054, .049, L1, 40,
+  const upperGeo = capsule(.046, .041, L1, 40,
     (a, y) => .05 * Math.sin(y * 70 + 1.8 * Math.sin(a * 2 + .5)) * smooth(.17, .27, y) + .025 * Math.sin(a * 4 + y * 22) + .02 * Math.sin(a * 3 - y * 30) * (1 - smooth(.04, .12, y)),
     v => { v.x *= 1.04; v.z *= .94; });
   const sleeveFold = (a, y) => (1 - smooth(.0, .1, y)) * (.075 * Math.sin(y * 92 + 1.6 * Math.sin(a * 2 + 1)) + .03 * Math.sin(a * 5 + y * 40))            // bunching at the elbow
@@ -313,7 +313,7 @@ M.createTypist = function createTypist(api){
       + smooth(.15, .168, y) * (1 - smooth(.188, .2, y)) * .045 * Math.sin(a * 4 + y * 50 + 1);                                       // slack piling onto the cuff
   const RIBS = 30, ribBand = y => smooth(.203, .209, y) * (1 - smooth(.233, .239, y));
   const foreGeo = lathe([[.0001, -.05], [.028, -.046], [.044, -.034], [.052, -.012], [.054, .018], [.051, .05], [.048, .09], [.0455, .13], [.0445, .158], [.0465, .177], [.045, .192],
-    [.039, .2], [.0345, .205], [.034, .209], [.0338, .214], [.0338, .22], [.0338, .226], [.0336, .232], [.031, .2385], [.0255, .2415], [.0001, .242]], 150,
+    [.039, .2], [.0345, .205], [.034, .209], [.0338, .214], [.0338, .22], [.0338, .226], [.0336, .232], [.031, .2385], [.0255, .2415], [.0001, .242]].map(([r, y]) => [r * (y > .19 ? .84 : .8), y]), 150,
     (a, y) => sleeveFold(a, y) + ribBand(y) * .05 * Math.max(-.6, Math.cos(a * RIBS)),                        // + rib knit on the cuff
     v => { v.x *= 1.1; v.z *= .86; });
   // the fabric's own shading: fold valleys darker, the knit cuff darker still with shadowed rib grooves
@@ -323,12 +323,12 @@ M.createTypist = function createTypist(api){
     k *= 1 - .2 * rb; k *= 1 - .3 * rb * clamp(.5 - .5 * Math.cos(a * RIBS), 0, 1);
     return [k, k, k];
   });
-  const wristGeo = tint(capsule(.0205, .0205, .05, 28, null, v => { v.x *= 1.3; v.z *= .74; v.z += .002 * smooth(.02, .05, v.y); }, 6), () => PLAIN);
-  const elbowGeo = blob(.056, .056, .056, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
+  const wristGeo = tint(capsule(.0185, .0185, .05, 28, null, v => { v.x *= 1.25; v.z *= .72; v.z += .002 * smooth(.02, .05, v.y); }, 6), () => PLAIN);
+  const elbowGeo = blob(.047, .047, .047, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
 
   /* ---------- hands ---------- */
-  const FL = [[.035, .029, .026], [.04, .024, .019], [.044, .027, .02], [.041, .025, .019], [.032, .02, .018]];
-  const FR = [[.0112, .0099, .009], [.0082, .0074, .0067], [.0085, .0077, .0069], [.008, .0072, .0065], [.0071, .0064, .0058]];
+  const FL = [[.036, .03, .026], [.041, .025, .019], [.045, .028, .02], [.042, .026, .019], [.032, .02, .0165]];
+  const FR = [[.0098, .0088, .0078], [.0075, .0067, .0059], [.0077, .0069, .006], [.0072, .0064, .0056], [.0062, .0055, .0049]];
   const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));
   const segGeo = FL.map((L, f) => L.map((l, j) => fingerSeg(FR[f][j], j < 2 ? FR[f][j + 1] : FR[f][j] * .9, l, j === 2)));
   const nailGeo = FL.map((L, f) => { const r = FR[f][2]; const g = blob(r * .8, r * .22, L[2] * .5, (x, y, z) => -.15 * Math.max(0, -y), 20, 12);
@@ -338,15 +338,15 @@ M.createTypist = function createTypist(api){
   for (let h = 0; h < 2; h++){
     const side = h ? 1 : -1, ts = -side;            // ts: which local x side the thumb is on
     const hand = new THREE.Group(); root.add(hand);
-    const KN = [V3(ts * .029, -.006, -.028), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.08)];
+    const KN = [V3(ts * .031, -.007, -.03), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.08)];
     mesh(palmGeo(ts, KN.slice(1).map(k => k.x)), skin, hand);
-    mesh(tint(blob(.0175, .0135, .03, null, 24, 16), () => PLAIN), skin, hand, V3(ts * .021, -.005, -.03), [0, -ts * .25, 0]);   // thenar
+    mesh(tint(blob(.015, .0115, .028, null, 24, 16), () => PLAIN), skin, hand, V3(ts * .022, -.005, -.032), [0, -ts * .25, 0]);   // thenar
     const upper = new THREE.Group(); root.add(upper); mesh(upperGeo, cloth, upper); mesh(elbowGeo, cloth, upper, V3(0, L1, 0));
     const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, cuffM, fore); mesh(wristGeo, skin, fore, V3(0, .21, 0));
     const fingers = [];
     for (let f = 0; f < 5; f++){
       const base = new THREE.Group(); base.position.copy(KN[f]); hand.add(base);
-      if (f === 0) base.rotation.set(-.35, -ts * .5, 0, 'YXZ'); else base.rotation.y = ts * (f - 2.4) * -.03;
+      if (f === 0) base.rotation.set(-.4, -ts * .6, 0, 'YXZ'); else base.rotation.y = ts * (f - 2.4) * -.05;
       const g0 = new THREE.Group(); g0.rotation.order = 'YXZ'; base.add(g0);
       const g1 = new THREE.Group(); g1.position.z = -FL[f][0]; g0.add(g1);
       const g2 = new THREE.Group(); g2.position.z = -FL[f][1]; g1.add(g2);
@@ -374,7 +374,7 @@ M.createTypist = function createTypist(api){
       H.homeQ.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, back))
         .multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -H.side * .2));
       const kc = H.fingers.slice(1).reduce((a, F) => a.add(F.base.position), V3()).multiplyScalar(.25);
-      const target = C.clone().addScaledVector(n, .045).addScaledVector(kfw, -.052);
+      const target = C.clone().addScaledVector(n, .056).addScaledVector(kfw, -.046);
       H.homeW.copy(target).sub(kc.clone().applyQuaternion(H.homeQ));
       H.W = new VSpring(H.homeW); H.hold.copy(H.homeW); H.region = new VSpring(H.homeW);
       const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(1, 1, 1)).invert();
@@ -600,7 +600,7 @@ M.createTypist = function createTypist(api){
       const tgt = v2.set(0, 0, 0); let wsum = 0, lead = null;
       for (const F of H.fingers){
         if (F.mode !== 'strike' && F.mode !== 'hold') continue;
-        const wgt = F.mode === 'strike' ? (F.f === 0 ? .35 : 1) * (.35 + 3 * smooth(.15, .85, F.t / F.Td)) /* the finger about to land owns the wrist */ : MOD.test(F.code || '') ? .15 : .5;
+        const wgt = F.mode === 'strike' ? (F.f === 0 ? .35 : 1) * (.35 + 3 * smooth(.15, .85, F.t / F.Td) + (F.t > F.Td ? 6 : 0)) /* the finger about to land owns the wrist */ : MOD.test(F.code || '') ? .15 : .5;
         tgt.addScaledVector(F.reach, wgt); wsum += wgt;
         if (F.mode === 'strike' && F.t / F.Td > .6 && (!lead || F.t / F.Td > lead.t / lead.Td)) lead = F;   // the finger about to land
       }
@@ -672,7 +672,7 @@ M.createTypist = function createTypist(api){
           solveFinger(F, F.P);
           if (u >= 1){
             const err = F.tip.distanceTo(Kc);
-            if (err < .0015 || F.t > F.Td + .1){
+            if (err < .0015 || F.t > F.Td + .12){
               F.mode = 'hold'; F.pressed = true; F.tC = F.t; F.depth.x = 0; F.depth.v = .9;
               contacts.push({ code: F.vcode, err: F.tip.clone().sub(Kc), t: F.t, at: T.toFixed(2) + '/h' + F.h });
               if (contacts.length > 400) contacts.shift();

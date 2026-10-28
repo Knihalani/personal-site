@@ -770,34 +770,34 @@ M.createScene = function createScene(container){
   const qLook = new THREE.Quaternion(), qDelta = new THREE.Quaternion(), eLook = new THREE.Euler(0, 0, 0, 'YXZ');
   const eyeNow = eyeRest.clone(), fwdNow = new V3();
   let breathT = 0;
-  /* v3: ONE fixed shot. The eye sits back and above the typist's own eyes so the whole tube, the keyboard and both
-     hands are in frame at once; it never follows the pointer and never sways. The lens is fitted to those three
-     things for the current aspect (aim and FOV solved so they sit centred with a small margin). */
-  const SHOT = { back: .85, up: .32, kbPull: -.02 };
-  const eyeShot = eyeRest.clone().addScaledVector(flatN, SHOT.back); eyeShot.y += SHOT.up; eyeShot.x = (screenCenter.x + keyboardCenter.x) / 2; // square-on to the machine
-  const fitPts = () => {
-    const ps = [], gx = new V3().crossVectors(new V3(0, 1, 0), flatN).normalize();
-    for (const sx of [-1, 1]) for (const sy of [-1, 1]) ps.push(screenCenter.clone().addScaledVector(gx, sx * (GW / 2 + .012)).add(new V3(0, sy * (GH / 2 + .012), 0)));
+  /* v3: ONE fixed shot, square-on to the tube. The camera looks straight down the screen's normal (so the glass is
+     a true rectangle, no keystone), from far enough back that the near keyboard isn't blown up by perspective.
+     The keyboard and hands below are brought into frame with a shifted lens (off-axis frustum), not by tilting. */
+  const SHOT = { dist: 1.7, up: .27, kbFront: -.005, margin: .012 };
+  const camN = screenNormal.clone().normalize();
+  const camQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new V3(), camN.clone().negate(), new V3(0, 1, 0)));
+  const camUp = new V3(0, 1, 0).applyQuaternion(camQ), camRight = new V3(1, 0, 0).applyQuaternion(camQ);
+  const eyeShot = screenCenter.clone().addScaledVector(camN, SHOT.dist).addScaledVector(camUp, SHOT.up);
+  const shotPts = (() => {
+    const ps = [], m = SHOT.margin;
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) ps.push(screenCenter.clone().addScaledVector(camRight, sx * (GW / 2 + m)).addScaledVector(camUp, sy * (GH / 2 + m)));
     const kx = new V3(Math.cos(KB.yaw), 0, -Math.sin(KB.yaw)), kz = new V3(Math.sin(KB.yaw), 0, Math.cos(KB.yaw));
-    for (const sx of [-1, 1]) ps.push(keyboardCenter.clone().addScaledVector(kx, sx * (KB.w / 2 + .01)).addScaledVector(kz, KB.d / 2 + SHOT.kbPull));
+    for (const sx of [-1, 1]) ps.push(keyboardCenter.clone().addScaledVector(kx, sx * (KB.w / 2 + .008)).addScaledVector(kz, SHOT.kbFront));
     return ps;
-  };
+  })();
+  const shotInv = new THREE.Matrix4();
   function applyCamera(){
-    const ps = fitPts(), m = new THREE.Matrix4(), inv = new THREE.Matrix4();
-    let yaw = YAW0, pitch = PITCH0, tv = .3, th = .3;
-    for (let it = 0; it < 6; it++){
-      eLook.set(pitch, yaw, 0); qLook.setFromEuler(eLook);
-      m.compose(eyeShot, qLook, new V3(1, 1, 1)); inv.copy(m).invert();
-      let vmin = 9, vmax = -9, hmin = 9, hmax = -9;
-      for (const p of ps){ const c = p.clone().applyMatrix4(inv), d = -c.z, av = Math.atan2(c.y, d), ah = Math.atan2(c.x, d);
-        vmin = Math.min(vmin, av); vmax = Math.max(vmax, av); hmin = Math.min(hmin, ah); hmax = Math.max(hmax, ah); }
-      pitch += (vmin + vmax) / 2; yaw -= (hmin + hmax) / 2;
-      tv = Math.tan((vmax - vmin) / 2); th = Math.tan((hmax - hmin) / 2);
-    }
-    eLook.set(pitch, yaw, 0); qLook.setFromEuler(eLook);
-    camera.position.copy(eyeShot); camera.quaternion.copy(qLook);
-    const fov = Math.min(80, 2 * Math.atan(Math.max(tv, th / aspect) * 1.03) / D2R);
-    if (Math.abs(camera.fov - fov) > 1e-4){ camera.fov = fov; camera.updateProjectionMatrix(); }
+    camera.position.copy(eyeShot); camera.quaternion.copy(camQ); camera.updateMatrixWorld();
+    shotInv.copy(camera.matrixWorld).invert();
+    let l = 9, r = -9, b = 9, t = -9, sTop = -9;
+    shotPts.forEach((p, i) => { const c = p.clone().applyMatrix4(shotInv), d = -c.z, x = c.x / d, y = c.y / d;
+      l = Math.min(l, x); r = Math.max(r, x); b = Math.min(b, y); t = Math.max(t, y); if (i < 4) sTop = Math.max(sTop, y); });
+    // fit the content box into the frame's aspect; spare room goes evenly to both sides, or (portrait) below the keys
+    let w = r - l, h = t - b; const cx = (l + r) / 2;
+    if (w / h < aspect){ w = h * aspect; } else { const h2 = w / aspect, cy = (t + b) / 2; t = cy + h2 / 2; b = cy - h2 / 2; h = h2; }
+    const n = camera.near;
+    camera.projectionMatrix.makePerspective((cx - w / 2) * n, (cx + w / 2) * n, t * n, b * n, n, camera.far);
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
   }
   /* never see inside the typist's head: anything added to the scene whose bounds wrap the eye is hidden */
   const added = [], hidden = new Set(), _sph = new THREE.Sphere();

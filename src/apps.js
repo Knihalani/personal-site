@@ -29,7 +29,7 @@ function box(scr, x, y, w, h, style){                       // ASCII frame, fill
 /* =====================================================================================
    TETRIS: SRS rotation + wall kicks, 7-bag, ghost, hold, next queue, lock delay
    ===================================================================================== */
-const BW = 10, BH = 20;
+const BW = 10;              // the well height adapts to the grid (BH, inside start)
 const SHAPES = {            // spawn state (0) in an n x n box, SRS orientation
   I: ['....', '####', '....', '....'],
   O: ['##', '##'],
@@ -70,6 +70,7 @@ T.apps.tetris = {
   desc: 'the falling blocks. arrows, space, c to hold',
   usage: 'tetris',
   start(api){
+    const BH = Math.max(10, Math.min(20, (api.rows || 23) - 2));   // well + floor + feet must fit the grid
     const board = Array.from({ length: BH }, () => Array(BW).fill(null));
     let bag = [], queue = [], cur = null, hold = null, canHold = true;
     let score = 0, lines = 0, level = 1, hi = hiGet(TETRIS_HI), newHi = false;
@@ -179,7 +180,10 @@ T.apps.tetris = {
       },
       render(scr){
         scr.clear(); scr.cursor(0, 0, null);
-        const W = BW * 2 + 4, ox = ((scr.cols - W) / 2) | 0, oy = Math.max(0, ((scr.rows - BH - 2) / 2) | 0);
+        const W = BW * 2 + 4;
+        const compact = scr.cols < 64 || scr.rows < 22;      // one stacked panel to the right of the well
+        const ox = compact ? Math.max(0, ((scr.cols - (W + 3 + 20)) / 2) | 0) : ((scr.cols - W) / 2) | 0;
+        const oy = Math.max(0, ((scr.rows - BH - 2) / 2) | 0);
         const bx = ox + 2;  // first board column
         // well: classic "<!" ... "!>" sides
         for (let y = 0; y < BH; y++){
@@ -203,6 +207,21 @@ T.apps.tetris = {
         // mini piece preview
         const mini = (p, x, y, level) => { if (!p) return; const n = SHAPES[p].length; const off = n === 4 ? 0 : 1;
           for (const [cx, cy] of STATES[p][0]) scr.put(x + (cx + off) * 2, y + cy - (p === 'I' ? 1 : 0), '  ', blk(level)); };
+        if (compact){
+          const rx = ox + W + 3;
+          scr.put(rx, oy, 'NEXT', 'dim'); mini(queue[0], rx, oy + 1, 'bright');
+          scr.put(rx + 10, oy, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx + 10, oy + 1, canHold ? 'normal' : 'faint');
+          [['SCORE', score, 'bright'], ['HIGH', Math.max(hi, score), score > hi ? 'bright' : 'normal'], ['LEVEL', level, 'normal'], ['LINES', lines, 'normal']]
+            .forEach(([a, v, st], i) => { scr.put(rx, oy + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, oy + 4 + i, String(v), st); });
+          const ks = [['<- ->', 'move'], ['up x', 'rotate'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
+          const ky = oy + 9, two = scr.rows - ky < ks.length;
+          const short = [['<->', 'move'], ['up', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
+          (two ? short : ks).forEach(([a, b], i) => {
+            const x = rx + (two ? (i % 2) * 11 : 0), y = ky + (two ? i >> 1 : i);
+            if (y >= scr.rows) return;
+            scr.put(x, y, two ? a.padEnd(4) : a.padEnd(7), 'normal'); scr.put(x + (two ? 4 : 7), y, b, 'faint');
+          });
+        } else {
         // left panel: hold + score
         const lx = ox - 16;
         scr.put(lx, oy, 'HOLD', 'dim'); scr.put(lx + 5, oy, canHold ? '' : '(used)', 'faint');
@@ -219,6 +238,7 @@ T.apps.tetris = {
         mini(queue[2], rx, oy + 9, 'faint');
         const keys = [['<- ->', 'move'], ['up x', 'rotate'], ['z', 'rotate back'], ['down', 'soft drop'], ['space', 'hard drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
         keys.forEach(([a, b], i) => { scr.put(rx, oy + 13 + i, a.padEnd(7), 'normal'); scr.put(rx + 7, oy + 13 + i, b, 'faint'); });
+        }
         // overlays
         const cardX = bx + 1, cardW = BW * 2 - 2;
         if (paused){
@@ -226,8 +246,9 @@ T.apps.tetris = {
           scr.put(cardX + ((cardW - 6) / 2 | 0), oy + 8, 'PAUSED', 'bright');
           scr.put(cardX + ((cardW - 14) / 2 | 0), oy + 10, 'p to carry on', 'dim');
         } else if (over){
-          box(scr, cardX, oy + 5, cardW, 10, 'normal');
-          const c = (y, s, st) => scr.put(cardX + ((cardW - s.length) / 2 | 0), oy + y, s, st);
+          const top = Math.max(0, Math.min(5, BH - 10));
+          box(scr, cardX, oy + top, cardW, 10, 'normal');
+          const c = (y, s, st) => scr.put(cardX + ((cardW - s.length) / 2 | 0), oy + top + y - 5, s, st);
           c(6, 'GAME  OVER', 'bright');
           c(8, 'score ' + score, 'normal');
           c(9, lines + ' lines  lvl ' + level, 'dim');

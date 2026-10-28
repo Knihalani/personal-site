@@ -451,8 +451,7 @@ Engine.prototype.event = function (name, when){
     this.play(this.bootBuf, this.fxBus, when, 0.42, 1, 0);
     this.play(this.spinBuf, this.fxBus, when + 0.55, 0.22, 1, 0.25);
     this.play(this.getFx('disk')[0], this.fxBus, when + 1.35, 0.26, 1, 0.25);
-    this.startWhine(when + 0.35);
-    return;
+    return;  // no flyback whine or room bed: the keys and the machine are the only sounds
   }
   const L = name !== 'drops' && this.getFx(name); if (!L) return;
   const buf = L[Math.floor(Math.random() * L.length)];
@@ -561,8 +560,6 @@ const sound = {
         /* spread the synthesis over a few tasks so the first keystroke never hitches */
         setTimeout(() => {
           try {
-            if (!muted) eng.event('boot', ctx.currentTime + 0.03); else eng.startWhine(ctx.currentTime);
-            setTimeout(() => { try { eng.startAmbience(ctx.currentTime + 0.05); } catch (e){} }, 60);
             setTimeout(() => { try { eng.fillKeys(); } catch (e){} }, 200);
             setTimeout(() => { try { eng.warm(); } catch (e){} }, 2600);
           } catch (e){}

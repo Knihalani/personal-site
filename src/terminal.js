@@ -8,7 +8,7 @@
    bloom, where Plex Mono's thin hairlines and ink traps would smear into mush. One face only: hierarchy
    comes from brightness (faint, dim, normal, bright), inverse video, and DEC-style double-size lines.
 
-   Everything is drawn on a fixed 72-column grid. Rules, arrows, bars and diagrams are drawn as vectors in
+   Everything is drawn on a fixed COLS-column grid (54 to 60; nothing assumes a width). Rules, arrows, bars and diagrams are drawn as vectors in
    the same phosphor so we never depend on box-drawing glyphs the font may not have. */
 (() => {
 'use strict';
@@ -393,11 +393,11 @@ M.createTerminal = function createTerminal(opts){
       blank(){ r.push({ k: 't', i: 0, s: [] }); return o; },
       big(text, st = 'b'){ r.push({ k: 'big', i: 2, s: [[text, st]] }); return o; },
       head(label, note){ r.push({ k: 'head', i: 2, label, note: note || '' }); return o; },
-      para(text, st = 'n', width = 62, i = 2){ for (const l of wrap(text, width)) o.at(i, [l, st]); return o; },
+      para(text, st = 'n', width = COLS - 6, i = 2){ for (const l of wrap(text, width)) o.at(i, [l, st]); return o; },
       viz(h, draw, live){ r.push({ k: 'viz', h, draw, live: live || null, t0: -1 }); return o; },
-      link(label, url, i = 2, labelW = 0){
+      link(label, url, i = 2, labelW = 0, shown){
         const sp = []; if (label) sp.push([pad(label, labelW), 'd']);
-        sp.push([url, 'n', { url }]); r.push({ k: 't', i, s: sp }); return o;
+        sp.push([shown || url, 'n', { url }]); r.push({ k: 't', i, s: sp }); return o;
       },
     };
     return o;
@@ -486,18 +486,31 @@ M.createTerminal = function createTerminal(opts){
 
   /* ---- content ---- */
   const L = C.links || {}, J = C.j || {}, E = C.eden || {}, A = C.about || {}, Wr = C.writing || {};
+  const bare = u => String(u || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+  const URLS = {
+    linkedin: L.linkedin || 'https://www.linkedin.com/in/kaiav-nihalani-594703356/',
+    x: L.x || 'https://x.com/KaiavRNihalani',
+    gh: L.github || L.gh || 'https://github.com/knihalani/personal-site',
+    j: J.url || 'https://risingfounder.net',
+  };
+  const EMAILS = (C.contact && Array.isArray(C.contact.emails) && C.contact.emails.length) ? C.contact.emails : [
+    { label: 'J (Rising Founder)', short: 'J', email: 'kaiav@risingfounder.net' },
+    { label: 'everything else', short: 'everything else', email: 'kaiav.nihalani@gmail.com' },
+  ];
   const OPEN = [
-    { name: 'linkedin', url: L.linkedin, label: 'LinkedIn' },
-    { name: 'x', url: L.x, alias: ['twitter'], label: 'X' },
-    { name: 'j', url: J.url, alias: ['risingfounder', 'rising'], kw: ['rising founder'], label: J.title },
-  ].filter(o => o.url);
-  const wrapT = (t, w = 68) => wrap(t, w).join('\n');
+    { name: 'j', url: URLS.j, alias: ['risingfounder', 'rising'], kw: ['rising founder'], label: bare(URLS.j) },
+    { name: 'linkedin', url: URLS.linkedin, label: bare(URLS.linkedin) },
+    { name: 'x', url: URLS.x, alias: ['twitter'], label: bare(URLS.x) },
+    { name: 'gh', url: URLS.gh, alias: ['github', 'repo', 'source'], label: bare(URLS.gh) },
+  ];
+  const LINKLIST = () => OPEN.filter(o => o.name !== 'j');
+  const wrapT = (t, w = 50) => wrap(t, w).join('\n');
   const posts = () => (Wr.posts || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const TEXT = {
     about: () => [C.name, A.role, '', ...(A.body || []).map(p => wrapT(p))].filter(x => x != null).join('\n') + '\n',
     eden: () => [E.title || 'Eden', E.role, '', E.line].filter(x => x != null).join('\n') + '\n',
     j: () => [J.title || 'J', J.role, '', J.line, wrapT(J.body || ''), '', ...(J.facts || []).map(f => pad(f[0], 9) + f[1]), '', J.url].filter(x => x != null).join('\n') + '\n',
-    links: () => [L.linkedin && pad('linkedin', 10) + L.linkedin, L.x && pad('x', 10) + L.x].filter(Boolean).join('\n') + '\n',
+    links: () => LINKLIST().map(t => pad(t.name, 10) + t.url).join('\n') + '\n',
     writing: () => posts().length ? posts().map(p => [p.date, p.title, p.summary && wrapT(p.summary), p.url].filter(Boolean).join('\n')).join('\n\n') + '\n' : 'No posts yet.\n',
   };
   const README = [
@@ -509,7 +522,9 @@ M.createTerminal = function createTerminal(opts){
     '  eden        ' + [E.title || 'Eden', E.line].filter(Boolean).join('. '),
     '  j           ' + (J.title || 'J'),
     '  writing     posts',
-    '  links       LinkedIn and X',
+    '  links       LinkedIn, X and GitHub',
+    '  contact     email addresses',
+    '  linkedin    x    gh    one link each',
     '  open x      open a link in a new tab',
     '  snake       a game',
     '  tetris      a game',
@@ -523,7 +538,8 @@ M.createTerminal = function createTerminal(opts){
     '  echo hello > notes/hello.txt',
     '  ls -l ~/notes', '',
     'Files you make are kept in this browser.',
-    'Tab completes. Up and down recall history. Ctrl+C stops a command.', '',
+    'Tab completes. Up and down recall history.',
+    'Ctrl+C stops a command.', '',
   ].join('\n');
   FS.seed([HOME, HOME + '/notes', HOME + '/writing', '/etc', '/tmp'], [
     { path: HOME + '/README.md', text: README },
@@ -542,7 +558,7 @@ M.createTerminal = function createTerminal(opts){
   function welcome(o){
     o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line(['type ', 'f'], ['help', 'n'], [' to begin, or try', 'f'])
-      .line(['about', 'n'], ['  ', 'f'], ['eden', 'n'], ['  ', 'f'], ['j', 'n'], ['  ', 'f'], ['writing', 'n'], ['  ', 'f'], ['links', 'n'], ['  ', 'f'], ['tetris', 'n'])
+      .line(['about', 'n'], ['  ', 'f'], ['eden', 'n'], ['  ', 'f'], ['j', 'n'], ['  ', 'f'], ['writing', 'n'], ['  ', 'f'], ['links', 'n'], ['  ', 'f'], ['contact', 'n'], ['  ', 'f'], ['tetris', 'n'])
       .line(['new here? ', 'f'], ['cat README.md', 'd'])
       .blank();
     return o;
@@ -563,8 +579,7 @@ M.createTerminal = function createTerminal(opts){
       o.blank().head('j', 'j.txt').big(J.title || 'J').line([J.role || '', 'd']).blank()
         .line([J.line || '', 'b']).para(J.body || '', 'n').blank()
         .viz(5, drawBars, age => age < 1.6 ? 30 : 0).blank();
-      if (J.url) o.link('', J.url).line(['tab selects the link, enter opens it', 'f']);
-      o.blank();
+      if (J.url) o.link('', J.url);
       return o;
     },
     writing(o){
@@ -573,7 +588,7 @@ M.createTerminal = function createTerminal(opts){
       if (!ps.length){ o.viz(5, drawEmpty, () => 4).blank(); return o; }
       for (const p of ps){
         o.line([pad(p.date || '', 12), 'd'], [p.title || '', 'b']);
-        if (p.summary) o.para(p.summary, 'n', 58, 14);
+        if (p.summary) o.para(p.summary, 'n', COLS - 16, 14);
         if (p.url) o.link('', p.url, 14);
         o.blank();
       }
@@ -581,15 +596,21 @@ M.createTerminal = function createTerminal(opts){
     },
     links(o){
       o.blank().head('links', 'links.txt').blank();
-      if (L.linkedin) o.link('linkedin', L.linkedin, 2, 11);
-      if (L.x) o.link('x', L.x, 2, 11);
-      o.blank().line(['tab selects, enter opens, or type ', 'f'], ['open x', 'd']).blank();
+      for (const t of LINKLIST()) o.link(t.name, t.url, 2, 10, t.label);
+      o.blank().line(['also ', 'f'], ['linkedin', 'n'], ['  ', 'f'], ['x', 'n'], ['  ', 'f'], ['gh', 'n'], ['  ', 'f'], ['contact', 'n'], ['  ', 'f'], ['open <name>', 'n']);
       return o;
     },
   };
-  function openUrl(url){
-    try { return window.open(url, '_blank', 'noopener'); } catch (e){ return null; }
+  /* must run inside the keydown that asked for it, or popup blockers step in */
+  function openTarget(url){
+    try {
+      if (/^mailto:/i.test(url)){ location.href = url; return true; }
+      const w = window.open(url, '_blank');
+      if (w){ try { w.opener = null; } catch (e){} return true; }
+    } catch (e){}
+    return false;
   }
+  const openUrl = openTarget;
   const uptimeStr = () => {
     const s = Math.floor((performance.now() - T0) / 1000);
     const hh = Math.floor(s / 3600), mm = Math.floor(s / 60) % 60, ss = s % 60;
@@ -627,17 +648,37 @@ M.createTerminal = function createTerminal(opts){
          opts and ex for the manual. Registered commands with the same name win. ---- */
   const B = {};
   const def = (name, d) => { B[name] = d; };
-  const doc = name => ({ g: 'read', desc: name === 'about' ? 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is' : name === 'eden' ? 'Eden. ' + (E.line || '') : name === 'j' ? J.title || 'J' : name === 'writing' ? 'posts' : 'LinkedIn and X',
-    usage: name, run(argv, io){ if (io.tty) io.rich(DOCS[name](out())); else io.write(TEXT[name]()); } });
+  const doc = name => ({ g: 'read', after: name === 'j' ? io => io.choose([{ label: bare(URLS.j), url: URLS.j }]) : name === 'links' ? io => io.choose(LINKLIST().map(t => ({ label: t.label, short: t.name, url: t.url }))) : null, desc: name === 'about' ? 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is' : name === 'eden' ? 'Eden. ' + (E.line || '') : name === 'j' ? J.title || 'J' : name === 'writing' ? 'posts' : 'LinkedIn and X',
+    usage: name, run(argv, io){ if (io.tty){ io.rich(DOCS[name](out())); if (this.after) return this.after(io); } else io.write(TEXT[name]()); } });
   for (const n of ['about', 'eden', 'j', 'writing', 'links']) def(n, doc(n));
-  def('open', { g: 'read', desc: 'open a link: ' + OPEN.map(o => o.name).join(', '), usage: 'open <link>', run(argv, io){
-    const q = argv.slice(1).join(' ');
+  def('open', { g: 'read', desc: 'open a link: a url, ' + OPEN.map(o => o.name).join(', '), usage: 'open <url | j | gh | linkedin | x>', ex: ['open j', 'open https://risingfounder.net'], run(argv, io){
+    const q = argv.slice(1).join(' ').trim();
     if (!q){ io.write('open what? ', 'dim'); io.write(OPEN.map(x => x.name).join('  ') + '\n'); return 1; }
-    const f = fuzzy(q, OPEN);
-    if (!f){ io.err('open: no link called ' + q + '. try ' + OPEN.map(x => x.name).join(', ') + '\n'); return 1; }
-    const w = openUrl(f.item.url);
-    if (io.tty){ const o = out(); o.at(0, ['opening ', 'd'], [f.item.label || f.item.name, 'b']).at(2, [f.item.url, 'n', { url: f.item.url }]); if (!w) o.at(2, ['if nothing opened, the address is above', 'f']); io.rich(o); }
-    else io.write(f.item.url + '\n');
+    let url = null, label = '';
+    if (/^(https?:\/\/|mailto:)\S+$/i.test(q)){ url = q; label = bare(q); }
+    else if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(q)){ url = 'https://' + q; label = bare(q); }
+    else { const f = fuzzy(q, OPEN); if (f){ url = f.item.url; label = f.item.label; } }
+    if (!url){ io.err('open: no link called ' + q + '. try ' + OPEN.map(x => x.name).join(', ') + ' or a url\n'); return 1; }
+    if (!io.tty){ io.write(url + '\n'); return; }
+    const w = openTarget(url);
+    const o = out(); o.at(0, ['opening ', 'd'], [label, 'b', { url }]); if (!w) o.at(2, ['if nothing opened, enter on the address opens it', 'f']); io.rich(o);
+  } });
+  /* one link, printed, then a one-key prompt to open it */
+  const linkCmd = (name, desc) => ({ g: 'read', desc, usage: name, run(argv, io){
+    const t = OPEN.find(x => x.name === name);
+    if (!io.tty){ io.write(t.url + '\n'); return; }
+    io.rich(out().at(0, [pad(name, 10), 'd'], [t.label, 'n', { url: t.url }]));
+    return io.choose([{ label: t.label, url: t.url }]);
+  } });
+  def('gh', linkCmd('gh', 'the source of this site, on GitHub'));
+  def('linkedin', linkCmd('linkedin', 'LinkedIn'));
+  def('x', linkCmd('x', 'X (Twitter)'));
+  def('contact', { g: 'read', desc: 'email addresses', usage: 'contact', run(argv, io){
+    if (!io.tty){ io.write(EMAILS.map(e => pad(e.label, 20) + e.email).join('\n') + '\n'); return; }
+    const o = out(); o.blank().head('contact').blank();
+    EMAILS.forEach((e, i) => o.at(2, [(i + 1) + '  ', 'f'], [pad(e.label, 20), 'd'], [e.email, 'b', { url: 'mailto:' + e.email }]));
+    o.blank(); io.rich(o);
+    return io.choose(EMAILS.map(e => ({ label: e.email, short: e.short, url: 'mailto:' + e.email })), 'email');
   } });
   def('welcome', { g: 'read', hidden: true, desc: 'the first screen', usage: 'welcome', run(argv, io){ if (io.tty) io.rich(welcome(out())); else io.write(C.name + '\n'); } });
 
@@ -945,7 +986,8 @@ M.createTerminal = function createTerminal(opts){
     for (const [gk, label] of groups) if (by[gk]) line(label, by[gk], gk === 'read' ? 'b' : 'n');
     if (apps.length) line('apps', apps, 'b');
     if (by.more) line('extras', by.more, 'n');
-    o.blank().at(2, ['man <cmd>', 'n'], [' for details   ', 'f'], ['tab', 'n'], [' completes   ', 'f'], ['ctrl+c', 'n'], [' stops   ', 'f'], ['cat README.md', 'n']).blank();
+    o.blank().at(2, ['man <cmd>', 'n'], [' for details   ', 'f'], ['tab', 'n'], [' completes   ', 'f'], ['ctrl+c', 'n'], [' stops', 'f'])
+      .at(2, ['open <name>', 'n'], [' opens a link   ', 'f'], ['cat README.md', 'n'], [' a guide', 'f']).blank();
     if (io.tty) io.rich(o); else io.write(o.rows.map(textOf).join('\n') + '\n');
   } });
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
@@ -1022,8 +1064,8 @@ M.createTerminal = function createTerminal(opts){
   }
   function fetchInfo(){
     const d = diskUse();
-    return [['OS', 'KNOS 1.04'], ['Host', 'KN-84 personal computer'], ['Kernel', '1.04 #1 1984'], ['Uptime', uptimeStr()], ['Shell', 'sh, ' + Object.keys(M.TERM.cmds).length + ' commands'],
-      ['Terminal', 'vt320, ' + COLS + 'x' + ROWS + ', VT323'], ['CPU', 'KN-1 @ 8 MHz'], ['Memory', '640K'], ['Disk', human(d.bytes) + ' in ' + d.files + ' files'], ['Display', 'P1 green phosphor']];
+    return [['OS', 'KNOS 1.04'], ['Host', 'KN-84'], ['Kernel', '1.04 #1 1984'], ['Uptime', uptimeStr()], ['Shell', 'sh, ' + Object.keys(M.TERM.cmds).length + ' cmds'],
+      ['Terminal', 'vt320 ' + COLS + 'x' + ROWS + ', VT323'], ['CPU', 'KN-1 @ 8 MHz'], ['Memory', '640K'], ['Disk', human(d.bytes) + ' in ' + d.files + ' files'], ['Display', 'P1 green phosphor']];
   }
 
   /* ---- expansion ---- */
@@ -1212,6 +1254,19 @@ M.createTerminal = function createTerminal(opts){
       rich(o){ if (!j.dead) ctx.sink.rich(o); },
       exit(c){ io.code = (c | 0); },
       sleep: ms => j.sleep(ms),
+      /* one-key inline prompt: items [{ label, short?, url }]; resolves with the item opened, or null */
+      choose(items, noun){
+        if (!ctx.sink.tty || j.dead || !items || !items.length) return Promise.resolve(null);
+        return new Promise(res => {
+          openRow = null;
+          const row = { k: 't', i: 0, s: [] }, hint = items.length > 1 ? { k: 't', i: 0, s: [] } : null;
+          rows.push(row); if (hint) rows.push(hint);
+          j.choice = { items, sel: 0, row, hint, res, noun: noun || 'link' };
+          paintChoice(j.choice);
+          mirror(items.length > 1 ? 'Press 1 to ' + items.length + ' or Enter to open ' + items.map((it, i) => (i + 1) + ', ' + it.label).join('; ') + '. Any other key goes back.' : 'Press Enter or o to open ' + items[0].label + '. Any other key goes back.');
+          dirty = true;
+        });
+      },
       runApp(name, argv){
         const a = Array.isArray(argv) ? (argv[0] === name ? argv : [name, ...argv]) : [name];
         if (!M.TERM.apps[name]) return Promise.resolve(127);
@@ -1219,6 +1274,38 @@ M.createTerminal = function createTerminal(opts){
       },
     };
     return io;
+  }
+  function paintChoice(ch){
+    if (ch.items.length === 1){
+      ch.row.s = [['open ', 'd'], [ch.items[0].label, 'b'], ['?  ', 'd'], ['enter', 'n'], ['/', 'f'], ['o', 'n'], [' open  ', 'f'], ['other key', 'n'], [' back', 'f']];
+      return;
+    }
+    const sp = [['open ', 'd']];
+    ch.items.forEach((it, i) => { sp.push([' ' + (i + 1) + ' ' + (it.short || it.label) + ' ', i === ch.sel ? 'i' : 'n'], [' ', 'f']); });
+    ch.row.s = sp;
+    ch.hint.s = [['1-' + ch.items.length, 'n'], [' or ', 'f'], ['enter', 'n'], [' open  ', 'f'], ['arrows', 'n'], [' move  ', 'f'], ['other key', 'n'], [' back', 'f']];
+  }
+  /* a key while a choice is waiting; returns true when consumed */
+  function choiceKey(e){
+    const ch = job.choice, k = e.key, n = ch.items.length;
+    if (e.ctrlKey && k.toLowerCase() === 'c'){ interrupt(); return true; }
+    if (n > 1 && (k === 'ArrowRight' || k === 'ArrowDown' || (k === 'Tab' && !e.shiftKey))){ ch.sel = (ch.sel + 1) % n; paintChoice(ch); dirty = true; return true; }
+    if (n > 1 && (k === 'ArrowLeft' || k === 'ArrowUp' || (k === 'Tab' && e.shiftKey))){ ch.sel = (ch.sel + n - 1) % n; paintChoice(ch); dirty = true; return true; }
+    let pick = -1;
+    if (k === 'Enter' || (n === 1 && (k === 'o' || k === 'O'))) pick = ch.sel;
+    else if (/^[1-9]$/.test(k) && +k <= n) pick = +k - 1;
+    job.choice = null;
+    if (ch.hint){ const at = rows.indexOf(ch.hint); if (at >= 0){ rows.splice(at, 1); shown = Math.min(shown, rows.length); } }
+    let it = null;
+    if (pick >= 0){
+      it = ch.items[pick];
+      const ok = openTarget(it.url);                       // synchronous, inside the keydown
+      ch.row.s = [['opening ', 'd'], [it.label, 'b', { url: it.url }]].concat(ok ? [] : [['  (blocked? enter on it)', 'f']]);
+      if (job) job.plain += 'Opening ' + it.label + '. ';
+    } else ch.row.s = [['back', 'f']];
+    dirty = true;
+    ch.res(it);
+    return true;
   }
   function interrupt(){
     if (!job) return;
@@ -1443,6 +1530,7 @@ M.createTerminal = function createTerminal(opts){
       if (ctrl && c === 'c' && app === st) interrupt();
       return true;
     }
+    if (job && job.choice){ if (typing()) revealAll(); return choiceKey(e); }
     if (typing()){ revealAll(); if (k === 'Enter' || k === 'Escape' || k === ' ' && !input) return true; }
     if (job){                                   // a command is running: only ctrl+c, ctrl+l and scrolling
       if (ctrl && c === 'c'){ interrupt(); return true; }
@@ -1698,7 +1786,7 @@ M.createTerminal = function createTerminal(opts){
     g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R); g.stroke();
     text(dp < 1 ? 'spinning up' + '.'.repeat(1 + Math.floor(t * 8) % 3) : 'ready', 12, top(3), dp < 1 ? 'n' : 'b');
     if (t < 1.45) return;
-    text('TERM', 0, top(4), 'd'); text('vt  72 x ' + ROWS, 10, top(4), 'n');
+    text('TERM', 0, top(4), 'd'); text('vt  ' + COLS + ' x ' + ROWS, 10, top(4), 'n');
     if (t > 1.6) text('OK', 42, top(4), 'b');
   }
 
@@ -1718,7 +1806,7 @@ M.createTerminal = function createTerminal(opts){
       g.fillRect(bx + cw, ly, (bw - cw * 2) * f, 5);
     });
     // agents
-    const ax = x + cw * 38, aw = cw * 11, ah = ch * 1.15;
+    const ax = x + cw * (COLS - 16), aw = cw * 11, ah = ch * 1.15;
     const ays = [y + ch * 0.45, y + h / 2 - ah / 2, y + h - ch * 0.45 - ah];
     const sx = bx + bw, sy = by + bh / 2;
     ays.forEach((ay, i) => {
@@ -1746,8 +1834,9 @@ M.createTerminal = function createTerminal(opts){
     });
   }
   function drawBars(x, y, w, h, age){
-    const labels = ['month 1', 'month 2', 'month 3'];
-    const base = y + h - ch * 1.25, maxH = h - ch * 1.6, bw = cw * 6, gap = cw * 10;
+    const narrow = COLS < 70;
+    const labels = narrow ? ['mo 1', 'mo 2', 'mo 3'] : ['month 1', 'month 2', 'month 3'];
+    const base = y + h - ch * 1.25, maxH = h - ch * 1.6, bw = cw * (narrow ? 3 : 6), gap = cw * (narrow ? 5 : 10);
     g.fillStyle = P.faint; g.fillRect(x, base, gap * 3 - cw * 2, 2);
     labels.forEach((lab, i) => {
       const p = REDUCED ? 1 : ease((age - i * 0.18) / 0.55);
@@ -1755,11 +1844,13 @@ M.createTerminal = function createTerminal(opts){
       const bx = x + i * gap + cw * 0.5;
       g.fillStyle = P.normal; g.fillRect(bx, base - bh, bw, bh);
       if (p > 0){ g.fillStyle = P.bright; g.fillRect(bx - 2, base - bh - 4, bw + 4, 4); }
-      g.font = font(); g.fillStyle = P.dim; g.fillText(lab, bx + (bw - cw * 7) / 2, base + 4 + fs * 0.68);
+      g.font = font(); g.fillStyle = P.dim; g.fillText(lab, bx + (bw - cw * lab.length) / 2, base + 4 + fs * 0.68);
     });
     // the facts, as a table aligned to the text grid beside the bars
-    const sepCol = 2 + 31, keyCol = sepCol + 2, f = J.facts || [];
-    const kw = Math.max(0, ...f.map(r => r[0].length)) + 3;
+    const f = J.facts || [];
+    const kw = Math.max(0, ...f.map(r => r[0].length)) + (narrow ? 2 : 3);
+    const vw = Math.max(0, ...f.map(r => r[1].length));
+    const sepCol = Math.min(2 + (narrow ? 16 : 31), COLS - vw - kw - 3), keyCol = sepCol + 2;
     g.fillStyle = P.faint; g.fillRect(X(sepCol), y + ch * 0.2, 2, ch * 4 - ch * 0.4);
     f.slice(0, 5).forEach(([k, v], i) => {
       const n = REDUCED ? 99 : Math.floor((age - 0.25 - i * 0.12) * 90);
@@ -1776,7 +1867,7 @@ M.createTerminal = function createTerminal(opts){
     g.beginPath(); g.moveTo(px, py); g.lineTo(px + pw - fold, py); g.lineTo(px + pw, py + fold); g.lineTo(px + pw, py + ph); g.lineTo(px, py + ph); g.closePath(); g.stroke();
     g.setLineDash([]); g.beginPath(); g.moveTo(px + pw - fold, py); g.lineTo(px + pw - fold, py + fold); g.lineTo(px + pw, py + fold); g.stroke();
     if (REDUCED || (t % 1.06) < 0.53){ g.fillStyle = P.normal; g.fillRect(px + cw * 1.2, py + ch * 0.9, cw, ch - 6); }
-    const col = 2 + 14;
+    const col = 2 + 12;
     text('No posts yet.', col, y + ch * 0.9, 'b');
     text('When there are, they will appear here,', col, y + ch * 2.0, 'd');
     text('newest first. Meanwhile:', col, y + ch * 3.0, 'd');
@@ -1785,7 +1876,8 @@ M.createTerminal = function createTerminal(opts){
   function drawFetch(x, y, w, h, age, t){
     // the KN-84 itself, in outline: a compact all-in-one with its screen lit, and a keyboard
     const ap = REDUCED ? 1 : ease(age / 0.5);
-    const bx = x, by = y + ch * 0.2, bw = cw * 18, bh = ch * 7.6;
+    const col = Math.max(14, COLS - 31);
+    const bx = x, by = y + ch * 0.2, bw = cw * Math.min(18, col - 6), bh = ch * 7.6;
     g.strokeStyle = P.normal; g.lineWidth = 2;
     g.strokeRect(bx, by, bw, bh * ap);
     if (ap >= 1){
@@ -1803,14 +1895,15 @@ M.createTerminal = function createTerminal(opts){
       const ky = by + bh + ch * 0.6, kh = ch * 2.6;
       g.strokeStyle = P.normal; g.strokeRect(bx - cw, ky, bw + cw * 2, kh);
       const kr = (kh - 12) / 4;
-      for (let r = 0; r < 3; r++) for (let c2 = 0; c2 < 11; c2++){
+      const nk = Math.floor((bw / cw) / 1.6);
+      for (let r = 0; r < 3; r++) for (let c2 = 0; c2 < nk - (r % 2); c2++){
         const kx = bx + c2 * cw * 1.6 + (r % 2) * cw * 0.5, kyy = ky + 6 + r * kr;
         g.fillStyle = P.dim; g.fillRect(kx, kyy, cw * 1.2, kr - 5);
       }
-      g.fillStyle = P.dim; g.fillRect(bx + cw * 4, ky + 6 + 3 * kr, cw * 10, kr - 5);
+      g.fillStyle = P.dim; g.fillRect(bx + bw * 0.22, ky + 6 + 3 * kr, bw * 0.56, kr - 5);
     }
     // the card
-    const col = 24; const info = fetchInfo();
+    const info = fetchInfo();
     const n = REDUCED ? 99 : Math.floor((age - 0.15) * 40);
     if (n <= 0) return;
     text('kaiav', col, y, 'b'); text('@', col + 5, y, 'f'); text('kn84', col + 6, y, 'b');
