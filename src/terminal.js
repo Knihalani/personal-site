@@ -1108,7 +1108,7 @@ M.createTerminal = function createTerminal(opts){
      help all lists every command, grouped by its g; help <cmd> is man */
   /* plain help is for someone who has never used a terminal: what you can do, in words, with commands to click */
   const HELP_TOP = [
-    ['about Kaiav', 'who Kaiav is and what they build', ['about', 'eden', 'j', 'writing', 'contact', 'links']],
+    ['about Kaiav', 'who he is, what he builds', ['about', 'eden', 'j', 'writing', 'contact', 'links']],
     ['do something', 'small, useful tools', ['weather', 'todo', 'qr', 'pass', 'vault', 'timer']],
     ['play', 'a game for a minute', ['tetris', 'snake', 'typing', 'donut']],
     ['files', 'look around this computer', ['ls', 'cat', 'edit']],
