@@ -25,6 +25,10 @@ M.dressRoom = function (api){
   }
   function canvasTex(w, h, draw, repeat){ const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
     const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; if (repeat){ t.wrapS = t.wrapT = THREE.RepeatWrapping; } return t; }
+  // textures lettered in a web font (Caveat, IBM Plex Mono) are painted now with whatever is loaded, then repainted
+  // once the font arrives, so a slow font never leaves a note in the fallback hand
+  const fontJobs = [];
+  function fontTex(w, h, draw){ const t = canvasTex(w, h, draw); fontJobs.push(() => { const c = t.image, x = c.getContext('2d'); x.clearRect(0, 0, w, h); draw(x, w, h); t.needsUpdate = true; }); return t; }
   function noiseFill(x, w, h, base, amt, n){ x.fillStyle = base; x.fillRect(0, 0, w, h); for (let i = 0; i < n; i++){ const a = rnd() * amt; x.fillStyle = rnd() < .5 ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a * .6})`; x.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 2, 1 + rnd() * 2); } }
   const mat = (hex, o) => new THREE.MeshStandardMaterial(Object.assign({ color: lin(hex), roughness: .7, metalness: 0 }, o || {}));
   function mesh(g, m, parent, x, y, z){ const o = new THREE.Mesh(g, m); o.position.set(x || 0, y || 0, z || 0); o.castShadow = true; o.receiveShadow = true; (parent || group).add(o); return o; }
@@ -65,7 +69,7 @@ M.dressRoom = function (api){
     bx += lean ? w + Math.sin(-lean) * h : w + .0015;
   });
   // three cassette tapes stacked flat, labels hand-written
-  const tapeLabel = t => canvasTex(256, 64, (x, W, H) => { x.fillStyle = '#efe6cf'; x.fillRect(0, 0, W, H); x.fillStyle = '#c4492d'; x.fillRect(0, 0, W, 9);
+  const tapeLabel = t => fontTex(256, 64, (x, W, H) => { x.fillStyle = '#efe6cf'; x.fillRect(0, 0, W, H); x.fillStyle = '#c4492d'; x.fillRect(0, 0, W, 9);
     x.fillStyle = '#20304f'; x.font = '500 30px Caveat, "Segoe Print", cursive'; x.fillText(t, 10, 46); });
   ['mixtape · spring', 'late night', 'side b'].forEach((t, i) => {
     const c = new THREE.Group(); c.position.set(SH.w / 2 - .085, SH.t / 2 + .0085 + i * .0172, -SH.d / 2 + .075); c.rotation.y = (rnd() - .5) * .25; shelf.add(c);
@@ -95,7 +99,7 @@ M.dressRoom = function (api){
   for (const [w, h, x, y] of [[CB.w + .03, .016, 0, CB.h / 2 + .008], [CB.w + .03, .016, 0, -CB.h / 2 - .008], [.016, CB.h, -CB.w / 2 - .008, 0], [.016, CB.h, CB.w / 2 + .008, 0]])
     mesh(softBox(w, h, .022, .003, .002), wood, board, x, y, .004);
   const card = (txt, col, w, h, x, y, rot, pin) => {
-    const t = canvasTex(256, Math.round(256 * h / w), (c, W, H) => { noiseFill(c, W, H, col, .05, 800);
+    const t = fontTex(256, Math.round(256 * h / w), (c, W, H) => { noiseFill(c, W, H, col, .05, 800);
       if (col === '#f3ecd9'){ c.strokeStyle = 'rgba(80,120,170,.35)'; c.lineWidth = 1; for (let yy = 40; yy < H; yy += 22){ c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); } c.strokeStyle = 'rgba(200,70,60,.4)'; c.beginPath(); c.moveTo(0, 30); c.lineTo(W, 30); c.stroke(); }
       // shrink the hand to fit the longest line and the line count, so any note from content.js fits its card
       const ls = txt.split('\n'); let fs = 34;
@@ -125,7 +129,7 @@ M.dressRoom = function (api){
 
   /* ================= framed print, right wall edge: a quiet orbital diagram ================= */
   { const FR = { x: .92, y: 1.33, w: .2, h: .27 };
-    const art = canvasTex(320, 432, (c, W, H) => { c.fillStyle = '#ece4d3'; c.fillRect(0, 0, W, H); c.fillStyle = '#e3d9c3'; c.fillRect(28, 28, W - 56, H - 56);
+    const art = fontTex(320, 432, (c, W, H) => { c.fillStyle = '#ece4d3'; c.fillRect(0, 0, W, H); c.fillStyle = '#e3d9c3'; c.fillRect(28, 28, W - 56, H - 56);
       c.strokeStyle = '#2a2a2a'; c.lineWidth = 1.2; const cx = W / 2, cy = H * .46;
       for (let r = 26; r < 120; r += 22){ c.beginPath(); c.ellipse(cx, cy, r, r * .42, -.35, 0, 6.28); c.stroke(); }
       c.fillStyle = '#c4492d'; c.beginPath(); c.arc(cx, cy, 9, 0, 6.28); c.fill();
@@ -197,6 +201,10 @@ M.dressRoom = function (api){
     mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, .0035, 8), mat('#d8cfb8', { roughness: .6 }), group); }
 
   api.add(group);
+  if (document.fonts && document.fonts.load){
+    Promise.all([document.fonts.load('500 30px Caveat'), document.fonts.load('500 12px "IBM Plex Mono"')])
+      .then(() => { for (const f of fontJobs) f(); if (api.markScreenDirty) api.markScreenDirty(); }, () => {});
+  }
   return group;
 };
 })();
