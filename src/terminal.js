@@ -2271,7 +2271,8 @@ M.createTerminal = function createTerminal(opts){
     scrollOff = clamp(scrollOff, 0, Math.max(0, total - ROWS));
     const first = Math.max(0, total - ROWS - scrollOff);
     /* a short history (the welcome) sits a little below the top of the tube, not jammed against it */
-    const lift = rows.length && rows[0].wel ? clamp(ROWS - total, 0, Math.min(4, Math.round(ROWS / 6))) : 0;
+    // the welcome sits a little lower on the landscape tube; a phone column starts at the top
+    const lift = !TAP && aspect > 1 && rows.length && rows[0].wel ? clamp(ROWS - total, 0, Math.min(4, Math.round(ROWS / 6))) : 0;
     g.save(); g.beginPath(); g.rect(0, PADY - 4, W, ROWS * ch + 8); g.clip();
     let u = 0;
     const last = Math.min(rows.length - 1, shown);
