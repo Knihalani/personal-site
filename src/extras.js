@@ -273,16 +273,68 @@ const WMO = { 0: ['Clear', 'sun'], 1: ['Mostly clear', 'part'], 2: ['Partly clou
   82: ['Heavy showers', 'rain'], 85: ['Snow showers', 'snow'], 86: ['Snow showers', 'snow'], 95: ['Thunderstorm', 'storm'], 96: ['Thunder and hail', 'storm'], 99: ['Thunder and hail', 'storm'] };
 const DAYS3 = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WX_CITY = 'kaiav.weather.city';
-async function getJSON(url, io, ms = 8000){
-  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
-  const t = setTimeout(() => ctl && ctl.abort(), ms);
-  try {
-    const r = await fetch(url, ctl ? { signal: ctl.signal } : {});
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return await r.json();
-  } finally { clearTimeout(t); }
-}
-T.cmds.weather = { g: 'tools', desc: 'the weather where you are, or anywhere', usage: 'weather [-c | -f] [city]',
+/* ---- the network: one helper that tells "blocked" apart from "offline", CORS, timeouts and HTTP errors ---- */
+class NetError extends Error { constructor(kind, msg, status){ super(msg); this.kind = kind; this.status = status; } }
+const SANDBOXED = (() => { try { return /claude(usercontent)?\.(ai|com)$/i.test(location.hostname) || location.protocol === 'about:'; } catch (e){ return false; } })();
+const net = {
+  /* -> { status, statusText, ok, headers: [[k, v]], type, text, data, ms, bytes, url } ; throws NetError */
+  async get(url, opt = {}){
+    if (typeof fetch !== 'function') throw new NetError('blocked', 'this browser cannot make requests');
+    let csp = false;
+    const onCsp = e => { if (/^connect-src|^default-src/.test(e.violatedDirective || e.effectiveDirective || '')) csp = true; };
+    try { document.addEventListener('securitypolicyviolation', onCsp); } catch (e){}
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; if (ctl) ctl.abort(); }, opt.timeout || 9000);
+    const t0 = performance.now();
+    try {
+      let r;
+      try {
+        r = await fetch(url, { method: opt.method || 'GET', headers: opt.headers || {}, body: opt.body, signal: ctl ? ctl.signal : undefined, cache: 'no-store' });
+      } catch (e){
+        await new Promise(res => setTimeout(res, 30));          // the CSP event arrives just after the rejection
+        if (timedOut) throw new NetError('timeout', 'no answer after ' + Math.round((opt.timeout || 9000) / 1000) + 's');
+        if (csp) throw new NetError('blocked', "blocked by this preview's sandbox");
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new NetError('offline', 'offline');
+        if (SANDBOXED) throw new NetError('blocked', "blocked by this preview's sandbox");
+        let reach = false;                                     // reachable without CORS? then it was CORS
+        try { await fetch(url, { mode: 'no-cors', cache: 'no-store' }); reach = true; } catch (e2){}
+        if (csp) throw new NetError('blocked', "blocked by this preview's sandbox");
+        if (reach) throw new NetError('cors', "the server doesn't allow browser requests");
+        throw new NetError('unreachable', 'could not reach ' + host(url));
+      }
+      const text = await r.text();
+      const ms = performance.now() - t0;
+      const headers = []; try { r.headers.forEach((v, k) => headers.push([k, v])); } catch (e){}
+      const type = (r.headers.get('content-type') || '').split(';')[0].trim();
+      const res = { status: r.status, statusText: r.statusText || HTTP_TEXT[r.status] || '', ok: r.ok, headers, type, text, ms, bytes: new Blob([text]).size, url: r.url || url };
+      if (opt.json || /json/.test(type)){ try { res.data = JSON.parse(text); } catch (e){ if (opt.json) throw new NetError('http', 'the answer was not JSON', r.status); } }
+      if (opt.json && !r.ok) throw new NetError('http', 'HTTP ' + r.status + (res.statusText ? ' ' + res.statusText : ''), r.status);
+      return res;
+    } finally { clearTimeout(timer); try { document.removeEventListener('securitypolicyviolation', onCsp); } catch (e){} }
+  },
+  json(url, opt = {}){ return net.get(url, Object.assign({ json: true }, opt)).then(r => r.data); },
+  /* an honest two-line explanation of a failure */
+  fail(io, name, e){
+    if (!(e instanceof NetError)){ io.err(name + ': ' + ((e && e.message) || e) + '\n'); return 1; }
+    const why = {
+      blocked: ["blocked by this preview's sandbox", 'network requests are switched off here. it works on the live site'],
+      offline: ['offline', 'this browser has no connection right now'],
+      cors: ["CORS: the server doesn't allow browser requests", 'the site answered, but will not share it with a web page'],
+      timeout: ['timeout: ' + e.message, 'the server is slow or unreachable. try again'],
+      unreachable: [e.message, 'the host may not exist, or the connection dropped'],
+      http: [e.message, e.status === 404 ? 'nothing there' : e.status === 403 || e.status === 429 ? 'refused, or rate limited. try again later' : ''],
+    }[e.kind] || [e.message, ''];
+    if (io.tty && io.ui){
+      const o = io.ui(); o.at(0, [name + ': ', 'd'], [why[0], 'b']); if (why[1]) o.para(why[1], 'f', io.cols - 4, 2); io.rich(o);
+    } else io.err(name + ': ' + why[0] + '\n');
+    return 1;
+  },
+};
+const HTTP_TEXT = { 200: 'OK', 201: 'Created', 204: 'No Content', 301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified', 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 405: 'Method Not Allowed', 429: 'Too Many Requests', 500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable' };
+const host = u => { try { return new URL(u).host; } catch (e){ return String(u); } };
+M.net = net;
+T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usage: 'weather [-c | -f] [city]',
   opts: [['-c', 'Celsius'], ['-f', 'Fahrenheit']], ex: ['weather', 'weather tokyo', 'weather -f new york'],
   more: 'Asks open-meteo.com for the weather now and the next three days. With no city it guesses yours from your time zone, then remembers the last city you named. Nothing about you leaves the browser except the city name.',
   async run(argv, io){
@@ -295,23 +347,18 @@ T.cmds.weather = { g: 'tools', desc: 'the weather where you are, or anywhere', u
     else q = lsGet(WX_CITY, '');
     if (!q && /^[A-Za-z]+\/[A-Za-z_\-]+/.test(tz) && !/^Etc\//.test(tz)){ q = tz.split('/').pop().replace(/_/g, ' '); guessed = true; }
     if (!q){ io.err('weather: which city? try weather london\n'); return 1; }
-    if (typeof fetch !== 'function'){ io.err('weather: this browser cannot fetch\n'); return 1; }
     if (io.tty){ io.out('asking the sky over ' + q + '...\n', 'faint'); }
     let place, wx;
     try {
-      const g = await getJSON('https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=' + encodeURIComponent(q), io);
+      const g = await net.json('https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=' + encodeURIComponent(q));
       const rs = (g && g.results) || [];
       place = (guessed && rs.find(r => r.timezone === tz)) || rs[0];
       if (!place){ io.err('weather: no place called ' + q + '\n'); if (!a.length) lsSet(WX_CITY, ''); return 1; }
-      wx = await getJSON('https://api.open-meteo.com/v1/forecast?latitude=' + place.latitude + '&longitude=' + place.longitude +
+      wx = await net.json('https://api.open-meteo.com/v1/forecast?latitude=' + place.latitude + '&longitude=' + place.longitude +
         '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day' +
         '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=4' +
-        (unit === 'F' ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : ''), io);
-    } catch (e){
-      io.err('weather: could not reach open-meteo.com' + (e && e.name === 'AbortError' ? ' (timed out)' : '') + '\n');
-      io.err('this page may be offline, or not allowed to fetch from here\n');
-      return 1;
-    }
+        (unit === 'F' ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : ''));
+    } catch (e){ return net.fail(io, 'weather', e); }
     const c = wx && wx.current, d = wx && wx.daily;
     if (!c || !d){ io.err('weather: open-meteo sent something unexpected\n'); return 1; }
     const deg = v => Math.round(v) + '°';

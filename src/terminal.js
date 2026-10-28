@@ -396,6 +396,20 @@ M.createTerminal = function createTerminal(opts){
       head(label, note){ r.push({ k: 'head', i: 2, label, note: note || '' }); return o; },
       para(text, st = 'n', width = COLS - 6, i = 2){ for (const l of wrap(text, width)) o.at(i, [l, st]); return o; },
       viz(h, draw, live){ r.push({ k: 'viz', h, draw, live: live || null, t0: -1 }); return o; },
+      /* a square bitmap (true = dark), dark on a lit field with a quiet zone of q modules: QR codes.
+         Drawn as vectors so a module is square whatever the cell shape. */
+      bits(m, q = 2){
+        const n = m.length + 2 * q, availW = X(COLS - 2) - X(2), availH = (ROWS - 4) * ch;
+        const sz = Math.max(2, Math.floor(Math.min(availW / n, availH / n, cw * 1.2)));
+        const h = Math.ceil(n * sz / ch);
+        r.push({ k: 'viz', h, live: null, t0: -1, draw(x, y){
+          const x0 = Math.round(x), y0 = Math.round(y + (h * ch - n * sz) / 2);
+          g.fillStyle = P.bright; g.fillRect(x0, y0, n * sz, n * sz);
+          g.fillStyle = P.bg;
+          for (let yy = 0; yy < m.length; yy++) for (let xx = 0; xx < m.length; xx++) if (m[yy][xx]) g.fillRect(x0 + (xx + q) * sz, y0 + (yy + q) * sz, sz, sz);
+        } });
+        return o;
+      },
       /* a boxed panel: title in the top border, label/value rows, selectable rows (url or copy) with
          number shortcuts, and a footer line of keys while it is waiting for a choice */
       card(spec){ const c = makeCard(spec); r.push(c); o.lastCard = c; return o; },

@@ -59,6 +59,8 @@ python3 build.py            # writes index.html and site.html
 python3 build.py --out dir  # build somewhere else
 ```
 
+To deploy to Cloudflare Pages, run `./deploy.sh`. It needs a token with *Cloudflare Pages: Edit* in `CLOUDFLARE_API_TOKEN`.
+
 Open `index.html` in a browser. It needs WebGL; phones skip WebGL and get the terminal only.
 
 ### Adding a command
