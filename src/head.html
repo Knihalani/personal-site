@@ -1,0 +1,32 @@
+<title>Kaiav Nihalani</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Kaiav Nihalani — founder of Eden, co-founder of J: Rising Founder.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=VT323&display=swap">
+<style>
+/* One full-bleed 3D scene; the only DOM is a tiny hint, a view toggle, a hidden input for phones,
+   and an accessible text mirror of the terminal for screen readers. Single dark theme by design. */
+:root{ color-scheme: dark; --bg: #07080a; --fg: #e9e2d0; --dim: rgba(233,226,208,.5); --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace }
+html, body{ margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden; font: 12px/1.4 var(--mono) }
+#stage{ position: fixed; inset: 0 }
+#stage canvas{ display: block; width: 100%; height: 100%; outline: none }
+.ui{ position: fixed; z-index: 2; font: 500 11px var(--mono); letter-spacing: .08em; color: var(--dim) }
+#hint{ left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom, 0px)); transition: opacity .8s; pointer-events: none; text-align: center }
+#view{ right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); background: none; border: 1px solid rgba(233,226,208,.18); color: var(--dim); font: inherit; letter-spacing: inherit; padding: 6px 10px; cursor: pointer }
+#view:hover{ color: var(--fg); border-color: rgba(233,226,208,.4) }
+#view:focus-visible, #stage canvas:focus-visible{ outline: 1px solid rgba(233,226,208,.5); outline-offset: -4px }
+#kbd{ position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; resize: none }
+.sr{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+#loading{ position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); font: 500 11px var(--mono); letter-spacing: .3em; text-transform: uppercase; transition: opacity .8s; z-index: 3; background: var(--bg) }
+#loading.gone{ opacity: 0; pointer-events: none }
+@media (prefers-reduced-motion: reduce){ #hint, #loading{ transition: none } }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+
+<div id="stage" aria-hidden="true"></div>
+<div id="loading">warming up the tube</div>
+<div id="hint" class="ui">start typing · try <b>help</b></div>
+<button id="view" class="ui" type="button" aria-pressed="false">screen view</button>
+<textarea id="kbd" aria-label="Terminal input" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+<main class="sr" aria-live="polite" id="mirror"><h1>Kaiav Nihalani</h1></main>
