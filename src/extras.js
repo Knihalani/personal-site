@@ -101,7 +101,7 @@ T.cmds.todo = { g: 'tools', desc: 'a to-do list, kept in ~/todo.txt', usage: 'to
       }
       return [...new Set(ns)].sort((a, b) => b - a);
     };
-    if (sub[0] === '-'){ io.err('todo: no ' + sub + ' option  (try: todo add text)\n'); return 2; }
+    if (sub[0] === '-'){ io.err('todo: no ' + argv[1] + ' option  (try: todo add text)\n'); return 2; }
     if (sub === 'add' || (sub && !['done', 'undo', 'rm', 'del', 'clear', 'ls', 'list'].includes(sub))){
       const text = (sub === 'add' ? argv.slice(2) : argv.slice(1)).join(' ').trim();
       if (!text){ io.err('usage: todo add text  (try: todo add call jose)\n'); return 1; }

@@ -920,7 +920,7 @@ M.createTerminal = function createTerminal(opts){
     for (const d of a){ if (o.p && FS.isDir(d)) continue; if (!FS.mkdir(d, !!o.p)){ io.err(fsErr('mkdir', d)); io.exit(1); } }
   } });
   def('touch', { g: 'files', desc: 'make an empty file, or update its time', usage: 'touch file...', run(argv, io){
-    if (argv.length < 2){ io.err('usage: touch file...\n'); return 1; }
+    if (argv.length < 2 || argv[1][0] === '-'){ io.err('usage: touch file...\n'); return 1; }
     for (const f of argv.slice(1)) if (!FS.touch(f)){ io.err(fsErr('touch', f)); io.exit(1); }
   } });
   def('rm', { g: 'files', desc: 'remove files', usage: 'rm [-r] [-f] path...', opts: [['-r', 'remove directories and what is in them'], ['-f', 'no complaint if missing']], run(argv, io){
@@ -1088,7 +1088,7 @@ M.createTerminal = function createTerminal(opts){
     const c = M.TERM.cmds[name] || M.TERM.apps[name];
     if (!c){ io.err('man: no manual entry for ' + n + '  (try: help all)\n'); return 1; }
     const isApp = !!M.TERM.apps[name] && !M.TERM.cmds[name];
-    const o = out(); const h = name.toUpperCase() + '(' + (isApp ? 6 : 1) + ')';
+    const o = out(); const h = name.toUpperCase() + '(' + (isApp && c.g !== 'files' && c.g !== 'tools' ? 6 : 1) + ')';
     o.at(0, [h, 'b'], [' '.repeat(Math.max(1, Math.floor((COLS - 12) / 2) - h.length)) + 'KN-84 manual', 'd'], [' '.repeat(Math.max(1, Math.ceil((COLS - 12) / 2) - h.length)) + h, 'b']).blank();
     o.at(0, ['NAME', 'b']).at(4, [name, 'n'], [' - ' + (c.desc || ''), 'n']).blank();
     o.at(0, ['SYNOPSIS', 'b']).at(4, [c.usage || name, 'n']).blank();

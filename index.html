@@ -3635,7 +3635,7 @@ M.createTerminal = function createTerminal(opts){
     for (const d of a){ if (o.p && FS.isDir(d)) continue; if (!FS.mkdir(d, !!o.p)){ io.err(fsErr('mkdir', d)); io.exit(1); } }
   } });
   def('touch', { g: 'files', desc: 'make an empty file, or update its time', usage: 'touch file...', run(argv, io){
-    if (argv.length < 2){ io.err('usage: touch file...\n'); return 1; }
+    if (argv.length < 2 || argv[1][0] === '-'){ io.err('usage: touch file...\n'); return 1; }
     for (const f of argv.slice(1)) if (!FS.touch(f)){ io.err(fsErr('touch', f)); io.exit(1); }
   } });
   def('rm', { g: 'files', desc: 'remove files', usage: 'rm [-r] [-f] path...', opts: [['-r', 'remove directories and what is in them'], ['-f', 'no complaint if missing']], run(argv, io){
@@ -3803,7 +3803,7 @@ M.createTerminal = function createTerminal(opts){
     const c = M.TERM.cmds[name] || M.TERM.apps[name];
     if (!c){ io.err('man: no manual entry for ' + n + '  (try: help all)\n'); return 1; }
     const isApp = !!M.TERM.apps[name] && !M.TERM.cmds[name];
-    const o = out(); const h = name.toUpperCase() + '(' + (isApp ? 6 : 1) + ')';
+    const o = out(); const h = name.toUpperCase() + '(' + (isApp && c.g !== 'files' && c.g !== 'tools' ? 6 : 1) + ')';
     o.at(0, [h, 'b'], [' '.repeat(Math.max(1, Math.floor((COLS - 12) / 2) - h.length)) + 'KN-84 manual', 'd'], [' '.repeat(Math.max(1, Math.ceil((COLS - 12) / 2) - h.length)) + h, 'b']).blank();
     o.at(0, ['NAME', 'b']).at(4, [name, 'n'], [' - ' + (c.desc || ''), 'n']).blank();
     o.at(0, ['SYNOPSIS', 'b']).at(4, [c.usage || name, 'n']).blank();
@@ -5009,7 +5009,8 @@ M.createTerminal = function createTerminal(opts){
 
   if (!booting) endBoot();
   draw();
-  return { canvas, handleKey, handleKeyUp, handleTap, insertText, update, run, scroll, get cursorY(){ return promptY / H; } };
+  return { canvas, handleKey, handleKeyUp, handleTap, insertText, update, run, scroll, get cursorY(){ return promptY / H; },
+    get busy(){ return !!(app || job); } };   // a full-screen app or a running command: don't rebuild under it
 };
 })();
 
@@ -5705,7 +5706,7 @@ T.cmds.todo = { g: 'tools', desc: 'a to-do list, kept in ~/todo.txt', usage: 'to
       }
       return [...new Set(ns)].sort((a, b) => b - a);
     };
-    if (sub[0] === '-'){ io.err('todo: no ' + sub + ' option  (try: todo add text)\n'); return 2; }
+    if (sub[0] === '-'){ io.err('todo: no ' + argv[1] + ' option  (try: todo add text)\n'); return 2; }
     if (sub === 'add' || (sub && !['done', 'undo', 'rm', 'del', 'clear', 'ls', 'list'].includes(sub))){
       const text = (sub === 'add' ? argv.slice(2) : argv.slice(1)).join(' ').trim();
       if (!text){ io.err('usage: todo add text  (try: todo add call jose)\n'); return 1; }
@@ -8024,7 +8025,8 @@ function flat(){
   build();
   let rt = 0;
   addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => {
-    if (Math.abs(innerWidth - bw) > 40 || (!TOUCH && Math.abs(innerHeight - bh) > 40)){ build(); fromHash(); } else place();
+    // rebuilding starts a fresh terminal, so it is skipped while an editor, game or command is running
+    if ((Math.abs(innerWidth - bw) > 40 || (!TOUCH && Math.abs(innerHeight - bh) > 40)) && !term.busy){ build(); fromHash(); } else place();
   }, 150); });
   const focus = () => { if (!reading()) try { kbd.focus({ preventScroll: true }); } catch (e){} };
   setupMute(TOUCH ? null : focus);
