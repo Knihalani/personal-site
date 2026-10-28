@@ -32,6 +32,7 @@ const RATE = 1500;             // typing-out speed, characters per second
 const BOOT_END = 1.85;         // seconds
 const HIST_KEY = 'kaiav.term.history';
 const T0 = performance.now();
+const LOCK = '\ue000';        // drawn as a vector padlock (ls -l marks built-in files with it)
 
 /* ---- fuzzy matching: prefix > substring > subsequence > small typo ---- */
 function osa(a, b){
@@ -114,7 +115,17 @@ function createFS(getCwd, onWrite){
   const persist = () => { try { localStorage.setItem(FS_KEY, JSON.stringify(root)); } catch (e){} };
   function changed(quiet){ clearTimeout(tSave); tSave = setTimeout(persist, 200); if (onWrite && !quiet) onWrite(); }
   const R = p => resolve(p, getCwd());
-  const info = (name, n) => ({ name, dir: isD(n), size: isD(n) ? 0 : n.t.length, mtime: n.m || 0 });
+  const info = (name, n) => ({ name, dir: isD(n), size: isD(n) ? 0 : n.t.length, mtime: n.m || 0, locked: !isD(n) && n.g === 1 });
+  /* built-in files (n.g) are read-only: every write path below goes through these checks */
+  const lockedNode = n => !!(n && !isD(n) && n.g === 1);
+  const tild = a => a === HOME ? '~' : a.startsWith(HOME + '/') ? '~' + a.slice(HOME.length) : a;
+  const readOnly = abs => fail('read-only: ' + tild(abs) + ' is a built-in file');
+  function lockedIn(abs){                       // the first locked file at or under abs, or null
+    const n = get(abs); if (!n) return null;
+    if (lockedNode(n)) return abs;
+    if (isD(n)) for (const k of Object.keys(n.c)){ const r = lockedIn(join(abs, k)); if (r) return r; }
+    return null;
+  }
   const badName = n => !n || n === '__proto__' || n === 'constructor' || n === 'prototype';
   function fail(m){ api.lastError = m; return false; }
   function put(abs, text, app){
@@ -124,6 +135,7 @@ function createFS(getCwd, onWrite){
     if (!isD(dir)) return fail('No such file or directory');
     const ex = own(dir.c, name) ? dir.c[name] : null;
     if (isD(ex)) return fail('Is a directory');
+    if (lockedNode(ex)) return readOnly(abs);
     const t = app && ex ? ex.t + text : text;
     if (t.length > 262144) return fail('File too large');
     dir.c[name] = { t, m: Date.now() }; dir.m = Date.now();
@@ -160,6 +172,7 @@ function createFS(getCwd, onWrite){
       const a = R(p); if (a === '/') return fail('Permission denied');
       const n = get(a); if (!n) return fail('No such file or directory');
       if (isD(n) && Object.keys(n.c).length && !recursive) return fail('Directory not empty');
+      const lk = lockedIn(a); if (lk) return readOnly(lk);
       const { dir, name } = parent(a); delete dir.c[name]; dir.m = Date.now(); changed(); return true;
     },
     mv(a, b){
@@ -169,6 +182,7 @@ function createFS(getCwd, onWrite){
       if (isD(get(B))) B = join(B, base(A));
       if (B === A) return true;
       if (B.startsWith(A + '/')) return fail('cannot move a directory into itself');
+      const lk = lockedIn(A) || (lockedNode(get(B)) ? B : null); if (lk) return readOnly(lk);
       const { dir, name } = parent(B);
       if (!isD(dir)) return fail('No such file or directory');
       if (badName(name)) return fail('Invalid name');
@@ -185,22 +199,25 @@ function createFS(getCwd, onWrite){
       if (!isD(dir)) return fail('No such file or directory');
       if (badName(name)) return fail('Invalid name');
       if (own(dir.c, name) && isD(dir.c[name]) !== isD(n)) return fail(isD(n) ? 'Not a directory' : 'Is a directory');
+      if (own(dir.c, name)){ const lk = lockedIn(B); if (lk) return readOnly(lk); }
       const c = clone(n); c.m = Date.now(); dir.c[name] = c; changed(); return true;
     },
     stat(p){ const a = R(p), n = get(a); return n ? Object.assign(info(base(a), n), { path: a }) : null; },
-    touch(p){ const a = R(p), n = get(a); if (n){ n.m = Date.now(); changed(true); return true; } return put(a, '', false); },
+    touch(p){ const a = R(p), n = get(a); if (n){ if (!lockedNode(n)){ n.m = Date.now(); changed(true); } return true; } return put(a, '', false); },
+    isLocked: p => lockedNode(get(R(p))),
     node: p => get(R(p)),
-    /* seed: files = [{ path, text, doc, always }], dirs = [path]. Generated files the visitor has not
-       changed are refreshed from MAC.CONTENT on every load. */
+    /* seed: files = [{ path, text, doc }], dirs = [path]. Built-in files are read-only, and on every load
+       they are rewritten from MAC.CONTENT (recreated if an older visit removed them). */
     seed(dirs, files){
-      const fresh = !root.seeded;
-      if (fresh) for (const d of dirs) mkdir(d, true);
+      if (!root.seeded) for (const d of dirs) mkdir(d, true);
       for (const f of files){
         const n = get(f.path);
-        if (!n && (fresh || f.always)){
-          const { dir, name } = parent(f.path);
-          if (isD(dir)) dir.c[name] = { t: f.text, m: Date.now(), g: 1, doc: f.doc || undefined };
-        } else if (n && n.g && !isD(n)){ n.t = f.text; n.doc = f.doc || undefined; }
+        if (isD(n)) continue;
+        if (!n){ const s = segs(f.path); s.pop(); if (!isD(get('/' + s.join('/')))) mkdir('/' + s.join('/'), true); }
+        const { dir, name } = parent(f.path);
+        if (!isD(dir)) continue;
+        if (n && n.g === 1 && n.t === f.text){ n.doc = f.doc || undefined; continue; }
+        dir.c[name] = { t: f.text, m: Date.now(), g: 1, doc: f.doc || undefined };
       }
       root.seeded = 1; changed(true);
     },
@@ -537,6 +554,22 @@ M.createTerminal = function createTerminal(opts){
     return b;
   }
   const NULLSINK = { tty: false, text: '', write(){}, rich(){} };
+  /* error lines read the same everywhere: "name:" dim, the message normal, a trailing "(try: ...)" faint.
+     Into a pipe or a file they are plain text. */
+  function errLine(sink, t){
+    t = String(t == null ? '' : t); if (!t) return;
+    if (!sink.tty){ sink.write(t); return; }
+    const ls = t.split('\n');
+    ls.forEach((l, k) => {
+      if (l){
+        const m = /^((?:[\w.+\-!]+: )?)(.*?)((?:\s{2,}|\s(?=\())\(.*\))?$/.exec(l);
+        if (m[1]) sink.write(m[1], 'dim');
+        if (m[2]) sink.write(m[2], 'normal');
+        if (m[3]) sink.write(m[3], 'faint');
+      }
+      if (k < ls.length - 1) sink.write('\n');
+    });
+  }
 
   /* ---- content ---- */
   const L = C.links || {}, J = C.j || {}, E = C.eden || {}, A = C.about || {}, Wr = C.writing || {};
@@ -610,7 +643,7 @@ M.createTerminal = function createTerminal(opts){
     { path: HOME + '/j.txt', text: TEXT.j(), doc: 'j' },
     { path: HOME + '/links.txt', text: TEXT.links(), doc: 'links' },
     ...posts().map(p => ({ path: HOME + '/writing/' + (p.date ? p.date + '-' : '') + String(p.title || 'post').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.txt',
-      text: [p.title, p.date, '', p.summary && wrapT(p.summary), p.url].filter(x => x != null).join('\n') + '\n', always: true })),
+      text: [p.title, p.date, '', p.summary && wrapT(p.summary), p.url].filter(x => x != null).join('\n') + '\n' })),
     { path: '/etc/motd', text: 'KN-84 personal computer. KNOS 1.04.\nType help to begin, or cat README.md for a short guide.\n' },
     { path: '/etc/hostname', text: 'kn84\n' },
   ]);
@@ -707,6 +740,8 @@ M.createTerminal = function createTerminal(opts){
     const walk = p => { for (const e of FS.list(p) || []){ if (e.dir) walk((p === '/' ? '' : p) + '/' + e.name); else { bytes += e.size; files++; } } };
     walk('/'); return { bytes, files };
   }
+  /* "rm: x: No such file", or for a built-in file just "rm: read-only: ~/README.md is a built-in file" */
+  const fsErr = (name, p) => name + ': ' + (/^read-only:/.test(FS.lastError) ? '' : p + ': ') + FS.lastError + '\n';
   /* read named files (or stdin) for a text utility */
   function sources(io, files, name){
     if (!files.length) return [{ name: '(standard input)', text: io.stdin || '' }];
@@ -784,9 +819,10 @@ M.createTerminal = function createTerminal(opts){
       if (o.l){
         const w = Math.max(...ents.map(e => human(e.size).length));
         for (const e of ents){
-          io.write((e.dir ? 'drwxr-xr-x' : '-rw-r--r--') + (COLS >= 50 || !io.tty ? '  kaiav  ' : '  '), 'faint');
+          io.write((e.dir ? 'drwxr-xr-x' : e.locked ? '-r--r--r--' : '-rw-r--r--') + (COLS >= 50 || !io.tty ? '  kaiav  ' : '  '), 'faint');
           io.write((e.dir ? '-' : human(e.size)).padStart(w) + '  ' + fmtDate(e.mtime) + '  ', 'dim');
-          io.write(e.name + (e.dir && e.name[0] !== '.' ? '/' : '') + '\n', e.dir ? 'bright' : 'normal');
+          io.write(e.name + (e.dir && e.name[0] !== '.' ? '/' : ''), e.dir ? 'bright' : 'normal');
+          io.write(e.locked && io.tty ? ' ' + LOCK + '\n' : '\n', 'faint');
         }
         return;
       }
@@ -829,11 +865,11 @@ M.createTerminal = function createTerminal(opts){
   def('mkdir', { g: 'files', desc: 'make directories', usage: 'mkdir [-p] dir...', opts: [['-p', 'make parents as needed; no error if it exists']], run(argv, io){
     const { o, a } = getopts(argv.slice(1));
     if (!a.length){ io.err('usage: mkdir [-p] dir...\n'); return 1; }
-    for (const d of a){ if (o.p && FS.isDir(d)) continue; if (!FS.mkdir(d, !!o.p)){ io.err('mkdir: ' + d + ': ' + FS.lastError + '\n'); io.exit(1); } }
+    for (const d of a){ if (o.p && FS.isDir(d)) continue; if (!FS.mkdir(d, !!o.p)){ io.err(fsErr('mkdir', d)); io.exit(1); } }
   } });
   def('touch', { g: 'files', desc: 'make an empty file, or update its time', usage: 'touch file...', run(argv, io){
     if (argv.length < 2){ io.err('usage: touch file...\n'); return 1; }
-    for (const f of argv.slice(1)) if (!FS.touch(f)){ io.err('touch: ' + f + ': ' + FS.lastError + '\n'); io.exit(1); }
+    for (const f of argv.slice(1)) if (!FS.touch(f)){ io.err(fsErr('touch', f)); io.exit(1); }
   } });
   def('rm', { g: 'files', desc: 'remove files', usage: 'rm [-r] [-f] path...', opts: [['-r', 'remove directories and what is in them'], ['-f', 'no complaint if missing']], run(argv, io){
     const { o, a } = getopts(argv.slice(1)); const r = o.r || o.R;
@@ -843,7 +879,7 @@ M.createTerminal = function createTerminal(opts){
       if (abs === '/' || abs === HOME){ io.err('rm: refusing to remove ' + tildify(abs) + '\n'); io.exit(1); continue; }
       if (!FS.exists(p)){ if (!o.f){ io.err('rm: ' + p + ': No such file or directory\n'); io.exit(1); } continue; }
       if (FS.isDir(p) && !r){ io.err('rm: ' + p + ': is a directory (use rm -r)\n'); io.exit(1); continue; }
-      if (!FS.rm(p, true)){ io.err('rm: ' + p + ': ' + FS.lastError + '\n'); io.exit(1); }
+      if (!FS.rm(p, true)){ io.err(fsErr('rm', p)); io.exit(1); }
       else if (!FS.isDir(cwd)) setCwd(HOME);
     }
   } });
@@ -852,7 +888,7 @@ M.createTerminal = function createTerminal(opts){
     if (a.length < 2){ io.err('usage: mv from... to\n'); return 1; }
     const to = a.pop();
     if (a.length > 1 && !FS.isDir(to)){ io.err('mv: ' + to + ': not a directory\n'); return 1; }
-    for (const f of a) if (!FS.mv(f, to)){ io.err('mv: ' + f + ': ' + FS.lastError + '\n'); io.exit(1); }
+    for (const f of a) if (!FS.mv(f, to)){ io.err(fsErr('mv', f)); io.exit(1); }
     if (!FS.isDir(cwd)) setCwd(HOME);
   } });
   def('cp', { g: 'files', desc: 'copy', usage: 'cp [-r] from... to', opts: [['-r', 'copy directories']], run(argv, io){
@@ -862,7 +898,7 @@ M.createTerminal = function createTerminal(opts){
     if (a.length > 1 && !FS.isDir(to)){ io.err('cp: ' + to + ': not a directory\n'); return 1; }
     for (const f of a){
       if (FS.isDir(f) && !(o.r || o.R)){ io.err('cp: ' + f + ' is a directory (use cp -r)\n'); io.exit(1); continue; }
-      if (!FS.cp(f, to)){ io.err('cp: ' + f + ': ' + FS.lastError + '\n'); io.exit(1); }
+      if (!FS.cp(f, to)){ io.err(fsErr('cp', f)); io.exit(1); }
     }
   } });
   def('tree', { g: 'files', desc: 'draw a directory as a tree', usage: 'tree [-a] [dir]', run(argv, io){
@@ -1275,12 +1311,12 @@ M.createTerminal = function createTerminal(opts){
       list = parse(applyAliases(lex(line)));
     } catch (e){
       record(raw, noHist);
-      tty.write('sh: ' + (e.message || e) + '\n', 'dim'); status = 2; finishJob(j); return;
+      errLine(tty, 'sh: ' + (e.message || e) + '\n'); status = 2; finishJob(j); return;
     }
     const work = execList(list, j);
     work.catch(() => {});
     try { await Promise.race([work, j.killed]); }
-    catch (e){ if (e !== INTR){ tty.write('sh: ' + ((e && e.message) || e) + '\n', 'dim'); status = 1; } }
+    catch (e){ if (e !== INTR){ errLine(tty, 'sh: ' + ((e && e.message) || e) + '\n'); status = 1; } }
     finishJob(j);
   }
   function record(line, noHist){
@@ -1318,8 +1354,8 @@ M.createTerminal = function createTerminal(opts){
       let outF = null, errF = null, inText = null, bad = false;
       for (const r of c.redirs){
         const t = expandWord(r.w);
-        if (t.length !== 1 || !t[0]){ tty.write('sh: ambiguous redirect\n', 'dim'); bad = true; break; }
-        if (r.op === '<'){ inText = FS.read(t[0]); if (inText == null){ tty.write('sh: ' + t[0] + ': No such file or directory\n', 'dim'); bad = true; break; } }
+        if (t.length !== 1 || !t[0]){ errLine(tty, 'sh: ambiguous redirect\n'); bad = true; break; }
+        if (r.op === '<'){ inText = FS.read(t[0]); if (inText == null){ errLine(tty, 'sh: ' + t[0] + ': No such file or directory\n'); bad = true; break; } }
         else if (r.op[0] === '2') errF = { path: t[0], append: r.op === '2>>', sink: buffer() };
         else outF = { path: t[0], append: r.op === '>>', sink: buffer() };
       }
@@ -1332,7 +1368,7 @@ M.createTerminal = function createTerminal(opts){
       for (const f of [outF, errF]){
         if (!f || isNull(f)) continue;
         const ok = f.append ? FS.append(f.path, f.sink.text) : FS.write(f.path, f.sink.text);
-        if (!ok){ tty.write('sh: ' + f.path + ': ' + FS.lastError + '\n', 'dim'); st = 1; }
+        if (!ok){ errLine(tty, fsErr('sh', f.path)); st = 1; }
       }
       stdin = sink === tty || sink === NULLSINK || outF ? '' : sink.text;
     }
@@ -1350,12 +1386,12 @@ M.createTerminal = function createTerminal(opts){
         return io.code != null ? io.code : typeof r === 'number' ? r : 0;
       } catch (e){
         if (e === INTR || j.dead) return 130;
-        ctx.errSink.write(name + ': ' + ((e && e.message) || e) + '\n', 'dim');
+        errLine(ctx.errSink, name + ': ' + ((e && e.message) || e) + '\n');
         return 1;
       }
     }
     sfx('error');
-    ctx.errSink.write(name + ': command not found\n', 'dim');
+    errLine(ctx.errSink, name + ': command not found\n');
     const f = fuzzy(name, cmdItems());
     if (f){ j.hint = [f.item.name, ...argv.slice(1)].join(' '); }
     else if (ctx.errSink === tty){ tty.write('type ', 'faint'); tty.write('help'); tty.write(' for the list\n', 'faint'); }
@@ -1366,7 +1402,7 @@ M.createTerminal = function createTerminal(opts){
       stdin: ctx.stdin, fs: FS, ui: out, env: ENV, cwd, cols: COLS, rows: ROWS, tty: ctx.sink.tty, code: null,
       out(t, style){ if (!j.dead && t != null) ctx.sink.write(String(t), style); },
       write(t, style){ io.out(t, style); },
-      err(t){ if (!j.dead && t != null) ctx.errSink.write(String(t), 'dim'); },
+      err(t){ if (!j.dead && t != null) errLine(ctx.errSink, t); },
       rich(o){ if (!j.dead) ctx.sink.rich(o); },
       exit(c){ io.code = (c | 0); },
       sleep: ms => j.sleep(ms),
@@ -1539,7 +1575,7 @@ M.createTerminal = function createTerminal(opts){
     gridCursor = null;
     const text = st.printed.map(t => t.endsWith('\n') ? t : t + '\n').join('');
     if (text) st.ctx.sink.write(text);
-    if (e) st.ctx.errSink.write(st.name + ': ' + ((e && e.message) || e) + '\n', 'dim');
+    if (e) errLine(st.ctx.errSink, st.name + ': ' + ((e && e.message) || e) + '\n');
     if (job && text) job.plain += text;
     if (e && typeof console !== 'undefined') console.warn(e);
     toBottom(); dirty = true;
@@ -1759,7 +1795,18 @@ M.createTerminal = function createTerminal(opts){
   }
   function insertText(str){
     if (booting){ skipBoot(); }
-    if (app){ for (const ch of String(str)){ const st = app; if (!st) break; if (appCall('key', { key: ch === '\n' ? 'Enter' : ch, code: '', ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, preventDefault(){} })) st.dirty = true; } return; }
+    if (app){                                   /* phones and IME: an app takes the text whole (app.insertText), or as key events */
+      const st = app;
+      if (st.inst && typeof st.inst.insertText === 'function'){ if (appCall('insertText', String(str)) !== false && app === st) st.dirty = true; return; }
+      for (const ch of String(str)){
+        const cur = app; if (!cur) break;
+        const key = ch === '\n' || ch === '\r' ? 'Enter' : ch === '\t' ? 'Tab' : ch === '\b' ? 'Backspace' : ch;
+        const code = key.length > 1 ? key : /[a-z]/i.test(ch) ? 'Key' + ch.toUpperCase() : /\d/.test(ch) ? 'Digit' + ch : ch === ' ' ? 'Space' : '';
+        const ev = { type: 'keydown', key, code, repeat: false, isComposing: false, ctrlKey: false, altKey: false, metaKey: false, shiftKey: /[A-Z]/.test(ch), synthetic: true, preventDefault(){}, stopPropagation(){} };
+        if (appCall('key', ev) && app === cur) cur.dirty = true;
+      }
+      return;
+    }
     if (job) return;
     if (typing()) revealAll();
     const parts = String(str).split(/\r?\n/);
@@ -1843,7 +1890,10 @@ M.createTerminal = function createTerminal(opts){
       const selected = (link && sel >= 0 && links[sel] === link) || sp[1] === 'i';
       if (selected){ g.fillStyle = P.normal; g.fillRect(X(col) - 3, top + 1, s.length * cw * k + 6, ch * k - 2); }
       g.font = font(k); g.fillStyle = selected ? P.bg : color(sp[1]);
-      g.fillText(s, X(col), top + fs * k * 0.68);
+      if (k === 1 && SPAN_VEC.test(s)){                // arrows and the lock, drawn: VT323 has neither
+        g.fillText(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
+        for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : color(sp[1]));
+      } else g.fillText(s, X(col), top + fs * k * 0.68);
       if (link && !selected){ g.fillStyle = P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, 2); }
       col += s.length * k;
     }
@@ -1892,11 +1942,20 @@ M.createTerminal = function createTerminal(opts){
     }
   }
   let drawnCards = [];
-  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7]/g;
+  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\ue000]/g;
+  const SPAN_VEC = /[\u2190-\u2193\ue000]/, SPAN_VEC_G = /[\u2190-\u2193\ue000]/g;
   function vecGlyph(c, col, top, colr){
     const cx = X(col) + cw / 2, cy = top + ch * 0.5, a = cw * 0.36;
     g.fillStyle = colr;
     if (c === '\u00b7'){ g.fillRect(cx - 2, cy - 2, 4, 4); return; }
+    if (c === LOCK){                                       // a small padlock: shackle and body
+      const bw = cw * 0.72, bh = ch * 0.3, bx = cx - bw / 2, by = cy - bh * 0.2;
+      g.fillRect(bx, by, bw, bh);
+      g.strokeStyle = colr; g.lineWidth = 2.5; g.beginPath();
+      g.moveTo(cx - bw * 0.3, by); g.lineTo(cx - bw * 0.3, by - bh * 0.45); g.arc(cx, by - bh * 0.45, bw * 0.3, Math.PI, 0); g.lineTo(cx + bw * 0.3, by); g.stroke();
+      g.fillStyle = P.bg; g.fillRect(cx - 1.5, by + bh * 0.3, 3, bh * 0.4);
+      return;
+    }
     const d = { '\u2190': [-1, 0], '\u2192': [1, 0], '\u2191': [0, -1], '\u2193': [0, 1] }[c];
     const [dx, dy] = d, px = -dy, py = dx;                 // tip direction and its perpendicular
     g.beginPath();

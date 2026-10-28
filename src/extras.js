@@ -298,8 +298,10 @@ const net = {
         if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new NetError('offline', 'offline');
         if (SANDBOXED) throw new NetError('blocked', "blocked by this preview's sandbox");
         let reach = false;                                     // reachable without CORS? then it was CORS
-        try { await fetch(url, { mode: 'no-cors', cache: 'no-store' }); reach = true; } catch (e2){}
+        try { await fetch(url, { mode: 'no-cors', cache: 'no-store', signal: ctl ? ctl.signal : undefined }); reach = true; } catch (e2){}
         if (csp) throw new NetError('blocked', "blocked by this preview's sandbox");
+        if (timedOut) throw new NetError('timeout', 'no answer after ' + Math.round((opt.timeout || 9000) / 1000) + 's');
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new NetError('offline', 'offline');
         if (reach) throw new NetError('cors', "the server doesn't allow browser requests");
         throw new NetError('unreachable', 'could not reach ' + host(url));
       }
@@ -318,15 +320,19 @@ const net = {
   fail(io, name, e){
     if (!(e instanceof NetError)){ io.err(name + ': ' + ((e && e.message) || e) + '\n'); return 1; }
     const why = {
-      blocked: ["blocked by this preview's sandbox", 'network requests are switched off here. it works on the live site'],
+      blocked: ["blocked by this preview's sandbox, works on the live site", 'the claude.ai preview switches the network off. everything offline still works'],
       offline: ['offline', 'this browser has no connection right now'],
       cors: ["CORS: the server doesn't allow browser requests", 'the site answered, but will not share it with a web page'],
-      timeout: ['timeout: ' + e.message, 'the server is slow or unreachable. try again'],
+      timeout: ['timeout, ' + e.message, 'the server is slow or unreachable. try again'],
       unreachable: [e.message, 'the host may not exist, or the connection dropped'],
       http: [e.message, e.status === 404 ? 'nothing there' : e.status === 403 || e.status === 429 ? 'refused, or rate limited. try again later' : ''],
     }[e.kind] || [e.message, ''];
     if (io.tty && io.ui){
-      const o = io.ui(); o.at(0, [name + ': ', 'd'], [why[0], 'b']); if (why[1]) o.para(why[1], 'f', io.cols - 4, 2); io.rich(o);
+      const o = io.ui(), ls = wrap(name + ': ' + why[0], io.cols - 1);
+      o.at(0, [name + ': ', 'd'], [ls[0].slice(name.length + 2), 'n']);
+      for (const l of ls.slice(1)) o.at(2, [l, 'n']);
+      if (why[1]) o.para(why[1], 'f', io.cols - 4, 2);
+      io.rich(o);
     } else io.err(name + ': ' + why[0] + '\n');
     return 1;
   },
@@ -340,7 +346,7 @@ T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usa
   async run(argv, io){
     let a = argv.slice(1), unit = null;
     while (a[0] === '-c' || a[0] === '-f'){ unit = a[0] === '-f' ? 'F' : 'C'; a = a.slice(1); }
-    if (!unit){ let l = ''; try { l = navigator.language || ''; } catch (e){} unit = /^en-(US|LR|MM)$/i.test(l) ? 'F' : 'C'; }
+    if (!unit) unit = 'C';   // Celsius unless -f is asked for
     let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e){}
     let q = a.join(' ').trim(), guessed = false;
     if (q) lsSet(WX_CITY, q);
@@ -703,12 +709,12 @@ function showJSON(o, v, cols, max = 1e9, i0 = 2){
 /* =====================================================================================
    curl: fetch a url and show what came back
    ===================================================================================== */
-T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl [-i] [-s] [-X METHOD] [-H "k: v"] [-d data] url',
-  opts: [['-i', 'show the response headers'], ['-s', 'just the body: no status or footer'], ['-X METHOD', 'GET, POST, PUT, DELETE...'], ['-H "k: v"', 'add a request header'], ['-d DATA', 'send a body (and POST)']],
+T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl [-i] [-s] [-m secs] [-X METHOD] [-H "k: v"] [-d data] url',
+  opts: [['-i', 'show the response headers'], ['-s', 'just the body: no status or footer'], ['-X METHOD', 'GET, POST, PUT, DELETE...'], ['-H "k: v"', 'add a request header'], ['-d DATA', 'send a body (and POST)'], ['-m SECS', 'give up after this long (9)']],
   ex: ['curl api.github.com/zen', 'curl -i httpbin.org/get', 'curl wttr.in/?format=3', 'curl api.ipify.org > ip.txt'],
   more: 'Makes a real request from your browser. JSON comes back pretty-printed and coloured; long answers are cut short on screen but whole in a pipe or a file. A bare domain means https. The server has to allow requests from web pages (CORS), and the claude.ai preview blocks the network entirely.',
   async run(argv, io){
-    const a = argv.slice(1); let inc = false, silent = false, method = null, data = null, url = null; const headers = {};
+    const a = argv.slice(1); let inc = false, silent = false, method = null, data = null, url = null, secs = 0; const headers = {};
     for (let i = 0; i < a.length; i++){
       const x = a[i];
       if (x === '-i' || x === '--include') inc = true;
@@ -717,6 +723,7 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
       else if (x === '-X' || x === '--request'){ method = String(a[++i] || '').toUpperCase(); }
       else if (x === '-H' || x === '--header'){ const h = String(a[++i] || ''), k = h.indexOf(':'); if (k > 0) headers[h.slice(0, k).trim()] = h.slice(k + 1).trim(); }
       else if (x === '-d' || x === '--data'){ data = a[++i] == null ? '' : a[i]; }
+      else if (x === '-m' || x === '--max-time'){ secs = parseFloat(a[++i]); if (!(secs > 0)){ io.err('curl: -m wants seconds, like -m 5\n'); return 2; } }
       else if (/^-/.test(x)){ io.err('curl: unknown option ' + x + '   (man curl)\n'); return 2; }
       else url = x;
     }
@@ -726,7 +733,7 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
     if (data != null && !method) method = 'POST';
     if (data != null && !Object.keys(headers).some(k => /^content-type$/i.test(k))) headers['Content-Type'] = /^\s*[[{]/.test(data) ? 'application/json' : 'application/x-www-form-urlencoded';
     let r;
-    try { r = await net.get(url, { method: method || 'GET', headers, body: data == null ? undefined : data }); }
+    try { r = await net.get(url, { method: method || 'GET', headers, body: data == null ? undefined : data, timeout: secs ? secs * 1000 : undefined }); }
     catch (e){ return net.fail(io, 'curl', e); }
     if (!io.tty){
       if (inc) io.out('HTTP ' + r.status + ' ' + r.statusText + '\n' + r.headers.map(([k, v]) => k + ': ' + v).join('\n') + '\n\n');
