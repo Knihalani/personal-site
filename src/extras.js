@@ -320,7 +320,7 @@ const net = {
   fail(io, name, e){
     if (!(e instanceof NetError)){ io.err(name + ': ' + ((e && e.message) || e) + '\n'); return 1; }
     const why = {
-      blocked: ["blocked by this preview's sandbox, works on the live site", 'the claude.ai preview switches the network off. everything offline still works'],
+      blocked: ["blocked by this preview's sandbox, works on the live site", 'kaiav.pages.dev has the network. offline tools work here'],
       offline: ['offline', 'this browser has no connection right now'],
       cors: ["CORS: the server doesn't allow browser requests", 'the site answered, but will not share it with a web page'],
       timeout: ['timeout, ' + e.message, 'the server is slow or unreachable. try again'],
@@ -979,7 +979,7 @@ const QR = (() => {
 })();
 M.qr = QR;
 T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] text...', opts: [['-l', 'low error correction: room for more text']],
-  ex: ['qr risingfounder.net', 'qr https://github.com/knihalani/personal-site', 'echo hello | qr'],
+  ex: ['qr risingfounder.net', 'qr kaiav.pages.dev', 'echo hello | qr'],
   more: 'Draws a QR code your phone camera can read. Up to about 200 characters (270 with -l). Piped or redirected, it comes out as text blocks.',
   run(argv, io){
     let a = argv.slice(1), lo = false; if (a[0] === '-l'){ lo = true; a = a.slice(1); }
@@ -1017,7 +1017,7 @@ T.cmds.base64 = { g: 'tools', desc: 'encode or decode base64', usage: 'base64 [-
     const t = argText(io, a);
     if (!t){ io.err('usage: base64 [-d] text   (or pipe something in)\n'); return 2; }
     if (dec){
-      try { const bin = atob(t.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')); io.out(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))) + (io.tty ? '\n' : '')); }
+      try { const bin = atob(t.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')); const txt = new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))); io.out(txt + (io.tty && !txt.endsWith('\n') ? '\n' : '')); }
       catch (e){ io.err('base64: that is not base64\n'); return 1; }
     } else { let bin = ''; for (const b of new TextEncoder().encode(t)) bin += String.fromCharCode(b); io.out(btoa(bin) + '\n'); }
   } };
@@ -1073,12 +1073,12 @@ const UNITS = (() => {
 const findUnit = s => { s = String(s || '').replace(/^°/, '').replace(/\.$/, ''); return UNITS[s] || UNITS[s.toLowerCase()] || null; };
 const toK = (v, n) => n === 'C' ? v + 273.15 : n === 'F' ? (v - 32) * 5 / 9 + 273.15 : v;
 const fromK = (k, n) => n === 'C' ? k - 273.15 : n === 'F' ? (k - 273.15) * 9 / 5 + 32 : k;
-const fmtNum = x => { if (!isFinite(x)) return String(x); const a = Math.abs(x); if (a !== 0 && (a >= 1e12 || a < 1e-6)) return x.toExponential(4); return String(+x.toPrecision(7)); };
+const fmtNum = x => { if (!isFinite(x)) return String(x); const a = Math.abs(x); if (a !== 0 && (a >= 1e12 || a < 1e-6)) return x.toExponential(4); return String(a >= 1e-3 ? +(+x.toPrecision(7)).toFixed(4) : +x.toPrecision(7)); };
 const UNIT_SHOW = { length: ['mm', 'cm', 'm', 'km', 'in', 'ft', 'yd', 'mi'], mass: ['g', 'kg', 'oz', 'lb', 'st'], data: ['B', 'KB', 'MB', 'GB', 'KiB', 'MiB', 'GiB'], time: ['s', 'min', 'h', 'd', 'wk'], volume: ['ml', 'l', 'cup', 'gal'], temperature: ['C', 'F', 'K'] };
 T.cmds.convert = { g: 'tools', desc: 'convert units', usage: 'convert number unit [to unit]', ex: ['convert 5 km to mi', 'convert 72 f c', 'convert 3.5 GB MiB', 'convert 180 lb'],
   more: 'Length, mass, temperature, data sizes, time and volume. Leave out the second unit to see the number in all the usual ones. KB, MB and GB are powers of 1000; KiB, MiB and GiB powers of 1024.',
   run(argv, io){
-    const s = argv.slice(1).join(' ').trim();
+    const s = argText(io, argv.slice(1)).replace(/\s+/g, ' ').trim();
     const m = /^(-?\d*\.?\d+(?:e[+-]?\d+)?)\s*(°?[a-z]+)(?:\s+(?:to|in|as|into)?\s*(°?[a-z]+))?\s*$/i.exec(s);
     if (!m){ io.err('usage: convert 5 km to mi   (man convert for the units)\n'); return 2; }
     const v = parseFloat(m[1]), from = findUnit(m[2]), to = m[3] ? findUnit(m[3]) : null;
@@ -1098,7 +1098,8 @@ T.cmds.units = Object.assign({}, T.cmds.convert, { hidden: true });
 T.cmds.roll = { g: 'tools', desc: 'roll dice', usage: 'roll [NdS[+K]]...', ex: ['roll', 'roll d20', 'roll 2d6+3', 'roll 4d6 d8'],
   more: 'Dice notation: 2d6+3 means two six-sided dice plus three. One six-sided die unless you say.',
   run(argv, io){
-    const specs = argv.length > 1 ? argv.slice(1) : ['1d6'];
+    const sin = String(io.stdin || '').trim().split(/\s+/).filter(Boolean);
+    const specs = argv.length > 1 ? argv.slice(1) : sin.length ? sin : ['1d6'];
     let total = 0; const groups = [];
     for (const sp of specs){
       const m = /^(\d*)d(\d+)([+-]\d+)?$/i.exec(sp);
@@ -1120,7 +1121,7 @@ const NAMED_DAYS = { 'new year': '01-01', 'new years': '01-01', christmas: '12-2
 T.cmds.countdown = { g: 'tools', desc: 'how long until a date', usage: 'countdown date', ex: ['countdown 2027-01-01', 'countdown dec 25', 'countdown christmas', 'countdown 2026-11-03 09:00'],
   more: 'Days, hours and minutes until a date (or since it, if it has passed). A date without a year means the next one.',
   run(argv, io){
-    const raw = argv.slice(1).join(' ').trim(); if (!raw){ io.err('usage: countdown date   (try: countdown dec 25)\n'); return 2; }
+    const raw = argText(io, argv.slice(1)).replace(/\s+/g, ' ').trim(); if (!raw){ io.err('usage: countdown date   (try: countdown dec 25)\n'); return 2; }
     const now = new Date(); let s = raw.toLowerCase(), d;
     if (NAMED_DAYS[s]) s = now.getFullYear() + '-' + NAMED_DAYS[s];
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(s + 'T00:00:00');

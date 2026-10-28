@@ -380,6 +380,8 @@ M.createTerminal = function createTerminal(opts){
   let links = [], sel = -1;            // selectable link items in the latest output
   let suggestion = '';                 // "did you mean" target, shown as ghost on an empty prompt
   let tabState = null;
+  let ahead = '';           // keys typed while a command runs, waiting for the next prompt
+  let rs = null;            // ctrl+r search: { q, i, draft, dcur }
   let history = [];
   try { const h = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); if (Array.isArray(h)) history = h.filter(s => typeof s === 'string').slice(-200); } catch (e){}
   let hIdx = history.length, hDraft = '', hPrefix = '';
@@ -563,9 +565,18 @@ M.createTerminal = function createTerminal(opts){
     ls.forEach((l, k) => {
       if (l){
         const m = /^((?:[\w.+\-!]+: )?)(.*?)((?:\s{2,}|\s(?=\())\(.*\))?$/.exec(l);
-        if (m[1]) sink.write(m[1], 'dim');
-        if (m[2]) sink.write(m[2], 'normal');
-        if (m[3]) sink.write(m[3], 'faint');
+        const sty = [];                       // one style per character, then cut at spaces to fit
+        for (const [part, st] of [[m[1], 'dim'], [m[2], 'normal'], [m[3] || '', 'faint']]) for (let q = 0; q < part.length; q++) sty.push(st);
+        let at = 0, first = true;
+        while (at < l.length){
+          const room = first ? COLS : COLS - 2;
+          let end = l.length;
+          if (end - at > room){ end = l.lastIndexOf(' ', at + room); if (end <= at + room / 2) end = at + room; }
+          if (!first) sink.write('\n  ');
+          for (let q = at; q < end;){ let r = q; while (r < end && sty[r] === sty[q]) r++; sink.write(l.slice(q, r), sty[q]); q = r; }
+          at = end; while (at < l.length && l[at] === ' ') at++;
+          first = false;
+        }
       }
       if (k < ls.length - 1) sink.write('\n');
     });
@@ -654,8 +665,10 @@ M.createTerminal = function createTerminal(opts){
     o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line(['type ', 'f'], ['help', 'n'], [' to begin, or try', 'f'])
 .flow(['about', 'eden', 'j', 'links', 'contact', 'weather', 'tetris'].map(w => [[w, 'n']]), '  ')
-      .line(['new here? ', 'f'], ['cat README.md', 'd'])
       .blank();
+    if (!history.length) o.line(['new here? ', 'f'], ['cat README.md', 'n'], [COLS >= 46 ? ' is a short guide' : ' first', 'f'])
+      .line(['tab', 'n'], [' completes   ', 'f'], ['\u2191', 'n'], [' recalls', 'f'], COLS >= 46 ? ['   ctrl+r', 'n'] : ['', 'n'], [COLS >= 46 ? ' searches' : '', 'f']).blank();
+    else o.line(['new here? ', 'f'], ['cat README.md', 'd']).blank();
     return o;
   }
   const DOCS = {
@@ -820,7 +833,7 @@ M.createTerminal = function createTerminal(opts){
         const w = Math.max(...ents.map(e => human(e.size).length));
         for (const e of ents){
           io.write((e.dir ? 'drwxr-xr-x' : e.locked ? '-r--r--r--' : '-rw-r--r--') + (COLS >= 50 || !io.tty ? '  kaiav  ' : '  '), 'faint');
-          io.write((e.dir ? '-' : human(e.size)).padStart(w) + '  ' + fmtDate(e.mtime) + '  ', 'dim');
+          io.write((e.dir ? '-' : human(e.size)).padStart(w) + '  ' + (COLS >= 50 || !io.tty ? fmtDate(e.mtime) : fmtDate(e.mtime).slice(0, 6)) + '  ', 'dim');
           io.write(e.name + (e.dir && e.name[0] !== '.' ? '/' : ''), e.dir ? 'bright' : 'normal');
           io.write(e.locked && io.tty ? ' ' + LOCK + '\n' : '\n', 'faint');
         }
@@ -1291,7 +1304,7 @@ M.createTerminal = function createTerminal(opts){
   /* ---- jobs ---- */
   const INTR = { interrupted: true };
   function newJob(){
-    const j = { dead: false, plain: '', hint: '', timers: new Set() };
+    const j = { dead: false, plain: '', hint: '', timers: new Set(), t0: now };
     j.killed = new Promise(r => { j.kill = r; });
     j.sleep = ms => new Promise((res, rej) => {
       if (j.dead) return rej(INTR);
@@ -1329,6 +1342,7 @@ M.createTerminal = function createTerminal(opts){
     for (const t of j.timers) clearTimeout(t);
     job = null; openRow = null;
     if (j.hint){ suggestion = j.hint; tty.write('did you mean ', 'dim'); tty.write(j.hint, 'bright'); tty.write('?  press enter\n', 'faint'); j.plain += ' Did you mean ' + j.hint + '?'; }
+    if (ahead){ const a = ahead; ahead = ''; insert(a); }
     trim(); mirror(j.plain || ''); toBottom(); dirty = true; touched();
     if (REDUCED) revealAll();
   }
@@ -1495,7 +1509,7 @@ M.createTerminal = function createTerminal(opts){
     job.choice = null;
     let it = null;
     if (pick >= 0){ it = card.acts[pick]; actOn(card, it); }
-    else { card.sel = -1; card.foot = [['back', 'f']]; }
+    else { card.sel = -1; card.foot = [['back', 'f']]; if (k.length === 1 && !e.ctrlKey && !e.altKey && k !== ' ') ahead += k; }
     dirty = true;
     ch.res(it);
     return true;
@@ -1666,20 +1680,26 @@ M.createTerminal = function createTerminal(opts){
       shown = rows.length; mirror('Commands: ' + names.join(', '));
       return;
     }
-    if (tabState && tabState.after === input){
+    if (tabState && tabState.after === input && tabState.cyc){          // third tab on: walk the list
       const s = tabState; s.i = (s.i + (back ? -1 : 1) + s.list.length) % s.list.length;
       input = s.base; cur = s.cur; accept(s.list[s.i], s.from, false); s.after = input; return;
     }
-    const ctx = context(); const list = candidates(ctx);
-    if (!list.length){ sfx('beep'); return; }
-    if (list.length === 1){ accept(list[0], ctx.from, true); tabState = null; return; }
-    if (ctx.kind === 'path'){
-      const cp = commonPrefix(list);
-      if (cp.length > ctx.q.length){ accept(cp, ctx.from, false); return; }
+    if (tabState && tabState.after === input && !tabState.cyc){        // second tab: show them all, pick the first
+      const s = tabState; s.cyc = true; s.i = back ? s.list.length - 1 : 0;
+      accept(s.list[s.i], s.from, false); s.after = input;
+      mirror(s.list.length + ' matches: ' + s.list.slice(0, 40).join(', ')); return;
     }
-    const base = input, bcur = cur;
-    accept(list[0], ctx.from, false);
-    tabState = { base, cur: bcur, list, i: 0, from: ctx.from, after: input };
+    const ctx = context(); let list = candidates(ctx);
+    if (!list.length){ sfx('beep'); return; }
+    if (list.some(x => x.startsWith(ctx.q))) list = list.filter(x => x.startsWith(ctx.q));
+    if (list.length === 1){ accept(list[0], ctx.from, true); tabState = null; return; }
+    if (!list[0].startsWith(ctx.q)){                                    // a typo: take the best guess, as the ghost offered
+      const base = input, bcur = cur; accept(list[0], ctx.from, false);
+      tabState = { base, cur: bcur, list, i: 0, from: ctx.from, after: input, cyc: true }; return;
+    }
+    const cp = commonPrefix(list.filter(x => x.startsWith(ctx.q)));
+    if (cp.length > ctx.q.length) accept(cp, ctx.from, false); else sfx('beep');
+    tabState = { base: input, cur, list, i: -1, from: ctx.from, after: input, cyc: false };
   }
 
   /* ---- editing ---- */
@@ -1709,6 +1729,33 @@ M.createTerminal = function createTerminal(opts){
   }
   function clearScreen(){ rows = []; shown = 0; partial = 0; links = []; sel = -1; openRow = null; toBottom(); dirty = true; }
 
+  /* ---- ctrl+r: search the history, newest first ---- */
+  function searchFrom(i, q){
+    if (!q) return -1;
+    const lq = q.toLowerCase();
+    for (let k = Math.min(i, history.length - 1); k >= 0; k--) if (history[k].toLowerCase().includes(lq)) return k;
+    return -1;
+  }
+  function searchSet(i){
+    const s = rs; s.fail = i < 0;
+    if (i >= 0){ s.i = i; input = history[i]; cur = Math.max(0, input.toLowerCase().indexOf(s.q.toLowerCase())); }
+    else if (!s.q){ s.i = history.length; input = s.draft; cur = s.dcur; }
+  }
+  function searchKey(e){
+    const k = e.key, c = k.toLowerCase(), s = rs;
+    const done = keep => { rs = null; if (!keep){ input = s.draft; cur = s.dcur; } else cur = input.length; hIdx = history.length; touched(); return true; };
+    if (e.ctrlKey && c === 'r'){ if (s.q){ const i = searchFrom(s.i - 1, s.q); if (i >= 0) searchSet(i); else { s.fail = true; sfx('beep'); } } touched(); return true; }
+    if (e.ctrlKey && (c === 'g' || c === 'c')) return done(false);
+    if (k === 'Escape') return done(false);
+    if (k === 'Enter'){ const keep = !s.fail && s.q && s.i < history.length; rs = null; if (keep){ execute(input); touched(); return true; } return done(false); }
+    if (k === 'Backspace'){ s.q = s.q.slice(0, -1); searchSet(searchFrom(history.length - 1, s.q)); touched(); return true; }
+    if (k.length === 1 && !e.ctrlKey && !e.altKey){ s.q += k; const i = searchFrom(s.i, s.q); if (i >= 0) searchSet(i); else { s.fail = true; } touched(); return true; }
+    if (/^(Arrow|Home|End|Tab)/.test(k) || (e.ctrlKey && (c === 'a' || c === 'e'))){   // take the match and keep editing
+      rs = null; if (s.fail && !s.q){ input = s.draft; } hIdx = history.length;
+      cur = k === 'Home' || (e.ctrlKey && c === 'a') ? 0 : input.length; touched(); return true;
+    }
+    return true;
+  }
   function handleKey(e){
     const k = e.key;
     if (!k || k === 'Shift' || k === 'Control' || k === 'Alt' || k === 'Meta' || k === 'CapsLock' || k === 'Dead') return false;
@@ -1730,8 +1777,13 @@ M.createTerminal = function createTerminal(opts){
       if (ctrl && c === 'l'){ clearScreen(); return true; }
       if (k === 'PageUp'){ scrollBy(ROWS - 2); return true; }
       if (k === 'PageDown'){ scrollBy(-(ROWS - 2)); return true; }
-      return k.length === 1 || ['Enter', 'Tab', 'Backspace', 'Escape', ' '].includes(k);
+      if (k.length === 1 && !ctrl && !alt){ if (ahead.length < 200) ahead += k; return true; }     // typed ahead: lands on the next prompt
+      if (k === 'Backspace'){ ahead = ahead.slice(0, -1); return true; }
+      return ['Enter', 'Tab', 'Escape'].includes(k);
     }
+    if (rs) return searchKey(e);
+    if (ctrl && !alt && c === 'r'){ rs = { q: '', i: history.length, draft: input, dcur: cur, fail: false }; tabState = null; suggestion = ''; touched(); return true; }
+    if (alt && !ctrl && (c === 'b' || c === 'f' || k === '\u222b' || k === '\u0192')){ cur = c === 'b' || k === '\u222b' ? wordLeft(cur) : wordRight(cur); touched(); return true; }
     if (ctrl && !alt){
       if (c === 'l'){ clearScreen(); touched(); return true; }
       if (c === 'c'){
@@ -1807,7 +1859,12 @@ M.createTerminal = function createTerminal(opts){
       }
       return;
     }
-    if (job) return;
+    if (job && job.choice){                     // phones: a tapped key answers the card
+      for (const ch of String(str)){ if (!job || !job.choice) break; choiceKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false, shiftKey: false }); }
+      return;
+    }
+    if (job){ ahead += String(str).replace(/[\r\n\t]/g, ''); return; }
+    if (rs){ for (const ch of String(str)) searchKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false }); return; }
     if (typing()) revealAll();
     const parts = String(str).split(/\r?\n/);
     parts.forEach((p, i) => { insert(p); if (i < parts.length - 1 && !job) execute(input); });
@@ -1910,17 +1967,52 @@ M.createTerminal = function createTerminal(opts){
   }
   function totalUnits(){
     let u = 0; for (let i = 0; i < rows.length && i <= shown; i++) if (i < shown || partial > 0 || rows[i].k === 'viz') u += i < rows.length ? heightOf(rows[i]) : 0;
-    return u + (promptVisible() ? 1 : 0);
+    return u + (promptVisible() ? 1 + belowPrompt().length : 0);
+  }
+  /* quiet rows under the prompt: the ctrl+r search line, or the tab candidates */
+  function fitSpans(opts){ const len = f => f.reduce((n, x) => n + x[0].length, 0); return opts.find(f => len(f) <= COLS) || opts[opts.length - 1]; }
+  function belowPrompt(){
+    if (rs){
+      const q = rs.q, st = rs.fail ? 'a' : 'b';
+      return [fitSpans([
+        [['search ', 'f'], [q, st], [rs.fail ? '  no match' : '', 'f'], ['   ctrl+r older \u00b7 enter run \u00b7 esc', 'f']],
+        [['search ', 'f'], [q, st], [rs.fail ? '  no match' : '', 'f'], ['   ^R older \u00b7 esc', 'f']],
+        [['search ', 'f'], [q, st]],
+      ])];
+    }
+    const t = tabState;
+    if (!t || !t.cyc || t.list.length < 2 || t.after !== input) return [];
+    const w = Math.min(COLS - 2, Math.max(...t.list.map(x => x.length)) + 2), nc = Math.max(1, Math.floor(COLS / w));
+    const lines = Math.ceil(t.list.length / nc), maxL = Math.min(5, Math.max(2, ROWS - 6));
+    const selL = Math.floor(Math.max(0, t.i) / nc), from = lines <= maxL ? 0 : clamp(selL - maxL + 1, 0, lines - maxL);
+    const out = [];
+    for (let l = from; l < Math.min(lines, from + maxL); l++){
+      const row = [];
+      for (let c = 0; c < nc; c++){
+        const k = l * nc + c; if (k >= t.list.length) break;
+        const name = t.list[k].slice(0, w - 1);
+        row.push([name, k === t.i ? 'i' : 'd'], [' '.repeat(w - name.length), 'n']);
+      }
+      out.push(row);
+    }
+    const more = t.list.length - Math.min(lines, from + maxL) * nc;
+    if (lines > maxL) out.push([[(t.i + 1) + ' of ' + t.list.length + (more > 0 ? '  tab for more' : ''), 'f']]);
+    return out;
   }
   const promptVisible = () => !booting && !typing() && !job && !app;
 
   function drawPrompt(top){
-    const gh = ghost();
+    const gh = rs ? null : ghost();
     const PL = promptLen();
     let off = 0; const room = COLS - PL - 1;
     if (cur > room) off = cur - room;
     const vis = input.slice(off, off + room);
-    drawSpans({ i: 0, s: [...promptSpans(), [vis, 'n']] }, top, 999);
+    let body = [[vis, 'n']];
+    if (rs && rs.q && !rs.fail){                     // the match, brighter
+      const at = input.toLowerCase().indexOf(rs.q.toLowerCase()) - off;
+      if (at >= 0 && at < vis.length) body = [[vis.slice(0, at), 'd'], [vis.slice(at, at + rs.q.length), 'b'], [vis.slice(at + rs.q.length), 'd']];
+    }
+    drawSpans({ i: 0, s: [...promptSpans(), ...body] }, top, 999);
     promptY = top + ch;
     const cx = X(PL + cur - off);
     if (gh){
@@ -2028,7 +2120,12 @@ M.createTerminal = function createTerminal(opts){
       u += h;
       if (isPartial) break;
     }
-    if (promptVisible() && u >= first && u < first + ROWS) drawPrompt(PADY + (u - first) * ch);
+    if (promptVisible()){
+      if (u >= first && u < first + ROWS) drawPrompt(PADY + (u - first) * ch);
+      belowPrompt().forEach((r, k) => { const y = u + 1 + k; if (y >= first && y < first + ROWS) drawSpans({ i: 0, s: r }, PADY + (y - first) * ch, 999); });
+    } else if (job && !job.choice && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
+      text(COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 0, PADY + (u - first) * ch, 'f');
+    }
     g.restore();
     // scroll position: a thin rail on the right and a quiet note at the bottom
     if (scrollOff > 0){
@@ -2039,8 +2136,7 @@ M.createTerminal = function createTerminal(opts){
       const note = ' ' + scrollOff + ' more below  pgdn ';
       const nx = COLS - note.length, top = PADY + (ROWS - 1) * ch;
       g.fillStyle = P.bg; g.fillRect(X(nx) - 8, top - 4, note.length * cw + 8, ch + 8);
-      g.fillStyle = P.dim; g.fillRect(X(nx), top + 2, note.length * cw, ch - 4);
-      g.font = font(); g.fillStyle = P.bg; g.fillText(note, X(nx), top + fs * 0.68);
+      g.font = font(); g.fillStyle = P.dim; g.fillText(note, X(nx), top + fs * 0.68);
     }
   }
   /* ---- boot screen ---- */
@@ -2236,6 +2332,7 @@ M.createTerminal = function createTerminal(opts){
       if (!typing()) carry = 0, blinkT0 = now;
       changed = true;
     }
+    if (job && !job.hinted && !app && now - job.t0 > 0.9){ job.hinted = true; changed = true; }
     const on = ((t - blinkT0) % 1.06) < 0.53;
     if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (app && gridCursor)) changed = true; }
     if (!app && animFps > 0 && t - lastAnim >= 1 / animFps - 1e-3) changed = true;

@@ -108,7 +108,8 @@ MAC.TERM.cmds[name] = { desc: 'one line', usage: 'name [args]', run(argv, io) } 
 //   'dim' | 'bright' | 'faint' | 'accent' | 'inverse'.
 
 // Full-screen apps (vim, games, top...) take over the whole terminal grid until they exit
-MAC.TERM.apps[name] = { desc, usage, start(api, argv) -> { key(e) -> bool, tick(dt) -> bool /*dirty*/, render(scr) } }
+MAC.TERM.apps[name] = { desc, usage, start(api, argv) -> { key(e) -> bool, tick(dt) -> bool /*dirty*/, render(scr),
+                                                          keyUp?(e), insertText?(str) /* phones */, tap?(col, row) -> bool /* phones */ } }
 // api = { cols, rows, fs, env, cwd, exit(code), print(text) /* goes to scrollback after exit */, sound: MAC.sound }
 // scr = { cols, rows, clear(), put(x, y, text, style /* 'normal'|'dim'|'bright'|'faint'|'accent'|'inverse'|{fg, inverse} */),
 //         fill(x, y, w, h, ch, style), cursor(x, y, shape /* 'block'|'bar'|'under'|null */) }

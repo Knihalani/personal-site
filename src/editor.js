@@ -77,7 +77,8 @@ function start(api, argv, flavor){
     if (text == null){ isNew = true; load(''); }
     else { load(text); readOnly = lockedAt(path); }
   }
-  if (readOnly) say(COLS < 54 ? 'built-in file. :w saves a copy, :q quits' : 'built-in file, read-only. ^S saves a copy', 'dim', 7);
+  if (readOnly && (flavor === 'vi' || flavor === 'vim')) say(COLS < 54 ? 'nano-style ' + flavor + '. read-only: :w copies' : 'nano-style ' + flavor + ', read-only file. ^S saves a copy', 'dim', 7);
+  else if (readOnly) say(COLS < 54 ? 'built-in file. :w saves a copy, :q quits' : 'built-in file, read-only. ^S saves a copy', 'dim', 7);
   else if (flavor === 'vi' || flavor === 'vim') say('this ' + flavor + ' is nano-style: just type. ^S save, ^Q quit', 'dim', 7);
   else if (COLS < 54) say('tip: :wq on its own line saves', 'dim', 7);
   else if (isNew) say('new file', 'dim');
@@ -501,7 +502,7 @@ function start(api, argv, flavor){
         case 'v': paste(); return true;
         case 'z': if (shift) doRedo(); else doUndo(); return true;
         case 'y': doRedo(); return true;
-        case 'f': case 'w': { const origin = { l: cy, c: cx }; find.on = true; openPrompt('find', 'Find: ', find.q, null); mode.origin = origin; return true; }
+        case 'f': { const origin = { l: cy, c: cx }; find.on = true; openPrompt('find', 'Find: ', find.q, null); mode.origin = origin; return true; }
         case 'g': openPrompt('goto', 'Go to line: ', '', null); return true;
         case 'l': gutter = !gutter; prefSet(gutter); say('line numbers ' + (gutter ? 'on' : 'off')); return true;
         case 'a': anchor = { l: 0, c: 0 }; cy = lines.length - 1; cx = lines[cy].length; return true;
@@ -602,7 +603,7 @@ function start(api, argv, flavor){
     let right = COLS >= 50 ? 'Ln ' + (cy + 1) + ', Col ' + (cx + 1) : (cy + 1) + ':' + (cx + 1);
     if (r && COLS >= 50){ const n = textOf(r[0], r[1]).length; right = n + ' sel  ' + right; }
     const left = flavor === 'edit' ? 'edit' : flavor;
-    let name = disp(path) + (modified() ? ' *' : '');
+    let name = disp(path) + (modified() ? ' \u2022' : '');
     const tag = readOnly ? ' [read-only]' : isNew && !modified() ? ' [new]' : '';
     const avail = COLS - 2 - right.length - 2 - (left.length + 2);
     if ((name + tag).length > avail){
@@ -697,7 +698,27 @@ function start(api, argv, flavor){
     return d;
   }
 
-  return { key, tick, render, tap };
+  /* phones / IME: the terminal hands whole strings here. Newlines go through the Enter path (auto-indent,
+     the :wq line commands), so a pasted or dictated chunk behaves like typing it. */
+  const synth = k => ({ key: k, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, synthetic: true, preventDefault(){} });
+  function insertText(str){
+    if (done) return false;
+    str = String(str == null ? '' : str).replace(/\r\n?/g, '\n');
+    if (!str) return false;
+    if (mode || readOnly || str.length === 1 || /[\b\t]/.test(str)){
+      for (const ch of str){ if (done) break; key(synth(ch === '\n' ? 'Enter' : ch === '\t' ? 'Tab' : ch === '\b' ? 'Backspace' : ch)); }
+      return true;
+    }
+    const parts = str.split('\n');
+    parts.forEach((part, i) => {
+      if (done) return;
+      if (part){ cutChain = false; if (mode) for (const ch of part) promptKey(synth(ch)); else typeText(part, 'other'); }
+      if (i < parts.length - 1 && !done) key(synth('Enter'));
+    });
+    return true;
+  }
+
+  return { key, tick, render, tap, insertText };
 }
 
 const def = (name, desc) => ({ desc, usage: name + ' [file]', start(api, argv){ return start(api, argv, name); } });

@@ -14,7 +14,7 @@ html, body{ margin: 0; height: 100%; background: var(--bg); color: var(--fg); ov
 body.phone{ background: #0a0f0a }
 body.phone #mute{ top: max(10px, env(safe-area-inset-top, 0px)); bottom: auto; padding: 4px 8px; font-size: 11px; opacity: .7 }
 body.phone #stage{ overflow: hidden; touch-action: none }
-#stage canvas.phone-term{ position: absolute; top: 0; left: 0; width: 100%; height: auto; transition: transform .25s cubic-bezier(.2,.8,.2,1) }
+#stage canvas.phone-term{ position: absolute; top: max(34px, env(safe-area-inset-top, 0px)); left: 0; width: 100%; height: auto; transition: transform .25s cubic-bezier(.2,.8,.2,1) }
 .ui{ position: fixed; z-index: 2; font: 500 11px var(--mono); letter-spacing: .08em; color: var(--dim) }
 #hint{ left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom, 0px)); transition: opacity .8s; pointer-events: none; text-align: center }
 #mute{ right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); background: none; border: 1px solid rgba(233,226,208,.18); color: var(--dim); font: inherit; letter-spacing: inherit; padding: 6px 10px; cursor: pointer }
