@@ -1375,7 +1375,7 @@ M.createTerminal = function createTerminal(opts){
     errLine(ctx.errSink, name + ': command not found\n');
     const f = fuzzy(name, cmdItems());
     if (f){ j.hint = [f.item.name, ...argv.slice(1)].join(' '); }
-    else if (ctx.errSink === tty) tty.rich(out().at(0, ['this shell knows commands, not sentences. try ', 'f'], chip('help', 'n')));
+    else if (ctx.errSink === tty) tty.rich(out().at(0, [argv.length > 2 ? 'this shell knows commands, not sentences. try ' : 'not something this machine knows. try ', 'f'], chip('help', 'n')));
     return 127;
   }
   function makeIo(ctx, j){
