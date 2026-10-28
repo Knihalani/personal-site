@@ -2294,6 +2294,7 @@ M.createTerminal = function createTerminal(opts){
 
   if (!booting) endBoot();
   draw();
-  return { canvas, handleKey, handleKeyUp, handleTap, insertText, update, run, scroll, get cursorY(){ return promptY / H; } };
+  return { canvas, handleKey, handleKeyUp, handleTap, insertText, update, run, scroll, get cursorY(){ return promptY / H; },
+    get busy(){ return !!(app || job); } };   // a full-screen app or a running command: don't rebuild under it
 };
 })();

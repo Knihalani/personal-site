@@ -183,7 +183,8 @@ function flat(){
   build();
   let rt = 0;
   addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => {
-    if (Math.abs(innerWidth - bw) > 40 || (!TOUCH && Math.abs(innerHeight - bh) > 40)){ build(); fromHash(); } else place();
+    // rebuilding starts a fresh terminal, so it is skipped while an editor, game or command is running
+    if ((Math.abs(innerWidth - bw) > 40 || (!TOUCH && Math.abs(innerHeight - bh) > 40)) && !term.busy){ build(); fromHash(); } else place();
   }, 150); });
   const focus = () => { if (!reading()) try { kbd.focus({ preventScroll: true }); } catch (e){} };
   setupMute(TOUCH ? null : focus);
