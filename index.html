@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kaiav Nihalani</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Kaiav Nihalani — founder of Eden, co-founder of J: Rising Founder.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<style>
+/* Layout: one full-bleed pond. The ASCII canvas fills the viewport; the four yin-yang regions are real
+   buttons laid over it; a reading panel slides in from the right (bottom on phones) and the symbol
+   moves aside to make room. Deliberately single-theme: the piece is ink, pond and koi. */
+:root{
+  color-scheme: dark;
+  --pond: #0d2a2d;        /* water ground */
+  --pond-2: #10292d;      /* panel ground */
+  --ink: #0e0f10;         /* yin */
+  --paper: #ece4d3;       /* yang */
+  --vermilion: #ff4b1f;   /* koi red, the one accent */
+  --mist: rgba(236,228,211,.62);
+  --rule: rgba(236,228,211,.16);
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --serif: "Newsreader", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+}
+*{ box-sizing: border-box }
+html, body{ height: 100%; margin: 0 }
+body{ background: var(--pond); color: var(--paper); font: 14px/1.5 var(--mono); overflow: hidden; -webkit-font-smoothing: antialiased }
+#pond{ position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation }
+a{ color: inherit }
+:focus-visible{ outline: 2px solid var(--vermilion); outline-offset: 3px }
+
+/* chrome: name and links. Small, quiet, out of the way of the symbol */
+.chrome{ position: fixed; z-index: 3; display: flex; gap: 14px; align-items: baseline; font-size: 12px; letter-spacing: .04em; color: var(--mist);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); transition: opacity .6s }
+.chrome.top{ top: 0; left: 0; right: 0; padding-top: max(16px, env(safe-area-inset-top, 0px)); justify-content: space-between }
+.chrome.bottom{ bottom: 0; left: 0; right: 0; padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); justify-content: space-between }
+.chrome .name{ color: var(--paper); font-weight: 500; letter-spacing: .02em }
+.chrome a, .chrome button{ color: var(--mist); text-decoration: none; background: none; border: 0; font: inherit; letter-spacing: inherit; cursor: pointer; padding: 4px 0 }
+.chrome a:hover, .chrome button:hover{ color: var(--paper) }
+.chrome .links{ display: flex; gap: 16px }
+.hint{ opacity: .8 }
+@media (hover: none){ .hint .keys{ display: none } }
+
+/* the four regions. Positioned by script over the symbol; each label sits on a window cut to the
+   region's own colour so the text never fights the glyph texture */
+#regions{ position: fixed; inset: 0; z-index: 2; pointer-events: none; margin: 0; padding: 0; list-style: none }
+.region{ position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer;
+  font-family: var(--mono); border: 0; padding: .08em .32em; line-height: 1.05; white-space: nowrap; opacity: 0;
+  transition: opacity .7s ease, color .2s ease, letter-spacing .3s ease; will-change: transform }
+.region.on{ opacity: 1 }
+.region .k{ display: block; font-size: 10px; letter-spacing: .14em; opacity: .55; margin-top: .45em; font-weight: 400; text-align: center }
+.region.dark{ background: var(--ink); color: var(--paper) }
+.region.light{ background: var(--paper); color: var(--ink) }
+.region.big{ font-weight: 700; letter-spacing: -.02em }
+.region.small{ font-weight: 500; letter-spacing: .02em; padding: .2em .4em }
+.region:hover, .region.hot{ color: var(--vermilion) }
+.region.big:hover, .region.big.hot{ letter-spacing: .02em }
+
+/* reading panel */
+#panel{ position: fixed; z-index: 4; top: 0; right: 0; bottom: 0; width: min(480px, 44vw); background: var(--pond-2);
+  border-left: 1px solid var(--rule); transform: translateX(102%); transition: transform .55s cubic-bezier(.2,.8,.2,1);
+  display: flex; flex-direction: column; padding-top: max(20px, env(safe-area-inset-top, 0px)); padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  padding-right: max(28px, env(safe-area-inset-right, 0px)); padding-left: 28px }
+#panel.open{ transform: none }
+#panel header{ display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--mist); letter-spacing: .06em }
+#panel header .rule{ flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; color: var(--rule) }
+#panel .close{ background: none; border: 1px solid var(--rule); color: var(--paper); font: 500 12px var(--mono); padding: 6px 10px; cursor: pointer }
+#panel .close:hover{ border-color: var(--paper) }
+#panel .body{ overflow-y: auto; min-height: 0; margin-top: 28px; padding-right: 6px; scrollbar-width: thin; scrollbar-color: var(--rule) transparent }
+#panel h2{ font: 700 clamp(30px, 4vw, 44px)/1.02 var(--mono); letter-spacing: -.02em; margin: 0; text-wrap: balance }
+#panel .role{ font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--mist); margin: 14px 0 0 }
+#panel .line{ font: italic 400 clamp(22px, 2.4vw, 28px)/1.25 var(--serif); margin: 26px 0 0; color: var(--paper); text-wrap: balance }
+#panel .prose{ font: 400 18px/1.6 var(--serif); color: rgba(236,228,211,.86); max-width: 62ch; margin-top: 20px }
+#panel .prose p{ margin: 0 0 1em }
+#panel .facts{ list-style: none; padding: 0; margin: 24px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; font-size: 13px }
+#panel .facts dt{ color: var(--mist) } #panel .facts dd{ margin: 0 }
+#panel .cta{ display: inline-flex; gap: 10px; margin-top: 28px; font-size: 13px; color: var(--paper); text-decoration: none; border-bottom: 1px solid var(--vermilion); padding-bottom: 3px }
+#panel .cta:hover{ color: var(--vermilion) }
+#panel .empty{ font: italic 400 20px/1.5 var(--serif); color: var(--mist); margin-top: 26px }
+#panel .placeholder{ color: var(--vermilion) }
+@media (max-width: 720px){
+  #panel{ top: auto; left: 0; width: auto; height: 60vh; height: 60dvh; border-left: 0; border-top: 1px solid var(--rule); transform: translateY(102%);
+    padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)) }
+  #panel .body{ margin-top: 18px }
+  #panel .prose{ font-size: 17px }
+}
+
+/* without WebGL: the same four doors as a plain list */
+.nogl #pond, .nogl #regions{ display: none }
+#fallback{ display: none }
+.nogl #fallback{ display: grid; place-content: center; min-height: 100%; gap: 10px; text-align: center; padding: 0 16px }
+.nogl #fallback button{ font: 700 28px var(--mono); background: none; border: 0; color: var(--paper); cursor: pointer }
+.sr{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+@media (prefers-reduced-motion: reduce){ #panel, .region, .chrome{ transition: none } }
+</style>
+</head>
+<body>
+<canvas id="pond" aria-hidden="true"></canvas>
+
+<div class="chrome top">
+  <span class="name" id="who">kaiav nihalani</span>
+  <button type="button" id="skip">skip ›</button>
+</div>
+
+<h1 class="sr">Kaiav Nihalani</h1>
+<nav aria-label="Sections">
+  <ul id="regions">
+    <li><button class="region big dark" data-id="j" type="button">J<span class="k">1</span></button></li>
+    <li><button class="region big light" data-id="eden" type="button">Eden<span class="k">2</span></button></li>
+    <li><button class="region small light" data-id="about" type="button">About me<span class="k">3</span></button></li>
+    <li><button class="region small dark" data-id="writing" type="button">Writing<span class="k">4</span></button></li>
+  </ul>
+</nav>
+<div id="fallback"></div>
+
+<aside id="panel" aria-labelledby="pTitle" aria-hidden="true">
+  <header><span id="pKey"></span><span class="rule" aria-hidden="true">────────────────────────────────────────────────────────────</span><button class="close" id="close" type="button">esc ✕</button></header>
+  <div class="body" id="pBody" tabindex="-1"></div>
+</aside>
+
+<div class="chrome bottom">
+  <span class="links"><a id="lnLinkedin" href="#" target="_blank" rel="noopener">linkedin</a><a id="lnX" href="#" target="_blank" rel="noopener">x</a></span>
+  <span class="hint" id="hint"></span>
+</div>
+
+<script>
+/* ============================================================================================
+   CONTENT. Edit the words here; everything on the page is built from this object.
+   ============================================================================================ */
+const CONTENT = {
+  name: 'Kaiav Nihalani',
+  links: { linkedin: 'https://www.linkedin.com/in/kaiav-nihalani-594703356/', x: 'https://x.com/KaiavRNihalani' },
+  j: {
+    title: 'J: Rising Founder', role: 'Co-founder, with Jose Cruz-Lopez',
+    line: 'An early chance for extraordinary founders.',
+    body: ['A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world.'],
+    facts: [['Length', 'Three months'], ['Where', 'Remote, anywhere'], ['Who', 'Founders aged 23 and under'], ['Cost', 'No fee, no equity']],
+    link: { href: 'https://risingfounder.net', label: 'risingfounder.net' }
+  },
+  eden: { title: 'Eden', role: 'Founder', line: 'Context for agents.', body: [] },
+  about: {
+    title: 'About me', role: 'Founder of Eden · Co-founder of J',
+    body: ['[A longer bio is coming soon.]']
+  },
+  writing: {
+    title: 'Writing', role: 'Essays and notes',
+    posts: [] // e.g. { title: 'On context', date: '2026-11-02', href: 'https://…' }
+  }
+};
+
+(() => {
+'use strict';
+const D = document, W0 = window, $ = s => D.querySelector(s);
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v, lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const store = { get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, v); } catch(e){} } };
+
+/* ---------- palette (linear-ish 0..1 for the shader, hex for canvas) ---------- */
+const C = { paper: '#ece4d3', ink: '#0e0f10', red: '#ff4b1f', orange: '#ff7a1a', gold: '#f2b84b', cream: '#f6efe1', showaWhite: '#efe7d6' };
+
+/* ---------- copy into the page ---------- */
+$('#lnLinkedin').href = CONTENT.links.linkedin; $('#lnX').href = CONTENT.links.x;
+$('#who').textContent = CONTENT.name.toLowerCase();
+
+/* ============================================================================================
+   GL: the scene is painted with Canvas 2D at 2x2 samples per character cell, uploaded as a texture,
+   and a fragment shader turns each cell into one glyph: edges pick / | \ - by gradient direction,
+   fills pick density by luminance, water reads the ripple field. One draw call per frame.
+   ============================================================================================ */
+const cv = $('#pond');
+const gl = cv.getContext('webgl', { antialias: false, alpha: false, premultipliedAlpha: false, preserveDrawingBuffer: false });
+if (!gl){ D.documentElement.classList.add('nogl'); buildFallback(); }
+
+const GLYPHS = " .:-=+*#%@|/\\~,'";
+const VS = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+const FRAG = `precision highp float;
+uniform sampler2D uScene,uWater,uAtlas;
+uniform vec2 uRes,uCell,uGrid;uniform float uDpr,uN,uT,uYinOn,uHover,uSel,uPhi;uniform vec3 uYin;
+float h1(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+float lum(vec3 c){return dot(c,vec3(.299,.587,.114));}
+float region(vec2 p){
+  vec2 d=p-uYin.xy;float s=sin(-uPhi),c=cos(-uPhi);vec2 q=vec2(c*d.x-s*d.y,s*d.x+c*d.y);float R=uYin.z;
+  if(length(q)>R)return 0.;float rd=R*.17;
+  if(length(q-vec2(0.,-R*.5))<rd)return 3.;
+  if(length(q-vec2(0.,R*.5))<rd)return 4.;
+  bool white=(q.x>0.&&length(q-vec2(0.,-R*.5))>R*.5)||length(q-vec2(0.,R*.5))<R*.5;
+  return white?2.:1.;
+}
+void main(){
+  vec2 css=vec2(gl_FragCoord.x,uRes.y*uDpr-gl_FragCoord.y)/uDpr;
+  vec2 cell=floor(css/uCell);vec2 lc=fract(css/uCell);
+  vec2 ts=1./(uGrid*2.);vec2 b=(cell*2.+.5)*ts;
+  vec4 a0=texture2D(uScene,b),a1=texture2D(uScene,b+vec2(ts.x,0.)),a2=texture2D(uScene,b+vec2(0.,ts.y)),a3=texture2D(uScene,b+ts);
+  float A=(a0.a+a1.a+a2.a+a3.a)*.25;
+  vec3 col=(a0.rgb*a0.a+a1.rgb*a1.a+a2.rgb*a2.a+a3.rgb*a3.a)/max(A*4.,1e-4);
+  float n=h1(cell),idx=0.;vec3 bg,fg;
+  vec3 pond=vec3(.051,.165,.176);
+  if(A>.55){
+    float l0=lum(a0.rgb)*a0.a+(1.-a0.a)*.08,l1=lum(a1.rgb)*a1.a+(1.-a1.a)*.08,l2=lum(a2.rgb)*a2.a+(1.-a2.a)*.08,l3=lum(a3.rgb)*a3.a+(1.-a3.a)*.08;
+    vec2 g=vec2(l1+l3-l0-l2,l2+l3-l0-l1);float gm=length(g);float L=lum(col);
+    if(gm>.34){vec2 e=vec2(-g.y,g.x);float an=atan(e.y,e.x);if(an<0.)an+=3.14159265;
+      idx=an<.39||an>2.75?3.:an<1.18?12.:an<1.96?10.:11.;}
+    else{bool dk=L<.45;float v=dk?L*1.5:(1.-L)*1.7;idx=floor(clamp(v+.06+(n-.5)*.14,0.,.999)*9.)+1.;if(L<.1)idx=n>.55?1.:2.;}
+    float r=uYinOn>0.?region(css):0.;
+    bool dark=L<.45;
+    bg=col;fg=dark?col*1.25+vec3(.075,.07,.065):col*.8;
+    if(r>0.&&r==uHover){float w=.5+.5*sin(uT*5.-cell.x*.45+cell.y*.8);idx=gm>.34?idx:floor(clamp(w*.999,0.,.999)*6.)+3.;
+      fg=mix(fg,vec3(1.,.294,.122),.85*uYinOn);}
+    else if(r>0.&&r==uSel){fg=mix(fg,vec3(1.,.294,.122),.35*uYinOn);}
+  }else{
+    float h=texture2D(uWater,(cell+.5)/uGrid).r-.5;float v=abs(h)*2.;
+    float caus=sin(cell.x*.23+uT*.5+sin(cell.y*.17-uT*.3)*2.)*sin(cell.y*.31-uT*.42+cell.x*.05);
+    float sh=A/.55;
+    if(v>.32)idx=h>0.?13.:14.;else if(v>.16)idx=h>0.?13.:2.;else if(v>.07)idx=1.;else if(caus>.86&&n>.55)idx=n>.8?15.:1.;
+    bg=pond*(1.-.55*sh);fg=mix(vec3(.2,.42,.42),vec3(.7,.88,.84),clamp(h*3.+.3,0.,1.))*(1.-.5*sh);
+  }
+  float m=texture2D(uAtlas,vec2((idx+lc.x)/uN,lc.y)).a;
+  gl_FragColor=vec4(mix(bg,fg,m),1.);
+}`;
+let prog, U = {}, texScene, texWater, texAtlas;
+function sh(type, src){ const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+function mkTex(){ const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v); return t; }
+if (gl){
+  try {
+    prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FRAG)); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    for (const n of ['uScene', 'uWater', 'uAtlas', 'uRes', 'uCell', 'uGrid', 'uDpr', 'uN', 'uT', 'uYinOn', 'uHover', 'uSel', 'uPhi', 'uYin']) U[n] = gl.getUniformLocation(prog, n);
+    texScene = mkTex(); texWater = mkTex(); texAtlas = mkTex();
+    gl.uniform1i(U.uScene, 0); gl.uniform1i(U.uWater, 1); gl.uniform1i(U.uAtlas, 2);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  } catch (e){ D.documentElement.classList.add('nogl'); buildFallback(); }
+}
+
+/* ---------- sizing ---------- */
+let VW = 0, VH = 0, DPR = 1, FS = 13, CW = 8, CH = 15, GW = 0, GH = 0;
+const scene = D.createElement('canvas'), sx = scene.getContext('2d');
+let water = null, waterPrev = null, waterBytes = null;
+let fontBump = 0;
+function layoutGrid(){
+  VW = innerWidth; VH = innerHeight; DPR = Math.min(2, devicePixelRatio || 1);
+  const small = Math.min(VW, VH);
+  FS = clamp(Math.round(small / 88), 8, 12) + fontBump;
+  const m = D.createElement('canvas').getContext('2d'); m.font = `500 ${FS}px "JetBrains Mono", monospace`;
+  CW = Math.max(5, Math.round(m.measureText('M').width)); CH = Math.round(FS * 1.2);
+  GW = Math.ceil(VW / CW); GH = Math.ceil(VH / CH);
+  cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
+  scene.width = GW * 2; scene.height = GH * 2;
+  water = new Float32Array(GW * GH); waterPrev = new Float32Array(GW * GH); waterBytes = new Uint8Array(GW * GH);
+  if (!gl || !prog) return;
+  // glyph atlas, drawn at device resolution so every character is crisp
+  const a = D.createElement('canvas'), ac = a.getContext('2d'), gw = Math.round(CW * DPR), gh = Math.round(CH * DPR);
+  a.width = gw * GLYPHS.length; a.height = gh;
+  ac.font = `500 ${Math.round(FS * DPR)}px "JetBrains Mono", monospace`; ac.textAlign = 'center'; ac.textBaseline = 'middle'; ac.fillStyle = '#fff';
+  for (let i = 0; i < GLYPHS.length; i++) ac.fillText(GLYPHS[i], i * gw + gw / 2, gh * .54);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, texAtlas); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, a);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texWater); gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GW, GH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, waterBytes);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texScene); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, scene);
+  gl.viewport(0, 0, cv.width, cv.height);
+  gl.uniform2f(U.uRes, VW, VH); gl.uniform2f(U.uCell, CW, CH); gl.uniform2f(U.uGrid, GW, GH); gl.uniform1f(U.uDpr, DPR); gl.uniform1f(U.uN, GLYPHS.length);
+}
+
+/* ---------- where the symbol lives: centre and radius, eased toward a target (panel open moves it) ---------- */
+const Y = { x: 0, y: 0, R: 0, tx: 0, ty: 0, tR: 0 };
+function yinTarget(){
+  const phone = VW <= 720, open = !!openId;
+  if (open && phone){ Y.tx = VW / 2; Y.ty = VH * .2 + 8; Y.tR = Math.min(VW * .4, VH * .17); }
+  else if (open){ const pw = Math.min(480, VW * .44); Y.tx = (VW - pw) / 2; Y.ty = VH / 2; Y.tR = Math.min((VW - pw) * .38, VH * .36); }
+  else { Y.tx = VW / 2; Y.ty = VH / 2 + (phone ? 0 : 6); Y.tR = Math.min(VW * (phone ? .42 : .34), VH * .36); }
+}
+
+/* ============================================================================================
+   KOI. Each fish is a spine of N samples around the ring. As `m` goes 0 -> 1 the ring tightens, the
+   body lengthens to half the circle and thickens into a comma, the patterns bleach to the fish's
+   base colour, and both eyes slide together and swell into the opposite-coloured dot. So the
+   yin-yang is literally made of the two fish: heads are the bulges, eyes are the dots.
+   ============================================================================================ */
+const N = 30;
+const KOI = [
+  { // Kohaku: white with vermilion. Becomes yang (Eden); its eyes become the dark dot (Writing)
+    base: [236, 228, 211], body: C.cream, fin: 'rgba(246,239,225,.82)', finEdge: 'rgba(255,120,80,.55)', eye: C.ink, eyeTo: C.ink,
+    patches: [[.04, 0, .95, C.red], [.27, .38, .95, C.red], [.31, -.42, .55, C.red], [.5, -.25, .9, C.red], [.66, .3, .62, C.red], [.8, -.1, .4, C.red]],
+    off: 0
+  },
+  { // Showa: black with red and white. Becomes yin (J); its gold eyes become the pale dot (About me)
+    base: [14, 15, 16], body: '#141516', fin: 'rgba(30,30,32,.85)', finEdge: 'rgba(255,122,26,.7)', eye: C.gold, eyeTo: C.paper,
+    patches: [[.08, .25, .75, C.red], [.3, -.3, .85, C.orange], [.44, .42, .5, C.showaWhite], [.58, -.05, .75, C.red], [.72, .4, .45, C.showaWhite], [.2, -.55, .35, C.showaWhite]],
+    off: Math.PI
+  }
+];
+const SP = KOI.map(() => ({ x: new Float32Array(N), y: new Float32Array(N), nx: new Float32Array(N), ny: new Float32Array(N), fx: new Float32Array(N), fy: new Float32Array(N), w: new Float32Array(N) }));
+
+function spine(k, s, theta, m, t){
+  const R = Y.R, cx = Y.x, cy = Y.y, R0 = R * .62;
+  const span = lerp(1.6, Math.PI, m);                 // how much of the circle one body covers
+  const W0 = R * .125, und = R * .07 * (1 - m);
+  for (let i = 0; i < N; i++){
+    const u = i / (N - 1);
+    const rr = lerp(R0 * (1 + .04 * Math.sin(theta * 2 + t * .4 + k.off)), R * (.5 + .5 * u), m);
+    const a = theta + k.off - u * span;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const wave = und * Math.pow(u, 1.5) * Math.sin(u * 5.2 - t * 6.2 - k.off);
+    s.x[i] = Y.x + ca * (rr + wave); s.y[i] = Y.y + sa * (rr + wave);
+    s.nx[i] = ca; s.ny[i] = sa; s.fx[i] = -sa; s.fy[i] = ca;   // radial normal, forward tangent (clockwise motion)
+    // width: a koi profile (round head, deep shoulders, long taper) morphing into a comma
+    const koiW = u < .2 ? W0 * (.62 + .38 * Math.sin(u / .2 * Math.PI / 2)) : W0 * (1 - Math.pow((u - .2) / .8, 1.35) * .84);
+    const commaW = R * .5 * Math.pow(1 - u, .9);
+    s.w[i] = lerp(koiW, commaW, m * m * (3 - 2 * m));
+  }
+  // fix forward/normal from the actual curve so undulation bends the fins
+  for (let i = 0; i < N; i++){
+    const a = Math.max(0, i - 1), b = Math.min(N - 1, i + 1);
+    let fx = s.x[a] - s.x[b], fy = s.y[a] - s.y[b]; const l = Math.hypot(fx, fy) || 1; fx /= l; fy /= l;
+    s.fx[i] = fx; s.fy[i] = fy; s.nx[i] = fy; s.ny[i] = -fx;   // normal to the right of travel = outward for clockwise
+  }
+}
+function bodyPath(c, s){
+  c.beginPath();
+  c.moveTo(s.x[0] + s.nx[0] * s.w[0], s.y[0] + s.ny[0] * s.w[0]);
+  for (let i = 1; i < N; i++) c.lineTo(s.x[i] + s.nx[i] * s.w[i], s.y[i] + s.ny[i] * s.w[i]);
+  for (let i = N - 1; i >= 0; i--) c.lineTo(s.x[i] - s.nx[i] * s.w[i], s.y[i] - s.ny[i] * s.w[i]);
+  const w = s.w[0];
+  for (let j = 0; j <= 12; j++){ const b = j / 12 * Math.PI; c.lineTo(s.x[0] + (-s.nx[0] * Math.cos(b) + s.fx[0] * Math.sin(b)) * w, s.y[0] + (-s.ny[0] * Math.cos(b) + s.fy[0] * Math.sin(b)) * w); }
+  c.closePath();
+}
+function at(s, u){ const f = u * (N - 1), i = Math.min(N - 2, Math.floor(f)), t = f - i;
+  return { x: lerp(s.x[i], s.x[i + 1], t), y: lerp(s.y[i], s.y[i + 1], t), nx: lerp(s.nx[i], s.nx[i + 1], t), ny: lerp(s.ny[i], s.ny[i + 1], t), fx: lerp(s.fx[i], s.fx[i + 1], t), fy: lerp(s.fy[i], s.fy[i + 1], t), w: lerp(s.w[i], s.w[i + 1], t) }; }
+
+function drawFin(c, p, dirx, diry, len, wid, fill, edge, flap){
+  // a soft fan with a few rays: reads as streaks of / \ in ASCII
+  const ang = Math.atan2(diry, dirx) + flap;
+  c.save(); c.translate(p.x, p.y); c.rotate(ang);
+  c.beginPath(); c.moveTo(0, 0);
+  c.quadraticCurveTo(len * .55, -wid * 1.1, len, -wid * .35);
+  c.quadraticCurveTo(len * .82, 0, len, wid * .35);
+  c.quadraticCurveTo(len * .55, wid * 1.1, 0, 0);
+  c.fillStyle = fill; c.fill();
+  c.strokeStyle = edge; c.lineWidth = Math.max(1, wid * .12);
+  for (let r = -2; r <= 2; r++){ c.beginPath(); c.moveTo(0, 0); c.lineTo(len * .95, r * wid * .17); c.stroke(); }
+  c.restore();
+}
+function drawTail(c, s, k, t, m){
+  const p = at(s, 1), w0 = Math.max(s.w[Math.floor(N * .7)], Y.R * .06);
+  const bx = -p.fx, by = -p.fy, len = lerp(Y.R * .3, Y.R * .2, m), spread = .55 + .12 * Math.sin(t * 7 + k.off);
+  const sw = Math.sin(t * 6.2 + k.off) * .35 * (1 - m * .6);
+  const ang = Math.atan2(by, bx) + sw;
+  c.save(); c.translate(p.x, p.y); c.rotate(ang);
+  c.beginPath(); c.moveTo(0, -w0 * .25);
+  c.bezierCurveTo(len * .4, -len * spread * .6, len * .9, -len * spread, len * 1.05, -len * spread * .85);
+  c.quadraticCurveTo(len * .62, -len * .08, len * .7, 0);
+  c.quadraticCurveTo(len * .62, len * .08, len * 1.05, len * spread * .85);
+  c.bezierCurveTo(len * .9, len * spread, len * .4, len * spread * .6, 0, w0 * .25);
+  c.closePath(); c.fillStyle = k.fin; c.fill();
+  c.strokeStyle = k.finEdge; c.lineWidth = Math.max(1, len * .03);
+  for (let r = -3; r <= 3; r++){ c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(len * .5, r * len * spread * .14, len * .98, r * len * spread * .26); c.stroke(); }
+  c.restore();
+}
+function drawKoi(c, k, s, t, m, alpha){
+  if (alpha <= .002) return;
+  c.globalAlpha = alpha;
+  const fade = 1 - smooth(0, .75, m);
+  // pectoral fins (under the body), flapping
+  if (fade > .01){
+    const p = at(s, .2), len = Y.R * .2 * fade, wid = Y.R * .06 * fade, fl = Math.sin(t * 4.1 + k.off) * .35;
+    for (const side of [1, -1]){
+      const ex = p.x + p.nx * p.w * side * .7, ey = p.y + p.ny * p.w * side * .7;
+      drawFin(c, { x: ex, y: ey }, p.nx * side - p.fx * .9, p.ny * side - p.fy * .9, len, wid, k.fin, k.finEdge, fl * side);
+    }
+  }
+  drawTail(c, s, k, t, m);
+  // body
+  bodyPath(c, s); c.fillStyle = k.body; c.fill();
+  c.save(); bodyPath(c, s); c.clip();
+  // patterns bleach away as the fish becomes the symbol
+  if (fade > .01){
+    c.globalAlpha = alpha * fade;
+    for (const [u, o, r, col] of k.patches){ const p = at(s, u); c.fillStyle = col; c.beginPath();
+      c.ellipse(p.x + p.nx * o * p.w, p.y + p.ny * o * p.w, r * p.w * 1.15, r * p.w * .85, Math.atan2(p.fy, p.fx), 0, Math.PI * 2); c.fill(); }
+    // scales: tiny overlapping arcs, the texture the ASCII picks up as shimmer
+    c.globalAlpha = alpha * fade * .22; c.strokeStyle = k.base[0] > 100 ? 'rgba(120,70,50,1)' : 'rgba(200,160,120,1)'; c.lineWidth = Math.max(.6, Y.R * .006);
+    for (let u = .1; u < .92; u += .055) for (let o = -.75; o <= .76; o += .3){ const p = at(s, u + (Math.round(o / .3) & 1) * .027);
+      c.beginPath(); c.arc(p.x + p.nx * o * p.w, p.y + p.ny * o * p.w, p.w * .2, Math.atan2(p.fy, p.fx) - 1.2, Math.atan2(p.fy, p.fx) + 1.2); c.stroke(); }
+    // spine ridge (the dorsal line seen from above)
+    c.globalAlpha = alpha * fade * .45; c.strokeStyle = k.base[0] > 100 ? 'rgba(160,110,90,1)' : 'rgba(60,60,64,1)'; c.lineWidth = Math.max(1, Y.R * .012);
+    c.beginPath(); for (let u = .22; u <= .68; u += .02){ const p = at(s, u); u === .22 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y); } c.stroke();
+  }
+  // shading: soft dark flanks and a pale ridge along the back
+  c.globalAlpha = alpha * (1 - m * .85);
+  c.lineJoin = 'round'; c.strokeStyle = k.base[0] > 100 ? 'rgba(90,50,40,.5)' : 'rgba(0,0,0,.6)'; c.lineWidth = Y.R * .045; bodyPath(c, s); c.stroke();
+  c.strokeStyle = k.base[0] > 100 ? 'rgba(255,250,240,.45)' : 'rgba(120,110,100,.35)'; c.lineWidth = Y.R * .03;
+  c.beginPath(); for (let u = .03; u <= .8; u += .02){ const p = at(s, u); u === .03 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y); } c.stroke();
+  c.restore(); c.globalAlpha = alpha;
+  // barbels
+  if (fade > .01){ const p = at(s, 0); c.strokeStyle = k.base[0] > 100 ? 'rgba(220,200,180,.8)' : 'rgba(80,70,60,.9)'; c.lineWidth = Math.max(.8, Y.R * .006);
+    for (const side of [1, -1]){ c.beginPath(); c.moveTo(p.x + p.fx * p.w * .8 + p.nx * p.w * .3 * side, p.y + p.fy * p.w * .8 + p.ny * p.w * .3 * side);
+      c.quadraticCurveTo(p.x + p.fx * p.w * 1.25 + p.nx * p.w * .7 * side, p.y + p.fy * p.w * 1.25 + p.ny * p.w * .7 * side, p.x + p.fx * p.w * .9 + p.nx * p.w * 1.1 * side, p.y + p.fy * p.w * .9 + p.ny * p.w * 1.1 * side); c.stroke(); } }
+  // eyes: two small eyes that slide together and swell into one dot
+  const h = at(s, 0), ms = smooth(.25, 1, m), er = lerp(Y.R * .022, Y.R * .17, ms);
+  const sep = lerp(.55, 0, ms), fwd = lerp(.42, 0, ms);
+  const col = ms > .5 ? k.eyeTo : k.eye;
+  for (const side of [1, -1]){
+    const ex = h.x + h.fx * h.w * fwd + h.nx * h.w * sep * side, ey = h.y + h.fy * h.w * fwd + h.ny * h.w * sep * side;
+    c.fillStyle = col; c.beginPath(); c.arc(ex, ey, er, 0, Math.PI * 2); c.fill();
+    if (k.eye === C.gold && ms < .5){ c.fillStyle = C.ink; c.beginPath(); c.arc(ex, ey, er * .55, 0, Math.PI * 2); c.fill(); }
+  }
+  c.globalAlpha = 1;
+}
+
+/* the finished symbol, drawn exactly (crisp) once the morph is nearly done */
+function drawYin(c, phi, alpha, t){
+  if (alpha <= .002) return;
+  const R = Y.R, rd = R * .17;
+  c.save(); c.globalAlpha = alpha; c.translate(Y.x, Y.y); c.rotate(phi);
+  c.fillStyle = C.ink; c.beginPath(); c.arc(0, 0, R, 0, Math.PI * 2); c.fill();
+  c.fillStyle = C.paper; c.beginPath(); c.arc(0, 0, R, -Math.PI / 2, Math.PI / 2); c.fill();
+  c.beginPath(); c.arc(0, R / 2, R / 2, 0, Math.PI * 2); c.fill();
+  c.fillStyle = C.ink; c.beginPath(); c.arc(0, -R / 2, R / 2, 0, Math.PI * 2); c.fill();
+  // faint scales inside each half: the fish are still in there
+  c.save(); c.beginPath(); c.arc(0, 0, R, 0, Math.PI * 2); c.clip(); c.globalAlpha = alpha * .07; c.lineWidth = Math.max(.6, R * .006);
+  for (let y = -R; y < R; y += R * .11) for (let x = -R; x < R; x += R * .12){ const o = (Math.round(y / (R * .11)) & 1) * R * .06;
+    const white = (x + o > 0 && Math.hypot(x + o, y + R / 2) > R / 2) || Math.hypot(x + o, y - R / 2) < R / 2;
+    c.strokeStyle = white ? '#7a6a55' : '#8a8580'; c.beginPath(); c.arc(x + o, y, R * .05, .3, Math.PI - .3); c.stroke(); }
+  c.restore();
+  // the eyes: dots that blink now and then and glance at the pointer
+  const blinkA = blinkAt(t, 0), blinkB = blinkAt(t, 1.7);
+  eyeDot(c, 0, -R / 2, rd, C.paper, C.ink, blinkB, phi);   // About me (in the dark half)
+  eyeDot(c, 0, R / 2, rd, C.ink, C.paper, blinkA, phi);    // Writing (in the light half)
+  c.restore();
+}
+function blinkAt(t, off){ if (REDUCED) return 1; const p = (t + off * 3.1) % 7.3; return p < .16 ? Math.abs(Math.cos(p / .16 * Math.PI)) * .9 + .1 : 1; }
+function eyeDot(c, x, y, r, fill, glint, open, phi){
+  c.save(); c.translate(x, y); c.scale(1, open); c.fillStyle = fill; c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.fill();
+  // glint: a crescent that leans toward the pointer
+  const lx = ptr.x - (Y.x + Math.cos(phi) * x - Math.sin(phi) * y), ly = ptr.y - (Y.y + Math.sin(phi) * x + Math.cos(phi) * y);
+  const l = Math.hypot(lx, ly) || 1, gx = Math.cos(-phi) * lx - Math.sin(-phi) * ly, gy = Math.sin(-phi) * lx + Math.cos(-phi) * ly;
+  c.globalAlpha *= .9; c.fillStyle = glint; c.beginPath(); c.arc(gx / l * r * .62, gy / l * r * .62, r * .17, 0, Math.PI * 2); c.fill();
+  c.restore();
+}
+
+/* ============================================================================================
+   WATER: a damped wave equation on the character grid. The pointer, clicks and the fish heads
+   disturb it; the shader turns height into ~ , . '
+   ============================================================================================ */
+function drop(px, py, amp, rad){
+  const cx = Math.floor(px / CW), cy = Math.floor(py / CH), r = rad || 1;
+  for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++){
+    const gx = cx + x, gy = cy + y; if (gx < 1 || gy < 1 || gx >= GW - 1 || gy >= GH - 1) continue;
+    const f = 1 - Math.hypot(x, y * CH / CW) / (r + 1); if (f > 0) water[gy * GW + gx] += amp * f;
+  }
+}
+function stepWater(){
+  const a = water, b = waterPrev;
+  for (let y = 1; y < GH - 1; y++){ const row = y * GW; for (let x = 1; x < GW - 1; x++){ const i = row + x;
+    b[i] = ((a[i - 1] + a[i + 1] + a[i - GW] + a[i + GW]) * .5 - b[i]) * .975; } }
+  water = b; waterPrev = a;
+  for (let i = 0; i < water.length; i++) waterBytes[i] = clamp(128 + water[i] * 110, 0, 255);
+}
+
+/* ============================================================================================
+   TIMELINE
+   swim   -> the fish circle each other
+   swirl  -> they speed up, tighten and fatten into the symbol
+   settle -> the spin eases out exactly at upright
+   yin    -> still; the four regions become doors
+   loose  -> (K) the symbol unwinds back into fish
+   ============================================================================================ */
+const seen = store.get('koi.seen') === '1';
+let phase = REDUCED ? 'yin' : 'swim', pT = 0, theta = Math.PI / 2, omega = .55, m = REDUCED ? 1 : 0;
+let settle = null, swimFor = seen ? 1.4 : 4.6;
+const SWIRL_T = 1.9, OMEGA_MAX = 10;
+function startSwirl(){ if (phase !== 'swim') return; phase = 'swirl'; pT = 0; omega = Math.max(omega, .55); $('#skip').hidden = true; store.set('koi.seen', '1'); }
+function loose(){ if (phase !== 'yin' || REDUCED) return; phase = 'loose'; pT = 0; closePanel(); setRegions(false); hint(); }
+function tick(dt, t){
+  pT += dt;
+  if (phase === 'swim'){
+    omega = lerp(omega, .55, 1 - Math.exp(-dt * 1.5)); theta += omega * dt; m = 0;
+    if (pT > swimFor) startSwirl();
+  } else if (phase === 'swirl'){
+    const u = clamp(pT / SWIRL_T, 0, 1);
+    omega = lerp(.55, OMEGA_MAX, u * u * u); theta += omega * dt; m = smooth(.18, 1, u);
+    if (u >= 1){
+      // ease out so the spin lands exactly upright: pick a stopping angle far enough ahead that a
+      // cubic ease-out starting at the current speed reaches it smoothly
+      const target = Math.PI / 2 + Math.ceil((theta + omega * .55 - Math.PI / 2) / (Math.PI * 2)) * Math.PI * 2;
+      const dist = target - theta; settle = { from: theta, dist, T: 3 * dist / omega }; phase = 'settle'; pT = 0;
+    }
+  } else if (phase === 'settle'){
+    const u = clamp(pT / settle.T, 0, 1); theta = settle.from + settle.dist * (1 - Math.pow(1 - u, 3)); m = 1;
+    if (u >= 1){ phase = 'yin'; theta = Math.PI / 2; setRegions(true); hint(); }
+  } else if (phase === 'yin'){ m = 1; }
+  else if (phase === 'loose'){
+    const u = clamp(pT / 1.6, 0, 1); omega = lerp(7, .55, u); theta += omega * dt; m = 1 - smooth(0, 1, u);
+    if (u >= 1){ phase = 'swim'; pT = 0; swimFor = Infinity; hint(); }
+  }
+}
+
+/* ============================================================================================
+   REGIONS: four doors. Hit-testing matches the shader's region() exactly.
+   ============================================================================================ */
+const IDS = ['', 'j', 'eden', 'about', 'writing'];
+const BTN = {}; D.querySelectorAll('.region').forEach(b => { BTN[b.dataset.id] = b; b.addEventListener('click', () => openPanel(b.dataset.id, true));
+  b.addEventListener('mouseenter', () => { hover = IDS.indexOf(b.dataset.id); }); b.addEventListener('mouseleave', () => { hover = 0; });
+  b.addEventListener('focus', () => { hover = IDS.indexOf(b.dataset.id); }); b.addEventListener('blur', () => { hover = 0; }); });
+let hover = 0, regionsOn = false;
+function setRegions(on){ regionsOn = on; for (const id in BTN){ BTN[id].classList.toggle('on', on); BTN[id].tabIndex = on ? 0 : -1; BTN[id].setAttribute('aria-hidden', on ? 'false' : 'true'); } }
+function regionAt(px, py){
+  const dx = px - Y.x, dy = py - Y.y, R = Y.R; if (Math.hypot(dx, dy) > R) return 0; const rd = R * .17;
+  if (Math.hypot(dx, dy + R / 2) < rd) return 3; if (Math.hypot(dx, dy - R / 2) < rd) return 4;
+  return (dx > 0 && Math.hypot(dx, dy + R / 2) > R / 2) || Math.hypot(dx, dy - R / 2) < R / 2 ? 2 : 1;
+}
+function placeRegions(){
+  const R = Y.R, small = clamp(R * .062, 11, 15);
+  const pos = { j: [-.5 * R, .1 * R, R * .44], eden: [.5 * R, -.1 * R, R * .2], about: [0, -R / 2, small], writing: [0, R / 2, small] };
+  for (const id in pos){ const [x, y, fs] = pos[id], b = BTN[id];
+    b.style.fontSize = fs + 'px'; b.style.transform = `translate(${Math.round(Y.x + x)}px, ${Math.round(Y.y + y)}px) translate(-50%, -50%)`; }
+}
+setRegions(REDUCED);
+
+/* ============================================================================================
+   PANEL
+   ============================================================================================ */
+let openId = null, lastFocus = null;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const para = s => { const t = esc(s); return /^\[.*\]$/.test(s) ? `<p class="placeholder">${t}</p>` : `<p>${t}</p>`; };
+function render(id){
+  const c = CONTENT[id]; let h = `<h2 id="pTitle">${esc(c.title)}</h2>`;
+  if (c.role) h += `<p class="role">${esc(c.role)}</p>`;
+  if (c.line) h += `<p class="line">${esc(c.line)}</p>`;
+  if (c.body && c.body.length) h += `<div class="prose">${c.body.map(para).join('')}</div>`;
+  if (c.facts) h += `<dl class="facts">${c.facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+  if (c.link) h += `<a class="cta" href="${esc(c.link.href)}" target="_blank" rel="noopener">${esc(c.link.label)} <span aria-hidden="true">↗</span></a>`;
+  if (id === 'about') h += `<p class="prose"><a href="${esc(CONTENT.links.linkedin)}" target="_blank" rel="noopener">LinkedIn</a> · <a href="${esc(CONTENT.links.x)}" target="_blank" rel="noopener">X</a></p>`;
+  if (id === 'writing') h += c.posts.length ? `<dl class="facts">${c.posts.map(p => `<dt>${esc(p.date || '')}</dt><dd><a href="${esc(p.href)}" target="_blank" rel="noopener">${esc(p.title)}</a></dd>`).join('')}</dl>`
+    : `<p class="empty">Nothing published yet. Essays and notes will land here.</p>`;
+  return h;
+}
+function openPanel(id, fromUser){
+  if (!CONTENT[id]) return;
+  if (phase !== 'yin'){ if (phase === 'swim') startSwirl(); pending = id; return; }
+  lastFocus = fromUser ? D.activeElement : null;
+  openId = id; sel = IDS.indexOf(id);
+  $('#pKey').textContent = `${IDS.indexOf(id)} / ${id === 'j' ? 'J' : CONTENT[id].title.toLowerCase()}`;
+  $('#pBody').innerHTML = render(id);
+  const p = $('#panel'); p.classList.add('open'); p.setAttribute('aria-hidden', 'false');
+  D.title = `${CONTENT[id].title} · ${CONTENT.name}`;
+  if (location.hash !== '#' + id) history.replaceState(null, '', '#' + id);
+  yinTarget(); setTimeout(() => $('#pBody').focus({ preventScroll: true }), fromUser ? 60 : 0);
+  drop(Y.x, Y.y, 3, 3);
+}
+let pending = null, sel = 0;
+function closePanel(){
+  if (!openId) return; openId = null; sel = 0;
+  const p = $('#panel'); p.classList.remove('open'); p.setAttribute('aria-hidden', 'true');
+  D.title = CONTENT.name; if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  yinTarget(); if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
+}
+$('#close').addEventListener('click', closePanel);
+
+/* ---------- hints ---------- */
+function hint(){
+  const touch = matchMedia('(hover: none)').matches, el = $('#hint');
+  if (phase === 'swim' && swimFor === Infinity) el.innerHTML = touch ? 'tap to gather them' : 'click to gather them';
+  else if (phase === 'yin') el.innerHTML = REDUCED ? '<span class="keys">1–4 to open</span>' : `<span class="keys">1–4 to open · </span><button type="button" id="free">release the koi</button>`;
+  else el.textContent = '';
+  const f = $('#free'); if (f) f.addEventListener('click', loose);
+}
+
+/* ---------- input ---------- */
+const ptr = { x: -9999, y: -9999, px: 0, py: 0, t: 0 };
+cv.addEventListener('pointermove', e => {
+  const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y, sp = Math.hypot(dx, dy);
+  ptr.x = e.clientX; ptr.y = e.clientY;
+  if (!REDUCED && sp > 2 && sp < 200 && regionAt(ptr.x, ptr.y) === 0) drop(ptr.x, ptr.y, clamp(sp * .03, .08, .9), 1);
+  if (phase === 'yin'){ const r = regionAt(ptr.x, ptr.y); hover = r; cv.style.cursor = r ? 'pointer' : 'default'; for (const id in BTN) BTN[id].classList.toggle('hot', IDS[r] === id); }
+});
+cv.addEventListener('pointerleave', () => { ptr.x = ptr.y = -9999; if (phase === 'yin'){ hover = 0; for (const id in BTN) BTN[id].classList.remove('hot'); } });
+cv.addEventListener('click', e => {
+  if (!REDUCED) drop(e.clientX, e.clientY, 2.4, 2);
+  if (phase === 'swim'){ startSwirl(); return; }
+  if (phase !== 'yin') return;
+  const r = regionAt(e.clientX, e.clientY);
+  if (r) openPanel(IDS[r], true); else if (openId) closePanel();
+});
+$('#skip').addEventListener('click', startSwirl);
+if (seen || REDUCED) $('#skip').hidden = REDUCED;
+addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key;
+  if (k === 'Escape'){ if (openId) closePanel(); return; }
+  if (/^[1-4]$/.test(k) && !/INPUT|TEXTAREA/.test(D.activeElement.tagName)){ openPanel(IDS[+k], true); return; }
+  if ((k === 'k' || k === 'K') && phase === 'yin' && !openId){ loose(); return; }
+  if ((k === ' ' || k === 'Enter') && phase === 'swim' && D.activeElement === D.body){ e.preventDefault(); startSwirl(); }
+});
+addEventListener('hashchange', () => { const id = location.hash.slice(1); if (CONTENT[id]) openPanel(id); else closePanel(); });
+
+/* ---------- fallback (no WebGL) ---------- */
+function buildFallback(){
+  const f = $('#fallback'); f.innerHTML = '';
+  for (const [n, id] of [['J', 'j'], ['Eden', 'eden'], ['About me', 'about'], ['Writing', 'writing']]){ const b = D.createElement('button'); b.type = 'button'; b.textContent = n; b.addEventListener('click', () => openPanel(id, true)); f.appendChild(b); }
+}
+
+/* ============================================================================================
+   LOOP
+   ============================================================================================ */
+let last = performance.now(), acc = 0, T = 0, raf = 0, slow = 0, frames = 0;
+function frame(now){
+  raf = requestAnimationFrame(frame);
+  const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt;
+  // ease the symbol toward where it should sit (panel open moves it)
+  const k = 1 - Math.exp(-dt * (REDUCED ? 60 : 7));
+  Y.x = lerp(Y.x, Y.tx, k); Y.y = lerp(Y.y, Y.ty, k); Y.R = lerp(Y.R, Y.tR, k);
+  if (!REDUCED || phase !== 'yin') tick(dt, T);
+  // water at a fixed 60 Hz
+  acc += dt; let n = 0;
+  while (acc >= 1 / 60 && n < 3){
+    if (!REDUCED && phase !== 'yin'){ for (const kk of KOI){ const a = theta + kk.off; if (Math.random() < .5) drop(Y.x + Math.cos(a) * Y.R * lerp(.62, .5, m), Y.y + Math.sin(a) * Y.R * lerp(.62, .5, m), .18 + omega * .03, 1); } }
+    if (!REDUCED && Math.random() < .012) drop(Math.random() * VW, Math.random() * VH, .7, 1);
+    stepWater(); acc -= 1 / 60; n++;
+  }
+  // scene
+  sx.setTransform(1, 0, 0, 1, 0, 0); sx.clearRect(0, 0, scene.width, scene.height);
+  sx.setTransform(2 / CW, 0, 0, 2 / CH, 0, 0);
+  const phi = theta - Math.PI / 2;
+  // soft shadows on the pond floor, a little offset: depth for free
+  if (m < 1){ sx.save(); sx.translate(Y.R * .05, Y.R * .07); sx.globalAlpha = .3 * (1 - m); for (let i = 0; i < 2; i++){ spine(KOI[i], SP[i], theta, m, T); bodyPath(sx, SP[i]); sx.fillStyle = '#000'; sx.fill(); } sx.restore(); sx.globalAlpha = 1; }
+  // motion smear while spinning fast: a couple of trailing copies
+  const smear = phase === 'swirl' || phase === 'loose' ? clamp((omega - 2) / 6, 0, 1) : 0;
+  const kAlpha = 1 - smooth(.86, 1, m);
+  for (let pass = smear > .02 ? 2 : 0; pass >= 0; pass--){
+    const th = theta - pass * omega * .012;
+    for (let i = 0; i < 2; i++){ spine(KOI[i], SP[i], th, m, T); drawKoi(sx, KOI[i], SP[i], T, m, kAlpha * (pass ? .35 * smear : 1)); }
+  }
+  drawYin(sx, phi, smooth(.82, 1, m), T);
+  // the two tails stay outside the finished symbol as a flourish
+  if (m > .86){ sx.globalAlpha = 1; for (let i = 0; i < 2; i++){ spine(KOI[i], SP[i], theta, 1, T); drawTail(sx, KOI[i], SP[i], T, 1); } }
+  if (!gl || !prog) return;
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texScene); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, scene);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texWater); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GW, GH, gl.LUMINANCE, gl.UNSIGNED_BYTE, waterBytes);
+  gl.uniform1f(U.uT, T); gl.uniform1f(U.uYinOn, phase === 'yin' ? 1 : 0); gl.uniform1f(U.uHover, hover); gl.uniform1f(U.uSel, sel);
+  gl.uniform1f(U.uPhi, phi); gl.uniform3f(U.uYin, Y.x, Y.y, Y.R);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  if (regionsOn) placeRegions();
+  // if a slow device can't keep up, use fewer, larger characters (once)
+  frames++; if (frames > 30 && frames < 150){ slow += dt > 1 / 40 ? 1 : 0; if (frames === 149 && slow > 60 && fontBump < 3){ fontBump += 3; resize(); } }
+  if (pending && phase === 'yin'){ const id = pending; pending = null; openPanel(id); }
+}
+function resize(){ layoutGrid(); yinTarget(); if (!Y.R){ Y.x = Y.tx; Y.y = Y.ty; Y.R = Y.tR; } }
+addEventListener('resize', () => { clearTimeout(resize.t); resize.t = setTimeout(resize, 80); });
+D.addEventListener('visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });
+
+function start(){
+  resize(); hint();
+  const id = location.hash.slice(1);
+  if (CONTENT[id]){ if (phase === 'swim'){ swimFor = .6; } pending = id; }
+  if (gl && prog) raf = requestAnimationFrame(frame);
+}
+// wait for the mono font so glyph widths are measured on the real face (with a short timeout)
+(D.fonts && D.fonts.load ? Promise.race([D.fonts.load('500 13px "JetBrains Mono"'), new Promise(r => setTimeout(r, 1200))]) : Promise.resolve()).then(start, start);
+})();
+</script>
+
+</body>
+</html>
