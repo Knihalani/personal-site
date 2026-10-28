@@ -103,7 +103,11 @@ M.createScene = function createScene(container){
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   if (!renderer.capabilities.isWebGL2 && !renderer.getContext()) throw new Error('no webgl');
-  let pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  /* pixel ratio: up to 2, but never more than ~3.7 MP of render target (a 1920x1080 window on a 2x display renders
+     at ~1.33x; 1280x800 at 2x stays near 1.9x). The tube text is still magnified at rest, so it stays sharp. */
+  const PX_BUDGET = 3.7e6;
+  const prFor = (w, h) => Math.max(1, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(PX_BUDGET / Math.max(1, w * h))));
+  let pixelRatio = prFor(innerWidth, innerHeight), prCap = 2;
   renderer.setPixelRatio(pixelRatio);
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -111,6 +115,7 @@ M.createScene = function createScene(container){
   renderer.physicallyCorrectLights = true;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;   // the lamp is fixed: the shadow pass re-renders only while something moves (see render())
   renderer.setClearColor(0x050608, 1);
   renderer.domElement.setAttribute('tabindex', '0');
   container.appendChild(renderer.domElement);
@@ -886,7 +891,16 @@ M.createScene = function createScene(container){
   }
 
   /* ================= API ================= */
-  let frames = 0, slowAcc = 0, perfT = 0;
+  let frames = 0, slowAcc = 0, perfT = 0, sag = 0;
+  /* the reveal: from black, the tube powers on (a bright line opens into the raster) while the lamp glows up and
+     the eye adapts. ~1.3 s; the first keystroke or a lean skips to the end. Reduced motion: no reveal. */
+  const intro = { t: REDUCED ? 9 : 0, end: 1.35 };
+  const skipIntro = () => { if (intro.t < intro.end) intro.t = intro.end; };
+  /* render on demand: the loop calls render() every frame, but a still picture (settled camera, no key or lamp
+     motion, nothing new on the tube) is drawn at ~20 fps so the flicker and dust keep breathing at a fraction of
+     the GPU cost. The shadow map re-renders only while hands or keys move, plus a slow refresh for idle fidgets. */
+  let sinceMove = 0, sinceRender = 9, screenDirty = true, shadowAge = 9, drew = false, warmed = false;
+  const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
   const api = {
     renderer, scene, camera, screenAspect: SCREEN_ASPECT,
     setScreenCanvas(c){
@@ -898,12 +912,24 @@ M.createScene = function createScene(container){
       screenTex.encoding = THREE.LinearEncoding; screenTex.wrapS = screenTex.wrapT = THREE.ClampToEdgeWrapping;
       screenU.uTex.value = screenTex; screenU.uHas.value = 1; screenU.uRes.value.set(c.width, c.height); lumDirty = true;
     },
-    markScreenDirty(){ if (screenTex){ screenTex.needsUpdate = true; lumDirty = true; } },
+    markScreenDirty(){ if (screenTex){ screenTex.needsUpdate = true; lumDirty = true; screenDirty = true; } },
+    /* clientX/Y -> where that point lands on the terminal canvas: {u, v} in 0..1 from its top-left, or null off the
+       image. Follows the CRT shader's mapping (barrel bow, then the overscan inset), so it matches what is drawn. */
+    pickScreen(cx, cy){
+      const r = renderer.domElement.getBoundingClientRect(); if (!r.width || !r.height) return null;
+      _ndc.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+      _ray.setFromCamera(_ndc, camera);
+      const hit = _ray.intersectObject(glass, false)[0]; if (!hit || !hit.uv) return null;
+      const x = hit.uv.x - .5, y = hit.uv.y - .5, b = 1 + .055 * (x * x + y * y);
+      const I = screenU.uInset.value, u = (x * b + .5 - I.x) / (1 - 2 * I.x), v = (y * b + .5 - I.y) / (1 - 2 * I.y);
+      if (u < 0 || u > 1 || v < 0 || v > 1) return null;
+      return { u, v: 1 - v };
+    },
     keyboard: {
       hasKey: code => keys.has(code) || keys.has(ALIAS[code]),
       keyWorldPos(code){ const k = keys.get(code) || keys.get(ALIAS[code]); return k ? k.world.clone() : null; },
       keyRow(code){ const k = keys.get(code) || keys.get(ALIAS[code]); return k ? k.row : -1; },
-      press(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = -TRAVEL; activeKeys.add(k); api.nudge(k.row === 4 ? .45 : .3); } },
+      press(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = -TRAVEL; activeKeys.add(k); sinceMove = 0; api.nudge(k.row === 4 ? .45 : .3); } },
       release(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = 0; activeKeys.add(k); } },
     },
     rig: { seat: SEAT.clone(), keyboardCenter, keyboardNormal, screenCenter: screenCenter.clone(), screenNormal: screenNormal.clone(), lampPosition: bulbPos.clone(), keySpacing: U,
@@ -919,7 +945,7 @@ M.createScene = function createScene(container){
     toggleView(){ api.setView(viewS.t ? 'screen' : 'full'); },
     get view(){ return viewS.t ? 'full' : 'screen'; },
     /* the desk lamp: true/false; get lampOn for the current switch state */
-    setLamp(on){ on = !!on; if (on === lampS.on) return; lampS.on = on; lampS.t = 0; },
+    setLamp(on){ on = !!on; if (on === lampS.on) return; lampS.on = on; lampS.t = 0; sag = REDUCED ? 0 : 1; },
     get lampOn(){ return lampS.on; },
     /* nx, ny in -1..1 from the pointer (0,0 = the screen). ny > 0 looks down toward the keyboard. */
     setLook(nx, ny){
@@ -933,9 +959,13 @@ M.createScene = function createScene(container){
     },
     setPointer(nx, ny){ api.setLook(nx, ny); },
     /* a keystroke: the head dips toward the work for a moment */
-    nudge(amount = 1){ if (false) leanS.v += 7 * clamp(amount, 0, 2); },
+    nudge(){ skipIntro(); sinceMove = 0; },
     update(dt, t){
       breathT += dt;
+      if (intro.t < intro.end && pitchS.t < -.2) skipIntro();   // leaning back skips the reveal too
+      const drewLast = drew; drew = false;
+      sinceMove += dt; sinceRender += dt;
+      if (Math.abs(yawS.v) + Math.abs(pitchS.v) + Math.abs(viewS.v) > 2e-3 || Math.abs(yawS.t - yawS.x) + Math.abs(pitchS.t - pitchS.x) > 1e-3) sinceMove = 0;
       crit(yawS, 3.4, dt); crit(pitchS, 3.1, dt); crit(viewS, 3.2, dt);   // slow, critically damped: glides, never overshoots
       { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h; leanS.v += (-110 * leanS.x - 2 * .75 * 10.5 * leanS.v) * h; leanS.x += leanS.v * h; } }
       leanS.x = clamp(leanS.x, -.3, 1);
@@ -952,24 +982,54 @@ M.createScene = function createScene(container){
       // tube: flicker, roll, and how much light the text throws into the room
       screenU.uTime.value = t;
       screenU.uFlicker.value = REDUCED ? 1 : 1 + .0045 * Math.sin(t * 2 * Math.PI * 7.7) + .003 * Math.sin(t * 2 * Math.PI * 1.3) + .002 * (Math.random() - .5);
-      lumTimer -= dt; if (lumDirty && lumTimer <= 0){ lumDirty = false; lumTimer = .25; sampleLum(); }
+      lumTimer -= dt; if (lumDirty && lumTimer <= 0){ lumDirty = false; lumTimer = 1.2; sampleLum(); }   // a GPU->CPU readback of the terminal canvas: keep it rare
       lum += (lumTarget - lum) * (1 - Math.exp(-dt * 4));
-      lampLevel(dt); applyLamp(dt);
+      lampLevel(dt);
+      if (intro.t < intro.end + .5){
+        intro.t += dt; const it = intro.t;
+        // the lamp's filament glows up a beat after the tube; the eye opens from black over the first half second
+        lampS.level = Math.min(lampS.level, lampS.on ? sstep(.25, 1.25, it) : lampS.level);
+        screenU.uWarm.value = clamp(it / 1.1, 0, 1);
+        sinceMove = 0;
+      } else {
+        screenU.uWarm.value = 1;
+        // once the reveal is over, compile every material that is still off-screen (desk, keys, room) on idle time,
+        // so the first lean back does not stall on shader compiles
+        if (!warmed){ warmed = true; const ric = window.requestIdleCallback || (f => setTimeout(f, 50)); ric(() => { try { renderer.compile(scene, camera); } catch (e){} }); }
+      }
+      applyLamp(dt);
+      if (intro.t < intro.end + .5) renderer.toneMappingExposure *= sstep(0, .6, intro.t);
+      // the tube sags for a moment when the lamp switches on or off: they share a wall socket
+      if (sag > 0){ sag = Math.max(0, sag - dt * 5); sinceMove = 0; }
+      screenU.uBright.value = 1 - .22 * Math.sin(Math.min(1, sag) * Math.PI) * (sag > .5 ? 1 : .6);
+      if (lampS.level > .002 && lampS.level < .999) sinceMove = 0;
       glow.intensity = (.2 + .6 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.6 * lampS.adapt);
       spill.intensity = (.0025 + .01 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.5 * lampS.adapt);
       dustU.uTime.value = REDUCED ? 40 : t;
       // keep it smooth on modest GPUs: step the pixel ratio down if frames run long
-      perfT += dt; frames++; if (dt > .026) slowAcc++;
-      if (perfT > 2.5){ if (slowAcc / frames > .5 && pixelRatio > 1){ pixelRatio = Math.max(1, pixelRatio - .25); renderer.setPixelRatio(pixelRatio); dustU.uPR.value = pixelRatio;
+      // only frames that were actually drawn count (idle frames are throttled), and not during the reveal
+      if (drewLast && intro.t > intro.end){ perfT += dt; frames++; if (dt > .026) slowAcc++; }
+      if (perfT > 2.5){ if (frames > 20 && slowAcc / frames > .5 && pixelRatio > 1){ pixelRatio = prCap = Math.max(1, pixelRatio - .25); renderer.setPixelRatio(pixelRatio); dustU.uPR.value = pixelRatio;
           const s = renderer.getSize(new THREE.Vector2()); renderer.setSize(s.x, s.y, false); } perfT = 0; frames = 0; slowAcc = 0; }
     },
-    render(){ scene.updateMatrixWorld(); hideNearEye(); renderer.render(scene, camera); },
+    render(){
+      const busy = sinceMove < 1.6 || activeKeys.size > 0 || screenDirty;
+      if (!busy && sinceRender < 1 / 20 - .004) return;
+      sinceRender = 0; screenDirty = false; drew = true;
+      // shadows: every frame while hands/keys/lamp move; otherwise a slow refresh (hands fidget), slower still at rest
+      const leaned = sstep(0, 1, 1 - (1 - clamp(viewS.x, 0, 1)) * (1 - clamp(-pitchS.x / LOOK.down, 0, 1)));
+      shadowAge++;
+      if (sinceMove < 1.6 || shadowAge > (leaned > .05 ? 3 : 20)){ renderer.shadowMap.needsUpdate = true; shadowAge = 0; }
+      scene.updateMatrixWorld(); hideNearEye(); renderer.render(scene, camera);
+    },
     resize(w, h){
-      renderer.setSize(w, h, false); aspect = w / Math.max(1, h); camera.aspect = aspect; camera.updateProjectionMatrix();
+      const pr = Math.min(prFor(w, h), prCap); if (Math.abs(pr - pixelRatio) > .01){ pixelRatio = pr; renderer.setPixelRatio(pr); dustU.uPR.value = pr; }
+      renderer.setSize(w, h, false); aspect = w / Math.max(1, h); screenDirty = true; camera.aspect = aspect; camera.updateProjectionMatrix();
       dustU.uScale.value = h;
       frameLens(); solveShots(); applyCamera(breathT);
     },
   };
+  api._dbg = { yawS, pitchS, viewS, intro, shot };
   api.resize(container.clientWidth || innerWidth, container.clientHeight || innerHeight);
   return api;
 };

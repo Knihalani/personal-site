@@ -79,7 +79,7 @@ function start(api, argv, flavor){
   }
   if (readOnly && (flavor === 'vi' || flavor === 'vim')) say(COLS < 54 ? 'nano-style ' + flavor + '. read-only: :w copies' : 'nano-style ' + flavor + ', read-only file. ^S saves a copy', 'dim', 7);
   else if (readOnly) say(COLS < 54 ? 'built-in file. :w saves a copy, :q quits' : 'built-in file, read-only. ^S saves a copy', 'dim', 7);
-  else if (flavor === 'vi' || flavor === 'vim') say('this ' + flavor + ' is nano-style: just type. ^S save, ^Q quit', 'dim', 7);
+  else if (flavor === 'vi' || flavor === 'vim') say('this ' + flavor + ' is nano-style: just type. ^S save, esc quits', 'dim', 7);
   else if (COLS < 54) say('tip: :wq on its own line saves', 'dim', 7);
   else if (isNew) say('new file', 'dim');
 
@@ -486,6 +486,7 @@ function start(api, argv, flavor){
     if (done) return false;
     const k = e.key; if (!k || k === 'Unidentified' || k === 'Process' || k === 'Dead') return false;
     if (mode) return promptKey(e);
+    if (k === 'Escape' && !e.ctrlKey && !e.altKey){ quit(false); return true; }   // esc leaves, like everywhere else (asks first if unsaved)
     const ctrl = e.ctrlKey && !e.altKey, alt = e.altKey && !e.ctrlKey, shift = e.shiftKey;
     if (ctrl || (e.ctrlKey && e.altKey && k.length > 1)){
       const c = k.toLowerCase();

@@ -342,10 +342,12 @@ const host = u => { try { return new URL(u).host; } catch (e){ return String(u);
 M.net = net;
 T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usage: 'weather [-c | -f] [city]',
   opts: [['-c', 'Celsius'], ['-f', 'Fahrenheit']], ex: ['weather', 'weather tokyo', 'weather -f new york'],
+  complete: () => ['london', 'tokyo', 'paris', 'mumbai', 'sydney', 'singapore', 'berlin', 'dubai', 'toronto', 'nairobi', 'seoul', 'reykjavik'],
   more: 'Asks open-meteo.com for the weather now and the next three days. With no city it guesses yours from your time zone, then remembers the last city you named. Nothing about you leaves the browser except the city name.',
   async run(argv, io){
     let a = argv.slice(1), unit = null;
     while (a[0] === '-c' || a[0] === '-f'){ unit = a[0] === '-f' ? 'F' : 'C'; a = a.slice(1); }
+    if (a[0] && /^-/.test(a[0])){ io.err('weather: unknown option ' + a[0] + '  (try: weather -f tokyo)\n'); return 2; }
     if (!unit) unit = 'C';   // Celsius unless -f is asked for
     let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e){}
     let q = a.join(' ').trim(), guessed = false;
@@ -1031,18 +1033,29 @@ T.cmds.uuid = { g: 'tools', desc: 'random UUIDs', usage: 'uuid [count]', ex: ['u
     };
     io.out(Array.from({ length: n }, one).join('\n') + '\n');
   } };
-T.cmds.pass = { g: 'tools', desc: 'a strong random password', usage: 'pass [-n] [length]', opts: [['-n', 'letters and digits only']], ex: ['pass', 'pass 32', 'pass -n 16'],
-  more: 'Made in your browser from secure random numbers; it never leaves the page. 20 characters unless you say (8 to 128). Enter copies it.',
-  run(argv, io){
+T.cmds.pass = { g: 'tools', desc: 'a strong random password', usage: 'pass [-n] [length]', opts: [['-n', 'letters and digits only']], ex: ['pass', 'pass 32', 'pass -n 16', 'vault'],
+  more: 'Made in your browser from secure random numbers; it never leaves the page. 20 characters unless you say (8 to 128). Then: c copies it, s saves it in your encrypted vault (see man vault), h hides it from the screen.',
+  async run(argv, io){
     let a = argv.slice(1), plain = false; if (a[0] === '-n'){ plain = true; a = a.slice(1); }
+    if (a[0] && !/^\d+$/.test(a[0])){ io.err('pass: ' + a[0] + ' is not a length  (try: pass 24)\n'); return 2; }
     const len = a[0] ? parseInt(a[0], 10) : 20;
     if (!(len >= 8 && len <= 128)){ io.err('pass: length from 8 to 128\n'); return 2; }
-    const set = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789' + (plain ? '' : '!@#$%^&*-_=+?');
-    let pw = ''; const lim = 256 - 256 % set.length;
-    while (pw.length < len){ for (const b of crypto.getRandomValues(new Uint8Array(len * 2))){ if (b < lim && pw.length < len) pw += set[b % set.length]; } }
-    if (!io.tty){ io.out(pw + '\n'); return; }
-    const o = io.ui(); o.blank().card({ title: 'PASSWORD', items: [{ label: len + ' chars', value: pw, copy: pw, hint: 'copy' }] });
-    io.rich(o); return io.pick(o.lastCard).then(() => {});
+    const pw = genPass(len, plain);
+    if (!io.tty || !io.ask){ io.out(pw + '\n'); return; }
+    const o = io.ui(); o.blank().card({ title: 'PASSWORD', note: len + ' chars', items: [{ label: 'new', value: pw }] }).blank();
+    io.rich(o);
+    const it = o.lastCard.items[0];
+    const hide = () => { it.value = DOT.repeat(Math.min(16, pw.length)); it.lines = (it.lines || [it.value]).map((l, k) => k ? '' : it.value); io.redraw(); };
+    let saved = false, hidden = false;
+    for (;;){
+      const keys = [['c', 'copy']].concat(saved ? [] : [['s', 'save']], hidden ? [] : [['h', 'hide']]);
+      const spans = []; keys.forEach(([k, d], n) => { if (n) spans.push(['  ·  ', 'f']); spans.push([k, 'n'], [' ' + d, 'f']); }); spans.push(['  ·  any other key done', 'f']);
+      const k = await io.ask(spans, { keys: keys.map(x => x[0]) });
+      if (k === 'c'){ const ok = await copy(pw); io.out(ok ? '  copied\n' : '  could not reach the clipboard\n', ok ? 'dim' : 'normal'); }
+      else if (k === 's'){ if (await vaultSave(io, pw)){ saved = true; } }
+      else if (k === 'h'){ hide(); hidden = true; }
+      else break;
+    }
   } };
 T.cmds.json = { g: 'tools', desc: 'pretty-print JSON', usage: 'json [file]', ex: ["echo '{\"a\":[1,2]}' | json", 'curl api.github.com/users/torvalds | json'],
   more: 'Reads JSON from a file or the standard input and prints it indented, in colour on the screen.',
@@ -1135,4 +1148,172 @@ T.cmds.countdown = { g: 'tools', desc: 'how long until a date', usage: 'countdow
     const o = io.ui(); o.blank().big(days + (days === 1 ? ' day' : ' days'), 'b').at(2, ['and ' + rest, 'n']).at(2, [(past ? 'since ' : 'until ') + when, 'd']).blank();
     io.rich(o);
   } };
+/* ---- vault: passwords kept in this browser, encrypted with the visitor's passphrase ----
+   PBKDF2-SHA256 (300k) -> AES-GCM-256, a fresh IV per write. Only the ciphertext is stored, in its own
+   localStorage key (never the virtual FS, so cat / grep / ls cannot see it). The key lives in memory and
+   is dropped after 5 idle minutes or when the tab is hidden. */
+const DOT = '•';
+const VKEY = 'kaiav.vault.v1', VITER = 300000, VIDLE = 5 * 60 * 1000;
+const V = { key: null, items: null, timer: 0 };
+const b64 = u8 => { let s = ''; for (const b of u8) s += String.fromCharCode(b); return btoa(s); };
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const vRead = () => { try { const b = JSON.parse(localStorage.getItem(VKEY) || 'null'); return b && b.ct && b.salt && b.iv ? b : null; } catch (e){ return null; } };
+function genPass(len, plain){
+  const set = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789' + (plain ? '' : '!@#$%^&*-_=+?');
+  let pw = ''; const lim = 256 - 256 % set.length;
+  while (pw.length < len){ for (const b of crypto.getRandomValues(new Uint8Array(len * 2))){ if (b < lim && pw.length < len) pw += set[b % set.length]; } }
+  return pw;
+}
+async function copy(t){
+  try { if (navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(t); return true; } } catch (e){}
+  try { const ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0;left:-99px'; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.value = ''; ta.remove(); return ok; } catch (e){ return false; }
+}
+function vLock(){ if (V.items) for (const it of V.items) it.pw = ''; V.key = null; V.items = null; clearTimeout(V.timer); }
+function vTouch(){ clearTimeout(V.timer); V.timer = setTimeout(vLock, VIDLE); }
+try { document.addEventListener('visibilitychange', () => { if (document.hidden) vLock(); }); } catch (e){}
+async function vDerive(pass, salt, iter){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function vSeal(){
+  const old = vRead(); const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, V.key, new TextEncoder().encode(JSON.stringify({ items: V.items }))));
+  const blob = { v: 1, kdf: 'PBKDF2-SHA256', iter: V.iter, salt: V.salt, iv: b64(iv), ct: b64(ct) };
+  try { localStorage.setItem(VKEY, JSON.stringify(blob)); return true; } catch (e){ if (old) {} return false; }
+}
+/* resolves true when the vault is open (setting it up on first use) */
+async function vUnlock(io){
+  if (!(window.crypto && crypto.subtle)){ io.err('vault: this browser cannot encrypt here (it needs a secure page)\n'); return false; }
+  if (V.key){ vTouch(); return true; }
+  if (!io.tty || !io.ask){ io.err('vault: locked. run vault on the screen to unlock it\n'); return false; }
+  const blob = vRead();
+  if (!blob){
+    const o = io.ui(); o.blank().head('new vault').blank()
+      .para('Pick a passphrase. It encrypts your saved passwords on this device, and only here.', 'n', io.cols - 6)
+      .para('There is no recovery: forget it and the vault cannot be opened, by anyone.', 'd', io.cols - 6).blank();
+    io.rich(o);
+    const p1 = await io.ask('passphrase  ', { secret: true }); if (!p1) return false;
+    if (p1.length < 8){ io.err('vault: use at least 8 characters\n'); return false; }
+    const p2 = await io.ask('again       ', { secret: true }); if (p2 == null) return false;
+    if (p1 !== p2){ io.err('vault: those did not match. nothing was saved\n'); return false; }
+    io.out('  deriving a key...\n', 'faint');
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    V.key = await vDerive(p1, salt, VITER); V.salt = b64(salt); V.iter = VITER; V.items = [];
+    if (!(await vSeal())){ vLock(); io.err('vault: this browser would not store it\n'); return false; }
+    vTouch(); return true;
+  }
+  const p = await io.ask('passphrase  ', { secret: true }); if (!p) return false;
+  io.out('  unlocking...\n', 'faint');
+  try {
+    const key = await vDerive(p, unb64(blob.salt), blob.iter || VITER);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(blob.iv) }, key, unb64(blob.ct));
+    const data = JSON.parse(new TextDecoder().decode(pt));
+    V.key = key; V.salt = blob.salt; V.iter = blob.iter || VITER; V.items = Array.isArray(data.items) ? data.items : [];
+    vTouch(); return true;
+  } catch (e){ io.err('vault: wrong passphrase\n'); return false; }
+}
+const vFind = l => V.items.find(it => it.label === l) || V.items.find(it => it.label.toLowerCase() === String(l).toLowerCase());
+const cleanLabel = l => String(l || '').trim().replace(/\s+/g, '-').slice(0, 32);
+async function vaultSave(io, pw, label){
+  if (!(await vUnlock(io))) return false;
+  label = cleanLabel(label || await io.ask('label (e.g. github)  '));
+  if (!label){ io.out('  not saved\n', 'faint'); return false; }
+  if (vFind(label)){ io.err('vault: ' + label + ' is already saved  (try: vault rm ' + label + ')\n'); return false; }
+  V.items.push({ label, pw, created: new Date().toISOString().slice(0, 10) });
+  if (!(await vSeal())){ V.items.pop(); io.err('vault: could not store it\n'); return false; }
+  io.out('  saved as ', 'dim'); io.out(label, 'bright'); io.out(' in your vault, encrypted\n', 'dim');
+  return true;
+}
+const VSUB = ['add', 'get', 'rm', 'rename', 'lock', 'export', 'import', 'reset'];
+T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this browser', usage: 'vault [add | get | rm | rename | lock | export | import | reset] [label]',
+  ex: ['vault', 'vault add github', 'vault get github', 'vault rename github gh', 'vault lock', 'pass  then s to save'],
+  more: 'Passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. Nothing is sent anywhere. Clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. It locks after 5 idle minutes or when you leave the tab. Handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault so you can keep a copy; vault import takes it back.',
+  complete(args){ if (!args.length) return VSUB; if (['get', 'rm', 'rename'].includes(args[0]) && args.length === 1 && V.items) return V.items.map(it => it.label); return null; },
+  async run(argv, io){
+    const sub = argv[1] || '', arg = argv[2];
+    if (sub && !VSUB.includes(sub) && sub !== 'list' && sub !== 'ls'){
+      const near = VSUB.find(x => x.startsWith(sub.slice(0, 2)));
+      io.err('vault: no ' + sub + ' here  (try: vault' + (near ? ' ' + near : '') + ')\n'); return 2;
+    }
+    if (sub === 'lock'){ const was = !!V.key; vLock(); io.out(was ? 'vault locked\n' : 'vault was already locked\n', 'dim'); return; }
+    if (sub === 'export'){
+      const b = vRead(); if (!b){ io.err('vault: nothing to export yet\n'); return 1; }
+      const s = 'kn84vault:' + btoa(JSON.stringify(b));
+      if (!io.tty){ io.out(s + '\n'); return; }
+      io.out('  your vault, still encrypted. keep it somewhere safe;\n  vault import takes it back.\n\n', 'dim');
+      for (let k = 0; k < s.length; k += io.cols - 4) io.out('  ' + s.slice(k, k + io.cols - 4) + '\n', 'faint');
+      const ok = await copy(s); io.out(ok ? '\n  copied to the clipboard\n' : '\n', 'dim'); return;
+    }
+    if (sub === 'import'){
+      let s = (argv.slice(2).join('') || io.stdin || '').replace(/\s+/g, '');
+      if (!s && io.ask) s = ((await io.ask('paste the export  ')) || '').replace(/\s+/g, '');
+      let b = null; try { b = JSON.parse(atob(s.replace(/^kn84vault:/, ''))); } catch (e){}
+      if (!b || !b.ct || !b.salt || !b.iv){ io.err('vault: that is not a vault export\n'); return 1; }
+      if (vRead() && io.ask){ const k = await io.ask([['replace the vault on this device? ', 'n'], ['y', 'b'], [' yes  ·  any other key no', 'f']], { keys: ['y'] }); if (k !== 'y'){ io.out('  kept the one you have\n', 'dim'); return; } }
+      try { localStorage.setItem(VKEY, JSON.stringify(b)); } catch (e){ io.err('vault: could not store it\n'); return 1; }
+      vLock(); io.out('  imported. it opens with the passphrase it was made with\n', 'dim'); return;
+    }
+    if (sub === 'reset'){
+      if (!vRead()){ io.out('no vault here\n', 'dim'); return; }
+      if (!io.ask){ io.err('vault: reset needs the screen\n'); return 1; }
+      io.out('  this deletes every saved password on this device, for good.\n', 'normal');
+      const t = await io.ask([['type ', 'f'], ['delete', 'b'], [' to confirm  ', 'f']]);
+      if (t !== 'delete'){ io.out('  nothing deleted\n', 'dim'); return; }
+      vLock(); try { localStorage.removeItem(VKEY); } catch (e){}
+      io.out('  vault deleted\n', 'dim'); return;
+    }
+    if (!(await vUnlock(io))) return 1;
+    if (!sub || sub === 'list' || sub === 'ls'){
+      if (!V.items.length){
+        const o = io.ui(); o.blank().line(['your vault is empty. ', 'd'], ['vault add <label>', 'n'], [' or ', 'f'], ['pass', 'n', { cmd: 'pass' }], [' then s', 'f']).blank(); io.rich(o); return;
+      }
+      if (!io.tty){ io.out(V.items.map(it => it.label + '  ' + it.created).join('\n') + '\n'); return; }
+      const o = io.ui(); o.blank().card({ title: 'VAULT', note: V.items.length + (V.items.length === 1 ? ' password' : ' passwords'), verb: 'copy',
+        items: V.items.map(it => ({ label: it.label, value: 'saved ' + it.created, copy: it.pw, secret: true, hint: 'copy' })) }).blank();
+      io.rich(o); await io.pick(o.lastCard); return;
+    }
+    if (sub === 'add'){
+      const label = cleanLabel(arg || await io.ask('label (e.g. github)  '));
+      if (!label) return 1;
+      if (vFind(label)){ io.err('vault: ' + label + ' is already saved  (try: vault rm ' + label + ')\n'); return 1; }
+      const k = await io.ask([['g', 'n'], [' generate one  ·  ', 'f'], ['p', 'n'], [' paste your own', 'f']], { keys: ['g', 'p'] });
+      let pw = null;
+      if (k === 'g') pw = genPass(20, false);
+      else if (k === 'p') pw = await io.ask('password  ', { secret: true });
+      if (!pw){ io.out('  not saved\n', 'faint'); return 1; }
+      const ok = await vaultSave(io, pw, label); if (ok && k === 'g' && await copy(pw)) io.out('  and copied to the clipboard\n', 'dim');
+      pw = ''; return ok ? 0 : 1;
+    }
+    const need = n => { if (!arg){ io.err('usage: vault ' + n + ' <label>\n'); return null; } const it = vFind(arg); if (!it){ const near = V.items.find(x => x.label.toLowerCase().startsWith(arg.toLowerCase().slice(0, 2))); io.err('vault: nothing saved as ' + arg + (near ? '  (did you mean ' + near.label + '?)' : '') + '\n'); } return it || null; };
+    if (sub === 'get'){
+      const it = need('get'); if (!it) return 1;
+      const ok = await copy(it.pw);
+      const o = io.ui(); const val = [DOT.repeat(12), 'b'];
+      o.blank().at(2, [it.label + '  ', 'd'], val, [ok ? '  copied' : '  (clipboard blocked)', 'f']).blank(); io.rich(o);
+      const k = await io.ask([['r', 'n'], [' reveal for 10 seconds  ·  any other key done', 'f']], { keys: ['r'] });
+      if (k === 'r'){ val[0] = it.pw; io.redraw(); setTimeout(() => { val[0] = DOT.repeat(12); io.redraw(); }, 10000); }
+      return;
+    }
+    if (sub === 'rm'){
+      const it = need('rm'); if (!it) return 1;
+      const k = await io.ask([['remove ' + it.label + '? ', 'n'], ['y', 'b'], [' yes  ·  any other key no', 'f']], { keys: ['y'] });
+      if (k !== 'y'){ io.out('  kept\n', 'dim'); return; }
+      V.items = V.items.filter(x => x !== it); it.pw = ''; await vSeal(); io.out('  removed ' + it.label + '\n', 'dim'); return;
+    }
+    if (sub === 'rename'){
+      const it = need('rename'); if (!it) return 1;
+      const to = cleanLabel(argv[3] || await io.ask('new label  '));
+      if (!to) return 1; if (vFind(to) && vFind(to) !== it){ io.err('vault: ' + to + ' is taken\n'); return 1; }
+      const was = it.label; it.label = to; await vSeal(); io.out('  ' + was + ' is now ' + to + '\n', 'dim'); return;
+    }
+  } };
+
+/* a hello for people who type one */
+T.cmds.hello = { g: 'fun', hidden: true, desc: 'say hi', usage: 'hello', run(argv, io){
+  if (!io.tty){ io.out('hi. try about, or help.\n'); return; }
+  const c = w => [w, 'b', { cmd: w }];
+  const o = io.ui(); o.blank().at(2, ['hi, welcome to ' + (M.CONTENT && M.CONTENT.name ? M.CONTENT.name.split(' ')[0] + "'s" : 'this') + ' desk.', 'n'])
+    .at(2, ['try ', 'f'], c('about'), ['  ', 'f'], c('contact'), ['  or  ', 'f'], c('help'), ['  for everything', 'f']).blank();
+  io.rich(o);
+} };
 })();

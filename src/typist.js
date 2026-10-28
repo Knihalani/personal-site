@@ -191,7 +191,7 @@ function makeMat(kind, U){
     float nc = dot(sN, normalize(uScrP - vTP)), nl = dot(sN, normalize(uLampP - vTP));
     float fr = pow(1.0 - clamp(dot(sN, sV), 0.0, 1.0), 4.0);
     float lit = clamp(0.55 * max(nc, 0.0) + 0.35 * max(nl, 0.0) + 0.15, 0.0, 1.0);
-    outgoingLight = vec3(0.0015) + fr * lit * vec3(0.05, 0.075, 0.1);
+    outgoingLight = vec3(0.0015) + fr * lit * vec3(0.07, 0.095, 0.12);
   }
 #include <output_fragment>`);
   };
@@ -853,7 +853,7 @@ M.createTypist = function createTypist(api){
     const idle = window.requestIdleCallback ? (f => requestIdleCallback(f, { timeout: 60 })) : (f => setTimeout(f, 16));
     let j = 0;
     const slice = () => {
-      const end = now() + 6;
+      const end = now() + 8;
       while (j < skinJobs.length && now() < end){ if (skinJobs[j].next().done) j++; }
       if (j < skinJobs.length) idle(slice); else if (api.renderer && api.scene && api.camera) try { api.renderer.compile(api.scene, api.camera); } catch (e){}
     };

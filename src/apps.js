@@ -535,4 +535,12 @@ const lamp = {
   },
 };
 T.cmds.lamp = lamp;
+/* games: what there is to play, as words to click */
+T.cmds.games = { g: 'fun', hidden: true, desc: 'what you can play', usage: 'games', run(argv, io){
+  const list = [['tetris', 'blocks'], ['snake', 'eat, grow'], ['typing', 'how fast you type'], ['donut', 'a spinning torus']].filter(([n]) => T.apps[n] || T.cmds[n]);
+  if (!io.tty){ io.out(list.map(x => x[0]).join('\n') + '\n'); return; }
+  const o = io.ui(); o.blank();
+  for (const [n, d] of list) o.at(2, [n, 'b', { cmd: n }], [' '.repeat(Math.max(2, 9 - n.length)) + d, 'f']);
+  o.blank().at(2, ['esc or q leaves a game', 'f']).blank(); io.rich(o);
+} };
 })();

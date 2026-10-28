@@ -691,7 +691,7 @@ M.createTerminal = function createTerminal(opts){
   function welcome(o){
     o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line(['type a word and press enter, or ' + (TAP ? 'tap' : 'click') + ' one', 'd'])
-      .flow(['about', 'eden', 'j', 'contact', 'links', 'weather', 'tetris'].map(w => [chip(w, 'b')]), '   ')
+      .flow(['about', 'eden', 'j', 'contact', 'links', 'weather', 'tetris'].map(w => [chip(w, 'b')]), '  ')
       .blank();
     if (!history.length) o.line(chip('help', 'n'), [' shows everything you can do', 'f']).blank();
     else o.line(chip('help', 'n'), ['   tab completes   ', 'f'], ['\u2191', 'n'], [' recalls', 'f']).blank();
@@ -1464,8 +1464,9 @@ M.createTerminal = function createTerminal(opts){
       said = ok ? 'Opened ' + it.value + ' in the reader. Escape comes back.' : 'The reader is not available.';
     } else if (it.copy){
       const ok = copyText(it.copy); sfx('beep');
-      card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [it.copy, 'b']] : [['select and copy: ', 'd'], [it.copy, 'b']];
-      said = (ok ? 'Copied ' : 'Copy ') + it.copy + '.';
+      const what = it.secret ? it.label : it.copy;            // a secret (a vault password) is never drawn or read out
+      card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [what, 'b']] : it.secret ? [['could not reach the clipboard', 'd']] : [['select and copy: ', 'd'], [it.copy, 'b']];
+      said = (ok ? 'Copied ' : 'Could not copy ') + what + '.';
     } else {
       const ok = openTarget(it.url);
       let shown = it.full ? bare(it.full) : it.value;
@@ -2013,7 +2014,9 @@ M.createTerminal = function createTerminal(opts){
   const X = col => PADX + col * cw;
   let promptY = 0;   // bottom of the prompt line, canvas px (phones keep it above the on-screen keyboard)
   function text(s, col, top, st, k = 1){
-    g.font = font(k); g.fillStyle = color(st); g.fillText(s, X(col), top + fs * k * 0.68);
+    g.font = font(k); g.fillStyle = color(st);
+    if (k === 1 && SPAN_VEC.test(s)){ const c0 = color(st); g.fillText(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68); for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, c0); return; }
+    g.fillText(s, X(col), top + fs * k * 0.68);
   }
   function drawSpans(r, top, limit, k = 1){
     let col = r.i || 0, left = limit;

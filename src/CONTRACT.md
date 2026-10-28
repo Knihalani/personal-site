@@ -36,6 +36,8 @@ MAC.createScene(container: HTMLElement) -> {
   add(obj3d),
   setView(name),                // 'scene' (cinematic over-the-shoulder) | 'screen' (dolly in so the terminal fills the view)
   setPointer(nx, ny),           // -1..1, subtle camera parallax
+  pickScreen(clientX, clientY) -> {u, v} | null,   // raycast to the CRT glass; u, v are 0..1 from the TOP-LEFT of the
+                                // terminal canvas (barrel bow and overscan inset accounted for); null off the image
   update(dt, t),
   render(),
   resize(w, h),
