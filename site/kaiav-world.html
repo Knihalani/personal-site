@@ -428,6 +428,7 @@ button.slot:active{transform:translateY(2px)}
       <div class="keys inmenu" id="ctlPause" hidden></div>
       <button class="btn f-alt" id="bSound" type="button">Sound<span class="r" id="vSound">On</span></button>
       <button class="btn f-alt" id="bView" type="button">Camera<span class="r" id="vView">First person</span></button>
+      <button class="btn f-alt" id="bAuto" type="button">Auto-jump<span class="r" id="vAuto">Off</span></button>
       <button class="btn f-alt" id="bBob" type="button">Head bob<span class="r" id="vBob">On</span></button>
       <button class="btn f-alt" id="bTips" type="button">Tutorial tips<span class="r" id="vTips">On</span></button>
       <label class="btn f-alt" for="sens">Look speed<input type="range" class="range" id="sens" min="0.4" max="3" step="0.05" value="1"></label>
@@ -2163,6 +2164,14 @@ function moveHoriz(e, axis, d0, canStep){
   return false;
 }
 
+/* height of a climbable ledge directly ahead (top of the blocking column), or -1 */
+function ledgeHeight(e, dx, dz){
+  const tx = e.x + dx * (e.hw + .12), tz = e.z + dz * (e.hw + .12);
+  for (let k = 1; k <= 3; k++){ const top = Math.floor(e.y + EPS) + k, h = top - e.y; if (h <= 0 || h > 2.05) continue;
+    if (boxFree(e.x, top, e.z, e.hw, e.h) && boxFree(tx, top, tz, e.hw, e.h) && supported(tx, top, tz, e.hw)) return h; }
+  return -1;
+}
+
 /* DDA voxel raycast */
 const HIT = { ok: false, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, id: 0, t: 0 };
 function raycast(ox, oy, oz, dx, dy, dz, maxD, out, solidOnly){
@@ -2189,7 +2198,7 @@ const GRAV = 32, FALL_MULT = 1.55, HANG_MULT = .5, TERMINAL = 50, JUMP_V = 10.2,
 const SLIDE_T = .7, SLIDE_V = 11, DASH_V = 15, DASH_CD = .85;
 const GLIDE_BASE = 9.5, GLIDE_MAX = 24, GLIDE_MIN = 5.5, LIFT = 14, BOUNCE_V = 21, CATCH_Y = 12, CATCH_T = 1.1;
 const PL = { x: 96.5, y: 40, z: 108, px: 96.5, py: 40, pz: 108, vx: 0, vy: 0, vz: 0, hw: .3, h: 1.8, onGround: false, wasGround: false, inWater: false, yaw: 0, pitch: 0,
-  stepOff: 0, sd: 0.5, md: 0.5, coyote: 0, jumpBuf: 0, air: 0, gliding: false, gs: 9.5, flaps: 0, sneak: false, slideT: 0, dashCD: 0, airDash: true, vault: 0, eyeOff: 0,
+  stepOff: 0, sd: 0.5, md: 0.5, coyote: 0, jumpBuf: 0, air: 0, gliding: false, gs: 9.5, flaps: 0, sneak: false, slideT: 0, dashCD: 0, airDash: true, vault: 0, eyeOff: 0, mantleCD: 0, glideLock: 0, autoJT: 0,
   stable: 0, walk: 0, stepAcc: 0, landKick: 0, punch: 0, trailT: 0, safe: null, catching: false };
 const INP = { x: 0, z: 0, jump: false, jumpEdge: false, sprint: false, sneak: false, sneakEdge: false, dashEdge: false, dashX: 0, dashZ: 0, use: false };
 let hasSail = false, inUpdraft = 0, festival = 0, goldSail = false, sailLevel = 0;
@@ -2225,7 +2234,8 @@ function stepPlayer(dt){
   let wishSpeed = (P.sneak ? SNEAK : sprint ? SPRINT : WALK) * mag * (P.inWater ? .6 : 1);
   // glide? hold Space in the air
   const was = P.gliding;
-  P.gliding = hasSail && !P.onGround && !P.inWater && INP.jump && (P.vy < .5 || P.gliding) && P.air > .14;
+  P.glideLock = Math.max(0, P.glideLock - dt);
+  P.gliding = hasSail && !P.onGround && !P.inWater && INP.jump && P.glideLock <= 0 && (P.vy < .5 || P.gliding) && P.air > .14;
   if (P.gliding && !was){ P.gs = Math.max(hs, GLIDE_BASE * .9); SND.sail(); }
   inUpdraft = updraftAt(P.x, P.y, P.z);
   if (P.gliding){
@@ -2253,10 +2263,10 @@ function stepPlayer(dt){
       if (add > 0 && mag > 0){ const a = Math.min(AIR_ACCEL * Math.max(wishSpeed, 5) * dt, add); P.vx += a * wx; P.vz += a * wz; }
       const sp = hyp2(P.vx, P.vz); if (sp > SPRINT + .5){ const k = Math.exp(-1.4 * dt), ns = SPRINT + .5 + (sp - SPRINT - .5) * k; P.vx *= ns / sp; P.vz *= ns / sp; }
     }
-    if (P.inWater){ P.vy -= 9 * dt; if (P.vy < -3) P.vy = -3; if (INP.jump) P.vy = Math.min(P.vy + 24 * dt, 3.6); }
+    if (P.inWater){ P.vy -= 9 * dt; if (P.vy < -3) P.vy = -3; if (INP.jump && P.vy < 3.6) P.vy = Math.min(P.vy + 24 * dt, 3.6); }
     else {
-      let g = GRAV;
-      if (P.vy < 0) g *= FALL_MULT; else if (INP.jump && P.vy < 2.4) g *= HANG_MULT; else if (!INP.jump && P.vy > 0) g *= 1.7; // apex hang, fast fall, short hops
+      let g = GRAV; const held = INP.jump || P.autoJT > 0; P.autoJT = Math.max(0, P.autoJT - dt);
+      if (P.vy < 0) g *= FALL_MULT; else if (held && P.vy < 2.4) g *= HANG_MULT; else if (!held && P.vy > 0) g *= 1.7; // apex hang, fast fall, short hops
       if (P.vy > -2.4 && P.vy < 0 && INP.jump) g = GRAV * HANG_MULT;
       P.vy -= g * dt;
       if (inUpdraft > 0 && P.vy < 0) P.vy += inUpdraft * 30 * dt;
@@ -2273,16 +2283,30 @@ function stepPlayer(dt){
   P.onGround = false;
   if ((P.sd = dy, sweepAxis(P, 1))){ if (dy < 0) P.onGround = true; P.vy = 0; }
   else if (dy < 0 && supported(P.x, P.y, P.z, P.hw) && P.y - Math.floor(P.y) < .002) P.onGround = true;
-  const fwdPress = INP.z > .3 || P.gliding;
-  const canStep = P.gliding ? 2 : ((P.onGround || P.coyote > 0) ? (fwdPress ? 2 : 1) : (P.vy > -12 && fwdPress ? 2 : 0));
-  const ox = P.x, oz = P.z, s0 = P.stepOff;
-  if ((P.md = P.vx * dt, moveHoriz(P, 0, undefined, canStep))) P.vx = 0;
+  // horizontal: plain swept collision (no teleporting step-ups). Climbing happens with real velocity:
+  // grounded + auto-jump -> a normal jump; airborne near a ledge top -> a short mantle boost.
+  const ox = P.x, oz = P.z, svx = P.vx, svz = P.vz;
+  let bx = 0, bz = 0;
+  if ((P.md = P.vx * dt, moveHoriz(P, 0, undefined, 0))){ bx = Math.sign(svx); P.vx = 0; }
   if (P.sneak && !supported(P.x, P.y, P.z, P.hw)){ P.x = ox; P.vx = 0; }
-  if ((P.md = P.vz * dt, moveHoriz(P, 2, undefined, canStep))) P.vz = 0;
+  if ((P.md = P.vz * dt, moveHoriz(P, 2, undefined, 0))){ bz = Math.sign(svz); P.vz = 0; }
   if (P.sneak && !supported(P.x, P.y, P.z, P.hw)){ P.z = oz; P.vz = 0; }
-  // ground snap: running down a 1-block step stays planted (no hop), the camera eases the drop
-  if (!P.onGround && P.wasGround && P.vy <= 0 && !P.gliding && !P.inWater){ const Y = Math.floor(P.y + .01); if (!supported(P.x, Y, P.z, P.hw) && supported(P.x, Y - 1, P.z, P.hw) && boxFree(P.x, Y - 1, P.z, P.hw, P.h)){ P.stepOff += P.y - (Y - 1); P.y = Y - 1; P.vy = 0; P.onGround = true; P.coyote = COYOTE; } }
-  if (P.stepOff - s0 > 1.05){ P.vault = 1; P.vy = Math.max(P.vy, 0); P.gliding = false; SND.vault(); animPlace(); dust(P.x, P.y, P.z, 5, 1.5); }
+  P.mantleCD = Math.max(0, P.mantleCD - dt);
+  if ((bx || bz) && (mag > 0 || P.gliding)){
+    const into = mag > 0 ? wx * bx + wz * bz : -sy * bx - cy * bz; // how hard the player pushes (or glides) into the wall
+    if (into > .5){
+      const h = ledgeHeight(P, bx, bz);
+      if (h > 0){
+        if (P.inWater){ if (h <= 1.4 && P.mantleCD <= 0){ P.vy = Math.max(P.vy, 7); P.mantleCD = .3; } } // climb out onto the bank
+        else if (P.onGround && autoJump && h <= 1.05 && P.jumpBuf <= 0){ P.jumpBuf = .05; P.autoJT = .4; } // jumps next tick through the normal path
+        else if (!P.onGround && P.mantleCD <= 0 && h <= (P.gliding ? 1.3 : .75) && P.vy < 7){
+          P.vy = Math.min(9, Math.max(P.vy, Math.sqrt(2 * GRAV * 1.7 * (h + .2))));
+          P.mantleCD = .3; P.vault = 1; if (P.gliding){ P.gliding = false; P.glideLock = .25; }
+          SND.vault(); animPlace();
+        }
+      }
+    }
+  }
   if (P.onGround && !P.wasGround){
     const k = clamp(-fallV / 34, 0, 1);
     if (k > .25){ P.landKick = Math.min(.24, k * .28); SND.land(k); landRing(P.x, P.y, P.z, k); }
@@ -3328,7 +3352,8 @@ $('#bJournal').addEventListener('click', () => openJournal());
 $('#bJournal2').addEventListener('click', () => openJournal());
 $('#jrClose').addEventListener('click', () => closeJournal(true));
 $('#bView').addEventListener('click', () => setThird(!third));
-let headBob = !REDUCED, tipsOn = true;
+let headBob = !REDUCED, tipsOn = true, autoJump = TOUCH;
+$('#bAuto').addEventListener('click', () => { autoJump = !autoJump; $('#vAuto').textContent = autoJump ? 'On' : 'Off'; saveDirty = true; });
 $('#bBob').addEventListener('click', () => { headBob = !headBob; $('#vBob').textContent = headBob ? 'On' : 'Off'; saveDirty = true; });
 $('#bTips').addEventListener('click', () => { tipsOn = !tipsOn; $('#vTips').textContent = tipsOn ? 'On' : 'Off'; tutShow(); saveDirty = true; });
 let sens = 1;
@@ -3656,7 +3681,7 @@ function updateCamera(dt){
   if (canopy){
     spring(HR.canopy, P.gliding ? 1 : 0, P.gliding ? 13 : 18, dt);
     const o = HR.canopy.x; canopy.visible = o > .03;
-    if (canopy.visible){ const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw), fwdD = third ? 0 : 1.5, up = third ? 1.25 : .95; const flex = clamp((gs - 9) / 14, -.3, 1);
+    if (canopy.visible){ const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw), fwdD = third ? 0 : .9, up = third ? .85 : .42; const flex = clamp((gs - 9) / 14, -.3, 1);
       canopy.position.set(ix - sy * fwdD, iy + 1.62 + up * Math.min(1, o + .2), iz - cy * fwdD);
       canopy.rotation.set(-P.pitch * .25 + Math.sin(tAcc * 3) * .03, P.yaw, HR.roll.x * 1.3 + Math.sin(tAcc * 2.3) * .04);
       canopy.scale.set(Math.max(.05, o) * (1 + flex * .04), Math.max(.05, o) * (1 - flex * .25), Math.max(.05, o) * (1 - flex * .08)); }
@@ -3765,7 +3790,7 @@ function saveGame(){
     const e = []; edits.forEach((v, k) => { e.push(k, v); });
     const s = PL.safe || PL;
     localStorage.setItem(SKEY, JSON.stringify({ v: 3, e, inv: inv.map(s => s ? [s.id, s.n] : 0), p: [+s.x.toFixed(2), +s.y.toFixed(2), +s.z.toFixed(2), +PL.yaw.toFixed(3), +PL.pitch.toFixed(3)], t: +dayT.toFixed(4), sel,
-      o: { sens, mute: AU.muted, tp: third, bob: headBob, tips: tipsOn }, g: { found: [...found], visited: [...visited], ways: [...ways], friends: [...friends], comp: companion ? MOBS.indexOf(companion) : -1, tut: tutStep, sail: SAIL_STAND ? SAIL_STAND.taken : false, gold: goldSail, rc: RC.done ? +RC.best.toFixed(2) : 0 } }));
+      o: { sens, mute: AU.muted, tp: third, bob: headBob, tips: tipsOn, aj: autoJump }, g: { found: [...found], visited: [...visited], ways: [...ways], friends: [...friends], comp: companion ? MOBS.indexOf(companion) : -1, tut: tutStep, sail: SAIL_STAND ? SAIL_STAND.taken : false, gold: goldSail, rc: RC.done ? +RC.best.toFixed(2) : 0 } }));
     saveDirty = false;
   } catch (err){}
 }
@@ -3778,7 +3803,7 @@ function applySave(sv){
     if (sv.p && isFinite(sv.p[0]) && sv.p[1] > CATCH_Y){ PL.x = sv.p[0]; PL.y = sv.p[1]; PL.z = sv.p[2]; PL.yaw = sv.p[3] || 0; PL.pitch = sv.p[4] || 0; PL.safe = { x: PL.x, y: PL.y, z: PL.z, yaw: PL.yaw }; }
     if (isFinite(sv.t)) dayT = ((sv.t % 1) + 1) % 1;
     sel = clamp(sv.sel | 0, 0, 8);
-    if (sv.o){ sens = clamp(+sv.o.sens || 1, .4, 3); $('#sens').value = sens; AU.muted = !!sv.o.mute; third = !!sv.o.tp; headBob = sv.o.bob !== false && !REDUCED; tipsOn = sv.o.tips !== false; }
+    if (sv.o){ sens = clamp(+sv.o.sens || 1, .4, 3); $('#sens').value = sens; AU.muted = !!sv.o.mute; third = !!sv.o.tp; headBob = sv.o.bob !== false && !REDUCED; tipsOn = sv.o.tips !== false; if (typeof sv.o.aj === 'boolean') autoJump = sv.o.aj; }
     const g = sv.g || {};
     (g.found || []).forEach(i => found.add(i)); (g.visited || []).forEach(i => visited.add(i)); (g.ways || []).forEach(i => ways.add(i)); (g.friends || []).forEach(i => friends.add(i));
     tutStep = clamp(g.tut | 0, 0, TUT.length); if (SAIL_STAND && g.sail) SAIL_STAND.taken = true; goldSail = !!g.gold;
@@ -3912,7 +3937,7 @@ function finishBoot(){
   buildSigns(); buildGlow(); buildParticles(); buildFliers(); buildUpdrafts(); buildMobs(); buildShards(); buildRings(); buildCubes(); buildBanners(); buildDrops(); buildHand(); buildOutline(); buildAvatar(); buildMapStatic();
   if (pendingComp >= 0 && MOBS[pendingComp] && MOBS[pendingComp].type !== 'jelly'){ companion = MOBS[pendingComp]; companion.friend = true; }
   if (goldSail) setGold();
-  setMuted(AU.muted); setThird(third); invChanged(); $('#vBob').textContent = headBob ? 'On' : 'Off'; $('#vTips').textContent = tipsOn ? 'On' : 'Off';
+  setMuted(AU.muted); setThird(third); invChanged(); $('#vBob').textContent = headBob ? 'On' : 'Off'; $('#vAuto').textContent = autoJump ? 'On' : 'Off'; $('#vTips').textContent = tipsOn ? 'On' : 'Off';
   startMesher(); pumpMeshing(30);
   U.uReveal.value = 0;
   last = performance.now(); raf = requestAnimationFrame(frame);
