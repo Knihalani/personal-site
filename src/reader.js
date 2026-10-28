@@ -343,7 +343,7 @@ function render(p){
 }
 
 /* ---- keyboard: while open, every keydown is the reader's ---- */
-const focusables = () => Array.from(root.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter(e => e.offsetParent !== null || e === sheet);
+const focusables = () => Array.from(new Set(root.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'))).filter(e => e !== sheet && e.offsetParent !== null);   // the sheet itself only holds focus on open
 function onKey(e){
   if (!isOpen) return;
   e.stopImmediatePropagation();                        // the terminal and the typist's hands never see it
@@ -390,6 +390,8 @@ function open(q){
     else { void root.offsetWidth; requestAnimationFrame(() => root.classList.add('rd-in')); }
     try { if (M.sound && M.sound.event) M.sound.event('disk'); } catch (e){}
   }
+  // every post opens at its top: render() can't reset a sheet that was still display:none
+  sheet.style.scrollBehavior = 'auto'; sheet.scrollTop = 0; sheet.style.scrollBehavior = '';
   sheet.focus({ preventScroll: true });
   return true;
 }

@@ -5,7 +5,7 @@
 const M = window.MAC, D = document, $ = s => D.querySelector(s);
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TOUCH = matchMedia('(pointer: coarse)').matches;
-const small = () => TOUCH && Math.min(innerWidth, innerHeight) < 820;
+const small = () => TOUCH;   // phones and tablets: touch has no cursor to look with or lean back, so the terminal alone
 const stage = $('#stage'), kbd = $('#kbd'), muteBtn = $('#mute'), hint = $('#hint'), sound = M.sound;
 const reading = () => !!(M.reader && M.reader.isOpen);   // the reader owns the keyboard while it is open
 let errs = 0;
@@ -79,7 +79,7 @@ setupMute(focusInput, ac.signal);
 const held = new Set();
 function onDown(e){
   if (e.metaKey || reading()) return;   // Ctrl combos go to the terminal; it only consumes the ones it handles
-  if (e.target === muteBtn) return;
+  if (e.target === muteBtn){ if (e.key.length !== 1 || e.key === ' ') return; focusInput(); }   // letters typed on the toggle go back to the prompt
   unlock();
   if (term.handleKey(e)) e.preventDefault();
   else if (e.target === kbd && e.key.length === 1 && !e.ctrlKey) e.preventDefault();   // a key the terminal ignored types nothing
@@ -121,6 +121,10 @@ on(window, 'pointermove', e => {
   const ny = e.clientY / innerHeight * 2 - 1;
   look(e.clientX / innerWidth * 2 - 1, ny);
   if (ny > 0.5) hideHint();
+  // clickable words on the tube get a pointer
+  const p = term.hitTest && api.pickScreen ? api.pickScreen(e.clientX, e.clientY) : null;
+  const want = p && term.hitTest(p.u, p.v) ? 'pointer' : '';
+  if (stage.style.cursor !== want) stage.style.cursor = want;
 });
 on(D.documentElement, 'mouseleave', () => look(0, 0));
 
@@ -197,7 +201,8 @@ function flat(){
   kbd.addEventListener('input', e => { if (TOUCH || !e.isComposing) take(); });
   if (!TOUCH) kbd.addEventListener('compositionend', take);
   addEventListener('keydown', e => {
-    if (e.metaKey || reading() || e.target === muteBtn) return;
+    if (e.metaKey || reading()) return;
+    if (e.target === muteBtn){ if (e.key.length !== 1 || e.key === ' ') return; focus(); }   // letters typed on the toggle go back to the prompt
     if (TOUCH && e.target === kbd && !special(e)) return;   // phones: letters arrive through the input event
     unlock();
     if (term.handleKey(e)){ e.preventDefault(); tap(e.code || 'KeyA'); }
@@ -206,6 +211,11 @@ function flat(){
   addEventListener('keyup', e => { if (!reading() && term.handleKeyUp) term.handleKeyUp(e); });
   addEventListener('wheel', e => { if (reading() || !term.scroll) return; term.scroll(e.deltaY); e.preventDefault(); }, { passive: false });
   stage.addEventListener('pointerdown', () => { unlock(); });
+  stage.addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse' || !term.hitTest) return;
+    const r = cv.getBoundingClientRect(), want = term.hitTest((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height) ? 'pointer' : '';
+    if (stage.style.cursor !== want) stage.style.cursor = want;
+  });
   stage.addEventListener('click', e => {
     const r = cv.getBoundingClientRect();
     if (term.handleTap && term.handleTap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)){ unlock(); return; }   // a card row: copy / open
