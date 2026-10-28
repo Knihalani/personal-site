@@ -581,6 +581,11 @@ M.createTerminal = function createTerminal(opts){
     '  open x      open a link in a new tab', '',
     '## things to do', '',
     '  weather     the sky where you are',
+    '  hn          Hacker News, top stories',
+    '  wiki turing a Wikipedia summary',
+    '  curl url    fetch anything',
+    '  qr text     a QR code for your phone',
+    '  convert 5 km to mi',
     '  todo        a to-do list',
     '  timer 5m    count down, then beep',
     '  pomodoro    focus 25, break 5',
@@ -1066,13 +1071,14 @@ M.createTerminal = function createTerminal(opts){
      help all lists every command, grouped by its g; help <cmd> is man */
   const HELP_TOP = [
     ['kaiav', ['about', 'eden', 'j', 'writing', 'links', 'contact']],
-    ['tools', ['weather', 'todo', 'timer', 'pomodoro', 'clock', 'cal']],
+    ['net', ['weather', 'curl', 'hn', 'wiki', 'define', 'github', 'ip']],
+    ['tools', ['todo', 'timer', 'pomodoro', 'qr', 'convert', 'pass', 'hash', 'roll', 'countdown', 'cal']],
     ['play', ['tetris', 'snake', 'typing', 'donut', 'matrix', 'banner', 'fortune', 'cowsay', 'lamp']],
     ['files', ['ls', 'cd', 'cat', 'tree', 'mkdir', 'mv', 'cp', 'rm']],
     ['text', ['echo', 'grep', 'sed', 'sort', 'wc', 'head', 'tail']],
     ['shell', ['man', 'history', 'alias', 'clear', 'neofetch']],
   ];
-  const HELP_ALL = [['read', 'kaiav'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
+  const HELP_ALL = [['read', 'kaiav'], ['net', 'net'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
   def('help', { g: 'system', desc: 'what you can type here', usage: 'help [all | command]', ex: ['help', 'help all', 'help weather'], run(argv, io){
     if (argv[1] && argv[1] !== 'all' && argv[1] !== '-a') return B.man.run(['man', argv[1]], io);
     const all = !!argv[1];

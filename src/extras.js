@@ -308,8 +308,8 @@ const net = {
       const headers = []; try { r.headers.forEach((v, k) => headers.push([k, v])); } catch (e){}
       const type = (r.headers.get('content-type') || '').split(';')[0].trim();
       const res = { status: r.status, statusText: r.statusText || HTTP_TEXT[r.status] || '', ok: r.ok, headers, type, text, ms, bytes: new Blob([text]).size, url: r.url || url };
-      if (opt.json || /json/.test(type)){ try { res.data = JSON.parse(text); } catch (e){ if (opt.json) throw new NetError('http', 'the answer was not JSON', r.status); } }
       if (opt.json && !r.ok) throw new NetError('http', 'HTTP ' + r.status + (res.statusText ? ' ' + res.statusText : ''), r.status);
+      if (opt.json || /json/.test(type)){ try { res.data = JSON.parse(text); } catch (e){ if (opt.json) throw new NetError('http', 'the answer was not JSON', r.status); } }
       return res;
     } finally { clearTimeout(timer); try { document.removeEventListener('securitypolicyviolation', onCsp); } catch (e){} }
   },
@@ -650,5 +650,483 @@ T.apps.matrix = { g: 'fun', desc: 'digital rain', usage: 'matrix', more: 'Charac
         });
       },
     };
+  } };
+
+/* =====================================================================================
+   shared: coloured JSON, span wrapping, little helpers
+   ===================================================================================== */
+const kb = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+const msStr = ms => ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(1) + ' s';
+const clip = (t, n) => t.length <= n ? t : t.slice(0, Math.max(1, n - 3)).trimEnd() + '...';
+const bareUrl = u => String(u || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+const argText = (io, a) => a.length ? a.join(' ') : String(io.stdin || '');
+/* JSON -> lines of { ind, toks: [[text, style]] }: keys dim, strings normal, numbers bright, literals accent, punctuation faint */
+function jsonLines(v){
+  const lines = [];
+  const scalar = x => typeof x === 'string' ? [JSON.stringify(x), 'n'] : typeof x === 'number' ? [String(x), 'b'] : [String(x), 'a'];
+  (function walk(x, ind, pre, comma){
+    const cm = comma ? [[',', 'f']] : [];
+    if (x && typeof x === 'object'){
+      const arr = Array.isArray(x), ks = arr ? x.map((_, i) => i) : Object.keys(x);
+      if (!ks.length){ lines.push({ ind, toks: [...pre, [arr ? '[]' : '{}', 'f'], ...cm] }); return; }
+      lines.push({ ind, toks: [...pre, [arr ? '[' : '{', 'f']] });
+      ks.forEach((k, i) => walk(x[k], ind + 2, arr ? [] : [[JSON.stringify(String(k)), 'd'], [': ', 'f']], i < ks.length - 1));
+      lines.push({ ind, toks: [[arr ? ']' : '}', 'f'], ...cm] });
+    } else lines.push({ ind, toks: [...pre, scalar(x), ...cm] });
+  })(v, 0, [], false);
+  return lines;
+}
+/* cut a line of spans into rows no wider than width; continuation rows are indented by cont */
+function wrapSpans(toks, width, cont = 2){
+  const rows = []; let row = [], w = 0, room = width;
+  for (let [t, st] of toks){
+    while (t.length){
+      if (w >= room){ rows.push(row); row = []; w = 0; room = Math.max(8, width - cont); }
+      const take = t.slice(0, room - w); row.push([take, st]); w += take.length; t = t.slice(take.length);
+    }
+  }
+  rows.push(row);
+  return rows.map((r, i) => ({ cont: i > 0, toks: r }));
+}
+/* print a JSON value on the screen, coloured and wrapped, at most max rows; returns rows not shown */
+function showJSON(o, v, cols, max = 1e9, i0 = 2){
+  let n = 0, hidden = 0;
+  for (const l of jsonLines(v)){
+    for (const r of wrapSpans(l.toks, cols - i0 - l.ind - 1)){
+      if (n >= max){ hidden++; continue; }
+      o.at(i0 + l.ind + (r.cont ? 2 : 0), ...(r.toks.length ? r.toks : [['', 'n']])); n++;
+    }
+  }
+  return hidden;
+}
+
+/* =====================================================================================
+   curl: fetch a url and show what came back
+   ===================================================================================== */
+T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl [-i] [-s] [-X METHOD] [-H "k: v"] [-d data] url',
+  opts: [['-i', 'show the response headers'], ['-s', 'just the body: no status or footer'], ['-X METHOD', 'GET, POST, PUT, DELETE...'], ['-H "k: v"', 'add a request header'], ['-d DATA', 'send a body (and POST)']],
+  ex: ['curl api.github.com/zen', 'curl -i httpbin.org/get', 'curl wttr.in/?format=3', 'curl api.ipify.org > ip.txt'],
+  more: 'Makes a real request from your browser. JSON comes back pretty-printed and coloured; long answers are cut short on screen but whole in a pipe or a file. A bare domain means https. The server has to allow requests from web pages (CORS), and the claude.ai preview blocks the network entirely.',
+  async run(argv, io){
+    const a = argv.slice(1); let inc = false, silent = false, method = null, data = null, url = null; const headers = {};
+    for (let i = 0; i < a.length; i++){
+      const x = a[i];
+      if (x === '-i' || x === '--include') inc = true;
+      else if (x === '-s' || x === '--silent') silent = true;
+      else if (x === '-L' || x === '-f') {}
+      else if (x === '-X' || x === '--request'){ method = String(a[++i] || '').toUpperCase(); }
+      else if (x === '-H' || x === '--header'){ const h = String(a[++i] || ''), k = h.indexOf(':'); if (k > 0) headers[h.slice(0, k).trim()] = h.slice(k + 1).trim(); }
+      else if (x === '-d' || x === '--data'){ data = a[++i] == null ? '' : a[i]; }
+      else if (/^-/.test(x)){ io.err('curl: unknown option ' + x + '   (man curl)\n'); return 2; }
+      else url = x;
+    }
+    if (!url){ io.err('usage: curl url   (try: curl api.github.com/zen)\n'); return 2; }
+    if (!/^[a-z]+:\/\//i.test(url)) url = 'https://' + url;
+    if (!/^https?:\/\//i.test(url)){ io.err('curl: only http and https\n'); return 2; }
+    if (data != null && !method) method = 'POST';
+    if (data != null && !Object.keys(headers).some(k => /^content-type$/i.test(k))) headers['Content-Type'] = /^\s*[[{]/.test(data) ? 'application/json' : 'application/x-www-form-urlencoded';
+    let r;
+    try { r = await net.get(url, { method: method || 'GET', headers, body: data == null ? undefined : data }); }
+    catch (e){ return net.fail(io, 'curl', e); }
+    if (!io.tty){
+      if (inc) io.out('HTTP ' + r.status + ' ' + r.statusText + '\n' + r.headers.map(([k, v]) => k + ': ' + v).join('\n') + '\n\n');
+      io.out(r.text + (r.text && !r.text.endsWith('\n') ? '\n' : ''));
+      return r.ok ? 0 : 22;
+    }
+    const o = io.ui(), max = Math.max(24, io.rows * 2);
+    if (!silent){
+      o.at(0, ['HTTP ' + r.status, r.ok ? 'b' : 'a'], [' ' + r.statusText, 'd']);
+      if (inc){
+        const hs = r.headers.slice(0, 12);
+        for (const [k, v] of hs){ const row = wrapSpans([[k + ': ', 'd'], [v, 'n']], io.cols - 1)[0]; o.at(0, ...row.toks); }
+        if (r.headers.length > hs.length) o.at(0, ['(' + (r.headers.length - hs.length) + ' more headers)', 'f']);
+      }
+      o.blank();
+    }
+    let hidden = 0;
+    if (r.data !== undefined) hidden = showJSON(o, r.data, io.cols, max, 0);
+    else {
+      let n = 0;
+      const text = r.text.replace(/\r/g, '').replace(/\t/g, '  ').replace(/\n+$/, '');
+      for (const line of text ? text.split('\n') : []){
+        for (const row of wrapSpans([[line, 'n']], io.cols)){ if (n >= max){ hidden++; continue; } o.at(row.cont ? 2 : 0, ...(row.toks.length ? row.toks : [['', 'n']])); n++; }
+      }
+      if (!text) o.at(0, ['(empty body)', 'f']);
+    }
+    if (hidden) o.at(0, ['... ' + hidden + ' more lines', 'd'], ['   | less, or > file', 'f']);
+    if (!silent){
+      o.blank();
+      const bits = [String(r.status), kb(r.bytes), msStr(r.ms), r.type].filter(Boolean);
+      o.at(0, [bits.join(' · ').slice(0, io.cols), 'f']);
+    }
+    io.rich(o);
+    return r.ok ? 0 : 22;
+  } };
+T.cmds.fetch = Object.assign({}, T.cmds.curl, { hidden: true, desc: 'same as curl' });
+
+/* =====================================================================================
+   hn, wiki, define, github, ip: live data, each one a small card
+   ===================================================================================== */
+T.cmds.hn = { g: 'net', desc: 'Hacker News, the top stories', usage: 'hn [count]', ex: ['hn', 'hn 5', 'hn 20 | grep -i ai'],
+  more: 'The front page of Hacker News, from its public API. Arrows pick a story, enter opens it, 1 to 9 jump. Piped, it prints points, title and link, one story per line.',
+  async run(argv, io){
+    const n = Math.max(1, Math.min(30, parseInt(argv[1], 10) || (io.tty ? Math.max(5, Math.min(10, io.rows - 8)) : 10)));
+    if (argv[1] && !(parseInt(argv[1], 10) > 0)){ io.err('usage: hn [count]   (1 to 30)\n'); return 2; }
+    let items;
+    try {
+      const ids = await net.json('https://hacker-news.firebaseio.com/v0/topstories.json');
+      items = (await Promise.all(ids.slice(0, n).map(id => net.json('https://hacker-news.firebaseio.com/v0/item/' + id + '.json').catch(() => null)))).filter(Boolean);
+    } catch (e){ return net.fail(io, 'hn', e); }
+    const link = it => it.url || 'https://news.ycombinator.com/item?id=' + it.id;
+    if (!io.tty){ io.out(items.map(it => String(it.score || 0).padStart(5) + '  ' + it.title + '  ' + link(it)).join('\n') + '\n'); return; }
+    const lw = Math.max(...items.map(it => String(it.score || 0).length)) + 2;
+    const room = io.cols - 3 - 5 - lw - 1;
+    const o = io.ui();
+    o.blank().card({ title: 'HACKER NEWS', note: 'top ' + items.length, verb: 'open',
+      items: items.map(it => ({ label: String(it.score || 0), value: io.cols < 46 ? clip(it.title, 64) : clip(it.title, room), full: link(it), url: link(it) })) });
+    io.rich(o);
+    return io.pick(o.lastCard).then(() => {});
+  } };
+
+T.cmds.wiki = { g: 'net', desc: 'the opening of a Wikipedia article', usage: 'wiki topic...', ex: ['wiki alan turing', 'wiki vt100', 'wiki pomodoro technique'],
+  more: 'Looks the topic up on English Wikipedia and prints the summary at the top of the article, with a link you can open.',
+  async run(argv, io){
+    const q = argv.slice(1).join(' ').trim();
+    if (!q){ io.err('usage: wiki topic   (try: wiki alan turing)\n'); return 2; }
+    const sum = t => net.json('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(t.replace(/ /g, '_')) + '?redirect=true');
+    let d;
+    try {
+      try { d = await sum(q); }
+      catch (e){
+        if (e.status !== 404) throw e;
+        const s = await net.json('https://en.wikipedia.org/w/api.php?action=opensearch&limit=1&namespace=0&format=json&origin=*&search=' + encodeURIComponent(q));
+        if (!s[1] || !s[1][0]){ io.err('wiki: no article for ' + q + '\n'); return 1; }
+        d = await sum(s[1][0]);
+      }
+    } catch (e){ return net.fail(io, 'wiki', e); }
+    const url = (d.content_urls && d.content_urls.desktop && d.content_urls.desktop.page) || 'https://en.wikipedia.org/wiki/' + encodeURIComponent(q);
+    const extract = String(d.extract || '').trim();
+    if (!io.tty){ io.out(d.title + '\n' + (d.description ? d.description + '\n' : '') + '\n' + extract + '\n\n' + url + '\n'); return; }
+    const o = io.ui(), w = io.cols - 6;
+    o.blank().at(2, [d.title || q, 'b']);
+    if (d.description) o.para(d.description, 'd', w);
+    o.blank();
+    let ls = wrap(extract, w); const max = Math.max(4, io.rows - 11);
+    if (ls.length > max){ ls = ls.slice(0, max); ls[max - 1] = clip(ls[max - 1] + ' ...', w); }
+    for (const l of ls) o.at(2, [l, 'n']);
+    if (d.type === 'disambiguation') o.blank().at(2, ['this name means several things. try something more specific', 'f']);
+    o.blank().card({ title: 'WIKIPEDIA', items: [{ label: 'read', value: bareUrl(url), full: url, url, hint: 'open' }] });
+    io.rich(o);
+    return io.pick(o.lastCard).then(() => {});
+  } };
+
+T.cmds.define = { g: 'net', desc: 'what a word means', usage: 'define word', ex: ['define serendipity', 'define terminal'],
+  more: 'English definitions from dictionaryapi.dev: the pronunciation, then up to three senses for each part of speech, with an example where there is one.',
+  async run(argv, io){
+    const w = argv.slice(1).join(' ').trim();
+    if (!w){ io.err('usage: define word   (try: define serendipity)\n'); return 2; }
+    let d;
+    try { d = await net.json('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(w.toLowerCase())); }
+    catch (e){ if (e.status === 404){ io.err('define: no entry for ' + w + '\n'); return 1; } return net.fail(io, 'define', e); }
+    const e0 = d[0] || {}, ph = e0.phonetic || ((e0.phonetics || []).find(p => p.text) || {}).text || '';
+    const means = [];
+    for (const e of d) for (const m of e.meanings || []){ const ex = means.find(x => x.pos === m.partOfSpeech); if (ex) ex.defs.push(...m.definitions); else means.push({ pos: m.partOfSpeech, defs: m.definitions.slice() }); }
+    if (!io.tty){ io.out(e0.word + (ph ? '  ' + ph : '') + '\n' + means.map(m => m.pos + '\n' + m.defs.slice(0, 3).map((x, i) => '  ' + (i + 1) + '. ' + x.definition).join('\n')).join('\n') + '\n'); return; }
+    const o = io.ui(), W = io.cols - 8;
+    o.blank().at(2, [e0.word || w, 'b'], [ph ? '   ' + ph : '', 'd']).blank();
+    let budget = Math.max(8, io.rows * 2 - 6);
+    for (const m of means.slice(0, 3)){
+      if (budget <= 2) break;
+      o.at(2, [m.pos, 'a']); budget--;
+      m.defs.slice(0, 3).forEach((x, i) => {
+        if (budget <= 1) return;
+        wrap(x.definition, W).forEach((l, k) => { o.at(k ? 6 : 4, [k ? '' : (i + 1) + ' ', 'f'], [l, 'n']); budget--; });
+        if (x.example && budget > 2) wrap('"' + x.example + '"', W - 2).forEach(l => { o.at(6, [l, 'd']); budget--; });
+      });
+      o.blank(); budget--;
+    }
+    io.rich(o);
+  } };
+
+T.cmds.github = { g: 'net', desc: 'a GitHub profile, by user name', usage: 'github [user]', ex: ['github torvalds', 'github knihalani', 'github'],
+  more: 'A public GitHub profile from api.github.com: name, bio, where, repos, followers and when they joined, with the profile to open. With no name it opens the repository for this site. GitHub allows 60 lookups an hour from one address.',
+  async run(argv, io){
+    const u = (argv[1] || '').replace(/^@/, '');
+    if (!u){ const gh = T.cmds.gh; if (gh && gh !== T.cmds.github) return gh.run(['gh'], io); io.err('usage: github user\n'); return 2; }
+    if (!/^[a-z\d](?:[a-z\d-]{0,38})$/i.test(u)){ io.err('github: that is not a GitHub user name\n'); return 2; }
+    let d;
+    try { d = await net.json('https://api.github.com/users/' + encodeURIComponent(u)); }
+    catch (e){ if (e.status === 404){ io.err('github: no user called ' + u + '\n'); return 1; } return net.fail(io, 'github', e); }
+    const joined = d.created_at ? new Date(d.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '';
+    const rows = [['repos', d.public_repos], ['followers', d.followers], ['following', d.following], ['where', d.location], ['company', d.company], ['joined', joined]]
+      .filter(r => r[1] != null && r[1] !== '').map(([label, v]) => ({ label, value: clip(String(v), io.cols - 22) }));
+    if (!io.tty){ io.out((d.name ? d.name + ' ' : '') + '@' + d.login + '\n' + (d.bio ? d.bio.trim() + '\n' : '') + rows.map(r => r.label.padEnd(11) + r.value).join('\n') + '\n' + d.html_url + '\n'); return; }
+    const o = io.ui();
+    o.blank().at(2, [d.name || d.login, 'b'], [d.name ? '  @' + d.login : '', 'd']);
+    if (d.bio) o.para(d.bio.trim(), 'n', io.cols - 6);
+    o.blank().card({ title: 'GITHUB', note: d.type === 'Organization' ? 'org' : '', items: [...rows, { label: 'profile', value: bareUrl(d.html_url), full: d.html_url, url: d.html_url, hint: 'open' }] });
+    io.rich(o);
+    return io.pick(o.lastCard).then(() => {});
+  } };
+T.cmds['gh-user'] = Object.assign({}, T.cmds.github, { hidden: true, usage: 'gh-user user' });
+
+T.cmds.ip = { g: 'net', desc: 'your public IP address', usage: 'ip', ex: ['ip', 'ip > ip.txt'],
+  more: 'Asks api.ipify.org which address your requests come from. Enter copies it.',
+  async run(argv, io){
+    let d; try { d = await net.json('https://api.ipify.org?format=json'); } catch (e){ return net.fail(io, 'ip', e); }
+    if (!io.tty){ io.out(d.ip + '\n'); return; }
+    const o = io.ui(); o.blank().card({ title: 'IP', note: 'api.ipify.org', items: [{ label: 'public', value: d.ip, copy: d.ip, hint: 'copy' }] });
+    io.rich(o); return io.pick(o.lastCard).then(() => {});
+  } };
+
+/* =====================================================================================
+   qr: a real QR encoder. byte mode, versions 1 to 10, error correction M (or L when long)
+   ===================================================================================== */
+const QR = (() => {
+  const ECC = { L: [7, 10, 15, 20, 26, 18, 20, 24, 30, 18], M: [10, 16, 26, 18, 24, 16, 18, 22, 22, 26] };
+  const BLOCKS = { L: [1, 1, 1, 1, 1, 2, 2, 2, 2, 4], M: [1, 1, 1, 2, 2, 4, 4, 4, 5, 5] };
+  const FMT = { L: 1, M: 0 };
+  const raw = v => { let r = (16 * v + 128) * v + 64; if (v >= 2){ const na = Math.floor(v / 7) + 2; r -= (25 * na - 10) * na - 55; if (v >= 7) r -= 36; } return r; };
+  const dataCw = (v, e) => Math.floor(raw(v) / 8) - ECC[e][v - 1] * BLOCKS[e][v - 1];
+  const mul = (x, y) => { let z = 0; for (let i = 7; i >= 0; i--){ z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; } return z & 255; };
+  function divisor(deg){ const r = new Array(deg).fill(0); r[deg - 1] = 1; let root = 1; for (let i = 0; i < deg; i++){ for (let j = 0; j < deg; j++){ r[j] = mul(r[j], root); if (j + 1 < deg) r[j] ^= r[j + 1]; } root = mul(root, 2); } return r; }
+  function remainder(data, div){ const r = div.map(() => 0); for (const b of data){ const f = b ^ r.shift(); r.push(0); div.forEach((c, i) => { r[i] ^= mul(c, f); }); } return r; }
+  function align(v){ if (v === 1) return []; const n = Math.floor(v / 7) + 2, size = v * 4 + 17, step = Math.ceil((v * 4 + 4) / (n * 2 - 2)) * 2; const r = [6]; for (let p = size - 7; r.length < n; p -= step) r.splice(1, 0, p); return r; }
+  function encode(text, prefer = 'M'){
+    const bytes = Array.from(new TextEncoder().encode(text));
+    let v = 0, e = prefer;
+    for (const ee of prefer === 'L' ? ['L'] : ['M', 'L']){
+      for (let vv = 1; vv <= 10; vv++){ if (4 + (vv < 10 ? 8 : 16) + bytes.length * 8 <= dataCw(vv, ee) * 8){ v = vv; break; } }
+      if (v){ e = ee; break; }
+    }
+    if (!v) return null;
+    // bit stream
+    const bits = []; const put = (x, n) => { for (let i = n - 1; i >= 0; i--) bits.push((x >>> i) & 1); };
+    put(4, 4); put(bytes.length, v < 10 ? 8 : 16); for (const b of bytes) put(b, 8);
+    const cap = dataCw(v, e) * 8;
+    put(0, Math.min(4, cap - bits.length)); while (bits.length % 8) bits.push(0);
+    for (let pad = 0xEC; bits.length < cap; pad ^= 0xEC ^ 0x11) put(pad, 8);
+    const data = []; for (let i = 0; i < bits.length; i += 8){ let b = 0; for (let k = 0; k < 8; k++) b = (b << 1) | bits[i + k]; data.push(b); }
+    // error correction, interleaved
+    const nb = BLOCKS[e][v - 1], el = ECC[e][v - 1], rawCw = Math.floor(raw(v) / 8), nShort = nb - rawCw % nb, shortLen = Math.floor(rawCw / nb);
+    const div = divisor(el), blocks = [];
+    for (let i = 0, k = 0; i < nb; i++){
+      const d = data.slice(k, k + shortLen - el + (i < nShort ? 0 : 1)); k += d.length;
+      const ec = remainder(d, div); if (i < nShort) d.push(0); blocks.push(d.concat(ec));
+    }
+    const cw = []; for (let i = 0; i < blocks[0].length; i++) blocks.forEach((b, j) => { if (i !== shortLen - el || j >= nShort) cw.push(b[i]); });
+    // modules
+    const size = v * 4 + 17, mod = [], fn = [];
+    for (let y = 0; y < size; y++){ mod.push(new Array(size).fill(false)); fn.push(new Array(size).fill(false)); }
+    const set = (x, y, d) => { mod[y][x] = d; fn[y][x] = true; };
+    for (let i = 0; i < size; i++){ set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+    const finder = (cx, cy) => { for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++){ const x = cx + dx, y = cy + dy, d = Math.max(Math.abs(dx), Math.abs(dy)); if (x >= 0 && x < size && y >= 0 && y < size) set(x, y, d !== 2 && d !== 4); } };
+    finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+    const al = align(v), na = al.length;
+    for (let i = 0; i < na; i++) for (let j = 0; j < na; j++){
+      if ((i === 0 && j === 0) || (i === 0 && j === na - 1) || (i === na - 1 && j === 0)) continue;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) set(al[i] + dx, al[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+    }
+    const format = mask => {
+      const d = FMT[e] << 3 | mask; let r = d; for (let i = 0; i < 10; i++) r = (r << 1) ^ ((r >>> 9) * 0x537);
+      const b = ((d << 10) | r) ^ 0x5412, bit = i => ((b >>> i) & 1) === 1;
+      for (let i = 0; i <= 5; i++) set(8, i, bit(i));
+      set(8, 7, bit(6)); set(8, 8, bit(7)); set(7, 8, bit(8));
+      for (let i = 9; i < 15; i++) set(14 - i, 8, bit(i));
+      for (let i = 0; i < 8; i++) set(size - 1 - i, 8, bit(i));
+      for (let i = 8; i < 15; i++) set(8, size - 15 + i, bit(i));
+      set(8, size - 8, true);
+    };
+    format(0);
+    if (v >= 7){
+      let r = v; for (let i = 0; i < 12; i++) r = (r << 1) ^ ((r >>> 11) * 0x1F25);
+      const b = (v << 12) | r;
+      for (let i = 0; i < 18; i++){ const d = ((b >>> i) & 1) === 1, a = size - 11 + i % 3, c = Math.floor(i / 3); set(a, c, d); set(c, a, d); }
+    }
+    let i = 0;
+    for (let right = size - 1; right >= 1; right -= 2){
+      if (right === 6) right = 5;
+      for (let vert = 0; vert < size; vert++) for (let j = 0; j < 2; j++){
+        const x = right - j, up = ((right + 1) & 2) === 0, y = up ? size - 1 - vert : vert;
+        if (!fn[y][x] && i < cw.length * 8){ mod[y][x] = ((cw[i >>> 3] >>> (7 - (i & 7))) & 1) === 1; i++; }
+      }
+    }
+    const MASKS = [(x, y) => (x + y) % 2 === 0, (x, y) => y % 2 === 0, (x, y) => x % 3 === 0, (x, y) => (x + y) % 3 === 0,
+      (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0, (x, y) => x * y % 2 + x * y % 3 === 0,
+      (x, y) => (x * y % 2 + x * y % 3) % 2 === 0, (x, y) => ((x + y) % 2 + x * y % 3) % 2 === 0];
+    const apply = m => { for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!fn[y][x] && MASKS[m](x, y)) mod[y][x] = !mod[y][x]; };
+    const penalty = () => {      // rules 1, 2 and 4 of the spec: enough to pick a sensible mask
+      let p = 0, dark = 0;
+      for (let y = 0; y < size; y++){ let run = 1, runC = 1; for (let x = 0; x < size; x++){ if (mod[y][x]) dark++;
+        if (x){ if (mod[y][x] === mod[y][x - 1]){ run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1;
+                if (mod[x][y] === mod[x - 1][y]){ runC++; if (runC === 5) p += 3; else if (runC > 5) p++; } else runC = 1; } } }
+      for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++){ const c = mod[y][x]; if (c === mod[y][x + 1] && c === mod[y + 1][x] && c === mod[y + 1][x + 1]) p += 3; }
+      return p + Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+    };
+    let best = 0, bp = Infinity;
+    for (let m = 0; m < 8; m++){ apply(m); format(m); const p = penalty(); if (p < bp){ bp = p; best = m; } apply(m); }
+    apply(best); format(best);
+    return { modules: mod, version: v, ecc: e, size };
+  }
+  return { encode };
+})();
+M.qr = QR;
+T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] text...', opts: [['-l', 'low error correction: room for more text']],
+  ex: ['qr risingfounder.net', 'qr https://github.com/knihalani/personal-site', 'echo hello | qr'],
+  more: 'Draws a QR code your phone camera can read. Up to about 200 characters (270 with -l). Piped or redirected, it comes out as text blocks.',
+  run(argv, io){
+    let a = argv.slice(1), lo = false; if (a[0] === '-l'){ lo = true; a = a.slice(1); }
+    const text = argText(io, a).replace(/\n$/, '');
+    if (!text){ io.err('usage: qr text   (try: qr risingfounder.net)\n'); return 2; }
+    const q = QR.encode(text, lo ? 'L' : 'M');
+    if (!q){ io.err('qr: too long for this little encoder (' + new TextEncoder().encode(text).length + ' bytes; ' + (lo ? 271 : 213) + ' max' + (lo ? '' : ', or 271 with -l') + ')\n'); return 1; }
+    if (!io.tty){ const qz = 2, n = q.size + qz * 2; let s = ''; for (let y = -qz; y < q.size + qz; y++){ for (let x = -qz; x < q.size + qz; x++) s += (q.modules[y] && q.modules[y][x]) ? '##' : '  '; s += '\n'; } io.out(s); return; }
+    const o = io.ui();
+    o.blank().bits(q.modules, 3).blank().at(2, [clip(text.replace(/\s+/g, ' '), io.cols - 14), 'd'], ['   v' + q.version + ' ' + q.ecc, 'f']).blank();
+    io.rich(o);
+  } };
+
+/* =====================================================================================
+   small offline tools: hash, base64, uuid, pass, json, convert, roll, countdown
+   ===================================================================================== */
+const ALGOS = { sha1: 'SHA-1', 'sha-1': 'SHA-1', sha256: 'SHA-256', 'sha-256': 'SHA-256', sha384: 'SHA-384', 'sha-384': 'SHA-384', sha512: 'SHA-512', 'sha-512': 'SHA-512' };
+T.cmds.hash = { g: 'tools', desc: 'SHA hash of text', usage: 'hash [sha1 | sha256 | sha512] [text...]', ex: ['hash hello', 'hash sha1 hello', 'cat README.md | hash sha512'],
+  more: 'Prints the hex digest of its arguments, or of the standard input (byte for byte, newline included, like sha256sum). SHA-256 unless you name another.',
+  async run(argv, io){
+    let a = argv.slice(1), algo = 'SHA-256';
+    if (a[0] && ALGOS[a[0].toLowerCase()]){ algo = ALGOS[a[0].toLowerCase()]; a = a.slice(1); }
+    else if (a[0] && /^(md5|sha\d+|-)/i.test(a[0]) && a.length > 1){ io.err('hash: no ' + a[0] + ' here. sha1, sha256, sha384 or sha512\n'); return 2; }
+    if (!a.length && !io.stdin){ io.err('usage: hash [sha256] text   (or pipe something in)\n'); return 2; }
+    if (!(crypto && crypto.subtle)){ io.err('hash: this page cannot reach the browser crypto (it needs https)\n'); return 1; }
+    const buf = await crypto.subtle.digest(algo, new TextEncoder().encode(argText(io, a)));
+    const hex = Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+    if (io.tty){ const o = io.ui(); for (let i = 0; i < hex.length; i += io.cols - 4) o.at(2, [hex.slice(i, i + io.cols - 4), 'b']); o.at(2, [algo.toLowerCase().replace('-', ''), 'f']); io.rich(o); }
+    else io.out(hex + '\n');
+  } };
+T.cmds.base64 = { g: 'tools', desc: 'encode or decode base64', usage: 'base64 [-d] [text...]', opts: [['-d', 'decode']], ex: ['base64 hello', 'echo aGVsbG8= | base64 -d', 'cat about.txt | base64'],
+  more: 'Encodes its arguments or the standard input as base64 (UTF-8), or decodes with -d.',
+  run(argv, io){
+    let a = argv.slice(1), dec = false; if (a[0] === '-d' || a[0] === '--decode'){ dec = true; a = a.slice(1); }
+    const t = argText(io, a);
+    if (!t){ io.err('usage: base64 [-d] text   (or pipe something in)\n'); return 2; }
+    if (dec){
+      try { const bin = atob(t.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')); io.out(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))) + (io.tty ? '\n' : '')); }
+      catch (e){ io.err('base64: that is not base64\n'); return 1; }
+    } else { let bin = ''; for (const b of new TextEncoder().encode(t)) bin += String.fromCharCode(b); io.out(btoa(bin) + '\n'); }
+  } };
+T.cmds.uuid = { g: 'tools', desc: 'random UUIDs', usage: 'uuid [count]', ex: ['uuid', 'uuid 5'], more: 'Version 4 UUIDs from the browser\'s secure random numbers.',
+  run(argv, io){
+    const n = Math.max(1, Math.min(100, parseInt(argv[1], 10) || 1));
+    const one = () => {
+      if (crypto.randomUUID) return crypto.randomUUID();
+      const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = b[6] & 15 | 64; b[8] = b[8] & 63 | 128;
+      const h = Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+      return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+    };
+    io.out(Array.from({ length: n }, one).join('\n') + '\n');
+  } };
+T.cmds.pass = { g: 'tools', desc: 'a strong random password', usage: 'pass [-n] [length]', opts: [['-n', 'letters and digits only']], ex: ['pass', 'pass 32', 'pass -n 16'],
+  more: 'Made in your browser from secure random numbers; it never leaves the page. 20 characters unless you say (8 to 128). Enter copies it.',
+  run(argv, io){
+    let a = argv.slice(1), plain = false; if (a[0] === '-n'){ plain = true; a = a.slice(1); }
+    const len = a[0] ? parseInt(a[0], 10) : 20;
+    if (!(len >= 8 && len <= 128)){ io.err('pass: length from 8 to 128\n'); return 2; }
+    const set = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789' + (plain ? '' : '!@#$%^&*-_=+?');
+    let pw = ''; const lim = 256 - 256 % set.length;
+    while (pw.length < len){ for (const b of crypto.getRandomValues(new Uint8Array(len * 2))){ if (b < lim && pw.length < len) pw += set[b % set.length]; } }
+    if (!io.tty){ io.out(pw + '\n'); return; }
+    const o = io.ui(); o.blank().card({ title: 'PASSWORD', items: [{ label: len + ' chars', value: pw, copy: pw, hint: 'copy' }] });
+    io.rich(o); return io.pick(o.lastCard).then(() => {});
+  } };
+T.cmds.json = { g: 'tools', desc: 'pretty-print JSON', usage: 'json [file]', ex: ["echo '{\"a\":[1,2]}' | json", 'curl api.github.com/users/torvalds | json'],
+  more: 'Reads JSON from a file or the standard input and prints it indented, in colour on the screen.',
+  run(argv, io){
+    let t;
+    if (argv[1]){ t = io.fs.read(argv[1]); if (t == null){ io.err('json: ' + argv[1] + ': No such file\n'); return 1; } } else t = io.stdin || '';
+    if (!t.trim()){ io.err('usage: json file   (or pipe JSON in)\n'); return 2; }
+    let v; try { v = JSON.parse(t); } catch (e){ io.err('json: not valid JSON: ' + String(e.message || e).replace(/^JSON\.parse: /, '') + '\n'); return 1; }
+    if (!io.tty){ io.out(JSON.stringify(v, null, 2) + '\n'); return; }
+    const o = io.ui(); showJSON(o, v, io.cols, 1e9, 0); io.rich(o);
+  } };
+
+const UNITS = (() => {
+  const u = {}, add = (kind, base, names) => { for (const n of names.split(' ')) u[n] = { kind, f: base, name: names.split(' ')[0] }; };
+  [['length', 0.001, 'mm millimeter millimeters millimetre millimetres'], ['length', 0.01, 'cm centimeter centimeters centimetre centimetres'], ['length', 1, 'm meter meters metre metres'],
+   ['length', 1000, 'km kilometer kilometers kilometre kilometres'], ['length', 0.0254, 'in inch inches'], ['length', 0.3048, 'ft foot feet'], ['length', 0.9144, 'yd yard yards'],
+   ['length', 1609.344, 'mi mile miles'], ['length', 1852, 'nmi nauticalmile'],
+   ['mass', 1e-6, 'mg milligram milligrams'], ['mass', 0.001, 'g gram grams'], ['mass', 1, 'kg kilogram kilograms kilo kilos'], ['mass', 1000, 't tonne tonnes'],
+   ['mass', 0.028349523125, 'oz ounce ounces'], ['mass', 0.45359237, 'lb lbs pound pounds'], ['mass', 6.35029318, 'st stone stones'],
+   ['data', 0.125, 'bit bits'], ['data', 1, 'B byte bytes'], ['data', 1e3, 'KB kb kilobyte kilobytes'], ['data', 1e6, 'MB mb megabyte megabytes'], ['data', 1e9, 'GB gb gigabyte gigabytes'],
+   ['data', 1e12, 'TB tb terabyte terabytes'], ['data', 1024, 'KiB kib'], ['data', 1048576, 'MiB mib'], ['data', 1073741824, 'GiB gib'], ['data', 1099511627776, 'TiB tib'],
+   ['time', 1, 's sec secs second seconds'], ['time', 60, 'min mins minute minutes'], ['time', 3600, 'h hr hrs hour hours'], ['time', 86400, 'd day days'], ['time', 604800, 'wk week weeks'],
+   ['volume', 0.001, 'ml milliliter milliliters millilitre millilitres'], ['volume', 1, 'l L liter liters litre litres'], ['volume', 3.785411784, 'gal gallon gallons'], ['volume', 0.2365882365, 'cup cups'],
+   ['temperature', 0, 'C c celsius degc'], ['temperature', 0, 'F f fahrenheit degf'], ['temperature', 0, 'K k kelvin']].forEach(x => add(...x));
+  return u;
+})();
+const findUnit = s => { s = String(s || '').replace(/^°/, '').replace(/\.$/, ''); return UNITS[s] || UNITS[s.toLowerCase()] || null; };
+const toK = (v, n) => n === 'C' ? v + 273.15 : n === 'F' ? (v - 32) * 5 / 9 + 273.15 : v;
+const fromK = (k, n) => n === 'C' ? k - 273.15 : n === 'F' ? (k - 273.15) * 9 / 5 + 32 : k;
+const fmtNum = x => { if (!isFinite(x)) return String(x); const a = Math.abs(x); if (a !== 0 && (a >= 1e12 || a < 1e-6)) return x.toExponential(4); return String(+x.toPrecision(7)); };
+const UNIT_SHOW = { length: ['mm', 'cm', 'm', 'km', 'in', 'ft', 'yd', 'mi'], mass: ['g', 'kg', 'oz', 'lb', 'st'], data: ['B', 'KB', 'MB', 'GB', 'KiB', 'MiB', 'GiB'], time: ['s', 'min', 'h', 'd', 'wk'], volume: ['ml', 'l', 'cup', 'gal'], temperature: ['C', 'F', 'K'] };
+T.cmds.convert = { g: 'tools', desc: 'convert units', usage: 'convert number unit [to unit]', ex: ['convert 5 km to mi', 'convert 72 f c', 'convert 3.5 GB MiB', 'convert 180 lb'],
+  more: 'Length, mass, temperature, data sizes, time and volume. Leave out the second unit to see the number in all the usual ones. KB, MB and GB are powers of 1000; KiB, MiB and GiB powers of 1024.',
+  run(argv, io){
+    const s = argv.slice(1).join(' ').trim();
+    const m = /^(-?\d*\.?\d+(?:e[+-]?\d+)?)\s*(°?[a-z]+)(?:\s+(?:to|in|as|into)?\s*(°?[a-z]+))?\s*$/i.exec(s);
+    if (!m){ io.err('usage: convert 5 km to mi   (man convert for the units)\n'); return 2; }
+    const v = parseFloat(m[1]), from = findUnit(m[2]), to = m[3] ? findUnit(m[3]) : null;
+    if (!from){ io.err('convert: no unit called ' + m[2] + '\n'); return 1; }
+    if (m[3] && !to){ io.err('convert: no unit called ' + m[3] + '\n'); return 1; }
+    if (to && to.kind !== from.kind){ io.err('convert: cannot turn ' + from.kind + ' into ' + to.kind + '\n'); return 1; }
+    const conv = t => from.kind === 'temperature' ? fromK(toK(v, from.name), t.name) : v * from.f / t.f;
+    const targets = to ? [to] : UNIT_SHOW[from.kind].map(n => UNITS[n]).filter(t => t.name !== from.name);
+    if (!io.tty){ io.out(targets.map(t => fmtNum(conv(t)) + ' ' + t.name).join('\n') + '\n'); return; }
+    const o = io.ui(); o.blank();
+    if (to) o.at(2, [fmtNum(v) + ' ' + from.name, 'n'], [' = ', 'f'], [fmtNum(conv(to)) + ' ' + to.name, 'b']);
+    else { o.at(2, [fmtNum(v) + ' ' + from.name, 'b'], ['  ' + from.kind, 'f']).blank(); const w = Math.max(...targets.map(t => fmtNum(conv(t)).length)); for (const t of targets) o.at(4, [fmtNum(conv(t)).padStart(w), 'n'], [' ' + t.name, 'd']); }
+    o.blank(); io.rich(o);
+  } };
+T.cmds.units = Object.assign({}, T.cmds.convert, { hidden: true });
+
+T.cmds.roll = { g: 'tools', desc: 'roll dice', usage: 'roll [NdS[+K]]...', ex: ['roll', 'roll d20', 'roll 2d6+3', 'roll 4d6 d8'],
+  more: 'Dice notation: 2d6+3 means two six-sided dice plus three. One six-sided die unless you say.',
+  run(argv, io){
+    const specs = argv.length > 1 ? argv.slice(1) : ['1d6'];
+    let total = 0; const groups = [];
+    for (const sp of specs){
+      const m = /^(\d*)d(\d+)([+-]\d+)?$/i.exec(sp);
+      if (!m){ io.err('roll: cannot read ' + sp + '. try 2d6+3\n'); return 2; }
+      const n = m[1] ? +m[1] : 1, sides = +m[2], k = m[3] ? +m[3] : 0;
+      if (!(n >= 1 && n <= 100 && sides >= 2 && sides <= 1000)){ io.err('roll: 1 to 100 dice, 2 to 1000 sides\n'); return 2; }
+      const vals = Array.from(crypto.getRandomValues(new Uint32Array(n)), r => r % sides + 1);
+      total += vals.reduce((x, y) => x + y, 0) + k; groups.push({ sp, vals, k });
+    }
+    if (!io.tty){ io.out(groups.map(g => g.vals.join(' ') + (g.k ? (g.k > 0 ? ' +' : ' ') + g.k : '')).join('  ') + ' = ' + total + '\n'); return; }
+    const o = io.ui(); o.blank();
+    const chips = []; groups.forEach((g, gi) => { g.vals.forEach(v => chips.push([[' ' + v + ' ', 'i']])); if (g.k) chips.push([[(g.k > 0 ? '+' : '') + g.k, 'd']]); if (gi < groups.length - 1) chips.push([['+', 'f']]); });
+    o.flow(chips, ' ');
+    o.blank().at(2, ['total ', 'd'], [String(total), 'b'], ['   ' + specs.join(' '), 'f']).blank();
+    io.rich(o);
+  } };
+
+const NAMED_DAYS = { 'new year': '01-01', 'new years': '01-01', christmas: '12-25', xmas: '12-25', halloween: '10-31', 'valentines': '02-14' };
+T.cmds.countdown = { g: 'tools', desc: 'how long until a date', usage: 'countdown date', ex: ['countdown 2027-01-01', 'countdown dec 25', 'countdown christmas', 'countdown 2026-11-03 09:00'],
+  more: 'Days, hours and minutes until a date (or since it, if it has passed). A date without a year means the next one.',
+  run(argv, io){
+    const raw = argv.slice(1).join(' ').trim(); if (!raw){ io.err('usage: countdown date   (try: countdown dec 25)\n'); return 2; }
+    const now = new Date(); let s = raw.toLowerCase(), d;
+    if (NAMED_DAYS[s]) s = now.getFullYear() + '-' + NAMED_DAYS[s];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(s + 'T00:00:00');
+    else if (/^\d{4}-\d{2}-\d{2}[ t]\d{1,2}:\d{2}$/.test(s)) d = new Date(s.replace(' ', 'T'));
+    else { d = new Date(/\b\d{4}\b/.test(s) ? s : s + ' ' + now.getFullYear()); }
+    if (isNaN(d)){ io.err('countdown: cannot read ' + raw + '. try 2027-01-01 or dec 25\n'); return 2; }
+    if (!/\b\d{4}\b/.test(raw) && d < now && now - d > 864e5) d.setFullYear(d.getFullYear() + 1);
+    let ms = d - now; const past = ms < 0; ms = Math.abs(ms);
+    const days = Math.floor(ms / 864e5), hrs = Math.floor(ms / 36e5) % 24, mins = Math.floor(ms / 6e4) % 60;
+    const when = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (d.getHours() || d.getMinutes() ? ', ' + two(d.getHours()) + ':' + two(d.getMinutes()) : '');
+    const rest = hrs + (hrs === 1 ? ' hour, ' : ' hours, ') + mins + (mins === 1 ? ' minute' : ' minutes');
+    if (!io.tty){ io.out(days + ' days, ' + rest + (past ? ' since ' : ' until ') + when + '\n'); return; }
+    const o = io.ui(); o.blank().big(days + (days === 1 ? ' day' : ' days'), 'b').at(2, ['and ' + rest, 'n']).at(2, [(past ? 'since ' : 'until ') + when, 'd']).blank();
+    io.rich(o);
   } };
 })();
