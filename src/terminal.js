@@ -29,10 +29,41 @@ let COLS = 54;                 // grid width (opts.cols on phones); ~18 rows at 
 const WIDTH = 1280;            // canvas px
 const LINE = 0.9;              // line height in em (VT323 has generous built-in leading)
 const RATE = 1500;             // typing-out speed, characters per second
-const BOOT_END = 1.85;         // seconds
+const BOOT_END = 0.75;         // seconds (first visit only; later visits go straight to the welcome)
+const BOOT_KEY = 'kaiav.term.booted';
 const HIST_KEY = 'kaiav.term.history';
 const T0 = performance.now();
 const LOCK = '\ue000';        // drawn as a vector padlock (ls -l marks built-in files with it)
+
+/* ---- shared with apps.js, extras.js and editor.js ---- */
+/* clipboard: synchronous, so it works inside the keydown or tap that asked; falls back to a hidden textarea */
+function copyText(t){
+  const fallback = () => {
+    const prev = document.activeElement;
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand('copy');
+      ta.value = ''; document.body.removeChild(ta);
+      if (prev && prev.focus) try { prev.focus({ preventScroll: true }); } catch (e){}
+      return ok;
+    } catch (e){ return false; }
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext !== false){
+      navigator.clipboard.writeText(t).catch(fallback);
+      return true;
+    }
+  } catch (e){}
+  return fallback();
+}
+M.TERM.copy = copyText;
+/* small preferences: JSON in localStorage, quietly absent in private windows */
+M.TERM.store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e){ return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e){} },
+};
 
 /* ---- fuzzy matching: prefix > substring > subsequence > small typo ---- */
 function osa(a, b){
@@ -95,6 +126,7 @@ function wrapLine(text, width, hang){
   if (line) out.push(line);
   return out.length ? out : [''];
 }
+const noLig = s => s.replace(/f(?=[il])/g, 'f\u200c');     // VT323 would draw fi / fl as one glyph
 const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const pad = (s, n) => s + ' '.repeat(Math.max(0, n - s.length));
@@ -362,6 +394,11 @@ M.createTerminal = function createTerminal(opts){
   const W = WIDTH, H = Math.round(WIDTH / aspect);
   const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d', { alpha: false });
+  /* VT323 has an fi/fl ligature that would eat a grid cell: switch shaping extras off where the canvas allows,
+     and (see noLig) break the pair with a zero-width non-joiner everywhere else */
+  const noShaping = () => { try { g.fontKerning = 'none'; g.textRendering = 'optimizeSpeed'; if ('fontVariantLigatures' in g) g.fontVariantLigatures = 'none'; } catch (e){} };
+  noShaping();
+  const fillT = (t, x, y) => g.fillText(noLig(t), x, y);
   const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const P = PALETTE;
   const sfx = name => { try { if (M.sound && M.sound.event) M.sound.event(name); } catch (e){} };
@@ -386,14 +423,14 @@ M.createTerminal = function createTerminal(opts){
   let shown = 0, partial = 0, carry = 0;   // typing-out progress
   let input = '', cur = 0;
   let scrollOff = 0, wheelAcc = 0;
-  let booting = true, bootT = 0, bootLastDraw = -1;
+  let booting = (() => { try { return !sessionStorage.getItem(BOOT_KEY); } catch (e){ return false; } })(), bootT = 0, bootLastDraw = -1;
   let now = 0, blinkT0 = 0, blinkOn = true, dirty = true;
   let animFps = 0, lastAnim = 0;
-  let links = [], sel = -1;            // selectable link items in the latest output
   let suggestion = '';                 // "did you mean" target, shown as ghost on an empty prompt
   let tabState = null;
   let ahead = '';           // keys typed while a command runs, waiting for the next prompt ('\n' = a queued Enter)
-  let okRuns = 0;           // commands that worked this visit (the first-visit hint goes after two)
+  let okRuns = 0;           // commands that worked this visit
+  let nudgeOff = false, lastNudge = false, idleT0 = -1;   // the first-visit nudge under the prompt: after ~8s idle, until something works
   let runQueued = false;    // a whole line came in with the type-ahead: run it on the next frame
   let rs = null;            // ctrl+r search: { q, i, draft, dcur }
   let history = [];
@@ -429,7 +466,6 @@ M.createTerminal = function createTerminal(opts){
       big(text, st = 'b'){ r.push({ k: 'big', i: 2, s: [[text, st]] }); return o; },
       head(label, note){ r.push({ k: 'head', i: 2, label, note: note || '' }); return o; },
       para(text, st = 'n', width = COLS - 6, i = 2){ for (const l of wrap(text, width)) o.at(i, [l, st]); return o; },
-      viz(h, draw, live){ r.push({ k: 'viz', h, draw, live: live || null, t0: -1 }); return o; },
       /* a square bitmap (true = dark), dark on a lit field with a quiet zone of q modules: QR codes.
          Drawn as vectors so a module is square whatever the cell shape. */
       bits(m, q = 2){
@@ -444,8 +480,8 @@ M.createTerminal = function createTerminal(opts){
         } });
         return o;
       },
-      /* a boxed panel: title in the top border, label/value rows, selectable rows (url or copy) with
-         number shortcuts, and a footer line of keys while it is waiting for a choice */
+      /* a boxed panel: title in the top border, label/value rows, rows that open or copy (click, tap, or the
+         arrows then enter), and a footer line while it can still be chosen from */
       card(spec){ const c = makeCard(spec); r.push(c); o.lastCard = c; return o; },
       /* groups of spans laid out left to right with a gap, wrapping at the grid width */
       flow(groups, gap = '  ', i = 2){
@@ -466,7 +502,7 @@ M.createTerminal = function createTerminal(opts){
     };
     return o;
   }
-  const heightOf = r => r.k === 'big' ? 2 : r.k === 'viz' || r.k === 'card' ? r.h : 1;
+  const heightOf = r => r.k === 'big' ? 2 : r.k === 'card' ? r.body + (r.foot ? 3 : 2) : r.k === 'viz' ? r.h : 1;
   const lenOf = r => r.k === 't' ? r.s.reduce((n, s) => n + s[0].length, 0) + (r.i || 0) : r.k === 'big' ? r.s[0][0].length : r.k === 'head' ? r.label.length * 2 : 0;
   const costOf = r => r.k === 'viz' || r.k === 'card' ? 40 : r.k === 'big' ? lenOf(r) * 2 + 4 : r.k === 'head' ? 30 : Math.max(3, lenOf(r) - (r.i || 0));
   const plainOf = r => r.k === 't' || r.k === 'big' ? r.s.map(s => s[1] === 'f' ? ' ' : s[0]).join('').replace(/\s+/g, ' ').trim()
@@ -494,14 +530,12 @@ M.createTerminal = function createTerminal(opts){
       it.lines = parts; it.n = 1 + parts.length; y += it.n;
     }
     const note = spec.note && spec.title.length + spec.note.length + 10 <= COLS ? spec.note : '';
-    return { k: 'card', title: spec.title, note, items, acts, lw, stacked, body: y, sel: -1, verb: spec.verb || 'open',
-      foot: null, h: y + (acts.length ? 3 : 2) };
+    return { k: 'card', title: spec.title, note, items, acts, lw, stacked, body: y, sel: -1, verb: spec.verb || 'open', foot: null };
   }
 
   function pushRow(r){ openRow = null; rows.push(r); dirty = true; }
   function emit(o, mirrorText){            // rich rows straight to the scrollback (outside a job)
-    links = []; sel = -1;
-    for (const r of o.rows){ if (r.k === 't') for (const s of r.s) if (s[2] && s[2].url) links.push(s[2]); pushRow(r); }
+    for (const r of o.rows) pushRow(r);
     trim();
     mirror(mirrorText || o.rows.map(plainOf).filter(Boolean).join('. '));
     toBottom(); dirty = true;
@@ -512,13 +546,19 @@ M.createTerminal = function createTerminal(opts){
     let drop = 0; while (total > 1200 && drop < rows.length - 1){ total -= heightOf(rows[drop]); drop++; }
     if (drop){ rows.splice(0, drop); shown = Math.max(0, shown - drop); if (shown === 0) partial = 0; }
   }
-  function mirror(text){
+  /* the screen-reader mirror (#mirror, a live log): each command and its output are appended as short
+     paragraphs, long output in sentence-sized chunks, and only the last few dozen are kept */
+  function mirror(text, cmd){
     const m = document.getElementById('mirror'); if (!m) return;
-    let p = document.getElementById('mirror-out');
-    if (!p){ p = document.createElement('p'); p.id = 'mirror-out'; m.appendChild(p); }
+    const add = t => { const p = document.createElement('p'); p.className = 'mirror-out'; p.textContent = t; m.appendChild(p); };
+    if (cmd) add('command: ' + cmd);
     text = String(text || '').replace(/\s+/g, ' ').replace(/\.\./g, '.').trim();
-    if (!text) return;
-    p.textContent = text.length > 600 ? text.slice(0, 597) + '...' : text;
+    while (text){
+      let cut = text.length;
+      if (cut > 320){ cut = text.lastIndexOf('. ', 320); if (cut < 120) cut = text.lastIndexOf(' ', 320); if (cut < 120) cut = 320; else cut++; }
+      add(text.slice(0, cut).trim()); text = text.slice(cut).trim();
+    }
+    const old = m.querySelectorAll('.mirror-out'); for (let i = 0; i < old.length - 60; i++) old[i].remove();
   }
   const typing = () => shown < rows.length;
   function revealAll(){ const t = now; for (let i = shown; i < rows.length; i++) if (rows[i].k === 'viz' && rows[i].t0 < 0) rows[i].t0 = t - (REDUCED ? 99 : 0); shown = rows.length; partial = 0; carry = 0; dirty = true; }
@@ -561,7 +601,7 @@ M.createTerminal = function createTerminal(opts){
     },
     rich(o){
       openRow = null;
-      for (const r of o.rows){ if (r.k === 't') for (const s of r.s) if (s[2] && s[2].url) links.push(s[2]); rows.push(r); }
+      for (const r of o.rows) rows.push(r);
       if (job) job.plain += o.rows.map(plainOf).filter(Boolean).join('. ') + ' ';
       dirty = true;
     },
@@ -636,7 +676,7 @@ M.createTerminal = function createTerminal(opts){
     eden: () => [E.title || 'Eden', E.role, '', E.line, E.body ? '\n' + E.body : null].filter(x => x != null).join('\n') + '\n',
     j: () => [J.title || 'J', J.role, '', J.line, wrapT(J.body || ''), '', ...(J.facts || []).map(f => pad(f[0], 9) + f[1]), '', J.url].filter(x => x != null).join('\n') + '\n',
     links: () => LINKLIST().map(t => pad(t.name, 10) + t.url).join('\n') + '\n',
-    writing: () => posts().length ? posts().map(p => [p.date, p.title, p.summary && wrapT(p.summary), p.html ? 'read ' + slugOf(p) : p.url].filter(Boolean).join('\n')).join('\n\n') + '\n' : 'No posts yet.\n',
+    writing: () => posts().length ? posts().map(p => [p.date, p.title, p.summary && wrapT(p.summary), p.html ? 'read ' + slugOf(p) : p.url].filter(Boolean).join('\n')).join('\n\n') + '\n' : 'Nothing published yet.\n',
   };
   const README = [
     '# README', '',
@@ -644,7 +684,7 @@ M.createTerminal = function createTerminal(opts){
     'It runs a little shell. Everything here is safe to poke at.', '',
     '## things to try', '',
     '  about       who ' + (C.name ? C.name.split(' ')[0] : 'Kaiav') + ' is',
-    '  eden        ' + [E.title || 'Eden', E.line].filter(Boolean).join('. '),
+    '  eden        ' + (E.line || E.title || 'Eden'),
     '  j           ' + (J.title || 'J'),
     '  writing     posts',
     '  links       LinkedIn, X and GitHub',
@@ -659,11 +699,9 @@ M.createTerminal = function createTerminal(opts){
     '  convert 5 km to mi',
     '  todo        a to-do list',
     '  timer 5m    count down, then beep',
-    '  pomodoro    focus 25, break 5',
+    '  edit        write a note',
     '  typing      a typing test',
-    '  tetris      a game (snake too)',
-    '  banner hi   big letters',
-    '  lamp        the desk lamp', '',
+    '  tetris      a game (snake too)', '',
     '## the shell', '',
     '  help        what you can type',
     '  man grep    the manual for grep',
@@ -689,13 +727,10 @@ M.createTerminal = function createTerminal(opts){
 
   /* ---- documents ---- */
   function welcome(o){
-    o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
+    return o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line(['type a word and press enter, or ' + (TAP ? 'tap' : 'click') + ' one', 'd'])
-      .flow(['about', 'eden', 'j', 'contact', 'links', 'weather', 'tetris'].map(w => [chip(w, 'b')]), '  ')
+      .flow(['about', 'eden', 'j', 'writing', 'contact', 'links'].map(w => [chip(w, 'b')]), '  ')
       .blank();
-    if (!history.length) o.line(chip('help', 'n'), [' shows everything you can do', 'f']).blank();
-    else o.line(chip('help', 'n'), ['   tab completes   ', 'f'], ['\u2191', 'n'], [' recalls', 'f']).blank();
-    return o;
   }
   /* a command chip: a word that, clicked or tapped, types and runs itself. A faint underline marks it. */
   const TAP = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -709,12 +744,10 @@ M.createTerminal = function createTerminal(opts){
       return o;
     },
     eden(o){
-      o.blank().big(E.title || 'Eden').blank()
-        .card({ title: 'EDEN', note: 'eden.txt', items: [{ label: 'role', value: E.role || '' }, { label: 'what', value: E.line || '' }] })
-        .blank();
+      o.blank().big(E.title || 'Eden').line([E.role || '', 'd']).blank();
+      if (E.line) o.para(E.line, 'b').blank();
       if (E.body) o.para(E.body, 'n').blank();
-      o.viz(6, drawEden, () => 30).blank().line(['see also  ', 'f'], ...chips(['contact', 'j', 'about'], 'n')).blank();
-      return o;
+      return o.line(['see also  ', 'f'], ...chips(['contact', 'j', 'about'], 'n')).blank();
     },
     j(o){
       o.blank().big(J.title || 'J').line([J.role || '', 'd']).blank()
@@ -727,7 +760,7 @@ M.createTerminal = function createTerminal(opts){
     writing(o){
       o.blank().head('writing', 'writing/').blank();
       const ps = posts();
-      if (!ps.length){ o.viz(5, drawEmpty, () => 4).blank().line(['see also  ', 'f'], ...chips(['contact', 'about'], 'n')).blank(); return o; }
+      if (!ps.length) return o.at(2, ['Nothing published yet.', 'n']).blank().line(['see also  ', 'f'], ...chips(['about', 'eden', 'j', 'contact'], 'n')).blank();
       /* one row per post: date, title; narrow screens stack them and add the summary. A post with html opens
          the reader; one with only a url opens the link */
       o.card({ title: 'POSTS', note: ps.length + (ps.length === 1 ? ' post' : ' posts'), verb: 'read', items: ps.map(p => ({
@@ -741,28 +774,6 @@ M.createTerminal = function createTerminal(opts){
       return o;
     },
   };
-  /* clipboard: also synchronous inside the keydown; falls back to a hidden textarea */
-  function copyText(t){
-    const fallback = () => {
-      const prev = document.activeElement;
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
-        document.body.appendChild(ta); ta.select();
-        const ok = document.execCommand('copy');
-        document.body.removeChild(ta);
-        if (prev && prev.focus) try { prev.focus({ preventScroll: true }); } catch (e){}
-        return ok;
-      } catch (e){ return false; }
-    };
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext !== false){
-        navigator.clipboard.writeText(t).catch(fallback);
-        return true;
-      }
-    } catch (e){}
-    return fallback();
-  }
   /* must run inside the keydown that asked for it, or popup blockers step in */
   function openTarget(url){
     try {
@@ -772,7 +783,6 @@ M.createTerminal = function createTerminal(opts){
     } catch (e){}
     return false;
   }
-  const openUrl = openTarget;
   const uptimeStr = () => {
     const s = Math.floor((performance.now() - T0) / 1000);
     const hh = Math.floor(s / 3600), mm = Math.floor(s / 60) % 60, ss = s % 60;
@@ -780,11 +790,6 @@ M.createTerminal = function createTerminal(opts){
   };
   const fmtDate = ms => { const d = new Date(ms || Date.now()); return MONTHS[d.getMonth()].slice(0, 3) + ' ' + String(d.getDate()).padStart(2, ' ') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const human = n => n < 1024 ? String(n) : (n / 1024).toFixed(n < 10240 ? 1 : 0) + 'K';
-  function diskUse(){
-    let bytes = 0, files = 0;
-    const walk = p => { for (const e of FS.list(p) || []){ if (e.dir) walk((p === '/' ? '' : p) + '/' + e.name); else { bytes += e.size; files++; } } };
-    walk('/'); return { bytes, files };
-  }
   /* "rm: x: No such file", or for a built-in file just "rm: read-only: ~/README.md is a built-in file" */
   const fsErr = (name, p) => name + ': ' + (/^read-only:/.test(FS.lastError) ? '' : p + ': ') + FS.lastError + '\n';
   /* read named files (or stdin) for a text utility */
@@ -834,7 +839,7 @@ M.createTerminal = function createTerminal(opts){
       io.rich(out().at(0, [ok ? 'copied ' : 'copy this: ', 'd'], [addr, 'b'])); return;
     }
     const w = openTarget(url);
-    const o = out(); o.at(0, ['opening ', 'd'], [label, 'b', { url }]); if (!w) o.at(2, ['if nothing opened, enter on the address opens it', 'f']); io.rich(o);
+    const o = out(); o.at(0, ['opening ', 'd'], [label, 'b', { url }]); if (!w) o.at(2, ['if nothing opened, click the address above', 'f']); io.rich(o);
   } });
   def('read', { g: 'read', desc: 'read a post', usage: 'read <slug | n>', ex: ['read 1', 'open post <slug>'], run(argv, io){
     const q = argv.slice(1).join(' ').trim();
@@ -844,7 +849,7 @@ M.createTerminal = function createTerminal(opts){
     if (!io.tty){ io.write(TEXT.writing().split('\n\n')[posts().indexOf(p)] + '\n'); return; }
     if (!p.html && p.url){
       const w = openTarget(p.url);
-      const o = out(); o.at(0, ['opening ', 'd'], [p.title || bare(p.url), 'b', { url: p.url }]); if (!w) o.at(2, ['if nothing opened, enter on the address opens it', 'f']); io.rich(o); return;
+      const o = out(); o.at(0, ['opening ', 'd'], [p.title || bare(p.url), 'b', { url: p.url }]); if (!w) o.at(2, ['if nothing opened, click the address above', 'f']); io.rich(o); return;
     }
     const ok = !!(M.reader && M.reader.open(slugOf(p)));
     io.rich(out().at(0, [ok ? 'reading ' : 'the reader is not available: ', 'd'], [p.title || slugOf(p), 'b']).at(2, [ok ? 'esc comes back' : '', 'f']));
@@ -1108,33 +1113,30 @@ M.createTerminal = function createTerminal(opts){
   /* help: a short, curated page by default (everything a visitor is likely to want, fitting one screen);
      help all lists every command, grouped by its g; help <cmd> is man */
   /* plain help is for someone who has never used a terminal: what you can do, in words, with commands to click */
-  const HELP_TOP = [
-    ['about Kaiav', 'who he is, what he builds', ['about', 'eden', 'j', 'writing', 'contact', 'links']],
-    ['do something', 'small, useful tools', ['weather', 'todo', 'qr', 'pass', 'vault', 'timer']],
-    ['play', 'a game for a minute', ['tetris', 'snake', 'typing', 'donut']],
-    ['files', 'look around this computer', ['ls', 'cat', 'edit']],
-  ];
-  const HELP_ALL = [['read', 'kaiav'], ['net', 'net'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
+  const HELP_TOP = [['about ' + ((C.name || 'Kaiav').split(' ')[0]), 'who he is, what he builds', ['about', 'eden', 'j', 'writing', 'contact', 'links']]];
+  const HELP_ALSO = ['edit', 'todo', 'tetris', 'snake', 'weather'];
+  const HELP_ALL = [['read', 'about'], ['net', 'net'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
   def('help', { g: 'system', desc: 'what you can type here', usage: 'help [all | command]', ex: ['help', 'help all', 'help weather'], run(argv, io){
     if (argv[1] && argv[1] !== 'all' && argv[1] !== '-a') return B.man.run(['man', argv[1]], io);
     const all = !!argv[1];
     const exists = n => (M.TERM.cmds[n] && !M.TERM.cmds[n].hidden && typeof M.TERM.cmds[n].run === 'function') || (M.TERM.apps[n] && typeof M.TERM.apps[n].start === 'function');
     if (!all){
       const groups = HELP_TOP.map(([label, what, names]) => [label, what, names.filter(exists)]).filter(x => x[2].length);
-      if (!io.tty){ io.write(groups.map(([l, w, ns]) => l + ' (' + w + ')\n  ' + ns.join('  ')).join('\n') + '\n\nhelp all for everything. man <command> for details.\n'); return; }
-      const o = out(); o.blank().head('help').blank()
-        .line(['type a word and press enter, or ' + (TAP ? 'tap' : 'click') + ' one', 'd']).blank();
+      const also = HELP_ALSO.filter(exists);
+      if (!io.tty){ io.write(groups.map(([l, w, ns]) => l + ' (' + w + ')\n  ' + ns.join('  ')).join('\n') + '\nalso\n  ' + also.join('  ') + '\n\nhelp all for everything\n'); return; }
+      const o = out(); o.blank().head('help').blank();
       for (const [label, what, names] of groups){
         o.line([label, 'b'], [COLS - 4 - label.length - what.length >= 2 ? '  ' + what : '', 'f']);
-        o.flow(names.map(n => [chip(n, 'n')]), '  ', 4);
+        o.flow(names.map(n => [chip(n, 'b')]), '  ', 4);
       }
-      o.blank().flow([[chip('help all', 'n'), [' for everything', 'f']], [['man <command>', 'n'], [' for details', 'f']]], '  ·  ').blank();
+      o.blank().line(['also', 'd']).flow(also.map(n => [chip(n, 'n')]), '  ', 4);
+      o.blank().line(chip('help all', 'n'), [' for everything', 'f']).blank();
       io.rich(o); return;
     }
     const by = {};
     const add = (n, c) => { const gk = c.g && HELP_ALL.some(x => x[0] === c.g) ? c.g : 'misc'; (by[gk] = by[gk] || []).push(n); };
     for (const [n, c] of Object.entries(M.TERM.cmds)) if (c && !c.hidden && typeof c.run === 'function') add(n, c);
-    for (const [n, a] of Object.entries(M.TERM.apps)) if (a && typeof a.start === 'function' && !M.TERM.cmds[n]) add(n, Object.assign({ g: 'fun' }, a));
+    for (const [n, a] of Object.entries(M.TERM.apps)) if (a && !a.hidden && typeof a.start === 'function' && !M.TERM.cmds[n]) add(n, Object.assign({ g: 'fun' }, a));
     const groups = HELP_ALL.filter(([k]) => by[k]).map(([k, label]) => [label, by[k]]);
     if (!io.tty){ io.write(groups.map(([l, ns]) => pad(l, 8) + ns.join(' ')).join('\n') + '\n'); return; }
     const LW = COLS >= 50 ? 9 : 8, room = COLS - 2 - LW;
@@ -1145,7 +1147,7 @@ M.createTerminal = function createTerminal(opts){
       for (const n of names){
         if (line.length && w + 2 + n.length > room) flush();
         if (line.length){ line.push(['  ', 'f']); w += 2; }
-        line.push(chip(n, label === 'kaiav' ? 'b' : 'n')); w += n.length;
+        line.push(chip(n, label === 'about' ? 'b' : 'n')); w += n.length;
       }
       if (line.length) flush();
     }
@@ -1167,12 +1169,6 @@ M.createTerminal = function createTerminal(opts){
     saveAliases();
   } });
   def('clear', { g: 'system', desc: 'clear the screen', usage: 'clear', run(argv, io){ if (io.tty) clearScreen(); } });
-  def('neofetch', { g: 'system', desc: 'about this machine', usage: 'neofetch', run(argv, io){
-    const info = fetchInfo();
-    if (!io.tty){ io.write('kaiav@kn84\n' + info.map(([k, v]) => pad(k, 10) + v).join('\n') + '\n'); return; }
-    const o = out(); o.blank().viz(13, drawFetch, age => age < 1.2 ? 30 : 4).blank(); io.rich(o);
-    if (job) job.plain += info.map(([k, v]) => k + ' ' + v).join('. ') + ' ';
-  } });
 
   /* misc */
   def('bc', { g: 'misc', desc: 'a calculator', usage: 'bc [expression]', opts: [], more: 'Arithmetic with + - * / % ^ and parentheses, plus sqrt, abs, floor, ceil, round and pi. Reads the expression from its arguments, or one per line from a pipe.', ex: ['bc 2^10', "echo '(1+2)*3' | bc"], run(argv, io){
@@ -1183,11 +1179,7 @@ M.createTerminal = function createTerminal(opts){
       try { const v = calc(l); if (v != null) io.write(v + '\n'); } catch (e){ io.err('bc: ' + (e.message || 'syntax error') + '\n'); io.exit(1); }
     }
   } });
-  let exits = 0;
-  def('exit', { g: 'misc', desc: 'leave', usage: 'exit', run(argv, io){
-    const lines = ["you can't leave. the coffee's still hot.", 'not yet. the lamp is warm and the coffee is still hot.', "logout refused: there's still coffee in the mug.", 'the door is the browser tab. the coffee is right here.'];
-    io.write(lines[exits++ % lines.length] + '\n', 'dim');
-  } });
+  def('exit', { g: 'misc', desc: 'leave', usage: 'exit', run(argv, io){ io.write('to leave, close the tab.\n', 'dim'); } });
   const SHELL_BUILTIN = ['cd', 'alias', 'history', 'exit', 'help', 'echo', 'pwd'];
   for (const [n, c] of Object.entries(B)) if (!M.TERM.cmds[n]) M.TERM.cmds[n] = c;
   const CONTENT_KW = { about: ['bio', 'kaiav', 'me'], eden: ['agents', 'context'], j: ['rising', 'rising founder', 'jose'], writing: ['blog', 'posts', 'essays'], links: ['linkedin', 'twitter', 'social', 'contact'] };
@@ -1195,14 +1187,9 @@ M.createTerminal = function createTerminal(opts){
   function cmdItems(){
     const items = [];
     for (const [n, c] of Object.entries(M.TERM.cmds)) if (c && !c.hidden && typeof c.run === 'function') items.push({ name: n, kw: CONTENT_KW[n] });
-    for (const [n, a] of Object.entries(M.TERM.apps)) if (a && typeof a.start === 'function' && !M.TERM.cmds[n]) items.push({ name: n });
+    for (const [n, a] of Object.entries(M.TERM.apps)) if (a && !a.hidden && typeof a.start === 'function' && !M.TERM.cmds[n]) items.push({ name: n });
     for (const n of Object.keys(ALIASES)) if (n.length > 1 && !M.TERM.cmds[n] && !M.TERM.apps[n]) items.push({ name: n });
     return items;
-  }
-  function fetchInfo(){
-    const d = diskUse();
-    return [['OS', 'KNOS 1.04'], ['Host', 'KN-84'], ['Kernel', '1.04 #1 1984'], ['Uptime', uptimeStr()], ['Shell', 'sh, ' + Object.keys(M.TERM.cmds).length + ' cmds'],
-      ['Terminal', 'vt320 ' + COLS + 'x' + ROWS + ', VT323'], ['CPU', 'KN-1 @ 8 MHz'], ['Memory', '640K'], ['Disk', human(d.bytes) + ' in ' + d.files + ' files'], ['Display', 'P1 green phosphor']];
   }
 
   /* ---- expansion ---- */
@@ -1286,7 +1273,7 @@ M.createTerminal = function createTerminal(opts){
     return j;
   }
   async function runLine(raw, noHist){
-    job = newJob(); links = []; sel = -1;
+    job = newJob();
     const j = job;
     let list;
     try {
@@ -1321,7 +1308,7 @@ M.createTerminal = function createTerminal(opts){
     if (status === 0 && !j.dead) okRuns++;
     if (j.hint){ suggestion = j.hint; tty.rich(out().at(0, ['did you mean ', 'd'], chip(j.hint, 'b'), ['?  press enter', 'f'])); j.plain += ' Did you mean ' + j.hint + '?'; }
     if (ahead) flushAhead();
-    trim(); mirror(j.plain || ''); toBottom(); dirty = true; touched();
+    trim(); mirror(j.plain || ''); if (j.tail) mirror(j.tail); toBottom(); dirty = true; touched();
     if (REDUCED) revealAll();
   }
   async function execList(list, j){
@@ -1407,17 +1394,12 @@ M.createTerminal = function createTerminal(opts){
         ctx.sink.rich(o);
         return io.pick(o.lastCard);
       },
-      /* wait for one key on a card already printed; resolves with the item acted on, or null */
+      /* make a printed card choosable. Not modal: the prompt comes straight back, typing goes to it as
+         usual, and only the arrows (or tab on an empty line) start choosing. Resolves at once. */
       pick(card){
         if (!ctx.sink.tty || j.dead || !card || !card.acts.length) return Promise.resolve(null);
-        return new Promise(res => {
-          card.sel = 0; setFoot(card);
-          j.choice = { card, res };
-          const a = card.acts;
-          mirror(a.length > 1 ? 'Press 1 to ' + a.length + ', or Enter, to ' + card.verb + ': ' + a.map((it, i) => (i + 1) + ', ' + it.label + ' ' + (it.full || it.value)).join('; ') + '. Escape goes back.'
-            : 'Press Enter to ' + (a[0].copy ? 'copy ' : 'open ') + (a[0].full || a[0].value) + '. Any other key goes back.');
-          dirty = true;
-        });
+        arm(card);
+        return Promise.resolve(null);
       },
       /* ask for a line (opts.secret: drawn as dots, never echoed or mirrored) or, with opts.keys, one key.
          Resolves with the text / the key (lowercased), or null on esc. A one-key ask passes other
@@ -1441,19 +1423,55 @@ M.createTerminal = function createTerminal(opts){
     };
     return io;
   }
+  /* the card the arrows can choose from: the latest one printed, until the next command or keystroke */
+  let armed = null;
+  const verbOf = card => card.verb === 'read' || card.acts.every(a => a.post) ? 'read' : card.acts.every(a => a.copy) ? 'copy' : card.acts.every(a => !a.copy) ? 'open' : 'open';
+  function arm(card){
+    disarm(); armed = card; card.sel = -1; setFoot(card);
+    const a = card.acts, v = verbOf(card);
+    const say = TAP ? 'Tap a row to ' + v + ' it.' : 'Arrow keys choose, Enter to ' + v + (a.length > 1 ? ', or press 1 to ' + a.length : '') + '. Or click a row.';
+    if (job) job.tail = say; else mirror(say);
+    dirty = true;
+  }
+  function disarm(){
+    const c = armed; armed = null; if (!c) return;
+    if (!c.done){ c.sel = -1; c.foot = null; }
+    dirty = true;
+  }
   function setFoot(card){
-    const n = card.acts.length, dot = [' \u00b7 ', 'f'];
-    const verb = card.verb === 'read' || card.acts.every(a => a.post) ? 'read' : card.acts.every(a => a.copy) ? 'copy' : card.acts.every(a => !a.copy) ? 'open' : 'open/copy';
+    const dot = [' \u00b7 ', 'f'], v = verbOf(card), n = card.acts.length;
+    if (TAP){ card.foot = [['tap to ' + v, 'f']]; return; }
     const len = f => f.reduce((a, x) => a + x[0].length, 0);
-    const opts = n > 1 ? [
-      [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['1-' + n, 'n'], [' jump', 'f'], dot, ['esc', 'n'], [' back', 'f']],
-      [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['esc', 'n'], [' back', 'f']],
-      [['  ', 'n', null, 'arrows'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['esc', 'n']],
+    const opts = card.sel < 0 ? [
+      [['  ', 'n', null, 'arrows'], [' choose', 'f'], dot, ['enter', 'n'], [' ' + v, 'f']],
+      [['  ', 'n', null, 'arrows'], dot, ['enter', 'n'], [' ' + v, 'f']],
     ] : [
-      [['enter', 'n'], [' ' + verb, 'f'], dot, ['any other key', 'n'], [' back', 'f']],
-      [['enter', 'n'], [' ' + verb, 'f'], dot, ['esc', 'n'], [' back', 'f']],
+      [['  ', 'n', null, 'arrows'], [' choose', 'f'], dot, ['enter', 'n'], [' ' + v, 'f']].concat(n > 1 ? [dot, ['1-' + n, 'n']] : [], [dot, ['esc', 'n'], [' done', 'f']]),
+      [['  ', 'n', null, 'arrows'], [' choose', 'f'], dot, ['enter', 'n'], [' ' + v, 'f'], dot, ['esc', 'n']],
+      [['  ', 'n', null, 'arrows'], dot, ['enter', 'n'], [' ' + v, 'f']],
     ];
     card.foot = opts.find(f => len(f) <= COLS - 3) || opts[opts.length - 1];
+  }
+  /* a key while a card is armed; returns true when the card used it, false to let the prompt have it */
+  function cardKey(e){
+    const card = armed, k = e.key, n = card.acts.length, choosing = card.sel >= 0;
+    const down = k === 'ArrowDown' || (k === 'Tab' && !e.shiftKey && (choosing || !input)), up = k === 'ArrowUp' || (k === 'Tab' && e.shiftKey && choosing);
+    if (!e.ctrlKey && !e.altKey && (down || up) && (choosing || !input)){
+      card.sel = choosing ? (card.sel + (down ? 1 : n - 1)) % n : down ? 0 : n - 1;
+      setFoot(card); const it = card.acts[card.sel];
+      mirror((card.sel + 1) + ' of ' + n + ': ' + it.label + ', ' + (it.secret ? '' : it.full || it.value) + '. Enter to ' + verbOf(card) + '.');
+      touched(); return true;
+    }
+    if (choosing && !e.ctrlKey && !e.altKey){
+      let pick = -1;
+      if (k === 'Enter') pick = card.sel;
+      else if (/^[1-9]$/.test(k) && +k <= n) pick = +k - 1;
+      if (pick >= 0){ armed = null; actOn(card, card.acts[pick]); touched(); return true; }
+      if (k === 'Escape'){ disarm(); touched(); return true; }
+    }
+    if (k === 'Shift' || k === 'Control' || k === 'Alt' || k === 'Meta') return false;
+    disarm();                                   // anything else: the card steps aside and the prompt takes the key
+    return false;
   }
   /* copy or open one card row; synchronous, so it must run inside the key or tap that asked */
   function actOn(card, it){
@@ -1496,8 +1514,8 @@ M.createTerminal = function createTerminal(opts){
         if (it.ai < 0) continue;
         const rt = r._top + ch * (it.y + 1);
         if (py < rt || py >= rt + ch * it.n) continue;
-        if (job && job.choice && job.choice.card === r){ const ch2 = job.choice; job.choice = null; actOn(r, it); ch2.res(it); }
-        else actOn(r, it);
+        if (armed === r) armed = null;
+        actOn(r, it);
         touched();
         return true;
       }
@@ -1507,8 +1525,8 @@ M.createTerminal = function createTerminal(opts){
     for (const h of drawnHits){
       if (px < h.x0 - slack || px > h.x1 + slack || py < h.top - 4 || py >= h.bot + 4) continue;
       if (h.link.cmd){
-        if (app || (job && !job.choice)) return false;
-        if (job && job.choice){ const c2 = job.choice; job.choice = null; c2.card.sel = -1; c2.card.foot = [['back', 'f']]; c2.res(null); }
+        if (app || job) return false;
+        disarm(); nudgeOff = true;
         revealAll(); const line = h.link.cmd;
         if (job) ahead = line + '\n'; else { input = ''; cur = 0; execute(line); }
         sfx('beep'); touched(); return true;
@@ -1526,7 +1544,7 @@ M.createTerminal = function createTerminal(opts){
       if (k.length > 1 && !['Enter', 'Escape', 'Backspace', 'Tab'].includes(k)) return true;
       const kk = k.length === 1 ? k.toLowerCase() : k, hit = a.keys.includes(kk);
       endAsk(hit ? kk : k === 'Escape' ? null : kk);
-      if (!hit && k.length === 1 && k !== ' ' && !e.ctrlKey && !e.altKey) ahead += k;
+      if (!hit && k.length === 1 && !/^[ qxnQXN]$/.test(k) && !e.ctrlKey && !e.altKey) ahead += k;   // q, x, n, space dismiss and are used up
       return true;
     }
     if (k === 'Enter'){ endAsk(a.buf); return true; }
@@ -1544,23 +1562,6 @@ M.createTerminal = function createTerminal(opts){
     }
     a.buf = ''; dirty = true; toBottom();
     a.res(v);
-  }
-  /* a key while a choice is waiting; returns true when consumed */
-  function choiceKey(e){
-    const ch = job.choice, card = ch.card, k = e.key, n = card.acts.length;
-    if (e.ctrlKey && k.toLowerCase() === 'c'){ card.sel = -1; card.foot = [['^C', 'd']]; interrupt(); return true; }
-    if (n > 1 && (k === 'ArrowDown' || k === 'ArrowRight' || (k === 'Tab' && !e.shiftKey) || k === 'j')){ card.sel = (card.sel + 1) % n; dirty = true; return true; }
-    if (n > 1 && (k === 'ArrowUp' || k === 'ArrowLeft' || (k === 'Tab' && e.shiftKey) || k === 'k')){ card.sel = (card.sel + n - 1) % n; dirty = true; return true; }
-    let pick = -1;
-    if (k === 'Enter' || k === 'o' || k === 'O' || (k === 'c' && card.acts[card.sel].copy)) pick = card.sel;
-    else if (/^[1-9]$/.test(k) && +k <= n) pick = +k - 1;
-    job.choice = null;
-    let it = null;
-    if (pick >= 0){ it = card.acts[pick]; actOn(card, it); }
-    else { card.sel = -1; card.foot = [['back', 'f']]; if (k.length === 1 && !e.ctrlKey && !e.altKey && k !== ' ') ahead += k; }
-    dirty = true;
-    ch.res(it);
-    return true;
   }
   function interrupt(){
     if (!job) return;
@@ -1678,9 +1679,10 @@ M.createTerminal = function createTerminal(opts){
   function execute(raw, programmatic){
     rows.push({ k: 't', i: 0, s: [...promptSpans(), [raw, 'n']] }); shown = rows.length; partial = 0;
     openRow = null;
-    input = ''; cur = 0; suggestion = ''; tabState = null; sel = -1;
+    input = ''; cur = 0; suggestion = ''; tabState = null; disarm();
     hIdx = history.length; hDraft = '';
     if (!raw.trim()){ toBottom(); dirty = true; return; }
+    mirror('', raw);
     runLine(forgive(raw), programmatic);
   }
 
@@ -1746,15 +1748,6 @@ M.createTerminal = function createTerminal(opts){
   }
   function commonPrefix(list){ let p = list[0] || ''; for (const s of list) while (!s.startsWith(p)) p = p.slice(0, -1); return p; }
   function tab(back){
-    if (!input){
-      if (suggestion){ input = suggestion; cur = input.length; suggestion = ''; return; }
-      if (links.length){ sel = back ? (sel <= 0 ? links.length - 1 : sel - 1) : (sel + 1) % links.length; return; }
-      const names = cmdItems().map(c => c.name).filter(n => n.length > 1).sort();
-      rows.push({ k: 't', i: 0, s: [...promptSpans()] });
-      for (const l of wrap(names.join('  '), COLS)) rows.push({ k: 't', i: 0, s: [[l, 'n']] });
-      shown = rows.length; mirror('Commands: ' + names.join(', '));
-      return;
-    }
     if (tabState && tabState.after === input && tabState.cyc){          // third tab on: walk the list
       const s = tabState; s.i = (s.i + (back ? -1 : 1) + s.list.length) % s.list.length;
       input = s.base; cur = s.cur; accept(s.list[s.i], s.from, false); s.after = input; return;
@@ -1786,9 +1779,9 @@ M.createTerminal = function createTerminal(opts){
     if (!s) return;
     if (input.length + s.length > 240) s = s.slice(0, 240 - input.length);
     input = input.slice(0, cur) + s + input.slice(cur); cur += s.length;
-    suggestion = ''; tabState = null; sel = -1;
+    suggestion = ''; tabState = null;
   }
-  function touched(){ blinkT0 = now; blinkOn = true; toBottom(); dirty = true; }
+  function touched(){ blinkT0 = now; idleT0 = now; blinkOn = true; toBottom(); dirty = true; }
   function histMove(d){
     if (hIdx === history.length && d < 0){ hDraft = input; hPrefix = input; }
     let i = hIdx;
@@ -1802,7 +1795,7 @@ M.createTerminal = function createTerminal(opts){
     const next = clamp(scrollOff + units, 0, max);
     if (next !== scrollOff){ scrollOff = next; dirty = true; }
   }
-  function clearScreen(){ rows = []; shown = 0; partial = 0; links = []; sel = -1; openRow = null; toBottom(); dirty = true; }
+  function clearScreen(){ rows = []; shown = 0; partial = 0; disarm(); openRow = null; toBottom(); dirty = true; }
 
   /* ---- ctrl+r: search the history, newest first ---- */
   function searchFrom(i, q){
@@ -1846,7 +1839,6 @@ M.createTerminal = function createTerminal(opts){
       return true;
     }
     if (job && job.ask){ if (typing()) revealAll(); return askKey(e); }
-    if (job && job.choice){ if (typing()) revealAll(); return choiceKey(e); }
     if (typing()){ revealAll(); if (!input && (k === 'Enter' || k === 'Escape' || k === ' ')) return true; }   // a key skips the typing-out; a typed line still runs
     if (job){                                   // a command is running: only ctrl+c, ctrl+l and scrolling
       if (ctrl && c === 'c'){ interrupt(); return true; }
@@ -1856,16 +1848,17 @@ M.createTerminal = function createTerminal(opts){
       if (k.length === 1 && !ctrl && !alt){ if (ahead.length < 400) ahead += k; return true; }     // typed ahead: lands on the next prompt
       if (k === 'Enter' && !alt){ if (ahead.length < 400) ahead += '\n'; return true; }            // ...and Enter queues it, like a real tty
       if (k === 'Backspace'){ ahead = ahead.slice(0, -1); return true; }
-      return ['Enter', 'Tab', 'Escape'].includes(k);
+      return ['Enter', 'Escape'].includes(k);
     }
     if (rs) return searchKey(e);
+    if (armed && cardKey(e)) return true;
     if (ctrl && !alt && c === 'r'){ rs = { q: '', i: history.length, draft: input, dcur: cur, fail: false }; tabState = null; suggestion = ''; touched(); return true; }
     if (alt && !ctrl && (c === 'b' || c === 'f' || k === '\u222b' || k === '\u0192')){ cur = c === 'b' || k === '\u222b' ? wordLeft(cur) : wordRight(cur); touched(); return true; }
     if (ctrl && !alt){
       if (c === 'l'){ clearScreen(); touched(); return true; }
       if (c === 'c'){
         rows.push({ k: 't', i: 0, s: [...promptSpans(), [input, 'n'], ['^C', 'd']] }); shown = rows.length; partial = 0;
-        input = ''; cur = 0; suggestion = ''; sel = -1; hIdx = history.length; status = 130; touched(); return true;
+        input = ''; cur = 0; suggestion = ''; hIdx = history.length; status = 130; touched(); return true;
       }
       if (c === 'a'){ cur = 0; touched(); return true; }
       if (c === 'e'){ cur = input.length; touched(); return true; }
@@ -1881,11 +1874,6 @@ M.createTerminal = function createTerminal(opts){
     }
     switch (k){
       case 'Enter': {
-        if (sel >= 0 && !input && links[sel]){
-          const url = links[sel].url; const w = openUrl(url);
-          const o = out(); o.at(0, ['opening ', 'd'], [url, 'n']); if (!w) o.at(0, ['if nothing opened, the address is above', 'f']);
-          rows.push({ k: 't', i: 0, s: [...promptSpans()] }); shown = rows.length; emit(o); touched(); return true;
-        }
         if (!input && suggestion){ const s = suggestion; execute(s); touched(); return true; }
         execute(input); touched(); return true;
       }
@@ -1909,8 +1897,10 @@ M.createTerminal = function createTerminal(opts){
       case 'ArrowDown': if (e.shiftKey){ scrollBy(-1); return true; } histMove(1); suggestion = ''; touched(); return true;
       case 'PageUp': scrollBy(ROWS - 2); return true;
       case 'PageDown': scrollBy(-(ROWS - 2)); return true;
-      case 'Tab': tab(e.shiftKey); touched(); return true;
-      case 'Escape': sel = -1; suggestion = ''; tabState = null; touched(); return true;
+      case 'Tab':                                  // completes a line with text; on an empty line (and shift+tab always) focus moves on
+        if (e.shiftKey || !input) return false;
+        tab(false); touched(); return true;
+      case 'Escape': suggestion = ''; tabState = null; touched(); return true;
     }
     if (k.length === 1 && !ctrl){ insert(k); touched(); return true; }
     return false;
@@ -1936,11 +1926,8 @@ M.createTerminal = function createTerminal(opts){
       }
       return;
     }
+    if (armed && !job) disarm();                // phones: typing moves on from a card
     if (job && job.ask){ for (const ch of String(str)){ if (!job || !job.ask) break; askKey({ key: ch === '\n' || ch === '\r' ? 'Enter' : ch, ctrlKey: false, altKey: false }); } return; }
-    if (job && job.choice){                     // phones: a tapped key answers the card
-      for (const ch of String(str)){ if (!job || !job.choice) break; choiceKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false, shiftKey: false }); }
-      return;
-    }
     if (job){ ahead = (ahead + String(str).replace(/\r\n?/g, '\n').replace(/\t/g, ' ')).slice(0, 4000); return; }
     if (rs){ for (const ch of String(str)) searchKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false }); return; }
     if (typing()) revealAll();
@@ -1967,6 +1954,7 @@ M.createTerminal = function createTerminal(opts){
   function skipBoot(){ if (!booting) return; booting = false; endBoot(); }
   function endBoot(){
     booting = false; rows = []; shown = 0; partial = 0;
+    try { sessionStorage.setItem(BOOT_KEY, '1'); } catch (e){}
     emit(welcome(out()), (C.name || '') + '. ' + (A.role || '') + '. Type help to begin.');
     blinkT0 = now; dirty = true;
   }
@@ -1988,11 +1976,11 @@ M.createTerminal = function createTerminal(opts){
     r.items.forEach(it => {
       const rt = top + ch * (it.y + 1);
       const flashing = r.done && it.ai === r.sel && r.flash != null && now - r.flash < 0.35;
-      const on = (active && it.ai === r.sel) || flashing, chosen = r.done && it.ai === r.sel;
+      const on = (active && it.ai === r.sel) || flashing;
       if (flashing){ g.fillStyle = P.bright; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
       if (on && !flashing){ g.fillStyle = P.normal; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
       const st = s => on ? 'z' : s;
-      if (it.ai >= 0) text(String(it.ai + 1), 3, rt, st(chosen ? 'b' : 'f'));
+      if (it.ai >= 0 && active) text(String(it.ai + 1), 3, rt, st('f'));   // numbers only while choosing: that is when digits work
       text(it.label, 5, rt, st('d'));
       if (r.stacked) it.lines.forEach((l, k) => text(l, 5, rt + ch * (k + 1), st(it.sub0 != null && k >= it.sub0 ? 'd' : it.ai >= 0 ? 'b' : 'n')));
       else text(it.value, 5 + r.lw, rt, st(it.ai >= 0 ? 'b' : 'n'));
@@ -2016,8 +2004,8 @@ M.createTerminal = function createTerminal(opts){
   let promptY = 0;   // bottom of the prompt line, canvas px (phones keep it above the on-screen keyboard)
   function text(s, col, top, st, k = 1){
     g.font = font(k); g.fillStyle = color(st);
-    if (k === 1 && SPAN_VEC.test(s)){ const c0 = color(st); g.fillText(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68); for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, c0); return; }
-    g.fillText(s, X(col), top + fs * k * 0.68);
+    if (k === 1 && SPAN_VEC.test(s)){ const c0 = color(st); fillT(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68); for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, c0); return; }
+    fillT(s, X(col), top + fs * k * 0.68);
   }
   function drawSpans(r, top, limit, k = 1){
     let col = r.i || 0, left = limit;
@@ -2025,13 +2013,13 @@ M.createTerminal = function createTerminal(opts){
       if (left <= 0) break;
       let s = sp[0]; if (s.length > left) s = s.slice(0, left); left -= s.length;
       const link = sp[2];
-      const selected = (link && sel >= 0 && links[sel] === link) || sp[1] === 'i';
+      const selected = sp[1] === 'i';
       if (selected){ g.fillStyle = P.normal; g.fillRect(X(col) - 3, top + 1, s.length * cw * k + 6, ch * k - 2); }
       g.font = font(k); g.fillStyle = selected ? P.bg : color(sp[1]);
       if (k === 1 && SPAN_VEC.test(s)){                // arrows and the lock, drawn: VT323 has neither
-        g.fillText(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
+        fillT(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
         for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : color(sp[1]));
-      } else g.fillText(s, X(col), top + fs * k * 0.68);
+      } else fillT(s, X(col), top + fs * k * 0.68);
       if (link && !selected){ g.fillStyle = link.cmd ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, 2); }
       if (link && (link.cmd || link.url) && s.trim()) drawnHits.push({ x0: X(col), x1: X(col + s.length * k), top, bot: top + ch * k, link });
       col += s.length * k;
@@ -2064,7 +2052,7 @@ M.createTerminal = function createTerminal(opts){
     }
     const t = tabState;
     if (!t || !t.cyc || t.list.length < 2 || t.after !== input){
-      if (!fresh || okRuns >= 2 || sel >= 0) return [];            // first visit: a quiet nudge until a command or two has worked
+      if (!nudgeOn()) return [];
       if (input) return [[['press ', 'f'], ['enter', 'd'], [' to run it', 'f']]];
       return [[['try ', 'f'], chip('about', 'd'), ['  or  ', 'f'], chip('help', 'd'), [COLS >= 46 ? '   type it, then press enter' : '', 'f']]];
     }
@@ -2086,6 +2074,7 @@ M.createTerminal = function createTerminal(opts){
     return out;
   }
   const promptVisible = () => !booting && !typing() && !job && !app;
+  const nudgeOn = () => fresh && !nudgeOff && okRuns === 0 && !armed && promptVisible() && idleT0 >= 0 && now - idleT0 > 8;
 
   function drawAsk(top){                 // io.ask's line: the question, what is typed (dots when secret), a cursor
     const a = job.ask, room = Math.max(4, COLS - a.i - a.spans.reduce((n, x) => n + x[0].length, 0) - 1);
@@ -2121,10 +2110,10 @@ M.createTerminal = function createTerminal(opts){
         g.strokeStyle = P.faint; g.lineWidth = 1.5; g.strokeRect(X(gcol + 4 + gh.text.length) - 4, top + 6, cw * 3 + 8, ch - 12);
       }
     }
-    if (blinkOn && sel < 0){
+    if (blinkOn){
       g.fillStyle = P.normal; g.fillRect(cx, top + 3, cw, ch - 6);
       const under = input[cur] || (gh && gh.kind === 'prefix' ? gh.text[0] : '');
-      if (under){ g.font = font(); g.fillStyle = P.bg; g.fillText(under, cx, top + fs * 0.68); }
+      if (under){ g.font = font(); g.fillStyle = P.bg; fillT(under, cx, top + fs * 0.68); }
     }
   }
   let drawnCards = [], drawnHits = [];   // what is on screen and can be clicked or tapped
@@ -2161,8 +2150,8 @@ M.createTerminal = function createTerminal(opts){
         const s = r[x][1]; let x1 = x, str = '';
         while (x1 < COLS && r[x1][1] === s){ str += r[x1][0]; x1++; }
         const plain = str.replace(VEC_RE, ' ');
-        if (s.inv){ g.fillStyle = s.fg; g.fillRect(X(x), top, (x1 - x) * cw + 0.5, ch); if (plain.trim()){ g.fillStyle = P.bg; g.fillText(plain, X(x), top + fs * 0.68); } }
-        else if (plain.trim()){ g.fillStyle = s.fg; g.fillText(plain, X(x), top + fs * 0.68); }
+        if (s.inv){ g.fillStyle = s.fg; g.fillRect(X(x), top, (x1 - x) * cw + 0.5, ch); if (plain.trim()){ g.fillStyle = P.bg; fillT(plain, X(x), top + fs * 0.68); } }
+        else if (plain.trim()){ g.fillStyle = s.fg; fillT(plain, X(x), top + fs * 0.68); }
         if (plain !== str) for (let k = 0; k < str.length; k++) if (VEC_RE.test(str[k])){ VEC_RE.lastIndex = 0; vecGlyph(str[k], x + k, top, s.inv ? P.bg : s.fg); }
         VEC_RE.lastIndex = 0;
         x = x1;
@@ -2174,7 +2163,7 @@ M.createTerminal = function createTerminal(opts){
       g.fillStyle = P.normal;
       if (c.shape === 'bar') g.fillRect(X(c.x), top + 3, 3, ch - 6);
       else if (c.shape === 'under') g.fillRect(X(c.x), top + ch - 7, cw, 3);
-      else { g.fillRect(X(c.x), top + 3, cw, ch - 6); g.fillStyle = P.bg; g.fillText(cell[0], X(c.x), top + fs * 0.68); }
+      else { g.fillRect(X(c.x), top + 3, cw, ch - 6); g.fillStyle = P.bg; fillT(cell[0], X(c.x), top + fs * 0.68); }
     }
   }
 
@@ -2220,7 +2209,7 @@ M.createTerminal = function createTerminal(opts){
       belowPrompt().forEach((r, k) => { const y = u + 1 + k; if (y >= first && y < first + ROWS) drawSpans({ i: 0, s: r }, PADY + (y - first) * ch, 999); });
     } else if (job && job.ask && !app && !typing()){
       if (u >= first && u < first + ROWS) drawAsk(PADY + (u - first) * ch);
-    } else if (job && !job.choice && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
+    } else if (job && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
       text(COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 0, PADY + (u - first) * ch, 'f');
     }
     g.restore();
@@ -2233,12 +2222,12 @@ M.createTerminal = function createTerminal(opts){
       const note = '  ' + scrollOff + ' more below' + (COLS >= 46 ? '  pgdn ' : ' ');
       const nx = COLS - note.length, top = PADY + (ROWS - 1) * ch;
       g.fillStyle = P.bg; g.fillRect(X(nx) - 8, top - 4, note.length * cw + 8, ch + 8);
-      g.font = font(); g.fillStyle = P.dim; g.fillText(note, X(nx), top + fs * 0.68);
+      g.font = font(); g.fillStyle = P.dim; fillT(note, X(nx), top + fs * 0.68);
     }
   }
   /* ---- boot screen ---- */
   function drawBoot(){
-    const t = bootT, top = r => PADY + r * ch;
+    const t = REDUCED ? 99 : bootT * 1.85 / BOOT_END, top = r => PADY + r * ch;   // the timeline below is in 1.85s units
     if (t < 0.12) return;
     text('KN-84', 0, top(0), 'b'); text('personal computer', 7, top(0), 'd');
     text('ROM 1.04', COLS - 8, top(0), 'f');
@@ -2265,142 +2254,6 @@ M.createTerminal = function createTerminal(opts){
     if (t < 1.45) return;
     text('TERM', 0, top(4), 'd'); text('vt  ' + COLS + ' x ' + ROWS, 10, top(4), 'n');
     if (t > 1.6) text('OK', bEnd + 6, top(4), 'b');
-  }
-
-  /* ---- inline visualisations, drawn in phosphor ---- */
-  function drawEden(x, y, w, h, age, t){
-    const ap = REDUCED ? 1 : ease(age / 0.6);
-    const bx = x, by = y + ch * 0.4, bw = cw * 16, bh = h - ch * 0.8;
-    // the context: a document of lines being read
-    g.strokeStyle = P.normal; g.lineWidth = 2; g.strokeRect(bx, by, bw, bh * ap);
-    text('context', 0 + 2 + 1, by + 4, 'b');
-    const lines = [0.82, 0.64, 0.9, 0.5, 0.74, 0.58];
-    const scan = Math.floor((t * 3) % lines.length);
-    lines.forEach((f, i) => {
-      const ly = by + ch * 1.3 + i * (bh - ch * 1.8) / lines.length;
-      if (ly > by + bh * ap - 8) return;
-      g.fillStyle = !REDUCED && i === scan ? P.normal : P.faint;
-      g.fillRect(bx + cw, ly, (bw - cw * 2) * f, 5);
-    });
-    // agents
-    const ax = x + cw * (COLS - 16), aw = cw * 11, ah = ch * 1.15;
-    const ays = [y + ch * 0.45, y + h / 2 - ah / 2, y + h - ch * 0.45 - ah];
-    const sx = bx + bw, sy = by + bh / 2;
-    ays.forEach((ay, i) => {
-      const ex = ax, ey = ay + ah / 2;
-      const c1x = sx + (ex - sx) * 0.5;
-      const pt = s => { const u = 1 - s; return [u * u * u * sx + 3 * u * u * s * c1x + 3 * u * s * s * c1x + s * s * s * ex, u * u * u * sy + 3 * u * u * s * sy + 3 * u * s * s * ey + s * s * s * ey]; };
-      // wire
-      g.strokeStyle = P.faint; g.lineWidth = 2; g.beginPath(); g.moveTo(sx, sy);
-      const reach = ap; for (let s = 0.02; s <= reach + 1e-6; s += 0.02){ const p = pt(s); g.lineTo(p[0], p[1]); } g.stroke();
-      // packets: a bright head and a dim trail
-      const period = 1.5, phase = REDUCED ? 0.55 : ((t + i * 0.5) % period) / period;
-      if (ap >= 1){
-        for (let k = 3; k >= 0; k--){
-          const s = phase - k * 0.04; if (s < 0.05 || s > 1) continue;
-          const p = pt(s); g.fillStyle = k ? P.dim : P.bright; const z = k ? 5 : 8;
-          g.fillRect(p[0] - z / 2, p[1] - z / 2, z, z);
-        }
-      }
-      // agent node: lights up as each packet lands
-      const glow = REDUCED ? 0 : Math.max(0, 1 - phase / 0.25) * (ap >= 1 ? 1 : 0);
-      g.fillStyle = glow > 0.5 ? P.normal : P.bg; g.fillRect(ex, ay, aw, ah);
-      g.strokeStyle = glow > 0.05 ? P.bright : P.normal; g.lineWidth = 2; g.strokeRect(ex, ay, aw, ah);
-      g.font = font(); g.fillStyle = glow > 0.5 ? P.bg : P.normal;
-      g.fillText('agent', ex + (aw - cw * 5) / 2, ay + (ah - ch) / 2 + fs * 0.68);
-    });
-  }
-  function drawBars(x, y, w, h, age){
-    const narrow = COLS < 70;
-    const labels = narrow ? ['mo 1', 'mo 2', 'mo 3'] : ['month 1', 'month 2', 'month 3'];
-    const base = y + h - ch * 1.25, maxH = h - ch * 1.6, bw = cw * (narrow ? 3 : 6), gap = cw * (narrow ? 5 : 10);
-    g.fillStyle = P.faint; g.fillRect(x, base, gap * 3 - cw * 2, 2);
-    labels.forEach((lab, i) => {
-      const p = REDUCED ? 1 : ease((age - i * 0.18) / 0.55);
-      const bh = maxH * (i + 1) / 3 * p;
-      const bx = x + i * gap + cw * 0.5;
-      g.fillStyle = P.normal; g.fillRect(bx, base - bh, bw, bh);
-      if (p > 0){ g.fillStyle = P.bright; g.fillRect(bx - 2, base - bh - 4, bw + 4, 4); }
-      g.font = font(); g.fillStyle = P.dim; g.fillText(lab, bx + (bw - cw * lab.length) / 2, base + 4 + fs * 0.68);
-    });
-    // the facts, as a table aligned to the text grid beside the bars
-    const f = J.facts || [];
-    const kw = Math.max(0, ...f.map(r => r[0].length)) + (narrow ? 2 : 3);
-    const vw = Math.max(0, ...f.map(r => r[1].length));
-    const sepCol = Math.min(2 + (narrow ? 16 : 31), COLS - vw - kw - 3), keyCol = sepCol + 2;
-    g.fillStyle = P.faint; g.fillRect(X(sepCol), y + ch * 0.2, 2, ch * 4 - ch * 0.4);
-    f.slice(0, 5).forEach(([k, v], i) => {
-      const n = REDUCED ? 99 : Math.floor((age - 0.25 - i * 0.12) * 90);
-      if (n <= 0) return;
-      const top = y + i * ch;
-      text(k.slice(0, n), keyCol, top, 'd');
-      text(v.slice(0, Math.max(0, n - 3)), keyCol + kw, top, i === 0 ? 'b' : 'n');
-    });
-  }
-  function drawEmpty(x, y, w, h, age, t){
-    // an empty sheet with a folded corner and a waiting caret (narrow screens: just the words)
-    if (COLS < 50){
-      text('No posts yet.', 2, y + ch * 0.9, 'b');
-      text('New ones will appear here.', 2, y + ch * 2.0, 'd');
-      text('Meanwhile:', 2, y + ch * 3.0, 'd');
-      text('about   eden   j   links', 2, y + ch * 4.0, 'n');
-      return;
-    }
-    const pw = cw * 10, ph = h - ch * 0.6, px = x, py = y + ch * 0.3, fold = cw * 2;
-    g.strokeStyle = P.dim; g.lineWidth = 2; g.setLineDash([8, 6]);
-    g.beginPath(); g.moveTo(px, py); g.lineTo(px + pw - fold, py); g.lineTo(px + pw, py + fold); g.lineTo(px + pw, py + ph); g.lineTo(px, py + ph); g.closePath(); g.stroke();
-    g.setLineDash([]); g.beginPath(); g.moveTo(px + pw - fold, py); g.lineTo(px + pw - fold, py + fold); g.lineTo(px + pw, py + fold); g.stroke();
-    if (REDUCED || (t % 1.06) < 0.53){ g.fillStyle = P.normal; g.fillRect(px + cw * 1.2, py + ch * 0.9, cw, ch - 6); }
-    const col = 2 + 12;
-    text('No posts yet.', col, y + ch * 0.9, 'b');
-    text('When there are, they will appear here,', col, y + ch * 2.0, 'd');
-    text('newest first. Meanwhile:', col, y + ch * 3.0, 'd');
-    text('about   eden   j   links', col, y + ch * 4.0, 'n');
-  }
-  function drawFetch(x, y, w, h, age, t){
-    // the KN-84 itself, in outline: a compact all-in-one with its screen lit, and a keyboard
-    const ap = REDUCED ? 1 : ease(age / 0.5);
-    const col = COLS < 50 ? 0 : Math.max(14, COLS - 31);
-    const bx = x, by = y + ch * 0.2, bw = cw * Math.min(18, col - 6), bh = ch * 7.6;
-    g.strokeStyle = P.normal; g.lineWidth = 2;
-    if (col) g.strokeRect(bx, by, bw, bh * ap);
-    if (col && ap >= 1){
-      const sx = bx + cw * 2, sy = by + ch * 0.7, sw = bw - cw * 4, sh = ch * 4.4;
-      g.strokeStyle = P.dim; g.strokeRect(sx, sy, sw, sh);
-      g.fillStyle = P.faint; g.fillRect(sx + 6, sy + 6, sw - 12, sh - 12);
-      g.fillStyle = P.bg; g.fillRect(sx + 10, sy + 10, sw - 20, sh - 20);
-      text('$', 5, sy + 16, 'n');
-      if (REDUCED || (t % 1.06) < 0.53){ g.fillStyle = P.normal; g.fillRect(X(7), sy + 20, cw, ch - 10); }
-      // floppy slot and power light
-      const fy = sy + sh + ch * 0.75;
-      g.fillStyle = P.dim; g.fillRect(bx + bw - cw * 8, fy, cw * 6, 4);
-      g.fillStyle = (t % 2) < 1.7 || REDUCED ? P.bright : P.faint; g.fillRect(bx + cw * 2, fy - 2, 8, 8);
-      // keyboard
-      const ky = by + bh + ch * 0.6, kh = ch * 2.6;
-      g.strokeStyle = P.normal; g.strokeRect(bx - cw, ky, bw + cw * 2, kh);
-      const kr = (kh - 12) / 4;
-      const nk = Math.floor((bw / cw) / 1.6);
-      for (let r = 0; r < 3; r++) for (let c2 = 0; c2 < nk - (r % 2); c2++){
-        const kx = bx + c2 * cw * 1.6 + (r % 2) * cw * 0.5, kyy = ky + 6 + r * kr;
-        g.fillStyle = P.dim; g.fillRect(kx, kyy, cw * 1.2, kr - 5);
-      }
-      g.fillStyle = P.dim; g.fillRect(bx + bw * 0.22, ky + 6 + 3 * kr, bw * 0.56, kr - 5);
-    }
-    // the card
-    const info = fetchInfo();
-    const n = REDUCED ? 99 : Math.floor((age - 0.15) * 40);
-    if (n <= 0) return;
-    text('kaiav', col, y, 'b'); text('@', col + 5, y, 'f'); text('kn84', col + 6, y, 'b');
-    g.fillStyle = P.faint; g.fillRect(X(col), y + ch * 1.48, cw * 10, 2);
-    info.forEach(([k, v], i) => {
-      if (i + 1 > n) return;
-      const top = y + (i + 2) * ch * 0.98;
-      text(k, col, top, 'd'); text(v, col + 10, top, 'n');
-    });
-    if (n > info.length + 1){
-      const top = y + (info.length + 2.4) * ch * 0.98;
-      [P.faint, P.dim, P.normal, P.bright, P.accent].forEach((c, i) => { g.fillStyle = c; g.fillRect(X(col + i * 3), top + 6, cw * 2.6, ch - 12); });
-    }
   }
 
   /* ---- frame ---- */
@@ -2433,12 +2286,15 @@ M.createTerminal = function createTerminal(opts){
     if (job && !job.hinted && !app && now - job.t0 > 0.9){ job.hinted = true; changed = true; }
     const on = ((t - blinkT0) % 1.06) < 0.53;
     if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (job && job.ask && !job.ask.one) || (app && gridCursor)) changed = true; }
+    if (idleT0 < 0 && !booting) idleT0 = t;
+    const nv = nudgeOn(); if (nv !== lastNudge){ lastNudge = nv; changed = true; }
     if (!app && animFps > 0 && t - lastAnim >= 1 / animFps - 1e-3) changed = true;
     if (!app) for (const r of drawnCards) if (r.flash != null && t - r.flash < 0.45) changed = true;   // tap / pick flash
     if (changed){ draw(); lastAnim = t; dirty = false; }
     return changed;
   }
 
+  if (!booting) endBoot();
   draw();
   return { canvas, handleKey, handleKeyUp, handleTap, insertText, update, run, scroll, get cursorY(){ return promptY / H; } };
 };

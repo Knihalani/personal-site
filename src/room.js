@@ -144,18 +144,34 @@ M.dressRoom = function (api){
     let y = 0; [['#3b4a3a', .24, .17, .028], ['#8c3b2c', .23, .16, .024], ['#d6caa9', .21, .15, .02]].forEach(([col, w, d, h], i) => {
       const pages = mat('#ebe2cb', { roughness: .95 }), cov = mat(col, { roughness: .75 });
       const b = mesh(new THREE.BoxGeometry(w, h, d), [cov, pages, cov, cov, pages, pages], st, (rnd() - .5) * .01, y + h / 2, (rnd() - .5) * .01); b.rotation.y = (rnd() - .5) * .12; y += h; });
-    // radio clock: cream plastic, a speaker grille, a red seven-segment readout that glows faintly
+    // radio clock: cream plastic, a perforated speaker grille on the left, a dim amber vacuum-fluorescent-ish
+    // seven-segment readout on the right (drawn as segments, so it never depends on a web font)
     const rc = new THREE.Group(); rc.position.set(0, y, 0); rc.rotation.y = .1; st.add(rc);
-    mesh(softBox(.15, .062, .07, .012, .004), mat('#d9cdb0', { roughness: .55 }), rc, 0, .031, 0);
-    const grille = canvasTex(128, 64, (c, W, H) => { c.fillStyle = '#2a2622'; c.fillRect(0, 0, W, H); c.fillStyle = '#4a443d'; for (let yy = 4; yy < H; yy += 6) for (let xx = 4; xx < W; xx += 6){ c.beginPath(); c.arc(xx, yy, 1.4, 0, 6.28); c.fill(); } });
-    mesh(new THREE.PlaneGeometry(.05, .036), new THREE.MeshStandardMaterial({ map: grille, roughness: .8 }), rc, -.038, .031, .0352);
-    const face = canvasTex(256, 96, (c, W, H) => { c.fillStyle = '#120806'; c.fillRect(0, 0, W, H); c.fillStyle = '#ff3b1f'; c.shadowColor = '#ff3b1f'; c.shadowBlur = 8; c.font = '700 64px "IBM Plex Mono", monospace'; c.fillText('11:47', 22, 70); });
-    const disp = mesh(new THREE.PlaneGeometry(.07, .028), new THREE.MeshStandardMaterial({ map: face, emissive: lin('#ff3b1f'), emissiveMap: face, emissiveIntensity: .6, roughness: .3 }), rc, .028, .033, .0352);
+    mesh(softBox(.15, .062, .07, .012, .004), mat('#d6c8a8', { roughness: .55 }), rc, 0, .031, 0);
+    const grille = canvasTex(160, 112, (c, W, H) => { c.fillStyle = '#b3a587'; c.fillRect(0, 0, W, H);
+      // a recessed panel edge, then a hex grid of round holes
+      c.strokeStyle = 'rgba(60,48,32,.45)'; c.lineWidth = 4; c.strokeRect(2, 2, W - 4, H - 4);
+      for (let r = 0, yy = 12; yy < H - 8; yy += 8.5, r++) for (let xx = 12 + (r & 1) * 4.5; xx < W - 9; xx += 9){
+        c.fillStyle = '#1c1712'; c.beginPath(); c.arc(xx, yy, 2.5, 0, 6.28); c.fill();
+        c.fillStyle = 'rgba(255,245,220,.25)'; c.beginPath(); c.arc(xx + .6, yy + 1.4, 2.5, .2, 2.9); c.fill(); } });
+    mesh(new THREE.PlaneGeometry(.056, .04), new THREE.MeshStandardMaterial({ map: grille, roughness: .7 }), rc, -.036, .031, .0352).castShadow = false;
+    const SEG = { a: [0, 0, 1, 0], b: [1, 0, 1, 1], c: [1, 1, 1, 2], d: [0, 2, 1, 2], e: [0, 1, 0, 2], f: [0, 0, 0, 1], g: [0, 1, 1, 1] };
+    const DIG = ['abcdef', 'bc', 'abdeg', 'abcdg', 'bcfg', 'acdfg', 'acdefg', 'abc', 'abcdefg', 'abcdfg'];
+    const face = canvasTex(256, 96, () => {});
+    const draw = () => { const d = new Date(), hh = d.getHours(), mm = d.getMinutes(), c = face.image.getContext('2d');
+      c.fillStyle = '#0d0905'; c.fillRect(0, 0, 256, 96);
+      const digits = [hh >= 10 ? (hh / 10 | 0) : -1, hh % 10, mm / 10 | 0, mm % 10], X = [20, 70, 140, 190];
+      c.lineCap = 'round'; c.lineWidth = 7;
+      digits.forEach((n, i) => { for (const k in SEG){ const [x0, y0, x1, y1] = SEG[k], on = n >= 0 && DIG[n].includes(k);
+          c.strokeStyle = on ? '#e8a24a' : 'rgba(120,80,30,.08)'; c.shadowColor = '#d98a2b'; c.shadowBlur = on ? 6 : 0;
+          const sk = .12, px = v => X[i] + v * 36, py = v => 14 + v * 34;
+          c.beginPath(); c.moveTo(px(x0 + .08 * (x1 - x0)) - sk * py(y0) + 6, py(y0 + .06 * (y1 - y0))); c.lineTo(px(x1 - .08 * (x1 - x0)) - sk * py(y1) + 6, py(y1 - .06 * (y1 - y0))); c.stroke(); } });
+      c.shadowBlur = 0; c.fillStyle = d.getSeconds() & 1 ? '#e8a24a' : 'rgba(120,80,30,.12)';
+      for (const yy of [36, 62]){ c.beginPath(); c.arc(122, yy, 3.6, 0, 6.28); c.fill(); }
+      face.needsUpdate = true; };
+    const disp = mesh(new THREE.PlaneGeometry(.07, .028), new THREE.MeshStandardMaterial({ map: face, emissive: lin('#ffffff'), emissiveMap: face, emissiveIntensity: .32, roughness: .3 }), rc, .028, .033, .0352);
     disp.castShadow = false;
     // keep the clock honest: it shows the visitor's own time
-    const draw = () => { const d = new Date(), hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
-      const c = face.image.getContext('2d'); c.fillStyle = '#120806'; c.fillRect(0, 0, 256, 96); c.fillStyle = '#ff3b1f'; c.shadowColor = '#ff3b1f'; c.shadowBlur = 8;
-      c.font = '700 64px "IBM Plex Mono", monospace'; c.fillText(hh + (d.getSeconds() & 1 ? ':' : ' ') + mm, 22, 70); c.shadowBlur = 0; face.needsUpdate = true; };
     draw(); setInterval(draw, 1000);
     mesh(softBox(.016, .008, .016, .003, .002), mat('#b9ad90', { roughness: .5 }), rc, .055, .066, 0);
   }

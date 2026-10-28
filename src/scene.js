@@ -117,7 +117,6 @@ M.createScene = function createScene(container){
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.shadowMap.autoUpdate = false;   // the lamp is fixed: the shadow pass re-renders only while something moves (see render())
   renderer.setClearColor(0x050608, 1);
-  renderer.domElement.setAttribute('tabindex', '0');
   container.appendChild(renderer.domElement);
   const ANISO = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
@@ -128,7 +127,7 @@ M.createScene = function createScene(container){
 
   /* ---------------- materials ---------------- */
   /* warm off-white ABS, a few years into yellowing: noise mottling, a faint warm sheen to fake subsurface */
-  const PLASTIC = [0.84, 0.825, 0.775];
+  const PLASTIC = [0.86, 0.815, 0.728];   // warm beige under a 2700K lamp, not grey-olive under the tube
   const plasticBase = (u, v, o, sx, sy) => {
     const n = fbm(u * sx * 6, v * sy * 6, 4), s = vnoise(u * sx * 140, v * sy * 140);
     const y = .015 + .03 * fbm(u * sx * 1.5 + 9, v * sy * 1.5, 3); // uneven yellowing
@@ -569,7 +568,7 @@ M.createScene = function createScene(container){
   const LAMP = { base: new V3(-.5, DESK_Y, -.25), elbow: new V3(-.54, 1.12, -.31), head: new V3(-.31, 1.13, -.07), target: new V3(-.17, DESK_Y, .13) };
   const lampDir = new V3().subVectors(LAMP.target, LAMP.head).normalize();
   const bulbPos = new V3();
-  let bulbMat = null, shadeInnerMat = null;
+  let bulbMat = null, shadeInnerMat = null, shadeLipMat = null; const shadeRim = { value: 1 };
   {
     const enamel = new THREE.MeshStandardMaterial({ color: lin(0x1d2620), roughness: .42, metalness: .35 }); // bottle-green enamel, nearly black
     const brass = new THREE.MeshStandardMaterial({ color: lin(0xb08a52), roughness: .35, metalness: .9 });
@@ -590,13 +589,30 @@ M.createScene = function createScene(container){
       for (const sg of [1, -1]){ const pts = []; for (let i = 0; i <= 220; i++){ const t = i / 220, th = t * 46 * Math.PI * 2;
           pts.push(a.clone().addScaledVector(d, t * Lr).add(off).addScaledVector(side, sg * .011 + Math.cos(th) * .0032).addScaledVector(w, Math.sin(th) * .0032)); }
         g.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 260, .0007, 4), brass)); } }
-    // the shade: a bell with a rolled lip, enamel outside, warm white inside
+    // the shade: a bell with a rolled lip. Outside, glossy dark enamel that keeps a soft edge against the room;
+    // inside, white enamel lit by the bulb itself (baked as a gradient: hot round the bulb, falling off toward the
+    // mouth), and a pale rolled lip where the two meet, so it reads as a cone you can see into, not a flat disc
     const prof = [[0, 0], [.018, 0], [.024, -.006], [.028, -.03], [.036, -.056], [.052, -.086], [.068, -.11], [.073, -.118], [.0745, -.122], [.071, -.123]].reverse().map(([x, y]) => new THREE.Vector2(x, y)); // bottom-up so normals face out
     const shade = new THREE.Group();
-    const enamelShade = enamel.clone(); enamelShade.side = THREE.DoubleSide;
-    const outer = mesh(new THREE.LatheGeometry(prof, 48), enamelShade); shade.add(outer);
-    const innerM = shadeInnerMat = new THREE.MeshStandardMaterial({ color: lin(0xe8dcc4), emissive: lin(0xffc58a), emissiveIntensity: .12, roughness: .7, side: THREE.DoubleSide });
-    shade.add(mesh(new THREE.LatheGeometry(prof.map(v => new THREE.Vector2(v.x * .985, v.y)), 48), innerM, false));
+    const shadeOuterM = new THREE.MeshPhysicalMaterial({ color: lin(0x26332b), roughness: .34, metalness: .25, clearcoat: .7, clearcoatRoughness: .3 });
+    shadeOuterM.onBeforeCompile = sh => {   // a faint warm fresnel edge (the lit desk below reflected in the enamel)
+      sh.uniforms.uRim = shadeRim;
+      sh.fragmentShader = 'uniform float uRim;\n' + sh.fragmentShader.replace('#include <output_fragment>',
+        'float shF = pow(1. - clamp(dot(normalize(normal), normalize(vViewPosition)), 0., 1.), 3.);\n outgoingLight += vec3(.06, .045, .03) * shF * uRim;\n#include <output_fragment>');
+    };
+    shade.add(mesh(new THREE.LatheGeometry(prof, 64), shadeOuterM));
+    const innerG = new THREE.LatheGeometry(prof.slice(1).map(v => new THREE.Vector2(v.x * .975, v.y + .0012)), 64);
+    { const P = innerG.attributes.position, C = new Float32Array(P.count * 3), bz = -.074;
+      for (let i = 0; i < P.count; i++){ const r = Math.hypot(P.getX(i), P.getZ(i)), y = P.getY(i), d = Math.hypot(r, y - bz);
+        // inverse-square from the bulb, softened, with a slight warm shift as it falls off toward the mouth
+        const k = clamp(Math.pow(.052 / Math.max(d, .03), 2), .18, 1.4), m = sstep(-.06, -.122, y);
+        C[i * 3] = 1.25 * k; C[i * 3 + 1] = (1.02 - .1 * m) * k; C[i * 3 + 2] = (.74 - .16 * m) * k; }
+      innerG.setAttribute('color', new THREE.BufferAttribute(C, 3)); }
+    const innerM = shadeInnerMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xffffff, side: THREE.BackSide });
+    shade.add(mesh(innerG, innerM, false));
+    // the rolled lip: a pale edge that catches the bulb
+    const lipM = shadeLipMat = new THREE.MeshStandardMaterial({ color: lin(0xd9cdb6), emissive: lin(0xffc98f), emissiveIntensity: .35, roughness: .5 });
+    const lipR = mesh(new THREE.TorusGeometry(.0728, .0016, 8, 72), lipM, false); lipR.rotation.x = Math.PI / 2; lipR.position.y = -.1222; shade.add(lipR);
     bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, .86, .62), toneMapped: false });
     const bulb = mesh(new THREE.SphereGeometry(.024, 24, 16), bulbMat, false);
     bulb.position.y = -.074; shade.add(bulb);
@@ -605,7 +621,7 @@ M.createScene = function createScene(container){
     shade.quaternion.setFromUnitVectors(new V3(0, -1, 0), lampDir);
     g.add(shade); shade.updateMatrixWorld(true);
     bulb.getWorldPosition(bulbPos);
-    g.traverse(o => { if (o.isMesh && o !== bulb) o.castShadow = true; });
+    g.traverse(o => { if (o.isMesh && o !== bulb && o.material !== innerM && o.material !== lipM) o.castShadow = true; });
   }
 
   /* ================= LIGHTS ================= */
@@ -622,14 +638,14 @@ M.createScene = function createScene(container){
   glow.position.copy(screenCenter).addScaledVector(screenNormal, .02); glow.target.position.copy(screenCenter).addScaledVector(screenNormal, 1).add(new V3(0, -.35, 0));
   scene.add(glow, glow.target);
   // spill: the tube also washes its own bezel, the lip and the front of the case in soft green (the spot can't, it faces away)
-  const spill = new THREE.PointLight(new THREE.Color(PHOSPHOR[0] * .75, PHOSPHOR[1], PHOSPHOR[2] * .85), .03, .9, 2);
+  const spill = new THREE.PointLight(new THREE.Color(.82, 1, .86), .03, .9, 2);   // mostly white: a green wash turns the beige olive
   spill.position.copy(screenCenter).addScaledVector(screenNormal, .1); scene.add(spill);
   // night through the window: a cool rim from behind the machine, and a whisper of ambient
   const moon = new THREE.DirectionalLight(lin(0x6f86b8), .18); moon.position.set(WIN.x, WIN.y + .3, WALL_Z - 1); moon.target.position.set(.2, .9, .8); scene.add(moon, moon.target);
   const hemi = new THREE.HemisphereLight(lin(0x405070), lin(0x1a120c), .26); scene.add(hemi);
   screenU.uLamp.value.copy(bulbPos);
 
-  /* ---- light shaft and dust in the beam ---- */
+  /* ---- a faint light shaft under the shade (no dust: specks read as stars against the dark wall) ---- */
   const shaftAmt = { value: 1 };
   {
     const len = bulbPos.distanceTo(LAMP.target) * 1.05, r0 = .06, r1 = len * Math.tan(.6) * .95;
@@ -646,27 +662,6 @@ M.createScene = function createScene(container){
     }));
     cone.position.copy(bulbPos); cone.quaternion.setFromUnitVectors(new V3(0, -1, 0), lampDir); cone.renderOrder = 2; scene.add(cone);
   }
-  const dustU = { uTime: { value: 0 }, uLampPos: { value: bulbPos.clone() }, uLampDir: { value: lampDir.clone() }, uCos: { value: Math.cos(.62) }, uPR: { value: pixelRatio }, uScale: { value: 800 }, uAmt: shaftAmt };
-  {
-    const N = 340, pos = new Float32Array(N * 3), sd = new Float32Array(N * 3);
-    const side = new V3().crossVectors(lampDir, new V3(0, 1, 0)).normalize(), up2 = new V3().crossVectors(side, lampDir).normalize();
-    seed = 3;
-    for (let i = 0; i < N; i++){ const d = .08 + rnd() * .42, rr = Math.sqrt(rnd()) * d * Math.tan(.66), a = rnd() * Math.PI * 2;
-      const p = bulbPos.clone().addScaledVector(lampDir, d).addScaledVector(side, Math.cos(a) * rr).addScaledVector(up2, Math.sin(a) * rr);
-      pos.set([p.x, p.y, p.z], i * 3); sd.set([rnd(), rnd(), rnd()], i * 3); }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('seed', new THREE.BufferAttribute(sd, 3));
-    const dust = new THREE.Points(g, new THREE.ShaderMaterial({ uniforms: dustU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      vertexShader: `attribute vec3 seed; uniform float uTime, uCos, uPR, uScale, uAmt; uniform vec3 uLampPos, uLampDir; varying float vA;
-        void main(){ float t = uTime; vec3 p = position;
-          p += vec3(sin(t * .11 + seed.x * 6.28) * .035 + sin(t * .37 + seed.z * 12.) * .006, sin(t * .07 + seed.y * 6.28) * .03 - .01 * sin(t * .05 + seed.x * 3.), cos(t * .09 + seed.z * 6.28) * .035);
-          vec3 d = p - uLampPos; float dist = length(d); float c = dot(d / dist, uLampDir);
-          vA = smoothstep(uCos - .02, uCos + .1, c) * (.35 + .65 * seed.x) * smoothstep(.06, .16, dist) * (.55 + .45 * sin(t * (.6 + seed.y) + seed.x * 40.)) * uAmt;
-          vec4 mv = modelViewMatrix * vec4(p, 1.); gl_Position = projectionMatrix * mv;
-          gl_PointSize = (1.2 + 2.2 * seed.y * seed.y) * uPR * uScale * .0025 / -mv.z; }`,
-      fragmentShader: `varying float vA; void main(){ float r = length(gl_PointCoord - .5); float a = smoothstep(.5, .05, r) * vA * .55; gl_FragColor = vec4(vec3(1., .82, .6) * a, 1.); }` }));
-    dust.frustumCulled = false; dust.renderOrder = 3; scene.add(dust);
-  }
-
   /* ================= PROPS ================= */
   {
     // mug: speckled cream stoneware with an iron-brown dipped rim, coffee gone cold
@@ -782,8 +777,8 @@ M.createScene = function createScene(container){
   const qLook = new THREE.Quaternion(), qDelta = new THREE.Quaternion(), eLook = new THREE.Euler(0, 0, 0, 'YXZ');
   const eyeNow = eyeRest.clone(), fwdNow = new V3();
   let breathT = 0;
-  /* v4: TWO fixed shots, switched by scrolling (setView), with a smooth dolly between them. Neither follows the pointer.
-     'screen': square-on to the tube, close, the glass filling the frame (the reading view).
+  /* Two solved shots; the pointer blends between them (setLook: down leans back).
+     'screen': square-on to the tube, close, the glass filling the frame (the reading view, at rest).
      'full'  : sat back and above, looking down: the whole machine, the whole keyboard and both hands. */
   const camN = screenNormal.clone().normalize();
   const camQS = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new V3(), camN.clone().negate(), new V3(0, 1, 0)));
@@ -799,7 +794,6 @@ M.createScene = function createScene(container){
     return ps;
   })();
   const shot = { screen: { pos: new V3(), q: new THREE.Quaternion(), fov: 30 }, full: { pos: eyeFull.clone(), q: new THREE.Quaternion(), fov: 40 } };
-  const viewS = { x: 0, v: 0, t: 0 };   // 0 = screen, 1 = full
   function solveShots(){
     // screen: the glass fills ~72% of the height (or ~84% of the width on narrow windows), dead centre, square-on,
     // so the bezel and a margin of the case frame it all round
@@ -826,7 +820,7 @@ M.createScene = function createScene(container){
   function applyCamera(){
     // the pointer looks around: down leans back toward the full view (the hands), sideways/up turn the head a little
     const down = clamp(-pitchS.x / LOOK.down, 0, 1);
-    const k = sstep(0, 1, 1 - (1 - clamp(viewS.x, 0, 1)) * (1 - down));
+    const k = sstep(0, 1, down);
     const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * lerp(YAW_REST, YAW_FULL, k);
     camera.position.lerpVectors(shot.screen.pos, shot.full.pos, k);
     // the head travels a slight arc (up and back first) rather than a straight dolly
@@ -879,7 +873,7 @@ M.createScene = function createScene(container){
     lamp.intensity = 5.6 * L; lamp.visible = L > .002;
     lamp.color.copy(LAMP_DIM).lerp(LAMP_COL, warm);
     bounce.intensity = .14 * L;
-    shadeInnerMat.emissiveIntensity = .12 * L;
+    shadeInnerMat.color.setScalar(.03 + .97 * L); shadeLipMat.emissiveIntensity = .35 * L; shadeRim.value = L;
     _c.copy(BULB_DIM).lerp(BULB_HOT, warm).multiplyScalar(Math.min(1, L * 1.4));
     bulbMat.color.setRGB(.07 + _c.r, .065 + _c.g, .06 + _c.b);
     shaftAmt.value = Math.pow(L, 1.5);
@@ -897,7 +891,7 @@ M.createScene = function createScene(container){
   const intro = { t: REDUCED ? 9 : 0, end: 1.35 };
   const skipIntro = () => { if (intro.t < intro.end) intro.t = intro.end; };
   /* render on demand: the loop calls render() every frame, but a still picture (settled camera, no key or lamp
-     motion, nothing new on the tube) is drawn at ~20 fps so the flicker and dust keep breathing at a fraction of
+     motion, nothing new on the tube) is drawn at ~20 fps so the flicker keeps breathing at a fraction of
      the GPU cost. The shadow map re-renders only while hands or keys move, plus a slow refresh for idle fidgets. */
   let sinceMove = 0, sinceRender = 9, screenDirty = true, shadowAge = 9, drew = false, warmed = false;
   const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
@@ -940,10 +934,6 @@ M.createScene = function createScene(container){
       floorY: 0, deskTop: DESK_Y, deskBounds: { minX: -DESK.w / 2, maxX: DESK.w / 2, minZ: DESK.z - DESK.d / 2, maxZ: DESK.z + DESK.d / 2 },
       wallZ: WALL_Z, windowRect: { x: WIN.x - WIN.hw - .05, y: WIN.y - WIN.hh - .025, w: WIN.hw * 2 + .1, h: WIN.hh * 2 + .045 } }, // x, y = lower-left corner, includes the trim and sill
     add(o){ scene.add(o); added.push(o); o.traverse(m => { if (m.isMesh && !m.userData.noShadow) m.castShadow = true; }); },
-    /* 'screen' (close, reading) | 'full' (the whole desk); toggleView() flips; view is the current target */
-    setView(name){ viewS.t = name === 'full' ? 1 : 0; if (REDUCED){ viewS.x = viewS.t; viewS.v = 0; } },
-    toggleView(){ api.setView(viewS.t ? 'screen' : 'full'); },
-    get view(){ return viewS.t ? 'full' : 'screen'; },
     /* the desk lamp: true/false; get lampOn for the current switch state */
     setLamp(on){ on = !!on; if (on === lampS.on) return; lampS.on = on; lampS.t = 0; sag = REDUCED ? 0 : 1; },
     get lampOn(){ return lampS.on; },
@@ -957,7 +947,6 @@ M.createScene = function createScene(container){
       yawS.t = -Math.sign(nx) * sx;
       pitchS.t = ny > 0 ? -sstep(.3, .92, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
     },
-    setPointer(nx, ny){ api.setLook(nx, ny); },
     /* a keystroke: the head dips toward the work for a moment */
     nudge(){ skipIntro(); sinceMove = 0; },
     update(dt, t){
@@ -965,8 +954,8 @@ M.createScene = function createScene(container){
       if (intro.t < intro.end && pitchS.t < -.2) skipIntro();   // leaning back skips the reveal too
       const drewLast = drew; drew = false;
       sinceMove += dt; sinceRender += dt;
-      if (Math.abs(yawS.v) + Math.abs(pitchS.v) + Math.abs(viewS.v) > 2e-3 || Math.abs(yawS.t - yawS.x) + Math.abs(pitchS.t - pitchS.x) > 1e-3) sinceMove = 0;
-      crit(yawS, 3.4, dt); crit(pitchS, 3.1, dt); crit(viewS, 3.2, dt);   // slow, critically damped: glides, never overshoots
+      if (Math.abs(yawS.v) + Math.abs(pitchS.v) > 2e-3 || Math.abs(yawS.t - yawS.x) + Math.abs(pitchS.t - pitchS.x) > 1e-3) sinceMove = 0;
+      crit(yawS, 3.4, dt); crit(pitchS, 3.1, dt);   // slow, critically damped: glides, never overshoots
       { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h; leanS.v += (-110 * leanS.x - 2 * .75 * 10.5 * leanS.v) * h; leanS.x += leanS.v * h; } }
       leanS.x = clamp(leanS.x, -.3, 1);
       applyCamera(t);
@@ -1003,13 +992,15 @@ M.createScene = function createScene(container){
       if (sag > 0){ sag = Math.max(0, sag - dt * 5); sinceMove = 0; }
       screenU.uBright.value = 1 - .22 * Math.sin(Math.min(1, sag) * Math.PI) * (sag > .5 ? 1 : .6);
       if (lampS.level > .002 && lampS.level < .999) sinceMove = 0;
-      glow.intensity = (.2 + .6 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.6 * lampS.adapt);
-      spill.intensity = (.0025 + .01 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.5 * lampS.adapt);
-      dustU.uTime.value = REDUCED ? 40 : t;
+      // during the reveal the lamp is still dark and the eye is adapting, so an undamped tube light would wash the
+      // beige case green: hold the tube's light on the room back until the lamp has come up
+      const reveal = intro.t < intro.end + .5 ? sstep(.6, intro.end + .5, intro.t) : 1;
+      glow.intensity = (.2 + .6 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.6 * lampS.adapt) * (.25 + .75 * reveal);
+      spill.intensity = (.0015 + .006 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + .8 * lampS.adapt) * reveal;
       // keep it smooth on modest GPUs: step the pixel ratio down if frames run long
       // only frames that were actually drawn count (idle frames are throttled), and not during the reveal
       if (drewLast && intro.t > intro.end){ perfT += dt; frames++; if (dt > .026) slowAcc++; }
-      if (perfT > 2.5){ if (frames > 20 && slowAcc / frames > .5 && pixelRatio > 1){ pixelRatio = prCap = Math.max(1, pixelRatio - .25); renderer.setPixelRatio(pixelRatio); dustU.uPR.value = pixelRatio;
+      if (perfT > 2.5){ if (frames > 20 && slowAcc / frames > .5 && pixelRatio > 1){ pixelRatio = prCap = Math.max(1, pixelRatio - .25); renderer.setPixelRatio(pixelRatio);
           const s = renderer.getSize(new THREE.Vector2()); renderer.setSize(s.x, s.y, false); } perfT = 0; frames = 0; slowAcc = 0; }
     },
     render(){
@@ -1017,19 +1008,19 @@ M.createScene = function createScene(container){
       if (!busy && sinceRender < 1 / 20 - .004) return;
       sinceRender = 0; screenDirty = false; drew = true;
       // shadows: every frame while hands/keys/lamp move; otherwise a slow refresh (hands fidget), slower still at rest
-      const leaned = sstep(0, 1, 1 - (1 - clamp(viewS.x, 0, 1)) * (1 - clamp(-pitchS.x / LOOK.down, 0, 1)));
+      const leaned = sstep(0, 1, clamp(-pitchS.x / LOOK.down, 0, 1));
       shadowAge++;
       if (sinceMove < 1.6 || shadowAge > (leaned > .05 ? 3 : 20)){ renderer.shadowMap.needsUpdate = true; shadowAge = 0; }
       scene.updateMatrixWorld(); hideNearEye(); renderer.render(scene, camera);
     },
     resize(w, h){
-      const pr = Math.min(prFor(w, h), prCap); if (Math.abs(pr - pixelRatio) > .01){ pixelRatio = pr; renderer.setPixelRatio(pr); dustU.uPR.value = pr; }
+      const pr = Math.min(prFor(w, h), prCap); if (Math.abs(pr - pixelRatio) > .01){ pixelRatio = pr; renderer.setPixelRatio(pr); }
       renderer.setSize(w, h, false); aspect = w / Math.max(1, h); screenDirty = true; camera.aspect = aspect; camera.updateProjectionMatrix();
-      dustU.uScale.value = h;
       frameLens(); solveShots(); applyCamera(breathT);
     },
   };
-  api._dbg = { yawS, pitchS, viewS, intro, shot };
+  // test hook only: ?debug exposes the camera springs (e.g. pitchS.x = pitchS.t = -LOOK.down to force the lean)
+  if (/[?&]debug\b/.test(location.search)) api._dbg = { yawS, pitchS, intro, shot, LOOK, lampS };
   api.resize(container.clientWidth || innerWidth, container.clientHeight || innerHeight);
   return api;
 };

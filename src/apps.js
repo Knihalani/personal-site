@@ -13,12 +13,14 @@ T.cmds = T.cmds || {}; T.apps = T.apps || {};
 /* ---- shared helpers ---- */
 const blk = level => ({ fg: level, inverse: true });
 const secs = dt => (dt > 1 ? dt / 1000 : dt) || 0;          // accept seconds (or ms, defensively)
-const hiGet = k => { try { return +localStorage.getItem(k) || 0; } catch (e) { return 0; } };
-const hiSet = (k, v) => { try { localStorage.setItem(k, String(v)); } catch (e) {} };
+const hiGet = k => +T.store.get(k, 0) || 0, hiSet = T.store.set;   // terminal.js
 const sound = (api, name) => { try { (api.sound || M.sound)?.event(name); } catch (e) {} };
 const center = (scr, y, s, style) => scr.put(Math.max(0, ((scr.cols - s.length) / 2) | 0), y, s, style);
 const pad = (n, w) => String(n).padStart(w, ' ');
 const isQuit = k => k === 'q' || k === 'Q' || k === 'Escape';
+const mq = q => typeof matchMedia === 'function' && matchMedia(q).matches;
+const TOUCH = mq('(pointer: coarse)');                       // phones: tap zones instead of arrows
+const REDUCED = mq('(prefers-reduced-motion: reduce)');
 function box(scr, x, y, w, h, style){                       // ASCII frame, fill inside with spaces
   scr.fill(x, y, w, h, ' ', 'normal');
   scr.put(x, y, '+' + '-'.repeat(w - 2) + '+', style);
@@ -67,6 +69,7 @@ const gravity = lvl => Math.pow(Math.max(0.05, 0.8 - (lvl - 1) * 0.007), lvl - 1
 const TETRIS_HI = 'kaiav.tetris.hi';
 
 T.apps.tetris = {
+  g: 'fun',
   desc: 'the falling blocks. arrows, space, c to hold',
   usage: 'tetris',
   start(api){
@@ -138,8 +141,23 @@ T.apps.tetris = {
       next();
     }
     next();
+    let oyDrawn = 0;                                         // where the well was last drawn (for taps)
 
     return {
+      /* phones: the top of the screen turns, the bottom drops, the left and right thirds move */
+      tap(col, row){
+        help = false;
+        if (over){ restart(); return true; }
+        if (paused){ paused = false; return true; }
+        if (!cur || flash) return true;
+        const rows = api.rows || 23, cols = api.cols || 40;
+        if (row < rows * 0.3) rotate(1);
+        else if (row >= Math.min(rows * 0.75, oyDrawn + BH)) hardDrop();
+        else if (col < cols / 3) shift(-1);
+        else if (col >= cols * 2 / 3) shift(1);
+        else rotate(1);
+        return true;
+      },
       key(e){
         const k = e.key;
         help = false;
@@ -184,7 +202,7 @@ T.apps.tetris = {
         const W = BW * 2 + 4;
         const compact = STACK || scr.cols < 64 || scr.rows < 22;      // one panel, beside the well or under it
         const ox = STACK ? Math.max(0, ((scr.cols - W) / 2) | 0) : compact ? Math.max(0, ((scr.cols - (W + 3 + 20)) / 2) | 0) : ((scr.cols - W) / 2) | 0;
-        const oy = Math.max(0, ((scr.rows - BH - 2 - (STACK ? 13 : 0)) / 2) | 0);
+        const oy = Math.max(0, ((scr.rows - BH - 2 - (STACK ? 13 : 0)) / 2) | 0); oyDrawn = oy;
         const bx = ox + 2;  // first board column
         // well: classic "<!" ... "!>" sides
         for (let y = 0; y < BH; y++){
@@ -216,9 +234,10 @@ T.apps.tetris = {
             .forEach(([a, v, st], i) => { scr.put(rx, ry + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, ry + 4 + i, String(v), st); });
           const ks = [['<- ->', 'move'], ['up x', 'rotate'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           const ky = ry + 9, two = STACK || scr.rows - ky < ks.length;
-          const short = [['<->', 'move'], ['up', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
+          const short = TOUCH ? [['tap', 'sides move'], ['top', 'turn'], ['low', 'drop'], ['q', 'quit']]
+            : [['<->', 'move'], ['up', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           (two ? short : ks).forEach(([a, b], i) => {
-            const x = rx + (two ? (i % 2) * 11 : 0), y = ky + (two ? i >> 1 : i);
+            const x = rx + (two ? (i % 2) * (TOUCH ? 15 : 11) : 0), y = ky + (two ? i >> 1 : i);
             if (y >= scr.rows) return;
             scr.put(x, y, two ? a.padEnd(4) : a.padEnd(7), 'normal'); scr.put(x + (two ? 4 : 7), y, b, 'faint');
           });
@@ -245,7 +264,8 @@ T.apps.tetris = {
         if (paused){
           box(scr, cardX, oy + 7, cardW, 5, 'dim');
           scr.put(cardX + ((cardW - 6) / 2 | 0), oy + 8, 'PAUSED', 'bright');
-          scr.put(cardX + ((cardW - 14) / 2 | 0), oy + 10, 'p to carry on', 'dim');
+          const go = TOUCH ? 'tap to go on' : 'p to carry on';
+          scr.put(cardX + ((cardW - go.length) / 2 | 0), oy + 10, go, 'dim');
         } else if (over){
           const top = Math.max(0, Math.min(5, BH - 10));
           box(scr, cardX, oy + top, cardW, 10, 'normal');
@@ -254,10 +274,10 @@ T.apps.tetris = {
           c(8, 'score ' + score, 'normal');
           c(9, lines + ' lines  lvl ' + level, 'dim');
           c(10, newHi ? '* new high score *' : 'best ' + hi, newHi ? 'accent' : 'dim');
-          if (Math.floor(t * 2) % 2 === 0) c(12, 'enter: again', 'normal');
+          if (REDUCED || Math.floor(t * 2) % 2 === 0) c(12, TOUCH ? 'tap: again' : 'enter: again', 'normal');
           c(13, 'q: quit', 'faint');
         } else if (help && score === 0){
-          scr.put(bx + 3, oy + 3, 'arrows to play', 'dim');
+          scr.put(bx + 3, oy + 3, TOUCH ? ' tap to play' : 'arrows to play', 'dim');
         }
       },
     };
@@ -269,6 +289,7 @@ T.apps.tetris = {
    ===================================================================================== */
 const SNAKE_HI = 'kaiav.snake.hi';
 T.apps.snake = {
+  g: 'fun',
   desc: 'eat, grow, do not bite yourself. arrows or wasd',
   usage: 'snake',
   start(api){
@@ -314,7 +335,23 @@ T.apps.snake = {
         sound(api, 'beep');
       } else body.pop();
     }
+    let headAt = [0, 0];                                     // the head's screen cell, from the last render
+    function turn(d){
+      const last = queue.length ? queue[queue.length - 1] : dir;
+      if (d !== last && !opposite(d, last) && queue.length < 3) queue.push(d);
+    }
     return {
+      /* phones: tap on the side of the head you want to go; the snake turns that way */
+      tap(col, row){
+        if (over){ reset(); return true; }
+        if (paused){ paused = false; return true; }
+        started = true;
+        const last = queue.length ? queue[queue.length - 1] : dir;
+        const dx = (col - headAt[0]) / 2, dy = row - headAt[1];
+        if (last === 'left' || last === 'right'){ if (dy) turn(dy < 0 ? 'up' : 'down'); }
+        else if (dx) turn(dx < 0 ? 'left' : 'right');
+        return true;
+      },
       key(e){
         const k = e.key;
         if (over){
@@ -325,11 +362,8 @@ T.apps.snake = {
         if (isQuit(k)){ api.print(`snake: ${score} points, length ${body.length}. high score ${Math.max(hi, score)}.`); if (score > hi) hiSet(SNAKE_HI, score); api.exit(0); return true; }
         if (k === 'p' || k === 'P' || (k === ' ' && started)){ paused = !paused; return true; }
         const d = KEYMAP[k];
-        if (d && !paused){
-          started = true;
-          const last = queue.length ? queue[queue.length - 1] : dir;
-          if (d !== last && !opposite(d, last) && queue.length < 3) queue.push(d);
-        } else if (!started && (k === ' ' || k === 'Enter')) started = true;
+        if (d && !paused){ started = true; turn(d); }
+        else if (!started && (k === ' ' || k === 'Enter')) started = true;
         return true;
       },
       tick(dt){
@@ -355,7 +389,7 @@ T.apps.snake = {
         scr.put(ox, oy + GH + 1, '+' + '-'.repeat(GW * 2) + '+', 'faint');
         const at = (x, y, s, st) => scr.put(ox + 1 + x * 2, oy + 1 + y, s, st);
         // food blinks gently
-        if (food) at(food[0], food[1], '<>', Math.floor(t * 3) % 3 ? 'bright' : 'normal');
+        if (food) at(food[0], food[1], '<>', REDUCED || Math.floor(t * 3) % 3 ? 'bright' : 'normal');
         // body: tail fades through the phosphor levels
         const n = body.length;
         for (let i = n - 1; i >= 1; i--){
@@ -363,6 +397,7 @@ T.apps.snake = {
           at(body[i][0], body[i][1], '  ', blk(f < 0.5 ? 'normal' : f < 0.85 ? 'dim' : 'faint'));
         }
         const [hx, hy] = body[0];
+        headAt = [ox + 1 + hx * 2, oy + 1 + hy];
         at(hx, hy, over ? 'xx' : '  ', blk('bright'));
         const cw = 30, cx = ox + 1 + ((GW * 2 - cw) / 2 | 0), cy = oy + ((GH - 9) / 2 | 0) + 1;
         const c = (y, s, st) => scr.put(cx + ((cw - s.length) / 2 | 0), cy + y, s, st);
@@ -372,16 +407,16 @@ T.apps.snake = {
           c(3, score + ' points', 'normal');
           c(4, 'length ' + n + '   apples ' + eaten, 'dim');
           c(6, newHi ? '* new high score *' : 'best ' + hi, newHi ? 'accent' : 'dim');
-          if (Math.floor(t * 2) % 2 === 0) c(8, 'enter: again    q: quit', 'normal');
+          if (REDUCED || Math.floor(t * 2) % 2 === 0) c(8, (TOUCH ? 'tap: again' : 'enter: again') + '    q: quit', 'normal');
           else c(8, '      again       quit', 'faint');
         } else if (paused){
           box(scr, cx, cy + 2, cw, 5, 'dim');
-          c(3, 'PAUSED', 'bright'); c(5, 'p to carry on', 'dim');
+          c(3, 'PAUSED', 'bright'); c(5, TOUCH ? 'tap to go on' : 'p to carry on', 'dim');
         } else if (!started){
           box(scr, cx, cy + 1, cw, 7, 'dim');
           c(2, 'S N A K E', 'bright');
-          c(4, 'arrows or wasd to start', 'normal');
-          c(5, 'p pause   q quit', 'faint');
+          c(4, TOUCH ? 'tap beside the head to turn' : 'arrows or wasd to start', 'normal');
+          c(5, TOUCH ? 'tap to start   q quit' : 'p pause   q quit', 'faint');
         }
       },
     };
@@ -394,10 +429,11 @@ T.apps.snake = {
 const LUM = '.,-:;=+!*#$@';      // VT323 draws ~ as a squiggle, so it is left out
 const LUM_STYLE = ['faint', 'faint', 'faint', 'dim', 'dim', 'dim', 'normal', 'normal', 'normal', 'bright', 'bright', 'bright'];
 T.apps.donut = {
+  g: 'fun',
   desc: 'a spinning ascii donut (after a1k0n). hold the arrows to spin it',
   usage: 'donut',
   start(api){
-    const IDLE_A = 1.0, IDLE_B = 0.5, SPIN = 3.4;   // idle drift and held-arrow spin (rad/s)
+    const IDLE_A = REDUCED ? 0 : 1.0, IDLE_B = REDUCED ? 0 : 0.5, SPIN = 3.4;   // idle drift (none with reduced motion) and held-arrow spin (rad/s)
     let A = 1, B = 0, vA = IDLE_A, vB = IDLE_B;     // angles and spin speeds (rad/s)
     let idle = 1, paused = false, t = 0, gotUp = false, note = '', noteT = 0;
     const held = { up: 0, down: 0, left: 0, right: 0 };   // time of the last keydown, 0 when released
@@ -510,28 +546,27 @@ const lamp = {
     const w = M.world;
     const arg = (argv[1] || '').toLowerCase();
     if (!w || typeof w.lamp !== 'function'){
-      io.err('lamp: no lamp here. it is on the desk in the 3D room\n');
+      io.err('lamp: there is no lamp on this screen\n');
       io.exit && io.exit(1);
       return;
     }
     const state = !!w.lampOn;
     if (arg === 'status'){
-      io.out('the lamp is ' + (state ? 'on.' : 'off.') + '  ', 'normal');
-      io.out('usage: ' + lamp.usage + '\n', 'faint');
+      io.out('the lamp is ' + (state ? 'on' : 'off') + '.\n');
       return;
     }
     let want;
     if (['on', '1', 'yes', 'up'].includes(arg)) want = true;
     else if (['off', '0', 'no', 'down', 'out'].includes(arg)) want = false;
     else if (!arg || ['toggle', 'flip', 'switch'].includes(arg)) want = !state;
-    else { io.err('lamp: no idea how to "' + arg + '" a lamp. usage: ' + lamp.usage + '\n'); io.exit && io.exit(2); return; }
+    else { io.err('lamp: try lamp on or lamp off\n'); io.exit && io.exit(2); return; }
     if (want === state){
-      io.out(state ? 'the lamp is already on.\n' : 'it is already dark in here.\n', 'dim');
+      io.out('the lamp is already ' + (state ? 'on' : 'off') + '.\n', 'dim');
       return;
     }
     const now = w.lamp(want);
     const on = typeof now === 'boolean' ? now : want;
-    io.out(on ? '*click*  warm light again.\n' : '*click*  the room goes dark. the screen is enough.\n', on ? 'bright' : 'dim');
+    io.out('lamp ' + (on ? 'on' : 'off') + '.\n', on ? 'normal' : 'dim');
   },
 };
 T.cmds.lamp = lamp;

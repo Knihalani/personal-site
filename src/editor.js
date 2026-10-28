@@ -12,8 +12,8 @@ const T = M.TERM = M.TERM || { cmds: {}, apps: {} };
 T.cmds = T.cmds || {}; T.apps = T.apps || {};
 
 const GUTTER_KEY = 'kaiav.edit.gutter';
-const prefGet = () => { try { const v = localStorage.getItem(GUTTER_KEY); return v == null ? null : v === '1'; } catch (e){ return null; } };
-const prefSet = on => { try { localStorage.setItem(GUTTER_KEY, on ? '1' : '0'); } catch (e){} };
+const prefGet = () => { const v = T.store.get(GUTTER_KEY, null); return v == null ? null : !!v; };   // terminal.js
+const prefSet = on => T.store.set(GUTTER_KEY, on ? 1 : 0);
 const isHi = c => c >= 0xD800 && c <= 0xDBFF;
 const isLo = c => c >= 0xDC00 && c <= 0xDFFF;
 const isWord = ch => !!ch && /[\wÀ-￿]/.test(ch);
@@ -722,9 +722,10 @@ function start(api, argv, flavor){
   return { key, tick, render, tap, insertText };
 }
 
-const def = (name, desc) => ({ desc, usage: name + ' [file]', start(api, argv){ return start(api, argv, name); } });
+/* one editor; nano, vi and vim are quiet aliases (they work, but help lists edit once) */
+const def = (name, desc, hidden) => ({ g: 'files', hidden: !!hidden, desc, usage: name + ' [file]', start(api, argv){ return start(api, argv, name); } });
 T.apps.edit = def('edit', 'edit a text file (nano-style)');
-T.apps.nano = def('nano', 'edit a text file (same as edit)');
-T.apps.vi = def('vi', 'edit a text file (nano-style, same as edit)');
-T.apps.vim = def('vim', 'edit a text file (nano-style, same as edit)');
+T.apps.nano = def('nano', 'edit a text file (same as edit)', true);
+T.apps.vi = def('vi', 'edit a text file (nano-style, same as edit)', true);
+T.apps.vim = def('vim', 'edit a text file (nano-style, same as edit)', true);
 })();

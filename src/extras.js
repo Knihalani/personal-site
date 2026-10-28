@@ -1,5 +1,5 @@
 /* extras.js: things to do on the KN-84 (see CONTRACT.md, "Terminal extension API").
-   weather, todo, clock / timer / stopwatch / pomodoro, typing, fortune, cowsay, banner, matrix.
+   weather, todo, timer, typing, curl / hn / wiki / define, qr, small offline tools, pass + vault, credits.
 
    Plain commands print rich rows through io.ui() (the terminal's own builder) when writing to the
    screen, and plain text when piped or redirected. Full-screen apps draw solid pixels as inverse-video
@@ -11,9 +11,9 @@ const T = M.TERM = M.TERM || { cmds: {}, apps: {} };
 T.cmds = T.cmds || {}; T.apps = T.apps || {};
 
 /* ---- shared ---- */
+const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const blk = level => ({ fg: level, inverse: true });
-const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e){ return d; } };
-const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e){} };
+const { get: lsGet, set: lsSet } = T.store;       // terminal.js: JSON in localStorage, never throws
 const beep = api => { try { (api.sound || M.sound).event('beep'); } catch (e){} };
 const center = (scr, y, s, st) => scr.put(Math.max(0, ((scr.cols - s.length) / 2) | 0), y, s, st);
 const isQuit = e => e.key === 'q' || e.key === 'Q' || e.key === 'Escape';
@@ -48,27 +48,7 @@ function show(io, build, text){
   return null;
 }
 
-/* ---- bitmap fonts ---- */
-const FONT5 = {
-  A: '.###.|#...#|#####|#...#|#...#', B: '####.|#...#|####.|#...#|####.', C: '.####|#....|#....|#....|.####',
-  D: '####.|#...#|#...#|#...#|####.', E: '#####|#....|####.|#....|#####', F: '#####|#....|####.|#....|#....',
-  G: '.####|#....|#..##|#...#|.####', H: '#...#|#...#|#####|#...#|#...#', I: '###|.#.|.#.|.#.|###',
-  J: '..###|...#.|...#.|#..#.|.##..', K: '#...#|#..#.|###..|#..#.|#...#', L: '#....|#....|#....|#....|#####',
-  M: '#...#|##.##|#.#.#|#...#|#...#', N: '#...#|##..#|#.#.#|#..##|#...#', O: '.###.|#...#|#...#|#...#|.###.',
-  P: '####.|#...#|####.|#....|#....', Q: '.###.|#...#|#.#.#|#..#.|.##.#', R: '####.|#...#|####.|#..#.|#...#',
-  S: '.####|#....|.###.|....#|####.', T: '#####|..#..|..#..|..#..|..#..', U: '#...#|#...#|#...#|#...#|.###.',
-  V: '#...#|#...#|#...#|.#.#.|..#..', W: '#...#|#...#|#.#.#|##.##|#...#', X: '#...#|.#.#.|..#..|.#.#.|#...#',
-  Y: '#...#|.#.#.|..#..|..#..|..#..', Z: '#####|...#.|..#..|.#...|#####',
-  0: '.###.|#..##|#.#.#|##..#|.###.', 1: '.#.|##.|.#.|.#.|###', 2: '####.|....#|.###.|#....|#####',
-  3: '####.|....#|.###.|....#|####.', 4: '#...#|#...#|#####|....#|....#', 5: '#####|#....|####.|....#|####.',
-  6: '.###.|#....|####.|#...#|.###.', 7: '#####|...#.|..#..|.#...|.#...', 8: '.###.|#...#|.###.|#...#|.###.',
-  9: '.###.|#...#|.####|....#|.###.',
-  ' ': '...|...|...|...|...', '!': '#|#|#|.|#', '?': '###.|...#|.##.|....|.#..', '.': '.|.|.|.|#', ',': '..|..|..|.#|#.',
-  '-': '...|...|###|...|...', '+': '...|.#.|###|.#.|...', '=': '...|###|...|###|...', ':': '.|#|.|#|.', "'": '#|#|.|.|.',
-  '/': '....#|...#.|..#..|.#...|#....', '#': '.#.#.|#####|.#.#.|#####|.#.#.', '&': '.##..|#..#.|.##.#|#..#.|.##.#',
-  '@': '.###.|#.###|#.#.#|#.###|.##..', '(': '.#|#.|#.|#.|.#', ')': '#.|.#|.#|.#|#.', '<': '..#|.#.|#..|.#.|..#', '>': '#..|.#.|..#|.#.|#..',
-  '_': '....|....|....|....|####', '*': '.....|.#.#.|..#..|.#.#.|.....', '$': '.####|#.#..|.###.|..#.#|####.', '%': '#...#|...#.|..#..|.#...|#...#',
-};
+/* ---- big digits, for the timer and the typing result ---- */
 const DIG3 = { 0: '###|#.#|#.#|#.#|###', 1: '.#.|##.|.#.|.#.|###', 2: '###|..#|###|#..|###', 3: '###|..#|.##|..#|###', 4: '#.#|#.#|###|..#|..#',
   5: '###|#..|###|..#|###', 6: '###|#..|###|#.#|###', 7: '###|..#|..#|.#.|.#.', 8: '###|#.#|###|#.#|###', 9: '###|#.#|###|..#|###', ':': '.|#|.|#|.', ' ': '.|.|.|.|.' };
 const glyph = (font, c) => (font[c] || font[String(c).toUpperCase()] || font['?'] || font[' ']).split('|');
@@ -96,106 +76,6 @@ function fitScale(s, w, h){
   }
   return bw <= w && 5 <= h ? { sx: 1, sy: 1, w: bw, h: 5 } : null;
 }
-
-/* =====================================================================================
-   banner: big letters, in inverse-video blocks on the screen and # in a pipe
-   ===================================================================================== */
-T.cmds.banner = { g: 'fun', desc: 'big letters', usage: 'banner text...', ex: ['banner hello', 'banner -c ship it', 'echo gm | banner'],
-  opts: [['-c', 'centre each line']],
-  more: 'Sets text in a five-line block font, breaking between words to fit the screen. Letters, digits and common punctuation; anything else becomes ?. Piped or redirected, the blocks are # characters.',
-  run(argv, io){
-    let a = argv.slice(1), centre = false;
-    if (a[0] === '-c'){ centre = true; a = a.slice(1); }
-    const text = (a.length ? a.join(' ') : String(io.stdin || '').trim()).replace(/\s+/g, ' ').trim();
-    if (!text){ io.err('usage: banner text...   (try: banner hello)\n'); return 1; }
-    const room = io.cols - 4;
-    const lines = []; let line = '';
-    for (let w of text.split(' ')){
-      while (bitWidth(FONT5, w) > room){              // a word too long for one line: split it
-        let k = w.length; while (k > 1 && bitWidth(FONT5, w.slice(0, k)) > room) k--;
-        if (line){ lines.push(line); line = ''; }
-        lines.push(w.slice(0, k)); w = w.slice(k);
-      }
-      if (!w) continue;
-      const cand = line ? line + ' ' + w : w;
-      if (bitWidth(FONT5, cand) <= room) line = cand; else { lines.push(line); line = w; }
-    }
-    if (line) lines.push(line);
-    if (lines.length > 6){ io.err('banner: that is a lot of letters. try something shorter\n'); return 1; }
-    show(io, o => {
-      o.blank();
-      lines.forEach((l, n) => {
-        const b = bitmap(FONT5, l), ind = 2 + (centre ? Math.max(0, ((room - b[0].length) / 2) | 0) : 0);
-        for (const r of b){
-          const sp = []; let run = '', on = null;
-          for (const p of r){ if (on !== null && p !== on){ sp.push([run, on ? 'i' : 'n']); run = ''; } on = p; run += ' '; }
-          if (run && on) sp.push([run, 'i']);
-          o.at(ind, ...(sp.length ? sp : [['', 'n']]));
-        }
-        if (n < lines.length - 1) o.blank();
-      });
-      o.blank();
-    }, () => lines.map(l => bitmap(FONT5, l).map(r => r.map(p => p ? '#' : ' ').join('').replace(/\s+$/, '')).join('\n')).join('\n\n') + '\n');
-  } };
-
-/* =====================================================================================
-   fortune and cowsay
-   ===================================================================================== */
-const FORTUNES = [
-  ['The best way to predict the future is to invent it.', 'Alan Kay'],
-  ['Simple things should be simple, complex things should be possible.', 'Alan Kay'],
-  ['Make something people want.', 'Y Combinator'],
-  ["Do things that don't scale.", 'Paul Graham'],
-  ["If you are not embarrassed by the first version of your product, you've launched too late.", 'Reid Hoffman'],
-  ['Real artists ship.', 'Steve Jobs'],
-  ['Stay hungry. Stay foolish.', 'The Whole Earth Catalog'],
-  ['Any sufficiently advanced technology is indistinguishable from magic.', 'Arthur C. Clarke'],
-  ['Perfection is achieved, not when there is nothing more to add, but when there is nothing left to take away.', 'Antoine de Saint-Exupery'],
-  ['What I cannot create, I do not understand.', 'Richard Feynman'],
-  ['Simplicity is prerequisite for reliability.', 'Edsger W. Dijkstra'],
-  ['Talk is cheap. Show me the code.', 'Linus Torvalds'],
-  ['The coffee is still hot. Keep going.', 'the KN-84'],
-  ['Small, steady keystrokes build big things.', 'the KN-84'],
-  ['Ship it, then make it better.', 'the KN-84'],
-  ['Every great thing was once a blinking cursor.', 'the KN-84'],
-  ['The lamp is on. Somebody is building something.', 'the KN-84'],
-  ['Ask for help sooner than feels comfortable.', 'the KN-84'],
-];
-let lastFortune = -1;
-T.cmds.fortune = { g: 'fun', desc: 'a line worth reading', usage: 'fortune', ex: ['fortune', 'fortune | cowsay', 'fortune >> notes/keep.txt'],
-  more: 'Prints one short line, picked at random: a few well-known lines from people who built things, and a few from this machine.',
-  run(argv, io){
-    let i; do { i = Math.random() * FORTUNES.length | 0; } while (i === lastFortune && FORTUNES.length > 1);
-    lastFortune = i;
-    const [q, who] = FORTUNES[i];
-    show(io, o => { o.blank(); o.para(q, 'b', io.cols - 6); o.at(4, ['- ' + who, 'd']).blank(); }, q + '\n  - ' + who + '\n');
-  } };
-
-const COWS = {
-  cow: ['        ^__^', '        (oo)\\_______', '        (__)\\       )\\/\\', '            ||----w |', '            ||     ||'],
-  mac: ['     .-------.', '     | .---. |', '     | |^_^| |', "     | '---' |", '     |  ___  |', "     '-------'"],
-};
-T.cmds.cowsay = { g: 'fun', desc: 'a cow says it', usage: 'cowsay [-f cow|mac] text...', opts: [['-f NAME', 'who says it: cow or mac']],
-  ex: ['cowsay moo', 'fortune | cowsay', 'cowsay -f mac hello'],
-  more: 'Puts the text in a speech balloon over a cow, or over a small Mac. Reads its arguments, or the standard input when there are none.',
-  run(argv, io){
-    let a = argv.slice(1), who = 'cow';
-    if (a[0] === '-f'){ who = a[1] || ''; a = a.slice(2); if (!COWS[who]){ io.err('cowsay: no such figure: ' + who + '   (try cow or mac)\n'); return 1; } }
-    const text = (a.length ? a.join(' ') : String(io.stdin || '')).replace(/\s+/g, ' ').trim();
-    if (!text){ io.err('usage: cowsay text...   (try: fortune | cowsay)\n'); return 1; }
-    const ls = wrap(text, Math.min(36, io.cols - 8)), w = Math.max(...ls.map(l => l.length));
-    const edge = (i, n) => n === 1 ? ['<', '>'] : i === 0 ? ['/', '\\'] : i === n - 1 ? ['\\', '/'] : ['|', '|'];
-    const bubble = [' ' + '_'.repeat(w + 2), ...ls.map((l, i) => { const [p, q] = edge(i, ls.length); return p + ' ' + l.padEnd(w) + ' ' + q; }), ' ' + '-'.repeat(w + 2)];
-    const tail = who === 'cow' ? ['        \\', '         \\'] : ['        \\'];
-    const art = COWS[who];
-    show(io, o => {
-      o.blank();
-      bubble.forEach((l, i) => o.at(2, [l, i === 0 || i === bubble.length - 1 ? 'd' : 'n']));
-      tail.forEach(l => o.at(2, [l, 'd']));
-      art.forEach(l => o.at(2, [l, 'b']));
-      o.blank();
-    }, [...bubble, ...tail, ...art].join('\n') + '\n');
-  } };
 
 /* =====================================================================================
    todo: a list kept in ~/todo.txt, one "[ ] thing" per line
@@ -354,18 +234,19 @@ T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usa
     if (q) lsSet(WX_CITY, q);
     else q = lsGet(WX_CITY, '');
     if (!q && /^[A-Za-z]+\/[A-Za-z_\-]+/.test(tz) && !/^Etc\//.test(tz)){ q = tz.split('/').pop().replace(/_/g, ' '); guessed = true; }
+    if (!q && io.tty && io.ask){ q = String((await io.ask('which city?  ')) || '').trim(); if (q) lsSet(WX_CITY, q); }
     if (!q){ io.err('weather: which city? try weather london\n'); return 1; }
     if (io.tty){ io.out('asking the sky over ' + q + '...\n', 'faint'); }
     let place, wx;
     try {
-      const g = await net.json('https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=' + encodeURIComponent(q));
+      const g = await net.json('https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=' + encodeURIComponent(q), { timeout: 6000 });
       const rs = (g && g.results) || [];
       place = (guessed && rs.find(r => r.timezone === tz)) || rs[0];
-      if (!place){ io.err('weather: no place called ' + q + '\n'); if (!a.length) lsSet(WX_CITY, ''); return 1; }
+      if (!place){ lsSet(WX_CITY, ''); io.err('weather: no place called ' + q + '. try a city name, like weather london\n'); return 1; }
       wx = await net.json('https://api.open-meteo.com/v1/forecast?latitude=' + place.latitude + '&longitude=' + place.longitude +
         '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day' +
         '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=4' +
-        (unit === 'F' ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : ''));
+        (unit === 'F' ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : ''), { timeout: 6000 });
     } catch (e){ return net.fail(io, 'weather', e); }
     const c = wx && wx.current, d = wx && wx.daily;
     if (!c || !d){ io.err('weather: open-meteo sent something unexpected\n'); return 1; }
@@ -402,7 +283,7 @@ T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usa
   } };
 
 /* =====================================================================================
-   clock, timer, stopwatch, pomodoro: one big-digit face, four ways to run it
+   timer: big digits counting down
    ===================================================================================== */
 function parseDur(s){
   s = String(s || '').trim().toLowerCase(); if (!s) return null;
@@ -417,126 +298,62 @@ const fmtHMS = (sec, tenths) => {
   sec = Math.max(0, sec); const s = Math.floor(sec), h = Math.floor(s / 3600), mm = Math.floor(s / 60) % 60, ss = s % 60;
   return (h ? h + ':' + two(mm) : String(mm)) + ':' + two(ss) + (tenths ? '.' + Math.floor((sec - s) * 10) : '');
 };
-const POMO_KEY = 'kaiav.pomodoro';
-function faceApp(mode){
-  return { start(api, argv){
+T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer duration', ex: ['timer 5m', 'timer 90s', 'timer 1:30', 'timer 1h 15m'],
+  more: 'Counts down in big digits and beeps when it reaches zero. A bare number is minutes. Space pauses, + and - add or take a minute, r starts over, q quits.',
+  start(api, argv){
     const now = () => performance.now() / 1000;
-    let dur = 0, t0 = now(), paused = false, pausedAt = 0, done = false, doneAt = 0, laps = [], running = mode !== 'stopwatch', acc = 0, lastSec = -1;
-    let phase = 'focus', round = 1, focusM = 25, breakM = 5, beeps = 0, beepT = 0;
-    const pomo = lsGet(POMO_KEY, { day: '', n: 0 });
-    const today = new Date().toDateString(); if (pomo.day !== today){ pomo.day = today; pomo.n = 0; }
-    if (mode === 'timer'){
-      dur = parseDur(argv.slice(1).join(' '));
-      if (!(dur > 0)){ api.print(argv[1] ? 'timer: cannot read ' + argv.slice(1).join(' ') + '. try timer 5m, timer 90s or timer 1:30' : 'usage: timer 5m   (also 90s, 1:30, 1h)'); api.exit(1); return {}; }
-      if (dur > 86400){ api.print('timer: up to 24 hours'); api.exit(1); return {}; }
-    }
-    if (mode === 'pomodoro'){
-      const f = parseFloat(argv[1]), b = parseFloat(argv[2]);
-      if (argv[1] && !(f > 0 && f <= 180)){ api.print('usage: pomodoro [focus minutes [break minutes]]'); api.exit(1); return {}; }
-      if (f) focusM = f; if (b > 0 && b <= 60) breakM = b;
-      dur = focusM * 60;
-    }
-    const elapsed = () => paused ? pausedAt - t0 : (running ? now() - t0 : acc);
-    function ring(n){ beeps = n; beepT = 0; }
-    function nextPhase(auto){
-      if (phase === 'focus'){ if (auto){ pomo.n++; lsSet(POMO_KEY, pomo); } phase = 'break'; dur = (round % 4 === 0 ? Math.max(breakM, 15) : breakM) * 60; }
-      else { phase = 'focus'; round++; dur = focusM * 60; }
-      t0 = now(); paused = false; ring(auto ? 3 : 0);
-    }
-    function finish(){
-      const msg = mode === 'timer' ? 'timer: ' + fmtHMS(dur) + ' done' : mode === 'stopwatch' ? 'stopwatch: ' + fmtHMS(elapsed(), true) + (laps.length ? ', ' + laps.length + ' laps' : '')
-        : mode === 'pomodoro' ? 'pomodoro: ' + pomo.n + (pomo.n === 1 ? ' focus block' : ' focus blocks') + ' today' : '';
-      if (msg) api.print(msg);
-      api.exit(0);
-    }
+    let dur = parseDur(argv.slice(1).join(' ')), t0 = now(), paused = false, pausedAt = 0, done = false, doneAt = 0, lastSec = -1, beeps = 0, beepT = 0;
+    if (!(dur > 0)){ api.print(argv[1] ? 'timer: cannot read ' + argv.slice(1).join(' ') + '. try timer 5m, timer 90s or timer 1:30' : 'usage: timer 5m   (also 90s, 1:30, 1h)'); api.exit(1); return {}; }
+    if (dur > 86400){ api.print('timer: up to 24 hours'); api.exit(1); return {}; }
+    const elapsed = () => (paused ? pausedAt : now()) - t0;
+    const finish = () => { api.print('timer: ' + fmtHMS(dur) + (done ? ' done' : ', stopped with ' + fmtHMS(Math.ceil(dur - elapsed())) + ' left')); api.exit(0); };
     return {
       key(e){
         if (e.ctrlKey || e.metaKey) return false;
         const k = e.key;
-        if (done){ finish(); return true; }
-        if (isQuit(e)){ finish(); return true; }
-        if (k === ' ' || k === 'p' || k === 'Enter'){
-          if (mode === 'stopwatch'){ if (running){ acc = now() - t0; running = false; } else { t0 = now() - acc; running = true; } }
-          else if (mode !== 'clock'){ if (paused){ t0 += now() - pausedAt; paused = false; } else { pausedAt = now(); paused = true; } }
-          return true;
-        }
-        if (k === 'r' || k === 'R'){ t0 = now(); acc = 0; laps = []; paused = false; if (mode === 'stopwatch') running = false; return true; }
-        if ((k === 'l' || k === 'L') && mode === 'stopwatch' && running){ laps.unshift(elapsed()); if (laps.length > 99) laps.pop(); return true; }
-        if ((k === 'n' || k === 'N') && mode === 'pomodoro'){ nextPhase(false); return true; }
-        if ((k === '+' || k === '=') && mode === 'timer'){ dur += 60; return true; }
-        if (k === '-' && mode === 'timer'){ dur = Math.max(elapsed() + 1, dur - 60); return true; }
+        if (done || isQuit(e)){ finish(); return true; }
+        if (k === ' ' || k === 'p' || k === 'Enter'){ if (paused){ t0 += now() - pausedAt; paused = false; } else { pausedAt = now(); paused = true; } return true; }
+        if (k === 'r' || k === 'R'){ t0 = now(); paused = false; return true; }
+        if (k === '+' || k === '='){ dur += 60; return true; }
+        if (k === '-'){ dur = Math.max(elapsed() + 1, dur - 60); return true; }
         return false;
       },
       tick(dt){
         if (beeps > 0){ beepT -= dt; if (beepT <= 0){ beep(api); beeps--; beepT = 0.32; } }
-        if ((mode === 'timer' || mode === 'pomodoro') && !paused && !done && elapsed() >= dur){
-          if (mode === 'timer'){ done = true; doneAt = now(); ring(4); }
-          else nextPhase(true);
-          return true;
-        }
+        if (!paused && !done && elapsed() >= dur){ done = true; doneAt = now(); beeps = 4; beepT = 0; return true; }
         if (done && now() - doneAt > 60) finish();
-        const s = Math.floor(now() * (mode === 'stopwatch' && running ? 10 : 2));
+        const s = Math.floor(now() * 2);
         if (s !== lastSec){ lastSec = s; return true; }
         return false;
       },
       render(scr){
         scr.clear();
         const W = scr.cols, H = scr.rows;
-        const d = new Date();
-        let big, small = '', title, sub = '', sub2 = '', frac = -1, keys;
-        if (mode === 'clock'){
-          big = d.getHours() + ':' + two(d.getMinutes()) + ':' + two(d.getSeconds()); title = 'clock';
-          sub = d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-          let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e){}
-          sub2 = tz.replace(/_/g, ' ');
-          keys = [['q', 'quit']];
-        } else if (mode === 'stopwatch'){
-          const e = elapsed(); big = fmtHMS(e); small = '.' + Math.floor((e % 1) * 10); title = 'stopwatch';
-          sub = running ? 'running' : e > 0 ? 'stopped' : 'ready';
-          keys = [['space', running ? 'stop' : 'start'], ['l', 'lap'], ['r', 'reset'], ['q', 'quit']];
-        } else {
-          const left = Math.max(0, dur - elapsed());
-          big = fmtHMS(Math.ceil(left - 1e-6)); frac = Math.min(1, elapsed() / dur);
-          if (mode === 'timer'){ title = 'timer'; sub = done ? "time's up" : paused ? 'paused' : fmtHMS(dur) + ' timer'; keys = done ? [['any key', 'done']] : [['space', paused ? 'resume' : 'pause'], ['+/-', 'a minute'], ['r', 'restart'], ['q', 'quit']]; }
-          else { title = phase === 'focus' ? 'focus' : 'break'; sub = (paused ? 'paused  ' : '') + 'round ' + round + '   ' + pomo.n + ' done today'; keys = [['space', paused ? 'resume' : 'pause'], ['n', 'skip'], ['r', 'restart'], ['q', 'quit']]; }
-        }
-        const avail = H - 7;
+        let big = fmtHMS(Math.ceil(Math.max(0, dur - elapsed()) - 1e-6)), small = '';
+        const frac = Math.min(1, elapsed() / dur), avail = H - 7;
         let f = fitScale(big, W - 4, avail);
-        if ((!f || f.sx < 2) && mode !== 'stopwatch' && big.split(':').length === 3){       // too small with seconds: big h:mm, small :ss
+        if ((!f || f.sx < 2) && big.split(':').length === 3){       // too small with seconds: big h:mm, small :ss
           const short = big.slice(0, big.lastIndexOf(':')), g2 = fitScale(short, W - 4, avail);
           if (g2 && (!f || g2.sx > f.sx)){ small = big.slice(big.lastIndexOf(':')); big = short; f = g2; }
         }
-        const blockH = f ? f.h : 1;
-        const top = Math.max(2, ((H - blockH - 5) / 2) | 0);
-        center(scr, top - 2 >= 0 ? top - 2 : 0, spaced(title), 'dim');
-        const flash = done && Math.floor(now() * 2) % 2 === 0;
-        const st = blk(done ? (flash ? 'bright' : 'dim') : paused ? 'dim' : mode === 'pomodoro' && phase === 'break' ? 'normal' : 'bright');
-        const tail = small;
-        if (f){ const beside = tail && f.w + tail.length + 1 <= W - 2, x = ((W - f.w - (beside ? tail.length + 1 : 0)) / 2) | 0; bigText(scr, x, top, big, f.sx, f.sy, st); if (tail){ if (beside) scr.put(x + f.w + 1, top + f.h - 1, tail, 'dim'); else scr.put(x + f.w - tail.length, top + f.h, tail, 'dim'); } }
-        else center(scr, top, big, 'bright');
+        const blockH = f ? f.h : 1, top = Math.max(2, ((H - blockH - 5) / 2) | 0);
+        center(scr, top - 2, spaced('timer'), 'dim');
+        const flash = done && !REDUCED && Math.floor(now() * 2) % 2 === 0;
+        const st = blk(done ? (flash ? 'bright' : 'dim') : paused ? 'dim' : 'bright');
+        if (f){
+          const beside = small && f.w + small.length + 1 <= W - 2, x = ((W - f.w - (beside ? small.length + 1 : 0)) / 2) | 0;
+          bigText(scr, x, top, big, f.sx, f.sy, st);
+          if (small){ if (beside) scr.put(x + f.w + 1, top + f.h - 1, small, 'dim'); else scr.put(x + f.w - small.length, top + f.h, small, 'dim'); }
+        } else center(scr, top, big, 'bright');
         let y = top + blockH + 1;
-        if (frac >= 0){
-          const bw = Math.min(W - 8, f ? Math.max(f.w, 20) : 30), bx = ((W - bw) / 2) | 0, on = Math.round(bw * frac);
-          scr.fill(bx, y, bw, 1, '·', 'faint'); scr.fill(bx, y, on, 1, ' ', blk(done ? 'bright' : 'dim'));
-          y += 2;
-        }
-        center(scr, y, sub, done ? 'bright' : 'normal');
-        if (sub2) center(scr, y + 1, sub2, 'faint');
-        if (mode === 'stopwatch' && laps.length){
-          const room = Math.max(0, H - 2 - (y + 2));
-          laps.slice(0, room).forEach((l, i) => center(scr, y + 2 + i, ('lap ' + (laps.length - i)).padEnd(8) + fmtHMS(l, true).padStart(10), i ? 'faint' : 'dim'));
-        }
-        keysLine(scr, H - 1, keys);
+        const bw = Math.min(W - 8, f ? Math.max(f.w, 20) : 30), bx = ((W - bw) / 2) | 0;
+        scr.fill(bx, y, bw, 1, '·', 'faint'); scr.fill(bx, y, Math.round(bw * frac), 1, ' ', blk(done ? 'bright' : 'dim'));
+        y += 2;
+        center(scr, y, done ? "time's up" : paused ? 'paused' : fmtHMS(dur) + ' timer', done ? 'bright' : 'normal');
+        keysLine(scr, H - 1, done ? [['any key', 'done']] : [['space', paused ? 'resume' : 'pause'], ['+/-', 'a minute'], ['r', 'restart'], ['q', 'quit']]);
       },
     };
   } };
-}
-T.apps.clock = Object.assign(faceApp('clock'), { g: 'tools', desc: 'a big clock', usage: 'clock', more: 'The time, large, in your time zone. q quits.' });
-T.apps.timer = Object.assign(faceApp('timer'), { g: 'tools', desc: 'count down, then beep', usage: 'timer duration', ex: ['timer 5m', 'timer 90s', 'timer 1:30', 'timer 1h 15m'],
-  more: 'Counts down in big digits and beeps when it reaches zero. A bare number is minutes. Space pauses, + and - add or take a minute, r starts over, q quits.' });
-T.apps.stopwatch = Object.assign(faceApp('stopwatch'), { g: 'tools', desc: 'count up, with laps', usage: 'stopwatch', more: 'Space starts and stops, l records a lap, r resets, q quits and prints the time.' });
-T.apps.pomodoro = Object.assign(faceApp('pomodoro'), { g: 'tools', desc: 'focus 25, break 5, repeat', usage: 'pomodoro [focus [break]]', ex: ['pomodoro', 'pomodoro 50 10'],
-  more: 'Alternates focus and break blocks, in minutes (25 and 5 unless you say), with a longer break every fourth round. It beeps at each change and counts the focus blocks you finish today. Space pauses, n skips ahead, r restarts the block, q quits.' });
 
 /* =====================================================================================
    typing: a typing test, on a keyboard with hands on it
@@ -624,38 +441,6 @@ T.apps.typing = { g: 'fun', desc: 'a typing test: how fast are you?', usage: 'ty
         } else {
           keysLine(scr, H - 1, t0 ? [['tab', 'new passage'], ['esc', 'quit']] : [['start typing', ''], ['tab', 'new passage'], ['esc', 'quit']]);
         }
-      },
-    };
-  } };
-
-/* =====================================================================================
-   matrix: falling characters. any key ends it
-   ===================================================================================== */
-T.apps.matrix = { g: 'fun', desc: 'digital rain', usage: 'matrix', more: 'Characters fall down the tube. Any key stops it.',
-  start(api){
-    const W = api.cols, H = api.rows, CH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$+-*/=%"#&<>[]{}:;~^';
-    const rnd = () => CH[Math.random() * CH.length | 0];
-    const cells = Array.from({ length: H }, () => Array.from({ length: W }, rnd));
-    const drops = Array.from({ length: W }, (_, x) => x % 2 ? null : { y: -Math.random() * H * 2, v: 6 + Math.random() * 14, len: 4 + (Math.random() * H * 0.8 | 0) });
-    let acc = 0;
-    return {
-      key(e){ if (e.ctrlKey && e.key !== 'c') return false; api.exit(0); return true; },
-      tick(dt){
-        acc += dt; if (acc < 1 / 24) return false; const step = acc; acc = 0;
-        drops.forEach((d, x) => { if (!d) return; d.y += d.v * step; if (d.y - d.len > H){ d.y = -Math.random() * H; d.v = 6 + Math.random() * 14; d.len = 4 + (Math.random() * H * 0.8 | 0); } });
-        for (let k = 0; k < W / 3; k++) cells[Math.random() * H | 0][Math.random() * W | 0] = rnd();
-        return true;
-      },
-      render(scr){
-        scr.clear();
-        drops.forEach((d, x) => {
-          if (!d) return;
-          const head = Math.floor(d.y);
-          for (let k = 0; k < d.len; k++){
-            const y = head - k; if (y < 0 || y >= H) continue;
-            scr.put(x, y, cells[y][x], k === 0 ? 'bright' : k < 3 ? 'accent' : k < d.len * 0.6 ? 'dim' : 'faint');
-          }
-        });
       },
     };
   } };
@@ -773,7 +558,7 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
   } };
 
 /* =====================================================================================
-   hn, wiki, define, github, ip: live data, each one a small card
+   hn, wiki, define: live data, each one a small card
    ===================================================================================== */
 T.cmds.hn = { g: 'net', desc: 'Hacker News, the top stories', usage: 'hn [count]', ex: ['hn', 'hn 5', 'hn 20 | grep -i ai'],
   more: 'The front page of Hacker News, from its public API. Arrows pick a story, enter opens it, 1 to 9 jump. Piped, it prints points, title and link, one story per line.',
@@ -796,7 +581,7 @@ T.cmds.hn = { g: 'net', desc: 'Hacker News, the top stories', usage: 'hn [count]
     return io.pick(o.lastCard).then(() => {});
   } };
 
-T.cmds.wiki = { g: 'net', desc: 'the opening of a Wikipedia article', usage: 'wiki topic...', ex: ['wiki alan turing', 'wiki vt100', 'wiki pomodoro technique'],
+T.cmds.wiki = { g: 'net', desc: 'the opening of a Wikipedia article', usage: 'wiki topic...', ex: ['wiki alan turing', 'wiki vt100', 'wiki hypertext'],
   more: 'Looks the topic up on English Wikipedia and prints the summary at the top of the article, with a link you can open.',
   async run(argv, io){
     const q = argv.slice(1).join(' ').trim();
@@ -854,37 +639,6 @@ T.cmds.define = { g: 'net', desc: 'what a word means', usage: 'define word', ex:
       o.blank(); budget--;
     }
     io.rich(o);
-  } };
-
-T.cmds.github = { g: 'net', desc: 'a GitHub profile, by user name', usage: 'github [user]', ex: ['github torvalds', 'github knihalani', 'github'],
-  more: 'A public GitHub profile from api.github.com: name, bio, where, repos, followers and when they joined, with the profile to open. With no name it opens the repository for this site. GitHub allows 60 lookups an hour from one address.',
-  async run(argv, io){
-    const u = (argv[1] || '').replace(/^@/, '');
-    if (!u){ const gh = T.cmds.gh; if (gh && gh !== T.cmds.github) return gh.run(['gh'], io); io.err('usage: github user\n'); return 2; }
-    if (!/^[a-z\d](?:[a-z\d-]{0,38})$/i.test(u)){ io.err('github: that is not a GitHub user name\n'); return 2; }
-    let d;
-    try { d = await net.json('https://api.github.com/users/' + encodeURIComponent(u)); }
-    catch (e){ if (e.status === 404){ io.err('github: no user called ' + u + '\n'); return 1; } return net.fail(io, 'github', e); }
-    const joined = d.created_at ? new Date(d.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '';
-    const rows = [['repos', d.public_repos], ['followers', d.followers], ['following', d.following], ['where', d.location], ['company', d.company], ['joined', joined]]
-      .filter(r => r[1] != null && r[1] !== '').map(([label, v]) => ({ label, value: clip(String(v), io.cols - 22) }));
-    if (!io.tty){ io.out((d.name ? d.name + ' ' : '') + '@' + d.login + '\n' + (d.bio ? d.bio.trim() + '\n' : '') + rows.map(r => r.label.padEnd(11) + r.value).join('\n') + '\n' + d.html_url + '\n'); return; }
-    const o = io.ui();
-    o.blank().at(2, [d.name || d.login, 'b'], [d.name ? '  @' + d.login : '', 'd']);
-    if (d.bio) o.para(d.bio.trim(), 'n', io.cols - 6);
-    o.blank().card({ title: 'GITHUB', note: d.type === 'Organization' ? 'org' : '', items: [...rows, { label: 'profile', value: bareUrl(d.html_url), full: d.html_url, url: d.html_url, hint: 'open' }] });
-    io.rich(o);
-    return io.pick(o.lastCard).then(() => {});
-  } };
-T.cmds['gh-user'] = Object.assign({}, T.cmds.github, { hidden: true, usage: 'gh-user user' });
-
-T.cmds.ip = { g: 'net', desc: 'your public IP address', usage: 'ip', ex: ['ip', 'ip > ip.txt'],
-  more: 'Asks api.ipify.org which address your requests come from. Enter copies it.',
-  async run(argv, io){
-    let d; try { d = await net.json('https://api.ipify.org?format=json'); } catch (e){ return net.fail(io, 'ip', e); }
-    if (!io.tty){ io.out(d.ip + '\n'); return; }
-    const o = io.ui(); o.blank().card({ title: 'IP', note: 'api.ipify.org', items: [{ label: 'public', value: d.ip, copy: d.ip, hint: 'copy' }] });
-    io.rich(o); return io.pick(o.lastCard).then(() => {});
   } };
 
 /* =====================================================================================
@@ -1164,10 +918,7 @@ function genPass(len, plain){
   while (pw.length < len){ for (const b of crypto.getRandomValues(new Uint8Array(len * 2))){ if (b < lim && pw.length < len) pw += set[b % set.length]; } }
   return pw;
 }
-async function copy(t){
-  try { if (navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(t); return true; } } catch (e){}
-  try { const ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0;left:-99px'; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.value = ''; ta.remove(); return ok; } catch (e){ return false; }
-}
+const copy = T.copy;                                   // terminal.js
 function vLock(){ if (V.items) for (const it of V.items) it.pw = ''; V.key = null; V.items = null; clearTimeout(V.timer); }
 function vTouch(){ clearTimeout(V.timer); V.timer = setTimeout(vLock, VIDLE); }
 try { document.addEventListener('visibilitychange', () => { if (document.hidden) vLock(); }); } catch (e){}
@@ -1308,12 +1059,19 @@ T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this brow
     }
   } };
 
+/* credits: what this page is made of */
+T.cmds.credits = { g: 'misc', desc: 'who made what', usage: 'credits', run(argv, io){
+  io.out('three.js by mrdoob and contributors, MIT\n');
+  if (M.KEY_SAMPLES && M.KEY_SAMPLES.credit) io.out(M.KEY_SAMPLES.credit + '\n', 'dim');
+  io.out('everything else: kaiav\n');
+} };
+
 /* a hello for people who type one */
 T.cmds.hello = { g: 'fun', hidden: true, desc: 'say hi', usage: 'hello', run(argv, io){
   if (!io.tty){ io.out('hi. try about, or help.\n'); return; }
   const c = w => [w, 'b', { cmd: w }];
-  const o = io.ui(); o.blank().at(2, ['hi, welcome to ' + (M.CONTENT && M.CONTENT.name ? M.CONTENT.name.split(' ')[0] + "'s" : 'this') + ' desk.', 'n'])
-    .at(2, ['try ', 'f'], c('about'), ['  ', 'f'], c('contact'), ['  or  ', 'f'], c('help'), ['  for everything', 'f']).blank();
+  const o = io.ui(); o.blank().para('hi, welcome to ' + (M.CONTENT && M.CONTENT.name ? M.CONTENT.name.split(' ')[0] + "'s" : 'this') + ' desk.', 'n', io.cols - 4)
+    .flow([[['try', 'f']], [c('about')], [c('contact')], [['or', 'f']], [c('help')]], '  ').blank();
   io.rich(o);
 } };
 })();

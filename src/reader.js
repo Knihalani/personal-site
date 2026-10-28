@@ -3,7 +3,7 @@
    Posts come from MAC.CONTENT.writing.posts: { id, slug, title, subtitle, date, tags, status, summary, html, wordCount, url? }.
    Only published posts show (a post with no status counts as published), newest first. A post with a url and no
    html opens the link instead. The html is sanitised with a small allowlist before it is inserted.
-   Nothing is built until the first open (the font link in head.html is the only cost up front).
+   Nothing is built or fetched until the first open (styles, the DOM and the Newsreader font).
    Deep link: #post/<slug> (main.js routes it here). While open, the reader owns the keyboard. */
 (() => {
 'use strict';
@@ -15,6 +15,7 @@ const store = {
   set(k, v){ try { localStorage.setItem(k, v); } catch (e){} },
 };
 const reduced = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e){ return false; } };
+const FONT = 'https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap';
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 /* ---- posts ---- */
@@ -109,7 +110,32 @@ function sanitize(html){
   }
   // empty paragraphs the editor leaves behind
   for (const p of box.querySelectorAll('p')) if (!p.textContent.trim() && !p.querySelector('img, br')) p.remove();
+  smarten(box);
   return box;
+}
+/* typographer's quotes in prose text (never inside code or pre). The character before a quote decides its direction,
+   carried across inline tags and reset at each block. */
+const BLOCKS = new Set(['P', 'H2', 'H3', 'LI', 'BLOCKQUOTE', 'FIGCAPTION', 'DIV', 'FIGURE', 'UL', 'OL', 'BR', 'HR']);
+function smarten(root){
+  let prev = ' ';
+  const quote = (t) => t.replace(/['"]/g, (q, i) => {
+    const before = i ? t[i - 1] : prev, opens = /[\s(\[{\u2014\u2013-]/.test(before);
+    if (q === '"') return opens ? '\u201c' : '\u201d';
+    if (opens && /^'\d\ds\b/.test(t.slice(i))) return '\u2019';     // '90s
+    return opens ? '\u2018' : '\u2019';
+  });
+  const walk = n => {
+    for (let c = n.firstChild; c; c = c.nextSibling){
+      if (c.nodeType === 3){ const v = c.nodeValue; if (/['"]/.test(v)) c.nodeValue = quote(v); if (v) prev = v[v.length - 1]; }
+      else if (c.nodeType === 1){
+        if (c.tagName === 'CODE' || c.tagName === 'PRE'){ prev = 'x'; continue; }
+        if (BLOCKS.has(c.tagName)) prev = ' ';
+        walk(c);
+        if (BLOCKS.has(c.tagName)) prev = ' ';
+      }
+    }
+  };
+  walk(root);
 }
 const wordsIn = t => (String(t || '').match(/\S+/g) || []).length;
 
@@ -134,9 +160,9 @@ const CSS = `
   box-shadow:0 0 0 1px var(--r-faint), 0 30px 90px rgba(0,0,0,.55), 0 0 140px 10px var(--r-glow);
   transition:transform .45s cubic-bezier(.2,.8,.2,1), opacity .35s ease, background-color .3s ease, color .3s ease; scrollbar-width:thin; scrollbar-color:var(--r-faint) transparent }
 #reader.rd-in .rd-sheet{ transform:translate(-50%, 0); opacity:1 }
-.rd-progress{ position:sticky; top:0; height:2px; z-index:3; background:transparent }
-.rd-progress i{ display:block; height:100%; width:100%; background:var(--r-accent); transform-origin:0 50%; transform:scaleX(0); opacity:.85 }
-.rd-bar{ position:sticky; top:2px; z-index:2; display:flex; align-items:center; gap:4px; padding:10px 18px 10px 12px;
+.rd-progress{ position:absolute; left:0; right:0; bottom:-1px; height:1px; pointer-events:none }
+.rd-progress i{ display:block; height:100%; width:100%; background:var(--r-mute); transform-origin:0 50%; transform:scaleX(0); opacity:.55 }
+.rd-bar{ position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:4px; padding:10px 18px 10px 12px;
   background:color-mix(in srgb, var(--r-sheet) 88%, transparent); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
   border-bottom:1px solid transparent; font:500 12px/1 var(--r-mono); letter-spacing:.02em; transition:border-color .2s }
 .rd-bar.rd-scrolled{ border-bottom-color:var(--r-faint) }
@@ -209,7 +235,6 @@ const CSS = `
   .rd-sheet{ inset:0; width:auto; left:0; transform:translateY(14px); border-radius:0; box-shadow:none;
     padding-bottom:env(safe-area-inset-bottom, 0px) }
   #reader.rd-in .rd-sheet{ transform:none }
-  .rd-progress{ top:0 }
   .rd-bar{ padding:max(8px, env(safe-area-inset-top, 0px)) 8px 8px 4px }
   .rd-bar .rd-where{ display:none }
   .rd-col{ padding:0 max(20px, env(safe-area-inset-left, 0px)) 0 max(20px, env(safe-area-inset-right, 0px)) }
@@ -239,6 +264,7 @@ function el(tag, attrs, ...kids){
 }
 function build(){
   if (root) return;
+  D.head.appendChild(el('link', { rel: 'stylesheet', href: FONT }));
   D.head.appendChild(el('style', { id: 'reader-css' }, CSS));
   prog = el('i');
   where = el('span', { class: 'rd-where', 'aria-hidden': 'true' });
@@ -248,11 +274,19 @@ function build(){
     el('button', { class: 'rd-btn', type: 'button', onclick: () => close() }, '← back to terminal'),
     where, el('span', { class: 'rd-sp' }), sizeBtn, themeBtn);
   col = el('div', { class: 'rd-col' });
-  sheet = el('article', { class: 'rd-sheet', tabindex: '-1' }, el('div', { class: 'rd-progress', 'aria-hidden': 'true' }, prog), bar, col);
+  bar.appendChild(el('div', { class: 'rd-progress', 'aria-hidden': 'true' }, prog));
+  sheet = el('article', { class: 'rd-sheet', tabindex: '-1' }, bar, col);
   root = el('div', { id: 'reader', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rd-title' },
     el('div', { class: 'rd-backdrop', onclick: () => close() }), sheet);
   D.body.appendChild(root);
   sheet.addEventListener('scroll', onScroll, { passive: true });
+  // the wheel over the backdrop scrolls the sheet, as if the pointer were on it
+  root.addEventListener('wheel', e => {
+    if (sheet.contains(e.target)) return;
+    e.preventDefault();
+    const k = e.deltaMode === 1 ? 32 : e.deltaMode === 2 ? sheet.clientHeight : 1;
+    sheet.style.scrollBehavior = 'auto'; sheet.scrollTop += e.deltaY * k; sheet.style.scrollBehavior = '';
+  }, { passive: false });
   paintPrefs();
 }
 function paintPrefs(){
@@ -366,8 +400,7 @@ function close(){
   hideT = setTimeout(() => { if (!isOpen) root.classList.remove('rd-on'); }, reduced() ? 0 : 420);
   setHash('');
   D.title = (M.CONTENT && M.CONTENT.name) || 'Kaiav Nihalani';
-  const phone = D.body.classList.contains('phone');
-  const back = prevFocus && D.contains(prevFocus) ? prevFocus : phone ? D.getElementById('kbd') : D.querySelector('#stage canvas') || D.getElementById('kbd');
+  const back = prevFocus && D.contains(prevFocus) ? prevFocus : D.getElementById('kbd');
   prevFocus = null;
   if (back && back.focus) try { back.focus({ preventScroll: true }); } catch (e){}
 }

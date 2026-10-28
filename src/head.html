@@ -1,37 +1,57 @@
 <title>Kaiav Nihalani</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="Kaiav Nihalani — founder of Eden, co-founder of J: Rising Founder.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Kaiav Nihalani">
+<meta property="og:description" content="Founder of Eden · Co-founder of J">
+<meta property="og:url" content="https://kaiav.pages.dev">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Kaiav Nihalani">
+<meta name="twitter:description" content="Founder of Eden · Co-founder of J">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0f0a'/%3E%3Crect x='12' y='8' width='8' height='16' rx='1' fill='%238dffb4'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Caveat:wght@500&family=VT323&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap">
 <style>
-/* One full-bleed 3D scene; the only DOM is a tiny hint, a view toggle, a hidden input for phones,
-   and an accessible text mirror of the terminal for screen readers. Single dark theme by design. */
+/* One full-bleed 3D scene; the only DOM is a quiet hint, a sound toggle, a hidden input (the real text field for
+   phones and assistive tech) and a visually hidden summary plus a live log of the terminal. Single dark theme by design. */
 :root{ color-scheme: dark; --bg: #07080a; --fg: #e9e2d0; --dim: rgba(233,226,208,.5); --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace }
 html, body{ margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden; font: 12px/1.4 var(--mono) }
 #stage{ position: fixed; inset: 0 }
 #stage canvas{ display: block; width: 100%; height: 100%; outline: none }
-body.phone{ background: #0a0f0a }
-body.phone #mute{ top: max(10px, env(safe-area-inset-top, 0px)); bottom: auto; padding: 4px 8px; font-size: 11px; opacity: .7 }
+/* phones: a slim header strip holds the sound toggle; the terminal fills the rest (main.js sizes it) */
+body.phone{ background: #0a0f0a; --hdr: calc(env(safe-area-inset-top, 0px) + 34px) }
+body.phone #mute{ top: calc(env(safe-area-inset-top, 0px) + 6px); bottom: auto; padding: 4px 8px; font-size: 11px }
 body.phone #stage{ overflow: hidden; touch-action: none }
-#stage canvas.phone-term{ position: absolute; top: max(34px, env(safe-area-inset-top, 0px)); left: 0; width: 100%; height: auto; transition: transform .25s cubic-bezier(.2,.8,.2,1) }
+body.phone::before{ content: ""; position: fixed; top: 0; left: 0; right: 0; height: var(--hdr); background: #0a0f0a; z-index: 1 }
+#stage .phone-term{ position: absolute; top: var(--hdr); left: 0; width: 100%; transition: transform .25s cubic-bezier(.2,.8,.2,1) }
 .ui{ position: fixed; z-index: 2; font: 500 11px var(--mono); letter-spacing: .08em; color: var(--dim) }
-#hint{ left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom, 0px)); transition: opacity .8s; pointer-events: none; text-align: center }
-#mute{ right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); background: none; border: 1px solid rgba(233,226,208,.18); color: var(--dim); font: inherit; letter-spacing: inherit; padding: 6px 10px; cursor: pointer }
+#hint{ left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom, 0px)); transition: opacity 1.2s; pointer-events: none; text-align: center;
+  font-size: 13px; letter-spacing: .04em; color: rgba(233,226,208,.68); text-shadow: 0 1px 8px rgba(0,0,0,.8) }
+#mute{ right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); background: none; border: 1px solid rgba(233,226,208,.18); color: var(--dim); font: inherit; letter-spacing: inherit; padding: 6px 10px; cursor: pointer; display: flex; align-items: center; gap: 7px }
+#mute::before{ content: ""; width: 6px; height: 6px; border-radius: 50%; border: 1px solid currentColor; box-sizing: border-box }
+#mute[aria-pressed="true"]::before{ background: #8dffb4; border-color: #8dffb4; box-shadow: 0 0 6px rgba(141,255,180,.6) }
 #mute:hover{ color: var(--fg); border-color: rgba(233,226,208,.4) }
-#mute:focus-visible, #stage canvas:focus-visible{ outline: 1px solid rgba(233,226,208,.5); outline-offset: -4px }
+#mute:focus-visible{ outline: 1px solid rgba(233,226,208,.5); outline-offset: 2px }
 #kbd{ position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; resize: none }
 .sr{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
 #loading{ position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); font: 500 11px var(--mono); letter-spacing: .3em; text-transform: uppercase; transition: opacity .35s; z-index: 3; background: var(--bg) }
 #loading.gone{ opacity: 0; pointer-events: none }
+noscript{ position: fixed; inset: 0; z-index: 4; display: grid; place-content: center; gap: 6px; background: var(--bg); font-size: 14px; text-align: center }
+noscript h1{ margin: 0; font: 500 18px var(--mono) } noscript p{ margin: 0; color: var(--dim) } noscript a{ color: #8dffb4 }
 @media (prefers-reduced-motion: reduce){ #hint, #loading{ transition: none } }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 
 <div id="stage" aria-hidden="true"></div>
 <div id="loading">warming up the tube</div>
-<div id="hint" class="ui">start typing · try <b>help</b> · move the cursor down to lean back</div>
-<button id="mute" class="ui" type="button" aria-pressed="false">sound on</button>
-<textarea id="kbd" aria-label="Terminal input" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
-<main class="sr" aria-live="polite" id="mirror"><h1>Kaiav Nihalani</h1></main>
+<div id="hint" class="ui" aria-hidden="true" hidden>move the cursor down to lean back</div>
+<textarea id="kbd" aria-label="Terminal: type a command, like help, and press Enter" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+<button id="mute" class="ui" type="button" aria-pressed="true">sound</button>
+<main class="sr">
+  <h1>Kaiav Nihalani</h1>
+  <p>Founder of Eden, giving agents context. Co-founder of J: Rising Founder, a free remote program for founders aged 23 and under. This site is a working terminal: type help.</p>
+  <ul><li><a tabindex="-1" href="https://www.linkedin.com/in/kaiav-nihalani-594703356/">LinkedIn</a></li><li><a tabindex="-1" href="https://x.com/KaiavRNihalani">X</a></li><li><a tabindex="-1" href="https://risingfounder.net">J: Rising Founder</a></li></ul>
+  <div id="mirror" role="log" aria-live="polite" aria-label="Terminal output"></div>
+</main>
+<noscript><h1>Kaiav Nihalani</h1><p>Founder of Eden · Co-founder of J: Rising Founder</p><p><a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/">LinkedIn</a> · <a href="https://x.com/KaiavRNihalani">X</a></p><p>This desk needs JavaScript; the links above are the short version.</p></noscript>
