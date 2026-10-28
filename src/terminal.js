@@ -52,6 +52,7 @@ function fscore(q, c){
   if (c.startsWith(q)) return 900 - (c.length - q.length);
   const at = c.indexOf(q);
   if (at >= 0 && q.length >= 2) return 700 - at;
+  if (q.length >= 3 && Math.abs(q.length - c.length) <= 1 && osa(q, c) === 1) return 520;   // one slip (lss -> ls) beats a loose subsequence (lss -> less)
   if (q.length >= 2){
     let from = 0, gaps = 0, last = -1, ok = true;
     for (const chr of q){ const j = c.indexOf(chr, from); if (j < 0){ ok = false; break; } gaps += last < 0 ? j * 2 : j - last - 1; last = j; from = j + 1; }
@@ -391,7 +392,8 @@ M.createTerminal = function createTerminal(opts){
   let links = [], sel = -1;            // selectable link items in the latest output
   let suggestion = '';                 // "did you mean" target, shown as ghost on an empty prompt
   let tabState = null;
-  let ahead = '';           // keys typed while a command runs, waiting for the next prompt
+  let ahead = '';           // keys typed while a command runs, waiting for the next prompt ('\n' = a queued Enter)
+  let runQueued = false;    // a whole line came in with the type-ahead: run it on the next frame
   let rs = null;            // ctrl+r search: { q, i, draft, dcur }
   let history = [];
   try { const h = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); if (Array.isArray(h)) history = h.filter(s => typeof s === 'string').slice(-200); } catch (e){}
@@ -1376,12 +1378,17 @@ M.createTerminal = function createTerminal(opts){
     if (!noHist && history[history.length - 1] !== line){ history.push(line); if (history.length > 200) history.shift(); try { localStorage.setItem(HIST_KEY, JSON.stringify(history)); } catch (e){} }
     hIdx = history.length; ran++;
   }
+  function flushAhead(){                 // the type-ahead lands on the prompt; a queued Enter runs it next frame
+    const a = ahead; ahead = ''; const nl = a.indexOf('\n');
+    insert(nl < 0 ? a : a.slice(0, nl));
+    if (nl >= 0){ ahead = a.slice(nl + 1); runQueued = true; }
+  }
   function finishJob(j){
     if (job !== j) return;
     for (const t of j.timers) clearTimeout(t);
     job = null; openRow = null;
     if (j.hint){ suggestion = j.hint; tty.write('did you mean ', 'dim'); tty.write(j.hint, 'bright'); tty.write('?  press enter\n', 'faint'); j.plain += ' Did you mean ' + j.hint + '?'; }
-    if (ahead){ const a = ahead; ahead = ''; insert(a); }
+    if (ahead) flushAhead();
     trim(); mirror(j.plain || ''); toBottom(); dirty = true; touched();
     if (REDUCED) revealAll();
   }
@@ -1759,7 +1766,7 @@ M.createTerminal = function createTerminal(opts){
   function wordLeft(p){ while (p > 0 && !isWord(input[p - 1])) p--; while (p > 0 && isWord(input[p - 1])) p--; return p; }
   function wordRight(p){ while (p < input.length && !isWord(input[p])) p++; while (p < input.length && isWord(input[p])) p++; return p; }
   function insert(s){
-    s = s.replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\x7e -￿]/g, '');
+    s = s.replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\x7e\u00a0-\uffff]|[\ud800-\udfff\u0300-\u036f\u200b-\u200f\ufe00-\ufe0f]/g, '');   // one cell per char: no emoji, combining marks or zero-width
     if (!s) return;
     if (input.length + s.length > 240) s = s.slice(0, 240 - input.length);
     input = input.slice(0, cur) + s + input.slice(cur); cur += s.length;
@@ -1823,13 +1830,14 @@ M.createTerminal = function createTerminal(opts){
       return true;
     }
     if (job && job.choice){ if (typing()) revealAll(); return choiceKey(e); }
-    if (typing()){ revealAll(); if (k === 'Enter' || k === 'Escape' || k === ' ' && !input) return true; }
+    if (typing()){ revealAll(); if (!input && (k === 'Enter' || k === 'Escape' || k === ' ')) return true; }   // a key skips the typing-out; a typed line still runs
     if (job){                                   // a command is running: only ctrl+c, ctrl+l and scrolling
       if (ctrl && c === 'c'){ interrupt(); return true; }
       if (ctrl && c === 'l'){ clearScreen(); return true; }
       if (k === 'PageUp'){ scrollBy(ROWS - 2); return true; }
       if (k === 'PageDown'){ scrollBy(-(ROWS - 2)); return true; }
-      if (k.length === 1 && !ctrl && !alt){ if (ahead.length < 200) ahead += k; return true; }     // typed ahead: lands on the next prompt
+      if (k.length === 1 && !ctrl && !alt){ if (ahead.length < 400) ahead += k; return true; }     // typed ahead: lands on the next prompt
+      if (k === 'Enter' && !alt){ if (ahead.length < 400) ahead += '\n'; return true; }            // ...and Enter queues it, like a real tty
       if (k === 'Backspace'){ ahead = ahead.slice(0, -1); return true; }
       return ['Enter', 'Tab', 'Escape'].includes(k);
     }
@@ -1915,11 +1923,12 @@ M.createTerminal = function createTerminal(opts){
       for (const ch of String(str)){ if (!job || !job.choice) break; choiceKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false, shiftKey: false }); }
       return;
     }
-    if (job){ ahead += String(str).replace(/[\r\n\t]/g, ''); return; }
+    if (job){ ahead = (ahead + String(str).replace(/\r\n?/g, '\n').replace(/\t/g, ' ')).slice(0, 4000); return; }
     if (rs){ for (const ch of String(str)) searchKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false }); return; }
     if (typing()) revealAll();
-    const parts = String(str).split(/\r?\n/);
-    parts.forEach((p, i) => { insert(p); if (i < parts.length - 1 && !job) execute(input); });
+    const parts = String(str).replace(/\t/g, ' ').split(/\r\n?|\n/);
+    insert(parts[0]);
+    if (parts.length > 1){ execute(input); ahead = parts.slice(1).join('\n').slice(0, 4000); if (!job) flushAhead(); }   // a pasted script: one line at a time
     touched();
   }
   function run(cmd){
@@ -2384,6 +2393,7 @@ M.createTerminal = function createTerminal(opts){
       if (!typing()) carry = 0, blinkT0 = now;
       changed = true;
     }
+    if (runQueued && !job && !app && !rs){ runQueued = false; execute(input); if (!job) flushAhead(); changed = true; }
     if (job && !job.hinted && !app && now - job.t0 > 0.9){ job.hinted = true; changed = true; }
     const on = ((t - blinkT0) % 1.06) < 0.53;
     if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (app && gridCursor)) changed = true; }
