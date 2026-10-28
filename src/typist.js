@@ -117,8 +117,11 @@ const mix3 = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a
 
 /* One finger segment along -Z (dorsal = +Y): tapered, slightly flattened palm-to-back, flushed at the knuckle. */
 function fingerSeg(r0, r1, len, distal){
-  const g = capsule(r0, r1, len, 20, null, v => {
-    const t = clamp(v.y / len, 0, 1);
+  const g = capsule(r0, r1, len, 24, null, v => {
+    const t = clamp(v.y / len, 0, 1), rr = Math.hypot(v.x, v.z) || 1;
+    const waist = 1 - .055 * Math.sin(PI * clamp(t, 0, 1)) * (distal ? .5 : 1);     // segments slim between the joints
+    v.x *= waist; v.z *= waist;
+    if (v.z > 0) v.z += r0 * .16 * gauss(v.y / len + .02, .16) * (v.z / rr);        // the joint knob on the back
     v.z *= .87 - (distal ? .05 * t : 0);                 // flatter toward the pad
     v.x *= 1 + (distal ? .05 * smooth(.4, 1, t) : 0);     // fingertips spread a touch
     if (distal && v.z < 0) v.z -= .0012 * gauss(t - .62, .3);   // the fleshy pad
@@ -127,8 +130,12 @@ function fingerSeg(r0, r1, len, distal){
   return tint(g, (x, y, z) => {
     const back = smooth(-.2 * r0, .6 * r0, y);
     let k = back * gauss(z / r0, .9) * .9;                                       // knuckle at the proximal joint
-    if (distal) k = Math.max(k, .45 * smooth(-len * .7, -len - r1, z));      // pink fingertip
-    return mix3(PLAIN, KNUCKLE, clamp(k, 0, 1));
+    if (distal) k = Math.max(k, .6 * smooth(-len * .6, -len - r1, z));       // warm fingertip
+    let c = mix3(PLAIN, KNUCKLE, clamp(k, 0, 1));
+    // dorsal wrinkle lines over the joint, palmar crease under it
+    const cr = back * (gauss(z / r0 + .25, .07) + .7 * gauss(z / r0 + .5, .06)) + (1 - back) * gauss(z / r0 + .05, .1) * .8;
+    c = mix3(c, [.72, .55, .5], clamp(cr * .5, 0, .5));
+    return c;
   });
 }
 
@@ -154,7 +161,10 @@ function palmGeo(ts, KX){
       }
     }
     P.setXYZ(i, x, y, z);
-    const c = mix3(PLAIN, KNUCKLE, clamp(red * .85, 0, 1));
+    let c = mix3(PLAIN, KNUCKLE, clamp(red * .85, 0, 1));
+    if (uy > 0) c = mix3(c, [1.02, .97, .9], .5 * smooth(.2, .7, t));                      // the back of the hand: a touch paler, less red
+    const mot = 1 + .035 * Math.sin(x * 310 + z * 90) * Math.sin(z * 260 - x * 70);       // faint mottling
+    c = [c[0] * mot, c[1] * mot, c[2] * mot];
     C[i * 3] = c[0]; C[i * 3 + 1] = c[1]; C[i * 3 + 2] = c[2];
   }
   g.setAttribute('color', new THREE.BufferAttribute(C, 3));
@@ -165,8 +175,8 @@ function palmGeo(ts, KX){
 function makeMat(kind, U){
   const skin = kind === 'skin', nail = kind === 'nail';
   const m = new THREE.MeshStandardMaterial(skin ? { color: lin(0xc8927a), roughness: .52, metalness: 0, vertexColors: true }
-    : nail ? { color: lin(0xe6c0b2), roughness: .28, metalness: 0 }
-    : { color: lin(kind === 'cuff' ? 0x34353b : 0x2e3036), roughness: .93, metalness: 0 });
+    : nail ? { color: lin(0xf2d2c8), roughness: .22, metalness: 0 }
+    : { color: lin(kind === 'cuff' ? 0x383a41 : 0x2e3036), roughness: .93, metalness: 0, vertexColors: kind === 'cuff' });
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = 'varying vec3 vTP;\nvarying vec3 vTN;\n' + sh.vertexShader.replace('#include <fog_vertex>',
@@ -193,6 +203,8 @@ function makeMat(kind, U){
   }
 #include <output_fragment>`);
   };
+  if (skin){ const prev = m.onBeforeCompile; m.onBeforeCompile = sh => { prev(sh);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = clamp(roughnessFactor * (0.86 + 0.6 * (1.0 - vColor.g)), 0.3, 0.8);'); }; }
   m.customProgramCacheKey = () => 'mac-typist-' + kind;
   return m;
 }
@@ -309,22 +321,30 @@ M.createTypist = function createTypist(api){
   const upperGeo = capsule(.054, .049, L1, 40,
     (a, y) => .05 * Math.sin(y * 70 + 1.8 * Math.sin(a * 2 + .5)) * smooth(.17, .27, y) + .025 * Math.sin(a * 4 + y * 22) + .02 * Math.sin(a * 3 - y * 30) * (1 - smooth(.04, .12, y)),
     v => { v.x *= 1.04; v.z *= .94; });
-  const foreGeo = lathe([[.0001, -.05], [.028, -.046], [.044, -.034], [.052, -.012], [.054, .018], [.051, .05], [.048, .09], [.0455, .13], [.0445, .158], [.0465, .177], [.045, .192],
-    [.039, .2], [.0345, .205], [.0335, .214], [.0335, .232], [.031, .2385], [.0255, .2415], [.0001, .242]], 72,
-    (a, y) => (1 - smooth(.0, .1, y)) * (.075 * Math.sin(y * 92 + 1.6 * Math.sin(a * 2 + 1)) + .03 * Math.sin(a * 5 + y * 40))            // bunching at the elbow
+  const sleeveFold = (a, y) => (1 - smooth(.0, .1, y)) * (.075 * Math.sin(y * 92 + 1.6 * Math.sin(a * 2 + 1)) + .03 * Math.sin(a * 5 + y * 40))            // bunching at the elbow
       + smooth(.05, .1, y) * (1 - smooth(.15, .18, y)) * (.028 * Math.sin(a * 3 + y * 28) + .014 * Math.sin(a * 7 - y * 22))          // drape along the forearm
-      + smooth(.15, .168, y) * (1 - smooth(.188, .2, y)) * .045 * Math.sin(a * 4 + y * 50 + 1)                                        // slack piling onto the cuff
-      + smooth(.204, .21, y) * (1 - smooth(.232, .238, y)) * .03 * Math.sin(a * 24),                                                 // rib knit
+      + smooth(.15, .168, y) * (1 - smooth(.188, .2, y)) * .045 * Math.sin(a * 4 + y * 50 + 1);                                       // slack piling onto the cuff
+  const RIBS = 30, ribBand = y => smooth(.203, .209, y) * (1 - smooth(.233, .239, y));
+  const foreGeo = lathe([[.0001, -.05], [.028, -.046], [.044, -.034], [.052, -.012], [.054, .018], [.051, .05], [.048, .09], [.0455, .13], [.0445, .158], [.0465, .177], [.045, .192],
+    [.039, .2], [.0345, .205], [.034, .209], [.0338, .214], [.0338, .22], [.0338, .226], [.0336, .232], [.031, .2385], [.0255, .2415], [.0001, .242]], 150,
+    (a, y) => sleeveFold(a, y) + ribBand(y) * .05 * Math.max(-.6, Math.cos(a * RIBS)),                        // + rib knit on the cuff
     v => { v.x *= 1.1; v.z *= .86; });
+  // the fabric's own shading: fold valleys darker, the knit cuff darker still with shadowed rib grooves
+  tint(foreGeo, (x, y, z) => {
+    const a = Math.atan2(z / .86, x / 1.1), rb = ribBand(y);
+    let k = 1 + clamp(sleeveFold(a, y) * 3.2, -.3, .12);
+    k *= 1 - .2 * rb; k *= 1 - .3 * rb * clamp(.5 - .5 * Math.cos(a * RIBS), 0, 1);
+    return [k, k, k];
+  });
   const wristGeo = tint(capsule(.0205, .0205, .05, 28, null, v => { v.x *= 1.3; v.z *= .74; v.z += .002 * smooth(.02, .05, v.y); }, 6), () => PLAIN);
   const elbowGeo = blob(.056, .056, .056, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
 
   /* ---------- hands ---------- */
-  const FL = [[.036, .03, .027], [.042, .025, .0195], [.046, .028, .0205], [.043, .026, .0195], [.034, .021, .0185]];
-  const FR = [[.0122, .0108, .0098], [.0092, .0084, .0076], [.0096, .0087, .0078], [.009, .0081, .0073], [.008, .0072, .0066]];
+  const FL = [[.035, .029, .026], [.04, .024, .019], [.044, .027, .02], [.041, .025, .019], [.032, .02, .018]];
+  const FR = [[.0112, .0099, .009], [.0082, .0074, .0067], [.0085, .0077, .0069], [.008, .0072, .0065], [.0071, .0064, .0058]];
   const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));
   const segGeo = FL.map((L, f) => L.map((l, j) => fingerSeg(FR[f][j], j < 2 ? FR[f][j + 1] : FR[f][j] * .9, l, j === 2)));
-  const nailGeo = FL.map((L, f) => { const r = FR[f][2]; const g = blob(r * .74, r * .2, L[2] * .4, (x, y, z) => -.15 * Math.max(0, -y), 16, 10);
+  const nailGeo = FL.map((L, f) => { const r = FR[f][2]; const g = blob(r * .8, r * .22, L[2] * .5, (x, y, z) => -.15 * Math.max(0, -y), 20, 12);
     const P = g.attributes.position; for (let i = 0; i < P.count; i++){ const x = P.getX(i); P.setY(i, P.getY(i) - x * x / (r * 2.2)); } return weldNormals(g); });
 
   const hands = [];
@@ -344,7 +364,7 @@ M.createTypist = function createTypist(api){
       const g1 = new THREE.Group(); g1.position.z = -FL[f][0]; g0.add(g1);
       const g2 = new THREE.Group(); g2.position.z = -FL[f][1]; g1.add(g2);
       mesh(segGeo[f][0], skin, g0); mesh(segGeo[f][1], skin, g1); mesh(segGeo[f][2], skin, g2);
-      const nl = mesh(nailGeo[f], nailM, g2, V3(0, FR[f][2] * .74, -FL[f][2] * .64), [-.06, 0, 0]);
+      const nl = mesh(nailGeo[f], nailM, g2, V3(0, FR[f][2] * .8, -FL[f][2] * .6), [-.06, 0, 0]);
       if (f === 0) nl.rotation.z = ts * .25;
       fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][2] * .9 * .87 + .0004,
         mode: 'idle', code: null, vcode: null, real: false, pressed: false, upReq: false, t: 0, tC: 0, Td: .08, lift: .005, relT: 9,

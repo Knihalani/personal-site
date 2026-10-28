@@ -780,6 +780,9 @@ M.createScene = function createScene(container){
     qDelta.copy(qRest).invert().premultiply(qLook);
     eyeNow.copy(pivot).add(eyeArm.clone().applyQuaternion(qDelta));
     eyeNow.y += .0016 * br;
+    // looking down, the head also settles back and up a little (sitting back from the desk), so both hands and
+    // the board are seen from a natural ~45 cm rather than from right over the wrists
+    { const d = sstep(0, 1, downT); eyeNow.addScaledVector(flatN, .13 * d); eyeNow.y += .03 * d; }
     fwdNow.set(0, 0, -1).applyQuaternion(qLook);
     eyeNow.addScaledVector(new V3(fwdNow.x, 0, fwdNow.z).normalize(), .012 * leanS.x);
     camera.position.copy(eyeNow); camera.quaternion.copy(qLook);
