@@ -12,6 +12,7 @@ T.cmds = T.cmds || {}; T.apps = T.apps || {};
 
 /* ---- shared ---- */
 const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const TOUCH = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;   // phones: a tap on the keys line quits
 const blk = level => ({ fg: level, inverse: true });
 const { get: lsGet, set: lsSet } = T.store;       // terminal.js: JSON in localStorage, never throws
 const beep = api => { try { (api.sound || M.sound).event('beep'); } catch (e){} };
@@ -22,22 +23,31 @@ function wrap(text, width){
   const out = []; let line = '';
   for (const w of String(text).split(/\s+/)){
     if (!w) continue;
-    if (!line) line = w; else if (line.length + 1 + w.length <= width) line += ' ' + w; else { out.push(line); line = w; }
+    if (!line) line = w; else if (line.length + 1 + w.length <= width) line += ' ' + w;
+    else if (/^[.,;:!?)\]'"%]+$/.test(w) && line.lastIndexOf(' ') > 0){ const at = line.lastIndexOf(' '); out.push(line.slice(0, at)); line = line.slice(at + 1) + ' ' + w; }   // a lone mark keeps its word
+    else { out.push(line); line = w; }
     while (line.length > width){ out.push(line.slice(0, width)); line = line.slice(width); }
   }
   if (line) out.push(line);
   return out.length ? out : [''];
 }
-/* a row of keys for the bottom line of an app: [['space', 'pause'], ['q', 'quit']] trimmed to fit */
+/* a row of keys for the bottom line of an app: [['space', 'pause'], ['q', 'quit']] trimmed to fit. The way
+   out is the last thing dropped: hints go first, from the end. On a phone it reads "tap here to quit"
+   (a tap on the bottom row is esc there). */
+const isQuitKey = ([k, d]) => d === 'quit' || k === 'esc' || k === 'q' || k === 'any key';
 function keysLine(scr, y, keys){
-  let ks = keys.slice();
-  const len = a => a.reduce((n, [k, d]) => n + k.length + 1 + d.length, 0) + (a.length - 1) * 3;
-  while (ks.length > 1 && len(ks) > scr.cols - 2) ks.pop();
+  let ks = TOUCH ? keys.map(x => x[1] === 'quit' ? ['tap here', 'to quit'] : x[0] === 'any key' ? ['tap here', x[1]] : x) : keys.slice();
+  const len = a => a.reduce((n, [k, d]) => n + k.length + (d ? 1 + d.length : 0), 0) + (a.length - 1) * 3;
+  while (ks.length > 1 && len(ks) > scr.cols - 2){
+    let i = ks.length - 1; while (i > 0 && (isQuitKey(ks[i]) || ks[i][0] === 'tap here')) i--;
+    if (isQuitKey(ks[i]) || ks[i][0] === 'tap here') i = ks.length - 1;
+    ks.splice(i, 1);
+  }
   let x = Math.max(1, ((scr.cols - len(ks)) / 2) | 0);
   ks.forEach(([k, d], i) => {
     if (i){ scr.put(x + 1, y, '·', 'faint'); x += 3; }
-    scr.put(x, y, k, 'normal'); x += k.length + 1;
-    scr.put(x, y, d, 'faint'); x += d.length;
+    scr.put(x, y, k, 'normal'); x += k.length;
+    if (d){ scr.put(x + 1, y, d, 'faint'); x += 1 + d.length; }
   });
 }
 const spaced = s => s.toUpperCase().split('').join(' ');
@@ -176,12 +186,12 @@ const net = {
       } catch (e){
         await new Promise(res => setTimeout(res, 30));          // the CSP event arrives just after the rejection
         if (timedOut) throw new NetError('timeout', 'no answer after ' + Math.round((opt.timeout || 9000) / 1000) + 's');
-        if (csp) throw new NetError('blocked', "blocked by this preview's sandbox");
+        if (csp) throw new NetError('blocked', 'the network is blocked here');
         if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new NetError('offline', 'offline');
-        if (SANDBOXED) throw new NetError('blocked', "blocked by this preview's sandbox");
+        if (SANDBOXED) throw new NetError('blocked', 'the network is blocked here');
         let reach = false;                                     // reachable without CORS? then it was CORS
         try { await fetch(url, { mode: 'no-cors', cache: 'no-store', signal: ctl ? ctl.signal : undefined }); reach = true; } catch (e2){}
-        if (csp) throw new NetError('blocked', "blocked by this preview's sandbox");
+        if (csp) throw new NetError('blocked', 'the network is blocked here');
         if (timedOut) throw new NetError('timeout', 'no answer after ' + Math.round((opt.timeout || 9000) / 1000) + 's');
         if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new NetError('offline', 'offline');
         if (reach) throw new NetError('cors', "the server doesn't allow browser requests");
@@ -202,7 +212,7 @@ const net = {
   fail(io, name, e){
     if (!(e instanceof NetError)){ io.err(name + ': ' + ((e && e.message) || e) + '\n'); return 1; }
     const why = {
-      blocked: ["blocked by this preview's sandbox, works on the live site", 'kaiav.pages.dev has the network. offline tools work here'],
+      blocked: ['the network is blocked here', 'the offline tools still work. try help all'],
       offline: ['offline', 'this browser has no connection right now'],
       cors: ["CORS: the server doesn't allow browser requests", 'the site answered, but will not share it with a web page'],
       timeout: ['timeout, ' + e.message, 'the server is slow or unreachable. try again'],
@@ -388,13 +398,16 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
       const w = wpm(); if (acc() >= 80 && w > best){ best = w; newBest = true; lsSet(TYPE_BEST, best); }
       api.sound && beep(api);
     }
+    const quit = () => { api.print(done ? 'typing: ' + wpm() + ' wpm, ' + acc() + '% accurate' + (newBest ? ', a new best' : '') : 'typing: stopped'); api.exit(0); };
     return {
+      /* phones have no esc: a tap on the keys line (the bottom row) quits */
+      tap(col, row){ if (row >= (api.rows || 18) - 1){ quit(); return true; } return false; },
       key(e){
         if (e.ctrlKey || e.metaKey || e.altKey) return false;
         const k = e.key;
-        if (k === 'Escape'){ api.print(done ? 'typing: ' + wpm() + ' wpm, ' + acc() + '% accurate' : 'typing: stopped'); api.exit(0); return true; }
+        if (k === 'Escape'){ quit(); return true; }
         if (k === 'Tab' || (done && k === 'Enter')){ if (e.preventDefault) e.preventDefault(); reset(); return true; }
-        if (done){ if (k === 'q' || k === 'Q'){ api.print('typing: ' + wpm() + ' wpm, ' + acc() + '% accurate' + (newBest ? ', a new best' : '')); api.exit(0); } return true; }
+        if (done){ if (k === 'q' || k === 'Q') quit(); return true; }
         if (k === 'Backspace'){ typed = typed.slice(0, -1); return true; }
         if (k.length !== 1) return false;
         if (!t0) t0 = now();
@@ -441,7 +454,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
           scr.put(sx, sy + 2, 'best', 'dim'); scr.put(sx + 10, sy + 2, best ? best + ' wpm' + (newBest ? '  new best' : '') : '-', newBest ? 'bright' : 'normal');
           keysLine(scr, H - 1, [['enter', 'again'], ['q', 'quit']]);
         } else {
-          keysLine(scr, H - 1, t0 ? [['tab', 'new passage'], ['esc', 'quit']] : [['start typing', ''], ['tab', 'new passage'], ['esc', 'quit']]);
+          keysLine(scr, H - 1, TOUCH ? [['esc', 'quit']] : t0 ? [['tab', 'new passage'], ['esc', 'quit']] : [['start typing', ''], ['tab', 'new passage'], ['esc', 'quit']]);
         }
       },
     };
@@ -501,7 +514,7 @@ function showJSON(o, v, cols, max = 1e9, i0 = 2){
 T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl [-i] [-s] [-m secs] [-X METHOD] [-H "k: v"] [-d data] url',
   opts: [['-i', 'show the response headers'], ['-s', 'just the body: no status or footer'], ['-X METHOD', 'GET, POST, PUT, DELETE...'], ['-H "k: v"', 'add a request header'], ['-d DATA', 'send a body (and POST)'], ['-m SECS', 'give up after this long (9)']],
   ex: ['curl api.github.com/zen', 'curl -i httpbin.org/get', 'curl wttr.in/?format=3', 'curl api.ipify.org > ip.txt'],
-  more: 'makes a real request from your browser. JSON comes back pretty-printed and coloured; long answers are cut short on screen but whole in a pipe or a file. a bare domain means https. the server has to allow requests from web pages (CORS), and the claude.ai preview blocks the network entirely.',
+  more: 'makes a real request from your browser. JSON comes back pretty-printed and coloured; long answers are cut short on screen but whole in a pipe or a file. a bare domain means https. the server has to allow requests from web pages (CORS).',
   async run(argv, io){
     const a = argv.slice(1); let inc = false, silent = false, method = null, data = null, url = null, secs = 0; const headers = {};
     for (let i = 0; i < a.length; i++){
@@ -805,7 +818,7 @@ T.cmds.pass = { g: 'tools', desc: 'a strong random password', usage: 'pass [-n] 
     let saved = false, hidden = false;
     for (;;){
       const keys = [['c', 'copy']].concat(saved ? [] : [['s', 'save']], hidden ? [] : [['h', 'hide']]);
-      const spans = []; keys.forEach(([k, d], n) => { if (n) spans.push(['  ·  ', 'f']); spans.push([k, 'n'], [' ' + d, 'f']); }); spans.push(['  ·  any other key done', 'f']);
+      const spans = []; keys.forEach(([k, d], n) => { if (n) spans.push(['  ·  ', 'f']); spans.push([k, 'n'], [' ' + d, 'f']); }); spans.push(...(io.cols < 54 ? [['  ', 'f'], ['any other key done', 'f', null]] : [['  ·  any other key done', 'f']]));   // narrow: the last part wraps whole
       const k = await io.ask(spans, { keys: keys.map(x => x[0]) });
       if (k === 'c'){ const ok = await copy(pw); io.out(ok ? '  copied\n' : '  could not reach the clipboard\n', ok ? 'dim' : 'normal'); }
       else if (k === 's'){ if (await vaultSave(io, pw)){ saved = true; } }
@@ -946,25 +959,33 @@ async function vUnlock(io){
       .para('pick a passphrase. it encrypts your saved passwords on this device, and only here.', 'n', io.cols - 6)
       .para('there is no recovery: forget it and the vault cannot be opened, by anyone.', 'd', io.cols - 6).blank();
     io.rich(o);
-    const p1 = await io.ask('passphrase  ', { secret: true }); if (!p1) return false;
-    if (p1.length < 8){ io.err('vault: use at least 8 characters\n'); return false; }
-    const p2 = await io.ask('again       ', { secret: true }); if (p2 == null) return false;
-    if (p1 !== p2){ io.err('vault: those did not match. nothing was saved\n'); return false; }
+    let p1 = null;
+    for (let tries = 3; tries > 0 && !p1; tries--){                 // a slip asks again, up to three times
+      const a = await io.ask('passphrase  ', { secret: true }); if (!a) return false;
+      if (a.length < 8){ io.out('  8 characters at least' + (tries > 1 ? '. try again\n' : '\n'), 'dim'); continue; }
+      const b = await io.ask('again       ', { secret: true }); if (b == null) return false;
+      if (a !== b){ io.out('  those did not match' + (tries > 1 ? '. try again\n' : '\n'), 'dim'); continue; }
+      p1 = a;
+    }
+    if (!p1){ io.err('vault: nothing was saved\n'); return false; }
     io.out('  deriving a key...\n', 'faint');
     const salt = crypto.getRandomValues(new Uint8Array(16));
     V.key = await vDerive(p1, salt, VITER); V.salt = b64(salt); V.iter = VITER; V.items = [];
     if (!(await vSeal())){ vLock(); io.err('vault: this browser would not store it\n'); return false; }
     vTouch(); return true;
   }
-  const p = await io.ask('passphrase  ', { secret: true }); if (!p) return false;
-  io.out('  unlocking...\n', 'faint');
-  try {
-    const key = await vDerive(p, unb64(blob.salt), blob.iter || VITER);
-    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(blob.iv) }, key, unb64(blob.ct));
-    const data = JSON.parse(new TextDecoder().decode(pt));
-    V.key = key; V.salt = blob.salt; V.iter = blob.iter || VITER; V.items = Array.isArray(data.items) ? data.items : [];
-    vTouch(); return true;
-  } catch (e){ io.err('vault: wrong passphrase\n'); return false; }
+  for (let tries = 3; tries > 0; tries--){
+    const p = await io.ask('passphrase  ', { secret: true }); if (!p) return false;
+    io.out('  unlocking...\n', 'faint');
+    try {
+      const key = await vDerive(p, unb64(blob.salt), blob.iter || VITER);
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(blob.iv) }, key, unb64(blob.ct));
+      const data = JSON.parse(new TextDecoder().decode(pt));
+      V.key = key; V.salt = blob.salt; V.iter = blob.iter || VITER; V.items = Array.isArray(data.items) ? data.items : [];
+      vTouch(); return true;
+    } catch (e){ if (tries > 1) io.out('  wrong passphrase. try again\n', 'dim'); }
+  }
+  io.err('vault: wrong passphrase\n'); return false;
 }
 const vFind = l => V.items.find(it => it.label === l) || V.items.find(it => it.label.toLowerCase() === String(l).toLowerCase());
 const cleanLabel = l => String(l || '').trim().replace(/\s+/g, '-').slice(0, 32);

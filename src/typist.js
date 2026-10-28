@@ -320,17 +320,20 @@ M.createTypist = function createTypist(api){
   /* ---------- hands ---------- */
   /* Hand scale: the hand is modelled at adult size, then drawn at HS. Seen from ~45 cm above, full-size black hands
      read as mittens over the board; at ~80% they sit on the keys like hands do in photos of someone typing. */
-  const HS = .8;
-  const SKIN_H = .0031;     // surface-nets cell size (hand space; ~2.5 mm in the world, so meshing costs what it did at full size)
+  const HS = .68;
+  const SKIN_H = .0036;     // surface-nets cell size (hand space; ~2.5 mm in the world, so meshing costs what it did before)
   const FL = [[.036, .03, .026], [.041, .025, .019], [.045, .028, .02], [.042, .026, .019], [.032, .02, .0165]];
-  const FR = [[.0098, .0088, .0078], [.0075, .0067, .0059], [.0077, .0069, .006], [.0072, .0064, .0056], [.0062, .0055, .0049]];
+  /* finger radius (hand space) at the knuckle, the two finger joints and the tip: it narrows continuously all the way
+     down, so no joint reads as a bead and the tip is the slimmest point (a flattened pad, not a ball) */
+  const FR = [[.0128, .0114, .0099, .0077], [.0102, .009, .0078, .0064], [.0105, .0093, .008, .0065], [.0099, .0087, .0075, .0061], [.0086, .0076, .0066, .0054]];
+  const TIPFL = 1.3;        // how much the last joint flattens (pad below, nail above) by the tip
   const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));
 
   const hands = [];
   for (let h = 0; h < 2; h++){
     const side = h ? 1 : -1, ts = -side;            // ts: which local x side the thumb is on
     const hand = new THREE.Group(); hand.scale.setScalar(HS); root.add(hand);
-    const KN = [V3(ts * .031, -.007, -.03), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.08)];
+    const KN = [V3(ts * .037, -.009, -.024), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.08)];
     const upper = new THREE.Group(); root.add(upper); mesh(upperGeo, cloth, upper); mesh(elbowGeo, cloth, upper, V3(0, L1, 0));
     const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, cuffM, fore);
     const fingers = [];
@@ -342,7 +345,7 @@ M.createTypist = function createTypist(api){
       const g2 = new THREE.Group(); g2.position.z = -FL[f][1]; g1.add(g2);
       // clear: fingertip axis end to key top. The tip tapers to ~.68 of the DIP radius (see the skin), so the pad
       // that meets the cap sits about that far below the axis, in world units
-      fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][2] * (f ? .7 : .8) * .92 * HS + .0003,
+      fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][3] / TIPFL * 1.12 * HS + .0003,
         mode: 'idle', code: null, vcode: null, real: false, pressed: false, upReq: false, t: 0, tC: 0, Td: .08, lift: .005, relT: 9,
         w: S(0), depth: S(0), act: 0, K: V3(), from: V3(), P: V3(), tip: V3(), restLocal: V3(), restHome: V3(), reach: V3(), start: 0,
         fid: new VSpring(V3()), fidT: V3(), fidAt: 1 + Math.random() * 4, queue: [], vel: V3(), prevP: V3(), v0: V3() });
@@ -383,7 +386,7 @@ M.createTypist = function createTypist(api){
           return o;
         };
         // per finger: MCP, PIP (DIP follows at .55; the bend spread along the finger, not hooked at the PIP), splay (+ = away from the thumb), tip offset along the key (m, + = forward)
-        const POSE = [null, [.56, .6, -.1, .001], [.6, .64, -.01, .0035], [.6, .64, .07, .0015], [.5, .7, .17, -.002]];
+        const POSE = [null, [.42, .56, -.03, .001], [.46, .58, 0, .0035], [.46, .58, .025, .0015], [.4, .6, .05, -.002]];
         const tipH = (inv, f) => homes[f - 1].clone().addScaledVector(n, H.fingers[f].clear + REST_GAP).addScaledVector(kfw, POSE[f][3]).applyMatrix4(inv);
         const kn = [];
         for (let it = 0; it < 3; it++){
@@ -405,7 +408,7 @@ M.createTypist = function createTypist(api){
       const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(HS, HS, HS)).invert();
       const ixLat = homes[0].clone().sub(space || C).dot(lat);
       const half = 2.7 * U_KEY;
-      const tl = clamp(ixLat + (H.h ? -.35 : .55) * U_KEY, -half, half);
+      const tl = clamp(ixLat + (H.h ? -.6 : .7) * U_KEY, -half, half);   // in under the index, where the thumb shows
       thumbKey[H.h] = (space || C.clone().addScaledVector(kfw, -2 * U_KEY)).clone().addScaledVector(lat, tl);
       H.fingers.forEach((F, f) => {
         const k = f === 0 ? thumbKey[H.h] : homes[f - 1];
@@ -689,7 +692,7 @@ M.createTypist = function createTypist(api){
         vI.copy(F.fid.x).applyQuaternion(H.hand.quaternion); idle.add(vI).addScaledVector(n, .0003 * (1 + Math.sin(T * 1.7 + F.f * 1.3 + H.h * 2)));
         let cp = 0; for (const G of H.fingers) if (G !== F) cp += COUPLE[G.f][F.f] * G.act * (G.mode === 'strike' ? Math.sin(PI * clamp(G.t / G.Td, 0, 1)) * .6 + .4 : 1);
         if (cp > 0) idle.addScaledVector(n, .0016 * Math.min(cp, 1.2));      // a neighbour's stroke lifts the coupled fingers a little
-        if (dk > 0){ const hgt = idle.dot(n) - (deskLocalH + FR[F.f][2] * .9 * HS); idle.addScaledVector(n, -hgt * dk * (F.f ? .85 : .5)); }
+        if (dk > 0){ const hgt = idle.dot(n) - (deskLocalH + FR[F.f][3] * .8 * HS); idle.addScaledVector(n, -hgt * dk * (F.f ? .85 : .5)); }
 
         if (F.mode === 'strike'){
           F.t += dt;
@@ -775,48 +778,45 @@ M.createTypist = function createTypist(api){
     const ap = (e, x, y, z) => { q[0] = e[0] * x + e[4] * y + e[8] * z + e[12]; q[1] = e[1] * x + e[5] * y + e[9] * z + e[13]; q[2] = e[2] * x + e[6] * y + e[10] * z + e[14]; return q; };
     // per finger: hand->bone transforms, lengths and radii (lateral; the dorsal-ventral axis is flattened)
     const CH = H.fingers.map(F => {
-      const f = F.f, th = f === 0, R = FR[f];
-      // the last joint tapers into the tip: full at the DIP, still full across the pad, narrowing to a slim, flattened
-      // tip (nail on top, pad below) instead of ending in a ball
-      const rj = th ? [.0135, R[1] * 1.08, R[2] * 1.05, R[2] * .74] : [R[0] * 1.02, R[1] * 1.04, R[2] * 1.03, R[2] * .7];
-      const gs = [F.g0, F.g1, F.g2];
-      // one cross-section along the whole finger (no change of flatness or waist at a joint, which reads as a bead):
-      // the shafts are as full as their ends and only the last segment flattens, gradually, into the pad and nail
-      const segs = gs.map((g, j) => ({ e: inv(rel(g)), L: F.L[j], r0: rj[j], r1: rj[j + 1],
-        flat: th ? 1.1 : 1.14, flat2: j === 2 ? (th ? 1.22 : 1.3) : 0 }));
+      const f = F.f, th = f === 0, R = FR[f], gs = [F.g0, F.g1, F.g2];
+      // one tapered, sphere-swept tube per bone; neighbouring bones share the joint radius, so the chain is seamless.
+      // Only the last bone flattens, toward the tip (the pad below, the nail above), so the end is not a ball.
+      const segs = gs.map((g, j) => ({ e: inv(rel(g)), L: F.L[j], r0: R[j], r1: R[j + 1], flat: th ? 1.1 : 1.12, flat2: j === 2 ? TIPFL : 0 }));
       const pts = gs.map(g => V3().setFromMatrixPosition(rel(g))); pts.push(V3(0, 0, -F.L[2]).applyMatrix4(rel(F.g2)));
       const c = pts.reduce((a, p) => a.add(p), V3()).multiplyScalar(.25);
-      return { f, th, segs, pts, c, rad: Math.max(...pts.map(p => p.distanceTo(c))) + .022, flat: th ? 1.08 : 1.15, joints: [0, F.L[0], F.L[0] + F.L[1]] };
+      return { f, th, segs, pts, c, rad: Math.max(...pts.map(p => p.distanceTo(c))) + .022, flat: th ? 1.08 : 1.12, joints: [0, F.L[0], F.L[0] + F.L[1]] };
     });
     const segD = (S, x, y, z, flat) => {
-      // a sphere-swept tube whose radius runs continuously along the bone: neighbouring segments meet with the same
-      // radius at the joint, so their union is seamless (a smooth-min between co-axial parts would add a bead there)
       ap(S.e, x, y, z); const hh = -q[2], t = clamp(hh / S.L, 0, 1);
       const fl = S.flat2 ? S.flat + (S.flat2 - S.flat) * smooth(0, 1, t) : (S.flat || flat);
-      const r = S.flat2 ? S.r0 + (S.r1 - S.r0) * smooth(.3, 1, t) * (.6 + .4 * t) : S.r0 + (S.r1 - S.r0) * t;
-      return Math.hypot(q[0], q[1] * fl, hh - t * S.L) - r;
+      return Math.hypot(q[0], q[1] * fl, hh - t * S.L) - (S.r0 + (S.r1 - S.r0) * t);
     };
-    const chainD = (C, x, y, z, from) => { let d = segD(C.segs[from], x, y, z, C.flat); for (let j = from + 1; j < 3; j++) d = smin(d, segD(C.segs[j], x, y, z, C.flat), .0018); return d; };
-    // palm: a rounded slab, longer than wide, back gently domed, front edge following the knuckle arc.
-    // Implicit F = r - 1, turned into a distance with its (analytic, shape-frozen) gradient: d = F / |grad F|.
-    const zK = H.KN[2].z, PE = 2.4;
+    const chainD = (C, x, y, z, from) => { let d = segD(C.segs[from], x, y, z, C.flat); for (let j = from + 1; j < 3; j++) d = smin(d, segD(C.segs[j], x, y, z, C.flat), .0012); return d; };
+    /* palm: one slightly flattened box with rounded edges, as wide as the knuckles it carries, narrowing a little to
+       the wrist; its front edge follows the knuckle arc and covers the knuckle heads, so the knuckles read only as a
+       gentle ridge where the fingers leave it (no separate balls). The back of the hand is flat-ish, the heel fuller. */
+    const kx = [1, 2, 3, 4].map(f => H.KN[f].x * ts), kz = [1, 2, 3, 4].map(f => H.KN[f].z), ky = [1, 2, 3, 4].map(f => H.KN[f].y);
+    const xIn = kx[0] + FR[1][0] * .9, xOut = kx[3] - FR[4][0] * 1.05, zW = .014;    // inner (thumb) and outer edges at the knuckles; wrist line
+    const kzAt = xs => {          // knuckle line, piecewise linear across the four knuckles (xs: thumb side +)
+      if (xs >= kx[0]) return kz[0]; if (xs <= kx[3]) return kz[3];
+      for (let i = 0; i < 3; i++) if (xs <= kx[i] && xs >= kx[i + 1]){ const u = (xs - kx[i + 1]) / (kx[i] - kx[i + 1]); return kz[i + 1] + (kz[i] - kz[i + 1]) * u; }
+      return kz[1];
+    };
+    const kyM = (ky[0] + ky[1] + ky[2] + ky[3]) / 4, RR = .0075;
     const palmDist = (x, y, z) => {
-      const xs = x * ts, ze = zK + 11 * (xs - .005) * (xs - .005) + .003, zb = .012, zl = zb - ze;
-      const t = (z - ze) / zl, tc = clamp(t, 0, 1);
-      const w = .0362 - .0092 * smooth(.3, 1, tc), u = (xs + .001 + .002 * tc) / w, v = 2 * t - 1;
-      const uu = Math.min(1, u * u);
-      const hy = y > 0 ? (.0098 + .0022 * smooth(.45, 1, tc)) * (1 - .32 * uu) : (.0108 + .0062 * smooth(.3, 1, tc)) * (1 - .22 * uu);
-      const au = Math.abs(u), av = Math.abs(v), ym = Math.abs(y) / hy;
-      const u2 = au * au, v2 = av * av, sv = Math.sqrt(Math.sqrt(u2 * u2 + v2 * v2)) + 1e-9;
-      const sp = Math.pow(sv, PE), yp = Math.pow(ym, PE), r = Math.pow(sp + yp, 1 / PE) + 1e-9;
-      const dRs = sp / sv / (r ** PE / r), dRy = yp / (ym + 1e-12) / (r ** PE / r);
-      const s3 = sv * sv * sv, gx = dRs * u2 * au / s3 / w, gz = dRs * v2 * av / s3 * 2 / zl, gy = dRy / hy;
-      return (r - 1) / Math.hypot(gx, gy, gz);
+      const xs = x * ts;
+      const zf = kzAt(clamp(xs, xOut, xIn)) + .002, t = clamp((z - zf) / (zW - zf), 0, 1);       // 0 at the knuckles, 1 at the wrist
+      const st = smooth(.25, 1, t);
+      const xi = xIn - .008 * st, xo = xOut + .012 * st;                 // narrows toward the wrist, more on the little-finger side
+      const top = kyM + .0068 - .0012 * t, bot = kyM - .0098 - .0052 * smooth(.2, .9, t);   // back of the hand / palm and heel
+      const cx = (xi + xo) / 2, cy = (top + bot) / 2, cz = (zf + zW) / 2;
+      const qx = Math.abs(xs - cx) - ((xi - xo) / 2 - RR), qy = Math.abs(y - cy) - ((top - bot) / 2 - RR), qz = Math.abs(z - cz) - ((zW - zf) / 2 - RR);
+      return Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0) - RR;
     };
-    // wrist and forearm: an elliptical section (5.5 x 3.5 cm at the wrist) widening toward the elbow
+    // wrist and forearm: an elliptical section widening toward the elbow
     const Fe = inv(rel(H.fore));
     const foreDist = (x, y, z) => {
-      ap(Fe, x, y, z); const sb = L2 - q[1], k = smooth(.0, .085, sb), a = .0228 + .0036 * k, b = .014 + .0045 * k; q[2] += .0015 * (1 - k);
+      ap(Fe, x, y, z); const sb = L2 - q[1], k = smooth(.0, .085, sb), a = .0235 + .0055 * k, b = .0158 + .0055 * k; q[2] += .0015 * (1 - k);
       const e = Math.hypot(q[0] / a, q[2] / b) + 1e-9;
       const c1 = -sb / .014, c2 = (sb - .085) / .02, cap = Math.max(0, c1, c2), cs = cap === c1 ? .014 : .02;
       const e2 = e * e, cc = cap * cap, r = Math.sqrt(Math.sqrt(e2 * e2 + cc * cc)) + 1e-9;
@@ -824,20 +824,13 @@ M.createTypist = function createTypist(api){
       const gx = de * q[0] / (a * a * e), gz = de * q[2] / (b * b * e), gy = dc / cs;
       return (r - 1) / Math.hypot(gx, gy, gz);
     };
-    const palmD = (x, y, z) => {
-      let d = smin(palmDist(x, y, z), foreDist(x, y, z), .015);
-      for (let f = 1; f < 5; f++){            // the knuckle heads
-        const S = CH[f].segs[0]; ap(S.e, x, y, z);
-        d = smin(d, Math.hypot(q[0] * .85, (q[1] - .2 * S.r0) * 1.25, q[2] - .002) - .74 * S.r0, .014);
-      }
-      return d;
-    };
+    const palmD = (x, y, z) => smin(palmDist(x, y, z), foreDist(x, y, z), .016);
     const sdf = (x, y, z) => {
       const pg = smin(palmD(x, y, z), segD(CH[0].segs[0], x, y, z, 1.25), .011);        // + the thumb's fleshy metacarpal (thenar)
       let d = pg;
       for (const C of CH){
         if (Math.hypot(x - C.c.x, y - C.c.y, z - C.c.z) - C.rad > pg + .01) continue;
-        d = Math.min(d, smin(pg, chainD(C, x, y, z, C.th ? 1 : 0), C.th ? .006 : .0075));   // fingers blend into the palm, never into each other
+        d = Math.min(d, smin(pg, chainD(C, x, y, z, C.th ? 1 : 0), C.th ? .006 : .0055));   // fingers blend into the palm, never into each other
       }
       return d;
     };

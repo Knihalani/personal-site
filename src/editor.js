@@ -81,7 +81,7 @@ function start(api, argv, flavor){
   }
   if (readOnly && (flavor === 'vi' || flavor === 'vim')) say(COLS < 54 ? 'nano-style ' + flavor + '. read-only: :w copies' : 'nano-style ' + flavor + ', read-only file. ^S saves a copy', 'dim', 7);
   else if (readOnly) say(COLS < 54 ? 'built-in file. :w saves a copy, :q quits' : 'built-in file, read-only. ^S saves a copy', 'dim', 7);
-  else if (flavor === 'vi' || flavor === 'vim') say('this ' + flavor + ' is nano-style: just type. ^S save, esc quits', 'dim', 7);
+  else if (flavor === 'vi' || flavor === 'vim') say(COLS < 54 ? 'nano-style ' + flavor + '. :w saves, :q quits' : 'this ' + flavor + ' is nano-style: just type. :w or ^S saves, :q quits', 'dim', 7);
   else if (COLS < 54) say('tip: :wq on its own line saves', 'dim', 7);
   else if (isNew) say('new file', 'dim');
 
@@ -412,7 +412,7 @@ function start(api, argv, flavor){
     } else if (m.type === 'ex'){
       mode = null;
       const cmd = VIM_CMDS[':' + m.input.trim()];
-      if (cmd) runVim(cmd); else if (m.input.trim()) say('try :w (save a copy) or :q (quit)', 'bright');
+      if (cmd) runVim(cmd); else if (m.input.trim()) say('try :w (' + (readOnly ? 'save a copy' : 'save') + ') or :q (quit)', 'bright');
     }
   }
   function promptKey(e){
@@ -466,11 +466,14 @@ function start(api, argv, flavor){
 
   /* ---- vim-ish commands typed on their own line (also the phone way out: no ctrl key there) ---- */
   function lineCommand(){
-    const t = lines[cy].trim(), cmd = VIM_CMDS[t];
+    /* ":wq" alone on a line, or at the end of one after a space ("done for today :wq") */
+    const m = /(^|\s)(:wq!?|:x|:q!?|:w)\s*$/.exec(lines[cy]), cmd = m && VIM_CMDS[m[2]];
     if (!cmd || selRange() || cx !== lines[cy].length) return false;
+    const keep = lines[cy].slice(0, m.index).replace(/\s+$/, '');
     if (readOnly){ /* nothing was typed into the buffer; nothing to remove */ }
     else edit('other', () => {
-      if (lines.length > 1){ lines.splice(cy, 1); if (cy > 0){ cy--; cx = lines[cy].length; } else cx = 0; }
+      if (keep){ lines[cy] = keep; cx = keep.length; }
+      else if (lines.length > 1){ lines.splice(cy, 1); if (cy > 0){ cy--; cx = lines[cy].length; } else cx = 0; }
       else { lines[0] = ''; cx = 0; }
     });
     runVim(cmd);
@@ -534,7 +537,7 @@ function start(api, argv, flavor){
         return true;
     }
     if ([...k].length === 1 && !e.metaKey){
-      if (readOnly && k === ':'){ openPrompt('ex', ':', '', null); return true; }
+      if (k === ':' && (readOnly || ((flavor === 'vi' || flavor === 'vim') && cx === 0 && !selRange()))){ openPrompt('ex', ':', '', null); return true; }
       cutChain = false; typeText(k, 'type'); return true;
     }
     return false;
@@ -566,7 +569,7 @@ function start(api, argv, flavor){
   /* ---- drawing ---- */
   const ev = (k, ctrl) => ({ key: k, ctrlKey: !!ctrl, altKey: false, shiftKey: false, metaKey: false, preventDefault(){} });
   const SHORTCUTS = [
-    [['^S', 'save', ev('s', 1)], ['^Q', 'quit', ev('q', 1)], ['^F', 'find', ev('f', 1)], ['^G', 'go to', ev('g', 1)], ['^L', 'lines', ev('l', 1)]],
+    [['esc', 'quit', ev('Escape')], ['^S', 'save', ev('s', 1)], ['^F', 'find', ev('f', 1)], ['^G', 'go to', ev('g', 1)], ['^L', 'lines', ev('l', 1)]],   // ^Q works too, but it closes Firefox on Linux
     [['^X', 'cut', ev('x', 1)], ['^C', 'copy', ev('c', 1)], ['^V', 'paste', ev('v', 1)], ['^Z', 'undo', ev('z', 1)], ['^Y', 'redo', ev('y', 1)]],
   ];
   function barFor(){
@@ -577,7 +580,7 @@ function start(api, argv, flavor){
       case 'goto': return [[['enter', 'go', ev('Enter')], ['12:4', 'line:col', null]], [esc]];
       case 'saveas': return [[['enter', 'save', ev('Enter')]], [esc]];
       case 'quit': return [[['y', 'save', ev('y')], ['n', "don't save", ev('n')]], [esc]];
-      case 'ex': return [[['w', 'save a copy', null], ['q', 'quit', null]], [['enter', 'run', ev('Enter')], esc]];
+      case 'ex': return [[['w', readOnly ? 'save a copy' : 'save', null], ['q', 'quit', null], ['wq', 'both', null]], [['enter', 'run', ev('Enter')], esc]];
       case 'overwrite': return [[['y', 'overwrite', ev('y')], ['n', 'new name', ev('n')]], [esc]];
     }
     return SHORTCUTS;
@@ -725,7 +728,7 @@ function start(api, argv, flavor){
 }
 
 /* one editor; nano, vi and vim are quiet aliases (they work, but help lists edit once) */
-const MORE = 'a small nano-style editor. just type. ^S saves, esc quits (asking first if there are changes), ^F finds, ^G goes to a line, ^Z undoes. the two bottom lines list the rest. built-in files open read-only; ^S then saves a copy. on a phone, type :w, :q or :wq on a line of its own and press enter.';
+const MORE = 'a small nano-style editor. just type. esc quits (asking first if there are changes), ^S saves, ^F finds, ^G goes to a line, ^Z undoes. the two bottom lines list the rest. built-in files open read-only; ^S then saves a copy. on a phone, type :w, :q or :wq at the end of a line and press enter. in vi and vim, : at the start of a line opens the command line.';
 const def = (name, desc, hidden) => ({ g: 'files', hidden: !!hidden, desc, usage: name + ' [file]', more: MORE, ex: ['edit notes/today.txt', 'edit README.md'], start(api, argv){ return start(api, argv, name); } });
 T.apps.edit = def('edit', 'edit a text file (nano-style)');
 T.apps.nano = def('nano', 'edit a text file (same as edit)', true);

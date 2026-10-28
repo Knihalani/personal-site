@@ -148,6 +148,9 @@ T.apps.tetris = {
       /* phones: the top of the screen turns, the bottom drops, the left and right thirds move */
       tap(col, row){
         help = false;
+        /* the bottom row is the way out on a phone: the first tap pauses, the next one quits (the terminal
+           treats a tap an app does not use, on that row, as esc) */
+        if (TOUCH && row >= (api.rows || 23) - 1){ if (over || paused) return false; paused = true; return true; }
         if (over){ restart(); return true; }
         if (paused){ paused = false; return true; }
         if (!cur || flash) return true;
@@ -235,7 +238,7 @@ T.apps.tetris = {
             .forEach(([a, v, st], i) => { scr.put(rx, ry + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, ry + 4 + i, String(v), st); });
           const ks = [['\u2190\u2192', 'move'], ['\u2191 x', 'turn'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           const ky = ry + 9, two = STACK || scr.rows - ky < ks.length;
-          const short = TOUCH ? [['tap', 'sides move'], ['top', 'turn'], ['low', 'drop'], ['q', 'quit']]
+          const short = TOUCH ? [['tap', 'sides move'], ['top', 'turn'], ['low', 'drop']]
             : [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           (two ? short : ks).forEach(([a, b], i) => {
             const x = rx + (two ? (i % 2) * (TOUCH ? 15 : 11) : 0), y = ky + (two ? i >> 1 : i);
@@ -276,10 +279,11 @@ T.apps.tetris = {
           c(9, lines + ' lines  lvl ' + level, 'dim');
           c(10, newHi ? '* new high score *' : 'best ' + hi, newHi ? 'accent' : 'dim');
           if (REDUCED || Math.floor(t * 2) % 2 === 0) c(12, TOUCH ? 'tap again' : 'enter again', 'normal');
-          c(13, 'q quit', 'faint');
+          if (!TOUCH) c(13, 'q quit', 'faint');
         } else if (help && score === 0){
           scr.put(bx + 3, oy + 3, TOUCH ? ' tap to play' : 'arrows to play', 'dim');
         }
+        if (TOUCH) center(scr, scr.rows - 1, paused || over ? 'tap here to quit' : 'tap here to pause', 'faint');
       },
     };
   },
@@ -345,6 +349,7 @@ T.apps.snake = {
     return {
       /* phones: tap on the side of the head you want to go; the snake turns that way */
       tap(col, row){
+        if (TOUCH && row >= rows - 1){ if (over || paused || !started) return false; paused = true; return true; }   // the bottom edge: pause, then quit
         if (over){ reset(); return true; }
         if (paused){ paused = false; return true; }
         started = true;
@@ -409,7 +414,7 @@ T.apps.snake = {
           c(3, score + ' points', 'normal');
           c(4, 'length ' + n + '   apples ' + eaten, 'dim');
           c(6, newHi ? '* new high score *' : 'best ' + hi, newHi ? 'accent' : 'dim');
-          c(8, (TOUCH ? 'tap again' : 'enter again') + '  \u00b7  q quit', REDUCED || Math.floor(t * 2) % 2 === 0 ? 'normal' : 'dim');
+          c(8, TOUCH ? 'tap again' : 'enter again  \u00b7  q quit', REDUCED || Math.floor(t * 2) % 2 === 0 ? 'normal' : 'dim');
         } else if (paused){
           box(scr, cx, cy + 2, cw, 5, 'dim');
           c(3, 'PAUSED', 'bright'); c(5, TOUCH ? 'tap to resume' : 'p to resume', 'dim');
@@ -419,6 +424,7 @@ T.apps.snake = {
           c(4, TOUCH ? 'tap beside the head to turn' : 'arrows or wasd to start', 'normal');
           c(5, TOUCH ? 'tap to start' : 'p pause  \u00b7  q quit', 'faint');
         }
+        if (TOUCH) center(scr, scr.rows - 1, paused || over || !started ? ' tap here to quit ' : ' tap here to pause ', 'faint');
       },
     };
   },
@@ -526,7 +532,7 @@ T.apps.donut = {
             scr.put(x - s.length, y, s, st);
           }
         }
-        const hint = note ? note + '  \u00b7  ' + (paused ? 'space resumes' : 'q quit')
+        const hint = TOUCH ? 'tap here to quit' : note ? note + '  \u00b7  ' + (paused ? 'space resumes' : 'q quit')
           : cols >= 46 ? '\u2190\u2191\u2193\u2192 spin \u00b7 space pause \u00b7 +/- speed \u00b7 q quit'
           : '\u2190\u2191\u2193\u2192 spin \u00b7 space \u00b7 +/- \u00b7 q';
         center(scr, rows - 1, hint, note ? 'dim' : 'faint');

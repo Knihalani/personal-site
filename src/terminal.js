@@ -104,6 +104,32 @@ function fuzzy(q, items){
   return best && bs >= 150 ? { item: best, score: bs } : null;
 }
 
+/* one rich row of spans -> rows no wider than width. Plain text spans ('f', 'd', 'n', no link) break between
+   words; chips, links and other styles stay whole. A lone mark (" .") moves with the word before it. */
+function fitRow(spans, width){
+  if (spans.reduce((n, x) => n + x[0].length, 0) <= width) return [spans];
+  const toks = [];
+  for (const sp of spans){
+    if (sp.length > 2 || !/^[fdn]$/.test(sp[1])){ toks.push({ sp, br: false }); continue; }
+    for (const m of sp[0].match(/\s+|\S+\s*/g) || []){
+      const prev = toks[toks.length - 1];
+      if (prev && prev.of === sp && PUNCT.test(m.trim())) prev.sp[0] += m; else toks.push({ sp: [m, sp[1]], br: true, of: sp });
+    }
+  }
+  const rows = []; let row = [], w = 0;
+  const flush = () => { const last = row[row.length - 1]; if (last && last.br) last[0] = last[0].replace(/\s+$/, ''); rows.push(row); row = []; w = 0; };
+  const put = (s, st) => { const last = row[row.length - 1]; if (last && last.br && last[1] === st) last[0] += s; else { const p = [s, st]; p.br = true; row.push(p); } w += s.length; };
+  for (const t of toks){
+    let s = t.sp[0];
+    if (row.length && w + s.replace(/\s+$/, '').length > width) flush();
+    if (!t.br){ row.push(t.sp); w += s.length; continue; }
+    if (!row.length) s = s.replace(/^\s+/, '');
+    while (s.length > width){ put(s.slice(0, width), t.sp[1]); flush(); s = s.slice(width); }
+    if (s) put(s, t.sp[1]);
+  }
+  if (row.length) flush();
+  return rows.length ? rows.map(r => r.map(x => x.br ? [x[0], x[1]] : x)) : [[]];
+}
 function wrap(text, width){
   // written line breaks are kept (a blank line stays blank); "- " bullets wrap with a hanging indent
   const src = String(text), out = [];
@@ -121,11 +147,16 @@ function wrapLine(text, width, hang){
     if (!w) continue;
     if (!line) line = (out.length ? hang : '') + w;
     else if (line.length + 1 + w.length <= width) line += ' ' + w;
-    else { out.push(line); line = hang + w; }
+    else {
+      const at = line.lastIndexOf(' ');               // a lone mark (" .") never starts a line: the word before it comes too
+      if (PUNCT.test(w) && at > (out.length ? hang.length : 0)){ out.push(line.slice(0, at)); line = hang + line.slice(at + 1) + ' ' + w; }
+      else { out.push(line); line = hang + w; }
+    }
   }
   if (line) out.push(line);
   return out.length ? out : [''];
 }
+const PUNCT = /^[.,;:!?)\]}'"\u2019%]+$/;
 const noLig = s => s.indexOf('f') < 0 ? s : s.replace(/f(?=[il])/g, 'f\u200c');     // VT323 would draw fi / fl as one glyph
 const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -408,7 +439,7 @@ M.createTerminal = function createTerminal(opts){
   let shown = 0, partial = 0, carry = 0;   // typing-out progress
   let input = '', cur = 0;
   let scrollOff = 0, wheelAcc = 0;
-  let booting = (() => { try { return !sessionStorage.getItem(BOOT_KEY); } catch (e){ return false; } })(), bootT = 0, bootLastDraw = -1;
+  let booting = !M.TERM.store.get(BOOT_KEY, 0), bootT = 0, bootLastDraw = -1;
   let now = 0, blinkT0 = 0, blinkOn = true, dirty = true;
   let animFps = 0, lastAnim = 0;
   let rate = RATE, rateRows = -1, rateShown = 0;   // the typing-out speed for what is pending (see update)
@@ -446,8 +477,8 @@ M.createTerminal = function createTerminal(opts){
   function out(){
     const r = [], o = {
       rows: r,
-      line(...spans){ const s = spans.map(x => typeof x === 'string' ? [x, 'n'] : x); r.push({ k: 't', i: 2, s }); return o; },
-      at(i, ...spans){ o.line(...spans); r[r.length - 1].i = i; return o; },
+      line(...spans){ return o.at(2, ...spans); },
+      at(i, ...spans){ for (const s of fitRow(spans.map(x => typeof x === 'string' ? [x, 'n'] : x), COLS - i)) r.push({ k: 't', i, s }); return o; },
       blank(){ r.push({ k: 't', i: 0, s: [] }); return o; },
       big(text, st = 'b'){ r.push({ k: 'big', i: 2, s: [[text, st]] }); return o; },
       head(label, note){ r.push({ k: 'head', i: 2, label, note: note || '' }); return o; },
@@ -471,14 +502,12 @@ M.createTerminal = function createTerminal(opts){
       card(spec){ const c = makeCard(spec); r.push(c); o.lastCard = c; return o; },
       /* groups of spans laid out left to right with a gap, wrapping at the grid width */
       flow(groups, gap = '  ', i = 2){
-        let line = [], w = 0;
-        for (const gr of groups){
-          const gw = gr.reduce((a, x) => a + x[0].length, 0);
-          if (line.length && w + gap.length + gw > COLS - i){ o.at(i, ...line); line = []; w = 0; }
-          if (line.length){ line.push([gap, 'f']); w += gap.length; }
-          line.push(...gr); w += gw;
-        }
-        if (line.length) o.at(i, ...line);
+        /* as few lines as the width allows, then evened out, so no word is left alone on the last one */
+        const gws = groups.map(gr => gr.reduce((a, x) => a + x[0].length, 0));
+        const lay = max => { const ls = []; let cur = null, w = 0; gws.forEach((gw, k) => { if (cur && w + gap.length + gw > max){ ls.push(cur); cur = null; } if (!cur){ cur = []; w = 0; } else w += gap.length; cur.push(k); w += gw; }); if (cur) ls.push(cur); return ls; };
+        let best = lay(COLS - i);
+        for (let max = COLS - i - 1; best.length > 1 && max > 0; max--){ const t = lay(max); if (t.length > best.length) break; best = t; }
+        for (const ks of best) o.at(i, ...ks.flatMap((k, n) => n ? [[gap, 'f'], ...groups[k]] : groups[k]));
         return o;
       },
       link(label, url, i = 2, labelW = 0, shown){
@@ -558,18 +587,41 @@ M.createTerminal = function createTerminal(opts){
     while (seg){
       if (!openRow){ openRow = { k: 't', i: 0, s: [] }; rows.push(openRow); }
       const room = COLS - rowLen(openRow);
-      if (room <= 0){ openRow = null; continue; }
       let piece = seg, rest = '';
       if (seg.length > room){
-        const cut = seg.lastIndexOf(' ', room);
-        if (cut > room * 0.5){ piece = seg.slice(0, cut); rest = seg.slice(cut + 1); }
-        else { piece = seg.slice(0, room); rest = seg.slice(room); }
+        /* word wrap: break at the last space that fits; a word that does not fit moves down whole (with the
+           start of it an earlier span wrote, e.g. a grep match), and a lone "." takes the word before it */
+        const used = rowLen(openRow);
+        let cut = seg.lastIndexOf(' ', room);
+        if (cut >= 0 && PUNCT.test(seg.slice(cut + 1).split(' ')[0]) && cut + 1 < seg.length) cut = seg.lastIndexOf(' ', cut - 1);
+        if (cut > 0 || (cut === 0 && used)){ piece = seg.slice(0, cut); rest = seg.slice(cut + 1); }
+        else {
+          const word = /^\S*/.exec(seg)[0], moved = used ? pullWord(openRow) : null;
+          const mw = moved ? moved.reduce((n, x) => n + x[0].length, 0) : 0;
+          if (moved && mw + word.length <= COLS && (mw || used)){ openRow = { k: 't', i: 0, s: moved }; rows.push(openRow); continue; }
+          if (moved) openRow.s.push(...moved);
+          piece = seg.slice(0, Math.max(0, room)); rest = seg.slice(Math.max(0, room));
+        }
       }
       const last = openRow.s[openRow.s.length - 1];
-      if (last && last[1] === st && !last[2]) last[0] += piece; else openRow.s.push([piece, st]);
+      if (!piece){ /* nothing on this row from this span */ }
+      else if (last && last[1] === st && !last[2]) last[0] += piece; else openRow.s.push([piece, st]);
       if (rest) openRow = null;
       seg = rest;
     }
+  }
+  /* take the word at the end of a row off it (spans after its last space); null if the row has no space */
+  function pullWord(row){
+    const moved = [];
+    for (let k = row.s.length - 1; k >= 0; k--){
+      const sp = row.s[k];
+      if (sp[2]) break;
+      const at = sp[0].lastIndexOf(' ');
+      if (at < 0){ moved.unshift(row.s.pop()); continue; }
+      if (at < sp[0].length - 1){ moved.unshift([sp[0].slice(at + 1), sp[1]]); sp[0] = sp[0].slice(0, at + 1); }
+      return moved;
+    }
+    row.s.push(...moved); return null;
   }
   const tty = {
     tty: true,
@@ -640,7 +692,7 @@ M.createTerminal = function createTerminal(opts){
   ];
   const OPEN = [
     { name: 'j', url: URLS.j, alias: ['risingfounder', 'rising'], kw: ['rising founder'], label: bare(URLS.j), title: 'J', short: bare(URLS.j) },
-    { name: 'linkedin', url: URLS.linkedin, label: bare(URLS.linkedin), title: 'LinkedIn', short: bare(URLS.linkedin).replace(/^linkedin\.com\/(in\/)?/, '') },
+    { name: 'linkedin', url: URLS.linkedin, label: bare(URLS.linkedin), title: 'LinkedIn', short: C.name || 'profile' },
     { name: 'x', url: URLS.x, alias: ['twitter'], label: bare(URLS.x), title: 'X', short: '@' + bare(URLS.x).replace(/^(x|twitter)\.com\//, '') },
     { name: 'gh', url: URLS.gh, alias: ['github', 'repo', 'source'], label: bare(URLS.gh), title: 'GitHub', short: bare(URLS.gh).replace(/^github\.com\//, '') },
   ];
@@ -714,7 +766,7 @@ M.createTerminal = function createTerminal(opts){
   /* ---- documents ---- */
   function welcome(o){
     return o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
-      .line(['type a word and press enter, or ' + (TAP ? 'tap' : 'click') + ' one', 'd'])
+      .line([TAP ? 'tap a word below, or type one' : 'type a word and press enter, or click one', 'd'])
       .flow(['about', 'eden', 'j', 'writing', 'contact', 'links'].map(w => [chip(w, 'b')]), '  ')
       .blank();
   }
@@ -755,7 +807,7 @@ M.createTerminal = function createTerminal(opts){
       return o;
     },
     links(o){
-      o.blank().card({ title: 'LINKS', note: 'links.txt', items: LINKLIST().map(t => ({ label: t.title, value: t.short, full: t.url, url: t.url, hint: t.name })) })
+      o.blank().card({ title: 'LINKS', note: 'links.txt', items: LINKLIST().map(t => ({ label: t.title, value: t.short, full: t.url, url: t.url, hint: 'open' })) })
         .blank().at(2, ['also  ', 'f'], ...chips(['contact', 'j'], 'n'), ['  ', 'f'], ['open <name>', 'n']).blank();
       return o;
     },
@@ -839,14 +891,14 @@ M.createTerminal = function createTerminal(opts){
       const o = out(); o.at(0, ['opening ', 'd'], [p.title || bare(p.url), 'b', { url: p.url }]); if (!w) o.at(2, ['if nothing opened, click the address above', 'f']); io.rich(o); return;
     }
     const ok = !!(M.reader && M.reader.open(slugOf(p)));
-    io.rich(out().at(0, [ok ? 'reading ' : 'the reader is not available: ', 'd'], [p.title || slugOf(p), 'b']).at(2, [ok ? 'esc comes back' : '', 'f']));
+    io.rich(out().at(0, [ok ? 'reading ' : 'the reader is not available: ', 'd'], [p.title || slugOf(p), 'b']).at(2, [ok ? (TAP ? 'tap \u2190 back' : 'esc comes back') : '', 'f']));
     return ok ? 0 : 1;
   } });
   /* one link, printed, then a one-key prompt to open it */
   const linkCmd = (name, desc) => ({ g: 'read', desc, usage: name, run(argv, io){
     const t = OPEN.find(x => x.name === name);
     if (!io.tty){ io.write(t.url + '\n'); return; }
-    const value = name === 'linkedin' ? 'in/' + t.short : name === 'gh' ? t.label : t.short;
+    const value = name === 'gh' ? t.label : t.short;
     const o = out().blank().card({ title: t.title.toUpperCase(), items: [{ label: name === 'gh' ? 'repo' : 'profile', value, full: t.url, url: t.url, hint: 'open' }] }).blank();
     io.rich(o); return io.pick(o.lastCard);
   } });
@@ -1093,7 +1145,7 @@ M.createTerminal = function createTerminal(opts){
     o.at(0, ['NAME', 'b']).at(4, [name, 'n'], [' - ' + (c.desc || ''), 'n']).blank();
     o.at(0, ['SYNOPSIS', 'b']).at(4, [c.usage || name, 'n']).blank();
     if (c.more){ o.at(0, ['DESCRIPTION', 'b']); o.para(c.more, 'n', COLS - 6, 4); o.blank(); }
-    if (c.opts && c.opts.length){ o.at(0, ['OPTIONS', 'b']); const w = Math.max(...c.opts.map(x => x[0].length)) + 3; for (const [f, d] of c.opts) o.at(4, [pad(f, w), 'b'], [d, 'n']); o.blank(); }
+    if (c.opts && c.opts.length){ o.at(0, ['OPTIONS', 'b']); const w = Math.max(...c.opts.map(x => x[0].length)) + 3; for (const [f, d] of c.opts){ const ls = wrap(d, Math.max(12, COLS - 4 - w)); o.at(4, [pad(f, w), 'b'], [ls[0], 'n']); for (const l of ls.slice(1)) o.at(4 + w, [l, 'n']); } o.blank(); }
     if (c.ex && c.ex.length){ o.at(0, ['EXAMPLES', 'b']); for (const x of c.ex) o.at(4, [x, 'd']); o.blank(); }
     if (hasAlias(n) && n !== name) o.at(0, ['(' + n + ' is an alias for ' + ALIASES[n] + ')', 'f']).blank();
     if (io.tty) io.rich(o); else io.write(o.rows.map(textOf).join('\n') + '\n');
@@ -1171,6 +1223,7 @@ M.createTerminal = function createTerminal(opts){
       try { const v = calc(l); if (v != null) io.write(v + '\n'); } catch (e){ io.err('bc: ' + (e.message || 'syntax error') + '\n'); io.exit(1); }
     }
   } });
+  def('sudo', { g: 'misc', hidden: true, desc: 'not needed here', usage: 'sudo', run(argv, io){ io.write('sudo: not needed here\n', 'dim'); } });
   def('exit', { g: 'misc', desc: 'leave', usage: 'exit', run(argv, io){ io.write('to leave, close the tab\n', 'dim'); } });
   const SHELL_BUILTIN = ['cd', 'alias', 'history', 'exit', 'help', 'echo', 'pwd'];
   for (const [n, c] of Object.entries(B)) if (!M.TERM.cmds[n]) M.TERM.cmds[n] = c;
@@ -1448,7 +1501,8 @@ M.createTerminal = function createTerminal(opts){
   /* a key while a card is armed; returns true when the card used it, false to let the prompt have it */
   function cardKey(e){
     const card = armed, k = e.key, n = card.acts.length, choosing = card.sel >= 0;
-    const down = k === 'ArrowDown' || (k === 'Tab' && !e.shiftKey && (choosing || !input)), up = k === 'ArrowUp' || (k === 'Tab' && e.shiftKey && choosing);
+    if (k === 'Tab' && !choosing) return false;   // tab on an empty line moves focus on (the arrows choose)
+    const down = k === 'ArrowDown' || (k === 'Tab' && !e.shiftKey), up = k === 'ArrowUp' || (k === 'Tab' && e.shiftKey);
     if (!e.ctrlKey && !e.altKey && (down || up) && (choosing || !input)){
       card.sel = choosing ? (card.sel + (down ? 1 : n - 1)) % n : down ? 0 : n - 1;
       setFoot(card); const it = card.acts[card.sel];
@@ -1494,11 +1548,17 @@ M.createTerminal = function createTerminal(opts){
     if (booting) return false;
     if (app){                                   // an app with tap(col, row) gets the grid cell (the editor's shortcut bar, cursor placement)
       const st = app;
-      if (!st.inst || typeof st.inst.tap !== 'function') return false;
       const col = clamp(Math.floor((fx * W - PADX) / cw), 0, COLS - 1), row = clamp(Math.floor((fy * H - PADY) / ch), 0, ROWS - 1);
-      const r = appCall('tap', col, row);
-      if (r && app === st) st.dirty = true;
-      return !!r;
+      const r = st.inst && typeof st.inst.tap === 'function' ? appCall('tap', col, row) : false;
+      if (r){ if (app === st) st.dirty = true; return true; }
+      /* the bottom row (where every app lists its keys) acts as esc when the app does not use the tap:
+         phones have no esc key, so no app can keep someone in */
+      if (row === ROWS - 1 && app === st && !st.done){
+        const ev = { type: 'keydown', key: 'Escape', code: 'Escape', repeat: false, isComposing: false, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, synthetic: true, preventDefault(){}, stopPropagation(){} };
+        if (appCall('key', ev) && app === st) st.dirty = true;
+        return true;
+      }
+      return false;
     }
     const px = fx * W, py = fy * H;
     if (px < X(1) || px > X(COLS - 1)) return false;
@@ -1526,6 +1586,22 @@ M.createTerminal = function createTerminal(opts){
       }
       const w = openTarget(h.link.url); const o = out(); o.at(0, ['opening ', 'd'], [bare(h.link.url), 'n']); if (!w) o.at(0, ['if nothing opened, the address is above', 'f']);
       if (!job) emit(o); touched(); return true;
+    }
+    return false;
+  }
+  /* is there something to click at (fx, fy)? a chip, a card row or a link: for a pointer cursor */
+  function hitTest(fx, fy){
+    if (booting || app) return false;
+    const px = fx * W, py = fy * H;
+    if (px < X(1) || px > X(COLS - 1)) return false;
+    for (const r of drawnCards) for (const it of r.items){
+      if (it.ai < 0) continue;
+      const rt = r._top + ch * (it.y + 1);
+      if (py >= rt && py < rt + ch * it.n) return true;
+    }
+    for (const h of drawnHits){
+      if (h.link.cmd && job) continue;
+      if (px >= h.x0 && px <= h.x1 && py >= h.top && py < h.bot) return true;
     }
     return false;
   }
@@ -1662,12 +1738,23 @@ M.createTerminal = function createTerminal(opts){
     if (/^\s*kaiav:\S*\s*\$\s+/.test(l)) l = l.replace(/^\s*kaiav:\S*\s*\$\s+/, '');
     l = l.replace(/^(\s*)cd(\.\.|~|\/)(?=\s|$|\/)/, '$1cd $2');     // cd.. and cd~
     const q = l.trim().toLowerCase().replace(/[?!.,]+$/, '').replace(/\s+/g, ' ');
-    if (!q || /[|;&<>$`'"]/.test(q)) return l;
+    const plain = q.replace(/(\w)['\u2019](\w)/g, '$1$2');        // what's, who's: words, not shell quotes
+    if (!q || /[|;&<>$`'"]/.test(plain)) return l;
     const w = q.split(' ')[0];
     if (M.TERM.cmds[w] || M.TERM.apps[w] || hasAlias(w)) return l;   // a real command wins
-    for (const [re, cmd] of PHRASES) if (re.test(q) && (M.TERM.cmds[cmd] || M.TERM.apps[cmd])) return cmd;
+    const ok = cmd => !!(M.TERM.cmds[cmd] || M.TERM.apps[cmd]);
+    for (const [re, cmd] of PHRASES) if (re.test(q) && ok(cmd)) return said(cmd);
+    if (plain.includes(' ')){                                          // a question in words: its first strong keyword
+      const words = new Set(plain.split(/[^a-z0-9]+/).filter(Boolean));
+      for (const [cmd, keys] of KEYWORDS) if (ok(cmd) && keys.some(k => k.includes(' ') ? (' ' + plain + ' ').includes(' ' + k + ' ') : words.has(k))) return said(cmd);
+    }
     return l;
   }
+  const KEYWORDS = [['contact', ['contact', 'email', 'reach', 'hire']], ['eden', ['eden']], ['j', ['j', 'founder', 'founders', 'rising']],
+    ['writing', ['posts', 'post', 'blog', 'writing']], ['links', ['links', 'linkedin', 'twitter', 'x', 'socials', 'social']],
+    ['about', ['who', 'about', 'yourself']], ['help', ['help', 'how', 'what can']]];
+  /* a rewritten line says what it ran, quietly, before the output */
+  function said(cmd){ rows.push({ k: 't', i: 0, s: [['\u2192 ', 'f'], [cmd, 'd']] }); shown = rows.length; partial = 0; return cmd; }
   function execute(raw, programmatic){
     rows.push({ k: 't', i: 0, s: [...promptSpans(), [raw, 'n']] }); shown = rows.length; partial = 0;
     openRow = null;
@@ -1946,8 +2033,9 @@ M.createTerminal = function createTerminal(opts){
   function skipBoot(){ if (!booting) return; booting = false; endBoot(); }
   function endBoot(){
     booting = false; rows = []; shown = 0; partial = 0;
-    try { sessionStorage.setItem(BOOT_KEY, '1'); } catch (e){}
-    emit(welcome(out()), (C.name || '') + '. ' + (A.role || '') + '. Type help to begin.');
+    M.TERM.store.set(BOOT_KEY, 1);
+    const w = welcome(out()); if (w.rows[0]) w.rows[0].wel = true;
+    emit(w, (C.name || '') + '. ' + (A.role || '') + '. Type help to begin.');
     blinkT0 = now; dirty = true;
   }
 
@@ -2029,7 +2117,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function totalUnits(){
     let u = 0; for (let i = 0; i < rows.length && i <= shown; i++) if (i < shown || partial > 0 || rows[i].k === 'viz') u += i < rows.length ? heightOf(rows[i]) : 0;
-    return u + (promptVisible() ? 1 + belowPrompt().length : job && job.ask && !app && !typing() ? 1 : 0);
+    return u + (promptVisible() ? 1 + belowPrompt().length : job && job.ask && !app && !typing() ? askRows().length : 0);
   }
   /* quiet rows under the prompt: the ctrl+r search line, or the tab candidates */
   function fitSpans(opts){ const len = f => f.reduce((n, x) => n + x[0].length, 0); return opts.find(f => len(f) <= COLS) || opts[opts.length - 1]; }
@@ -2068,7 +2156,10 @@ M.createTerminal = function createTerminal(opts){
   const promptVisible = () => !booting && !typing() && !job && !app;
   const nudgeOn = () => fresh && !nudgeOff && okRuns === 0 && !armed && promptVisible() && idleT0 >= 0 && now - idleT0 > 8;
 
+  /* a one-key question wraps like any other line (nothing is typed on it); a typed answer stays on one line */
+  const askRows = () => job.ask.one ? fitRow(job.ask.spans, COLS - job.ask.i) : [null];
   function drawAsk(top){                 // io.ask's line: the question, what is typed (dots when secret), a cursor
+    if (job.ask.one){ const rs = askRows(); rs.forEach((s, k) => drawSpans({ i: job.ask.i, s }, top + k * ch, 999)); promptY = top + ch * rs.length; return; }
     const a = job.ask, room = Math.max(4, COLS - a.i - a.spans.reduce((n, x) => n + x[0].length, 0) - 1);
     let b = a.secret ? '\u2022'.repeat(a.buf.length) : a.buf; if (b.length > room) b = b.slice(-room);
     const sp = [...a.spans, [b, a.secret ? 'd' : 'n']];
@@ -2105,16 +2196,25 @@ M.createTerminal = function createTerminal(opts){
     if (blinkOn){
       g.fillStyle = P.normal; g.fillRect(cx, top + 3, cw, ch - 6);
       const under = input[cur] || (gh && gh.kind === 'prefix' ? gh.text[0] : '');
-      if (under){ setFont(); g.fillStyle = P.bg; fillT(under, cx, top + fs * 0.68); }
+      if (under && SPAN_VEC.test(under)) vecGlyph(under, PL + cur - off, top, P.bg);
+      else if (under){ setFont(); g.fillStyle = P.bg; fillT(under, cx, top + fs * 0.68); }
     }
   }
   let drawnCards = [], drawnHits = [];   // what is on screen and can be clicked or tapped
-  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\u2022\ue000]/g;
-  const SPAN_VEC = /[\u2190-\u2193\u2022\ue000]/, SPAN_VEC_G = /[\u2190-\u2193\u2022\ue000]/g;
+  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\u2022\ue000~]/g;
+  const SPAN_VEC = /[\u2190-\u2193\u2022\ue000~]/, SPAN_VEC_G = /[\u2190-\u2193\u2022\ue000~]/g;
   function vecGlyph(c, col, top, colr){
     const cx = X(col) + cw / 2, cy = top + ch * 0.5, a = cw * 0.36;
     g.fillStyle = colr;
     if (c === '\u00b7'){ g.fillRect(cx - 2, cy - 2, 4, 4); return; }
+    if (c === '~'){                                        // VT323's tilde reads as a raised "N": a plain wave instead
+      const w = cw * 0.74, amp = ch * 0.085, y0 = top + ch * 0.47;
+      g.strokeStyle = colr; g.lineWidth = Math.max(2, fs * 0.07); g.lineCap = 'round'; g.lineJoin = 'round';
+      g.beginPath();
+      for (let k = 0; k <= 16; k++){ const t = k / 16, x = cx - w / 2 + t * w, y = y0 - Math.sin(t * Math.PI * 2) * amp; if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+      g.stroke(); g.lineCap = 'butt'; g.lineJoin = 'miter';
+      return;
+    }
     if (c === '\u2022'){ g.beginPath(); g.arc(cx, cy + 1, cw * 0.19, 0, 6.2832); g.fill(); return; }   // a masked character
     if (c === LOCK){                                       // a small padlock: shackle and body
       const bw = cw * 0.72, bh = ch * 0.3, bx = cx - bw / 2, by = cy - bh * 0.2;
@@ -2155,7 +2255,7 @@ M.createTerminal = function createTerminal(opts){
       g.fillStyle = P.normal;
       if (c.shape === 'bar') g.fillRect(X(c.x), top + 3, 3, ch - 6);
       else if (c.shape === 'under') g.fillRect(X(c.x), top + ch - 7, cw, 3);
-      else { g.fillRect(X(c.x), top + 3, cw, ch - 6); g.fillStyle = P.bg; fillT(cell[0], X(c.x), top + fs * 0.68); }
+      else { g.fillRect(X(c.x), top + 3, cw, ch - 6); if (SPAN_VEC.test(cell[0])) vecGlyph(cell[0], c.x, top, P.bg); else { g.fillStyle = P.bg; fillT(cell[0], X(c.x), top + fs * 0.68); } }
     }
   }
 
@@ -2170,6 +2270,8 @@ M.createTerminal = function createTerminal(opts){
     const total = totalUnits();
     scrollOff = clamp(scrollOff, 0, Math.max(0, total - ROWS));
     const first = Math.max(0, total - ROWS - scrollOff);
+    /* a short history (the welcome) sits a little below the top of the tube, not jammed against it */
+    const lift = rows.length && rows[0].wel ? clamp(ROWS - total, 0, Math.min(4, Math.round(ROWS / 6))) : 0;
     g.save(); g.beginPath(); g.rect(0, PADY - 4, W, ROWS * ch + 8); g.clip();
     let u = 0;
     const last = Math.min(rows.length - 1, shown);
@@ -2178,7 +2280,7 @@ M.createTerminal = function createTerminal(opts){
       const isPartial = i === shown;
       if (isPartial && partial <= 0 && r.k !== 'viz' && r.k !== 'card') break;
       if (u + h > first && u < first + ROWS){
-        const top = PADY + (u - first) * ch;
+        const top = PADY + (u - first + lift) * ch;
         const lim = isPartial ? Math.floor(partial) : 1e9;
         if (r.k === 't') drawSpans(r, top, lim);
         else if (r.k === 'big') drawSpans(r, top, isPartial ? Math.floor(partial / 2) : 1e9, 2);
@@ -2197,12 +2299,12 @@ M.createTerminal = function createTerminal(opts){
       if (isPartial) break;
     }
     if (promptVisible()){
-      if (u >= first && u < first + ROWS) drawPrompt(PADY + (u - first) * ch);
-      belowPrompt().forEach((r, k) => { const y = u + 1 + k; if (y >= first && y < first + ROWS) drawSpans({ i: 0, s: r }, PADY + (y - first) * ch, 999); });
+      if (u >= first && u < first + ROWS) drawPrompt(PADY + (u - first + lift) * ch);
+      belowPrompt().forEach((r, k) => { const y = u + 1 + k; if (y >= first && y < first + ROWS) drawSpans({ i: 0, s: r }, PADY + (y - first + lift) * ch, 999); });
     } else if (job && job.ask && !app && !typing()){
-      if (u >= first && u < first + ROWS) drawAsk(PADY + (u - first) * ch);
+      if (u >= first && u < first + ROWS) drawAsk(PADY + (u - first + lift) * ch);
     } else if (job && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
-      text(COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 0, PADY + (u - first) * ch, 'f');
+      text(COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 0, PADY + (u - first + lift) * ch, 'f');
     }
     g.restore(); curFont = '';
     // scroll position: a thin rail on the right and a quiet note at the bottom
@@ -2294,7 +2396,7 @@ M.createTerminal = function createTerminal(opts){
 
   if (!booting) endBoot();
   draw();
-  return { canvas, handleKey, handleKeyUp, handleTap, insertText, update, run, scroll, get cursorY(){ return promptY / H; },
+  return { canvas, handleKey, handleKeyUp, handleTap, hitTest, insertText, update, run, scroll, get cursorY(){ return promptY / H; },
     get busy(){ return !!(app || job); } };   // a full-screen app or a running command: don't rebuild under it
 };
 })();

@@ -443,6 +443,7 @@ M.createScene = function createScene(container){
 
   /* ================= THE KEYBOARD ================= */
   const U = .019, KB = { w: .316, d: .14, tilt: .085, yaw: .03, x: .015, z: .13, kz0: .008 };
+  const keyBounce = { value: .085 };    // warm bounce on the cap skirts (see topM), scaled by the lamp in applyLamp
   const ROW_ANGLE = [.15, .075, 0, -.05, -.085], ROW_LIFT = [.0024, .001, 0, .0003, .0009];
   const KEY_H = .0095, KEY_BASE = .0042, TRAVEL = .0032, DISH = .0008;
   const L = (s) => s.split('').map(c => ['Key' + c, 1, c]);
@@ -483,6 +484,19 @@ M.createScene = function createScene(container){
     }
     const atlas = tex(ac, true, ANISO);
     const topM = new THREE.MeshStandardMaterial({ map: atlas, roughness: .62 });
+    /* bounce: the lamp's pool on the desk in front of the board lights the cap skirts that face the typist (the lamp
+       itself never reaches them, so from the lean-back view they would read as a row of black bars). A soft warm term
+       on faces turned toward the typist, fading on the tops; it follows the lamp switch (applyLamp). */
+    topM.onBeforeCompile = sh => {
+      sh.uniforms.uKeyBounce = keyBounce;
+      sh.fragmentShader = 'uniform float uKeyBounce;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  {
+    vec3 nW = inverseTransformDirection(normal, viewMatrix);
+    float face = clamp(nW.z * .85 + .3, 0.0, 1.0) * (1.0 - .8 * clamp(nW.y, 0.0, 1.0));
+    totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, .7, .46) * (uKeyBounce * face);
+  }`);
+    };
+    topM.customProgramCacheKey = () => 'mac-keycap-bounce';
 
     // case: base slab plus a raised surround, all in the same slightly-more-yellowed plastic
     const kbC = paint(256, 128, (u, v, o) => { plasticBase(u, v, o, 1, .45); o[1] *= .985; o[2] *= .95; });
@@ -626,6 +640,7 @@ M.createScene = function createScene(container){
   }
 
   /* ================= LIGHTS ================= */
+  const KEY_BOUNCE = .085;
   // the lamp: warm 2700K spot with soft shadows
   const lamp = new THREE.SpotLight(lin(0xffe2c2), 5.6, 4, .8, .72, 2);
   lamp.position.copy(bulbPos); lamp.target.position.copy(bulbPos).addScaledVector(lampDir, 1);
@@ -873,7 +888,7 @@ M.createScene = function createScene(container){
     const L = lampS.level, warm = sstep(.2, 1, L), off = 1 - sstep(0, .8, L);
     lamp.intensity = 5.6 * L; lamp.visible = L > .002;
     lamp.color.copy(LAMP_DIM).lerp(LAMP_COL, warm);
-    bounce.intensity = .14 * L;
+    bounce.intensity = .14 * L; keyBounce.value = KEY_BOUNCE * L;
     shadeInnerMat.color.setScalar(.03 + .97 * L); shadeLipMat.emissiveIntensity = .35 * L; shadeRim.value = L;
     _c.copy(BULB_DIM).lerp(BULB_HOT, warm).multiplyScalar(Math.min(1, L * 1.4));
     bulbMat.color.setRGB(.07 + _c.r, .065 + _c.g, .06 + _c.b);
