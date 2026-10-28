@@ -19,7 +19,7 @@ html, body{ margin: 0; height: 100%; background: var(--bg); color: var(--fg); ov
 body.phone{ background: #0a0f0a }
 body.phone #mute{ top: max(10px, env(safe-area-inset-top, 0px)); bottom: auto; padding: 4px 8px; font-size: 11px; opacity: .7 }
 body.phone #stage{ overflow: hidden; touch-action: none }
-#stage canvas.phone-term{ position: absolute; top: 0; left: 0; width: 100%; height: auto; transition: transform .25s cubic-bezier(.2,.8,.2,1) }
+#stage canvas.phone-term{ position: absolute; top: max(34px, env(safe-area-inset-top, 0px)); left: 0; width: 100%; height: auto; transition: transform .25s cubic-bezier(.2,.8,.2,1) }
 .ui{ position: fixed; z-index: 2; font: 500 11px var(--mono); letter-spacing: .08em; color: var(--dim) }
 #hint{ left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom, 0px)); transition: opacity .8s; pointer-events: none; text-align: center }
 #mute{ right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); background: none; border: 1px solid rgba(233,226,208,.18); color: var(--dim); font: inherit; letter-spacing: inherit; padding: 6px 10px; cursor: pointer }
@@ -2734,6 +2734,7 @@ const RATE = 1500;             // typing-out speed, characters per second
 const BOOT_END = 1.85;         // seconds
 const HIST_KEY = 'kaiav.term.history';
 const T0 = performance.now();
+const LOCK = '\ue000';        // drawn as a vector padlock (ls -l marks built-in files with it)
 
 /* ---- fuzzy matching: prefix > substring > subsequence > small typo ---- */
 function osa(a, b){
@@ -2816,7 +2817,17 @@ function createFS(getCwd, onWrite){
   const persist = () => { try { localStorage.setItem(FS_KEY, JSON.stringify(root)); } catch (e){} };
   function changed(quiet){ clearTimeout(tSave); tSave = setTimeout(persist, 200); if (onWrite && !quiet) onWrite(); }
   const R = p => resolve(p, getCwd());
-  const info = (name, n) => ({ name, dir: isD(n), size: isD(n) ? 0 : n.t.length, mtime: n.m || 0 });
+  const info = (name, n) => ({ name, dir: isD(n), size: isD(n) ? 0 : n.t.length, mtime: n.m || 0, locked: !isD(n) && n.g === 1 });
+  /* built-in files (n.g) are read-only: every write path below goes through these checks */
+  const lockedNode = n => !!(n && !isD(n) && n.g === 1);
+  const tild = a => a === HOME ? '~' : a.startsWith(HOME + '/') ? '~' + a.slice(HOME.length) : a;
+  const readOnly = abs => fail('read-only: ' + tild(abs) + ' is a built-in file');
+  function lockedIn(abs){                       // the first locked file at or under abs, or null
+    const n = get(abs); if (!n) return null;
+    if (lockedNode(n)) return abs;
+    if (isD(n)) for (const k of Object.keys(n.c)){ const r = lockedIn(join(abs, k)); if (r) return r; }
+    return null;
+  }
   const badName = n => !n || n === '__proto__' || n === 'constructor' || n === 'prototype';
   function fail(m){ api.lastError = m; return false; }
   function put(abs, text, app){
@@ -2826,6 +2837,7 @@ function createFS(getCwd, onWrite){
     if (!isD(dir)) return fail('No such file or directory');
     const ex = own(dir.c, name) ? dir.c[name] : null;
     if (isD(ex)) return fail('Is a directory');
+    if (lockedNode(ex)) return readOnly(abs);
     const t = app && ex ? ex.t + text : text;
     if (t.length > 262144) return fail('File too large');
     dir.c[name] = { t, m: Date.now() }; dir.m = Date.now();
@@ -2862,6 +2874,7 @@ function createFS(getCwd, onWrite){
       const a = R(p); if (a === '/') return fail('Permission denied');
       const n = get(a); if (!n) return fail('No such file or directory');
       if (isD(n) && Object.keys(n.c).length && !recursive) return fail('Directory not empty');
+      const lk = lockedIn(a); if (lk) return readOnly(lk);
       const { dir, name } = parent(a); delete dir.c[name]; dir.m = Date.now(); changed(); return true;
     },
     mv(a, b){
@@ -2871,6 +2884,7 @@ function createFS(getCwd, onWrite){
       if (isD(get(B))) B = join(B, base(A));
       if (B === A) return true;
       if (B.startsWith(A + '/')) return fail('cannot move a directory into itself');
+      const lk = lockedIn(A) || (lockedNode(get(B)) ? B : null); if (lk) return readOnly(lk);
       const { dir, name } = parent(B);
       if (!isD(dir)) return fail('No such file or directory');
       if (badName(name)) return fail('Invalid name');
@@ -2887,22 +2901,25 @@ function createFS(getCwd, onWrite){
       if (!isD(dir)) return fail('No such file or directory');
       if (badName(name)) return fail('Invalid name');
       if (own(dir.c, name) && isD(dir.c[name]) !== isD(n)) return fail(isD(n) ? 'Not a directory' : 'Is a directory');
+      if (own(dir.c, name)){ const lk = lockedIn(B); if (lk) return readOnly(lk); }
       const c = clone(n); c.m = Date.now(); dir.c[name] = c; changed(); return true;
     },
     stat(p){ const a = R(p), n = get(a); return n ? Object.assign(info(base(a), n), { path: a }) : null; },
-    touch(p){ const a = R(p), n = get(a); if (n){ n.m = Date.now(); changed(true); return true; } return put(a, '', false); },
+    touch(p){ const a = R(p), n = get(a); if (n){ if (!lockedNode(n)){ n.m = Date.now(); changed(true); } return true; } return put(a, '', false); },
+    isLocked: p => lockedNode(get(R(p))),
     node: p => get(R(p)),
-    /* seed: files = [{ path, text, doc, always }], dirs = [path]. Generated files the visitor has not
-       changed are refreshed from MAC.CONTENT on every load. */
+    /* seed: files = [{ path, text, doc }], dirs = [path]. Built-in files are read-only, and on every load
+       they are rewritten from MAC.CONTENT (recreated if an older visit removed them). */
     seed(dirs, files){
-      const fresh = !root.seeded;
-      if (fresh) for (const d of dirs) mkdir(d, true);
+      if (!root.seeded) for (const d of dirs) mkdir(d, true);
       for (const f of files){
         const n = get(f.path);
-        if (!n && (fresh || f.always)){
-          const { dir, name } = parent(f.path);
-          if (isD(dir)) dir.c[name] = { t: f.text, m: Date.now(), g: 1, doc: f.doc || undefined };
-        } else if (n && n.g && !isD(n)){ n.t = f.text; n.doc = f.doc || undefined; }
+        if (isD(n)) continue;
+        if (!n){ const s = segs(f.path); s.pop(); if (!isD(get('/' + s.join('/')))) mkdir('/' + s.join('/'), true); }
+        const { dir, name } = parent(f.path);
+        if (!isD(dir)) continue;
+        if (n && n.g === 1 && n.t === f.text){ n.doc = f.doc || undefined; continue; }
+        dir.c[name] = { t: f.text, m: Date.now(), g: 1, doc: f.doc || undefined };
       }
       root.seeded = 1; changed(true);
     },
@@ -3065,6 +3082,8 @@ M.createTerminal = function createTerminal(opts){
   let links = [], sel = -1;            // selectable link items in the latest output
   let suggestion = '';                 // "did you mean" target, shown as ghost on an empty prompt
   let tabState = null;
+  let ahead = '';           // keys typed while a command runs, waiting for the next prompt
+  let rs = null;            // ctrl+r search: { q, i, draft, dcur }
   let history = [];
   try { const h = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); if (Array.isArray(h)) history = h.filter(s => typeof s === 'string').slice(-200); } catch (e){}
   let hIdx = history.length, hDraft = '', hPrefix = '';
@@ -3098,6 +3117,20 @@ M.createTerminal = function createTerminal(opts){
       head(label, note){ r.push({ k: 'head', i: 2, label, note: note || '' }); return o; },
       para(text, st = 'n', width = COLS - 6, i = 2){ for (const l of wrap(text, width)) o.at(i, [l, st]); return o; },
       viz(h, draw, live){ r.push({ k: 'viz', h, draw, live: live || null, t0: -1 }); return o; },
+      /* a square bitmap (true = dark), dark on a lit field with a quiet zone of q modules: QR codes.
+         Drawn as vectors so a module is square whatever the cell shape. */
+      bits(m, q = 2){
+        const n = m.length + 2 * q, availW = X(COLS - 2) - X(2), availH = (ROWS - 4) * ch;
+        const sz = Math.max(2, Math.floor(Math.min(availW / n, availH / n, cw * 1.2)));
+        const h = Math.ceil(n * sz / ch);
+        r.push({ k: 'viz', h, live: null, t0: -1, draw(x, y){
+          const x0 = Math.round(x), y0 = Math.round(y + (h * ch - n * sz) / 2);
+          g.fillStyle = P.bright; g.fillRect(x0, y0, n * sz, n * sz);
+          g.fillStyle = P.bg;
+          for (let yy = 0; yy < m.length; yy++) for (let xx = 0; xx < m.length; xx++) if (m[yy][xx]) g.fillRect(x0 + (xx + q) * sz, y0 + (yy + q) * sz, sz, sz);
+        } });
+        return o;
+      },
       /* a boxed panel: title in the top border, label/value rows, selectable rows (url or copy) with
          number shortcuts, and a footer line of keys while it is waiting for a choice */
       card(spec){ const c = makeCard(spec); r.push(c); o.lastCard = c; return o; },
@@ -3225,6 +3258,31 @@ M.createTerminal = function createTerminal(opts){
     return b;
   }
   const NULLSINK = { tty: false, text: '', write(){}, rich(){} };
+  /* error lines read the same everywhere: "name:" dim, the message normal, a trailing "(try: ...)" faint.
+     Into a pipe or a file they are plain text. */
+  function errLine(sink, t){
+    t = String(t == null ? '' : t); if (!t) return;
+    if (!sink.tty){ sink.write(t); return; }
+    const ls = t.split('\n');
+    ls.forEach((l, k) => {
+      if (l){
+        const m = /^((?:[\w.+\-!]+: )?)(.*?)((?:\s{2,}|\s(?=\())\(.*\))?$/.exec(l);
+        const sty = [];                       // one style per character, then cut at spaces to fit
+        for (const [part, st] of [[m[1], 'dim'], [m[2], 'normal'], [m[3] || '', 'faint']]) for (let q = 0; q < part.length; q++) sty.push(st);
+        let at = 0, first = true;
+        while (at < l.length){
+          const room = first ? COLS : COLS - 2;
+          let end = l.length;
+          if (end - at > room){ end = l.lastIndexOf(' ', at + room); if (end <= at + room / 2) end = at + room; }
+          if (!first) sink.write('\n  ');
+          for (let q = at; q < end;){ let r = q; while (r < end && sty[r] === sty[q]) r++; sink.write(l.slice(q, r), sty[q]); q = r; }
+          at = end; while (at < l.length && l[at] === ' ') at++;
+          first = false;
+        }
+      }
+      if (k < ls.length - 1) sink.write('\n');
+    });
+  }
 
   /* ---- content ---- */
   const L = C.links || {}, J = C.j || {}, E = C.eden || {}, A = C.about || {}, Wr = C.writing || {};
@@ -3269,6 +3327,11 @@ M.createTerminal = function createTerminal(opts){
     '  open x      open a link in a new tab', '',
     '## things to do', '',
     '  weather     the sky where you are',
+    '  hn          Hacker News, top stories',
+    '  wiki turing a Wikipedia summary',
+    '  curl url    fetch anything',
+    '  qr text     a QR code for your phone',
+    '  convert 5 km to mi',
     '  todo        a to-do list',
     '  timer 5m    count down, then beep',
     '  pomodoro    focus 25, break 5',
@@ -3293,7 +3356,7 @@ M.createTerminal = function createTerminal(opts){
     { path: HOME + '/j.txt', text: TEXT.j(), doc: 'j' },
     { path: HOME + '/links.txt', text: TEXT.links(), doc: 'links' },
     ...posts().map(p => ({ path: HOME + '/writing/' + (p.date ? p.date + '-' : '') + String(p.title || 'post').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.txt',
-      text: [p.title, p.date, '', p.summary && wrapT(p.summary), p.url].filter(x => x != null).join('\n') + '\n', always: true })),
+      text: [p.title, p.date, '', p.summary && wrapT(p.summary), p.url].filter(x => x != null).join('\n') + '\n' })),
     { path: '/etc/motd', text: 'KN-84 personal computer. KNOS 1.04.\nType help to begin, or cat README.md for a short guide.\n' },
     { path: '/etc/hostname', text: 'kn84\n' },
   ]);
@@ -3304,8 +3367,10 @@ M.createTerminal = function createTerminal(opts){
     o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line(['type ', 'f'], ['help', 'n'], [' to begin, or try', 'f'])
 .flow(['about', 'eden', 'j', 'links', 'contact', 'weather', 'tetris'].map(w => [[w, 'n']]), '  ')
-      .line(['new here? ', 'f'], ['cat README.md', 'd'])
       .blank();
+    if (!history.length) o.line(['new here? ', 'f'], ['cat README.md', 'n'], [COLS >= 46 ? ' is a short guide' : ' first', 'f'])
+      .line(['tab', 'n'], [' completes   ', 'f'], ['\u2191', 'n'], [' recalls', 'f'], COLS >= 46 ? ['   ctrl+r', 'n'] : ['', 'n'], [COLS >= 46 ? ' searches' : '', 'f']).blank();
+    else o.line(['new here? ', 'f'], ['cat README.md', 'd']).blank();
     return o;
   }
   const DOCS = {
@@ -3390,6 +3455,8 @@ M.createTerminal = function createTerminal(opts){
     const walk = p => { for (const e of FS.list(p) || []){ if (e.dir) walk((p === '/' ? '' : p) + '/' + e.name); else { bytes += e.size; files++; } } };
     walk('/'); return { bytes, files };
   }
+  /* "rm: x: No such file", or for a built-in file just "rm: read-only: ~/README.md is a built-in file" */
+  const fsErr = (name, p) => name + ': ' + (/^read-only:/.test(FS.lastError) ? '' : p + ': ') + FS.lastError + '\n';
   /* read named files (or stdin) for a text utility */
   function sources(io, files, name){
     if (!files.length) return [{ name: '(standard input)', text: io.stdin || '' }];
@@ -3467,9 +3534,10 @@ M.createTerminal = function createTerminal(opts){
       if (o.l){
         const w = Math.max(...ents.map(e => human(e.size).length));
         for (const e of ents){
-          io.write((e.dir ? 'drwxr-xr-x' : '-rw-r--r--') + (COLS >= 50 || !io.tty ? '  kaiav  ' : '  '), 'faint');
-          io.write((e.dir ? '-' : human(e.size)).padStart(w) + '  ' + fmtDate(e.mtime) + '  ', 'dim');
-          io.write(e.name + (e.dir && e.name[0] !== '.' ? '/' : '') + '\n', e.dir ? 'bright' : 'normal');
+          io.write((e.dir ? 'drwxr-xr-x' : e.locked ? '-r--r--r--' : '-rw-r--r--') + (COLS >= 50 || !io.tty ? '  kaiav  ' : '  '), 'faint');
+          io.write((e.dir ? '-' : human(e.size)).padStart(w) + '  ' + (COLS >= 50 || !io.tty ? fmtDate(e.mtime) : fmtDate(e.mtime).slice(0, 6)) + '  ', 'dim');
+          io.write(e.name + (e.dir && e.name[0] !== '.' ? '/' : ''), e.dir ? 'bright' : 'normal');
+          io.write(e.locked && io.tty ? ' ' + LOCK + '\n' : '\n', 'faint');
         }
         return;
       }
@@ -3512,11 +3580,11 @@ M.createTerminal = function createTerminal(opts){
   def('mkdir', { g: 'files', desc: 'make directories', usage: 'mkdir [-p] dir...', opts: [['-p', 'make parents as needed; no error if it exists']], run(argv, io){
     const { o, a } = getopts(argv.slice(1));
     if (!a.length){ io.err('usage: mkdir [-p] dir...\n'); return 1; }
-    for (const d of a){ if (o.p && FS.isDir(d)) continue; if (!FS.mkdir(d, !!o.p)){ io.err('mkdir: ' + d + ': ' + FS.lastError + '\n'); io.exit(1); } }
+    for (const d of a){ if (o.p && FS.isDir(d)) continue; if (!FS.mkdir(d, !!o.p)){ io.err(fsErr('mkdir', d)); io.exit(1); } }
   } });
   def('touch', { g: 'files', desc: 'make an empty file, or update its time', usage: 'touch file...', run(argv, io){
     if (argv.length < 2){ io.err('usage: touch file...\n'); return 1; }
-    for (const f of argv.slice(1)) if (!FS.touch(f)){ io.err('touch: ' + f + ': ' + FS.lastError + '\n'); io.exit(1); }
+    for (const f of argv.slice(1)) if (!FS.touch(f)){ io.err(fsErr('touch', f)); io.exit(1); }
   } });
   def('rm', { g: 'files', desc: 'remove files', usage: 'rm [-r] [-f] path...', opts: [['-r', 'remove directories and what is in them'], ['-f', 'no complaint if missing']], run(argv, io){
     const { o, a } = getopts(argv.slice(1)); const r = o.r || o.R;
@@ -3526,7 +3594,7 @@ M.createTerminal = function createTerminal(opts){
       if (abs === '/' || abs === HOME){ io.err('rm: refusing to remove ' + tildify(abs) + '\n'); io.exit(1); continue; }
       if (!FS.exists(p)){ if (!o.f){ io.err('rm: ' + p + ': No such file or directory\n'); io.exit(1); } continue; }
       if (FS.isDir(p) && !r){ io.err('rm: ' + p + ': is a directory (use rm -r)\n'); io.exit(1); continue; }
-      if (!FS.rm(p, true)){ io.err('rm: ' + p + ': ' + FS.lastError + '\n'); io.exit(1); }
+      if (!FS.rm(p, true)){ io.err(fsErr('rm', p)); io.exit(1); }
       else if (!FS.isDir(cwd)) setCwd(HOME);
     }
   } });
@@ -3535,7 +3603,7 @@ M.createTerminal = function createTerminal(opts){
     if (a.length < 2){ io.err('usage: mv from... to\n'); return 1; }
     const to = a.pop();
     if (a.length > 1 && !FS.isDir(to)){ io.err('mv: ' + to + ': not a directory\n'); return 1; }
-    for (const f of a) if (!FS.mv(f, to)){ io.err('mv: ' + f + ': ' + FS.lastError + '\n'); io.exit(1); }
+    for (const f of a) if (!FS.mv(f, to)){ io.err(fsErr('mv', f)); io.exit(1); }
     if (!FS.isDir(cwd)) setCwd(HOME);
   } });
   def('cp', { g: 'files', desc: 'copy', usage: 'cp [-r] from... to', opts: [['-r', 'copy directories']], run(argv, io){
@@ -3545,7 +3613,7 @@ M.createTerminal = function createTerminal(opts){
     if (a.length > 1 && !FS.isDir(to)){ io.err('cp: ' + to + ': not a directory\n'); return 1; }
     for (const f of a){
       if (FS.isDir(f) && !(o.r || o.R)){ io.err('cp: ' + f + ' is a directory (use cp -r)\n'); io.exit(1); continue; }
-      if (!FS.cp(f, to)){ io.err('cp: ' + f + ': ' + FS.lastError + '\n'); io.exit(1); }
+      if (!FS.cp(f, to)){ io.err(fsErr('cp', f)); io.exit(1); }
     }
   } });
   def('tree', { g: 'files', desc: 'draw a directory as a tree', usage: 'tree [-a] [dir]', run(argv, io){
@@ -3754,13 +3822,14 @@ M.createTerminal = function createTerminal(opts){
      help all lists every command, grouped by its g; help <cmd> is man */
   const HELP_TOP = [
     ['kaiav', ['about', 'eden', 'j', 'writing', 'links', 'contact']],
-    ['tools', ['weather', 'todo', 'timer', 'pomodoro', 'clock', 'cal']],
+    ['net', ['weather', 'curl', 'hn', 'wiki', 'define', 'github', 'ip']],
+    ['tools', ['todo', 'timer', 'pomodoro', 'qr', 'convert', 'pass', 'hash', 'roll', 'countdown', 'cal']],
     ['play', ['tetris', 'snake', 'typing', 'donut', 'matrix', 'banner', 'fortune', 'cowsay', 'lamp']],
     ['files', ['ls', 'cd', 'cat', 'tree', 'mkdir', 'mv', 'cp', 'rm']],
     ['text', ['echo', 'grep', 'sed', 'sort', 'wc', 'head', 'tail']],
     ['shell', ['man', 'history', 'alias', 'clear', 'neofetch']],
   ];
-  const HELP_ALL = [['read', 'kaiav'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
+  const HELP_ALL = [['read', 'kaiav'], ['net', 'net'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
   def('help', { g: 'system', desc: 'what you can type here', usage: 'help [all | command]', ex: ['help', 'help all', 'help weather'], run(argv, io){
     if (argv[1] && argv[1] !== 'all' && argv[1] !== '-a') return B.man.run(['man', argv[1]], io);
     const all = !!argv[1];
@@ -3937,7 +4006,7 @@ M.createTerminal = function createTerminal(opts){
   /* ---- jobs ---- */
   const INTR = { interrupted: true };
   function newJob(){
-    const j = { dead: false, plain: '', hint: '', timers: new Set() };
+    const j = { dead: false, plain: '', hint: '', timers: new Set(), t0: now };
     j.killed = new Promise(r => { j.kill = r; });
     j.sleep = ms => new Promise((res, rej) => {
       if (j.dead) return rej(INTR);
@@ -3957,12 +4026,12 @@ M.createTerminal = function createTerminal(opts){
       list = parse(applyAliases(lex(line)));
     } catch (e){
       record(raw, noHist);
-      tty.write('sh: ' + (e.message || e) + '\n', 'dim'); status = 2; finishJob(j); return;
+      errLine(tty, 'sh: ' + (e.message || e) + '\n'); status = 2; finishJob(j); return;
     }
     const work = execList(list, j);
     work.catch(() => {});
     try { await Promise.race([work, j.killed]); }
-    catch (e){ if (e !== INTR){ tty.write('sh: ' + ((e && e.message) || e) + '\n', 'dim'); status = 1; } }
+    catch (e){ if (e !== INTR){ errLine(tty, 'sh: ' + ((e && e.message) || e) + '\n'); status = 1; } }
     finishJob(j);
   }
   function record(line, noHist){
@@ -3975,6 +4044,7 @@ M.createTerminal = function createTerminal(opts){
     for (const t of j.timers) clearTimeout(t);
     job = null; openRow = null;
     if (j.hint){ suggestion = j.hint; tty.write('did you mean ', 'dim'); tty.write(j.hint, 'bright'); tty.write('?  press enter\n', 'faint'); j.plain += ' Did you mean ' + j.hint + '?'; }
+    if (ahead){ const a = ahead; ahead = ''; insert(a); }
     trim(); mirror(j.plain || ''); toBottom(); dirty = true; touched();
     if (REDUCED) revealAll();
   }
@@ -4000,8 +4070,8 @@ M.createTerminal = function createTerminal(opts){
       let outF = null, errF = null, inText = null, bad = false;
       for (const r of c.redirs){
         const t = expandWord(r.w);
-        if (t.length !== 1 || !t[0]){ tty.write('sh: ambiguous redirect\n', 'dim'); bad = true; break; }
-        if (r.op === '<'){ inText = FS.read(t[0]); if (inText == null){ tty.write('sh: ' + t[0] + ': No such file or directory\n', 'dim'); bad = true; break; } }
+        if (t.length !== 1 || !t[0]){ errLine(tty, 'sh: ambiguous redirect\n'); bad = true; break; }
+        if (r.op === '<'){ inText = FS.read(t[0]); if (inText == null){ errLine(tty, 'sh: ' + t[0] + ': No such file or directory\n'); bad = true; break; } }
         else if (r.op[0] === '2') errF = { path: t[0], append: r.op === '2>>', sink: buffer() };
         else outF = { path: t[0], append: r.op === '>>', sink: buffer() };
       }
@@ -4014,7 +4084,7 @@ M.createTerminal = function createTerminal(opts){
       for (const f of [outF, errF]){
         if (!f || isNull(f)) continue;
         const ok = f.append ? FS.append(f.path, f.sink.text) : FS.write(f.path, f.sink.text);
-        if (!ok){ tty.write('sh: ' + f.path + ': ' + FS.lastError + '\n', 'dim'); st = 1; }
+        if (!ok){ errLine(tty, fsErr('sh', f.path)); st = 1; }
       }
       stdin = sink === tty || sink === NULLSINK || outF ? '' : sink.text;
     }
@@ -4032,12 +4102,12 @@ M.createTerminal = function createTerminal(opts){
         return io.code != null ? io.code : typeof r === 'number' ? r : 0;
       } catch (e){
         if (e === INTR || j.dead) return 130;
-        ctx.errSink.write(name + ': ' + ((e && e.message) || e) + '\n', 'dim');
+        errLine(ctx.errSink, name + ': ' + ((e && e.message) || e) + '\n');
         return 1;
       }
     }
     sfx('error');
-    ctx.errSink.write(name + ': command not found\n', 'dim');
+    errLine(ctx.errSink, name + ': command not found\n');
     const f = fuzzy(name, cmdItems());
     if (f){ j.hint = [f.item.name, ...argv.slice(1)].join(' '); }
     else if (ctx.errSink === tty){ tty.write('type ', 'faint'); tty.write('help'); tty.write(' for the list\n', 'faint'); }
@@ -4048,7 +4118,7 @@ M.createTerminal = function createTerminal(opts){
       stdin: ctx.stdin, fs: FS, ui: out, env: ENV, cwd, cols: COLS, rows: ROWS, tty: ctx.sink.tty, code: null,
       out(t, style){ if (!j.dead && t != null) ctx.sink.write(String(t), style); },
       write(t, style){ io.out(t, style); },
-      err(t){ if (!j.dead && t != null) ctx.errSink.write(String(t), 'dim'); },
+      err(t){ if (!j.dead && t != null) errLine(ctx.errSink, t); },
       rich(o){ if (!j.dead) ctx.sink.rich(o); },
       exit(c){ io.code = (c | 0); },
       sleep: ms => j.sleep(ms),
@@ -4113,7 +4183,15 @@ M.createTerminal = function createTerminal(opts){
   }
   /* a tap on the canvas (x, y as 0..1 fractions): a card row acts as if chosen with enter */
   function handleTap(fx, fy){
-    if (booting || app) return false;
+    if (booting) return false;
+    if (app){                                   // an app with tap(col, row) gets the grid cell (the editor's shortcut bar, cursor placement)
+      const st = app;
+      if (!st.inst || typeof st.inst.tap !== 'function') return false;
+      const col = clamp(Math.floor((fx * W - PADX) / cw), 0, COLS - 1), row = clamp(Math.floor((fy * H - PADY) / ch), 0, ROWS - 1);
+      const r = appCall('tap', col, row);
+      if (r && app === st) st.dirty = true;
+      return !!r;
+    }
     const px = fx * W, py = fy * H;
     if (px < X(1) || px > X(COLS - 1)) return false;
     for (const r of drawnCards){
@@ -4141,7 +4219,7 @@ M.createTerminal = function createTerminal(opts){
     job.choice = null;
     let it = null;
     if (pick >= 0){ it = card.acts[pick]; actOn(card, it); }
-    else { card.sel = -1; card.foot = [['back', 'f']]; }
+    else { card.sel = -1; card.foot = [['back', 'f']]; if (k.length === 1 && !e.ctrlKey && !e.altKey && k !== ' ') ahead += k; }
     dirty = true;
     ch.res(it);
     return true;
@@ -4221,7 +4299,7 @@ M.createTerminal = function createTerminal(opts){
     gridCursor = null;
     const text = st.printed.map(t => t.endsWith('\n') ? t : t + '\n').join('');
     if (text) st.ctx.sink.write(text);
-    if (e) st.ctx.errSink.write(st.name + ': ' + ((e && e.message) || e) + '\n', 'dim');
+    if (e) errLine(st.ctx.errSink, st.name + ': ' + ((e && e.message) || e) + '\n');
     if (job && text) job.plain += text;
     if (e && typeof console !== 'undefined') console.warn(e);
     toBottom(); dirty = true;
@@ -4312,20 +4390,26 @@ M.createTerminal = function createTerminal(opts){
       shown = rows.length; mirror('Commands: ' + names.join(', '));
       return;
     }
-    if (tabState && tabState.after === input){
+    if (tabState && tabState.after === input && tabState.cyc){          // third tab on: walk the list
       const s = tabState; s.i = (s.i + (back ? -1 : 1) + s.list.length) % s.list.length;
       input = s.base; cur = s.cur; accept(s.list[s.i], s.from, false); s.after = input; return;
     }
-    const ctx = context(); const list = candidates(ctx);
-    if (!list.length){ sfx('beep'); return; }
-    if (list.length === 1){ accept(list[0], ctx.from, true); tabState = null; return; }
-    if (ctx.kind === 'path'){
-      const cp = commonPrefix(list);
-      if (cp.length > ctx.q.length){ accept(cp, ctx.from, false); return; }
+    if (tabState && tabState.after === input && !tabState.cyc){        // second tab: show them all, pick the first
+      const s = tabState; s.cyc = true; s.i = back ? s.list.length - 1 : 0;
+      accept(s.list[s.i], s.from, false); s.after = input;
+      mirror(s.list.length + ' matches: ' + s.list.slice(0, 40).join(', ')); return;
     }
-    const base = input, bcur = cur;
-    accept(list[0], ctx.from, false);
-    tabState = { base, cur: bcur, list, i: 0, from: ctx.from, after: input };
+    const ctx = context(); let list = candidates(ctx);
+    if (!list.length){ sfx('beep'); return; }
+    if (list.some(x => x.startsWith(ctx.q))) list = list.filter(x => x.startsWith(ctx.q));
+    if (list.length === 1){ accept(list[0], ctx.from, true); tabState = null; return; }
+    if (!list[0].startsWith(ctx.q)){                                    // a typo: take the best guess, as the ghost offered
+      const base = input, bcur = cur; accept(list[0], ctx.from, false);
+      tabState = { base, cur: bcur, list, i: 0, from: ctx.from, after: input, cyc: true }; return;
+    }
+    const cp = commonPrefix(list.filter(x => x.startsWith(ctx.q)));
+    if (cp.length > ctx.q.length) accept(cp, ctx.from, false); else sfx('beep');
+    tabState = { base: input, cur, list, i: -1, from: ctx.from, after: input, cyc: false };
   }
 
   /* ---- editing ---- */
@@ -4355,6 +4439,33 @@ M.createTerminal = function createTerminal(opts){
   }
   function clearScreen(){ rows = []; shown = 0; partial = 0; links = []; sel = -1; openRow = null; toBottom(); dirty = true; }
 
+  /* ---- ctrl+r: search the history, newest first ---- */
+  function searchFrom(i, q){
+    if (!q) return -1;
+    const lq = q.toLowerCase();
+    for (let k = Math.min(i, history.length - 1); k >= 0; k--) if (history[k].toLowerCase().includes(lq)) return k;
+    return -1;
+  }
+  function searchSet(i){
+    const s = rs; s.fail = i < 0;
+    if (i >= 0){ s.i = i; input = history[i]; cur = Math.max(0, input.toLowerCase().indexOf(s.q.toLowerCase())); }
+    else if (!s.q){ s.i = history.length; input = s.draft; cur = s.dcur; }
+  }
+  function searchKey(e){
+    const k = e.key, c = k.toLowerCase(), s = rs;
+    const done = keep => { rs = null; if (!keep){ input = s.draft; cur = s.dcur; } else cur = input.length; hIdx = history.length; touched(); return true; };
+    if (e.ctrlKey && c === 'r'){ if (s.q){ const i = searchFrom(s.i - 1, s.q); if (i >= 0) searchSet(i); else { s.fail = true; sfx('beep'); } } touched(); return true; }
+    if (e.ctrlKey && (c === 'g' || c === 'c')) return done(false);
+    if (k === 'Escape') return done(false);
+    if (k === 'Enter'){ const keep = !s.fail && s.q && s.i < history.length; rs = null; if (keep){ execute(input); touched(); return true; } return done(false); }
+    if (k === 'Backspace'){ s.q = s.q.slice(0, -1); searchSet(searchFrom(history.length - 1, s.q)); touched(); return true; }
+    if (k.length === 1 && !e.ctrlKey && !e.altKey){ s.q += k; const i = searchFrom(s.i, s.q); if (i >= 0) searchSet(i); else { s.fail = true; } touched(); return true; }
+    if (/^(Arrow|Home|End|Tab)/.test(k) || (e.ctrlKey && (c === 'a' || c === 'e'))){   // take the match and keep editing
+      rs = null; if (s.fail && !s.q){ input = s.draft; } hIdx = history.length;
+      cur = k === 'Home' || (e.ctrlKey && c === 'a') ? 0 : input.length; touched(); return true;
+    }
+    return true;
+  }
   function handleKey(e){
     const k = e.key;
     if (!k || k === 'Shift' || k === 'Control' || k === 'Alt' || k === 'Meta' || k === 'CapsLock' || k === 'Dead') return false;
@@ -4376,8 +4487,13 @@ M.createTerminal = function createTerminal(opts){
       if (ctrl && c === 'l'){ clearScreen(); return true; }
       if (k === 'PageUp'){ scrollBy(ROWS - 2); return true; }
       if (k === 'PageDown'){ scrollBy(-(ROWS - 2)); return true; }
-      return k.length === 1 || ['Enter', 'Tab', 'Backspace', 'Escape', ' '].includes(k);
+      if (k.length === 1 && !ctrl && !alt){ if (ahead.length < 200) ahead += k; return true; }     // typed ahead: lands on the next prompt
+      if (k === 'Backspace'){ ahead = ahead.slice(0, -1); return true; }
+      return ['Enter', 'Tab', 'Escape'].includes(k);
     }
+    if (rs) return searchKey(e);
+    if (ctrl && !alt && c === 'r'){ rs = { q: '', i: history.length, draft: input, dcur: cur, fail: false }; tabState = null; suggestion = ''; touched(); return true; }
+    if (alt && !ctrl && (c === 'b' || c === 'f' || k === '\u222b' || k === '\u0192')){ cur = c === 'b' || k === '\u222b' ? wordLeft(cur) : wordRight(cur); touched(); return true; }
     if (ctrl && !alt){
       if (c === 'l'){ clearScreen(); touched(); return true; }
       if (c === 'c'){
@@ -4441,8 +4557,24 @@ M.createTerminal = function createTerminal(opts){
   }
   function insertText(str){
     if (booting){ skipBoot(); }
-    if (app){ for (const ch of String(str)){ const st = app; if (!st) break; if (appCall('key', { key: ch === '\n' ? 'Enter' : ch, code: '', ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, preventDefault(){} })) st.dirty = true; } return; }
-    if (job) return;
+    if (app){                                   /* phones and IME: an app takes the text whole (app.insertText), or as key events */
+      const st = app;
+      if (st.inst && typeof st.inst.insertText === 'function'){ if (appCall('insertText', String(str)) !== false && app === st) st.dirty = true; return; }
+      for (const ch of String(str)){
+        const cur = app; if (!cur) break;
+        const key = ch === '\n' || ch === '\r' ? 'Enter' : ch === '\t' ? 'Tab' : ch === '\b' ? 'Backspace' : ch;
+        const code = key.length > 1 ? key : /[a-z]/i.test(ch) ? 'Key' + ch.toUpperCase() : /\d/.test(ch) ? 'Digit' + ch : ch === ' ' ? 'Space' : '';
+        const ev = { type: 'keydown', key, code, repeat: false, isComposing: false, ctrlKey: false, altKey: false, metaKey: false, shiftKey: /[A-Z]/.test(ch), synthetic: true, preventDefault(){}, stopPropagation(){} };
+        if (appCall('key', ev) && app === cur) cur.dirty = true;
+      }
+      return;
+    }
+    if (job && job.choice){                     // phones: a tapped key answers the card
+      for (const ch of String(str)){ if (!job || !job.choice) break; choiceKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false, shiftKey: false }); }
+      return;
+    }
+    if (job){ ahead += String(str).replace(/[\r\n\t]/g, ''); return; }
+    if (rs){ for (const ch of String(str)) searchKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false }); return; }
     if (typing()) revealAll();
     const parts = String(str).split(/\r?\n/);
     parts.forEach((p, i) => { insert(p); if (i < parts.length - 1 && !job) execute(input); });
@@ -4525,7 +4657,10 @@ M.createTerminal = function createTerminal(opts){
       const selected = (link && sel >= 0 && links[sel] === link) || sp[1] === 'i';
       if (selected){ g.fillStyle = P.normal; g.fillRect(X(col) - 3, top + 1, s.length * cw * k + 6, ch * k - 2); }
       g.font = font(k); g.fillStyle = selected ? P.bg : color(sp[1]);
-      g.fillText(s, X(col), top + fs * k * 0.68);
+      if (k === 1 && SPAN_VEC.test(s)){                // arrows and the lock, drawn: VT323 has neither
+        g.fillText(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
+        for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : color(sp[1]));
+      } else g.fillText(s, X(col), top + fs * k * 0.68);
       if (link && !selected){ g.fillStyle = P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, 2); }
       col += s.length * k;
     }
@@ -4542,17 +4677,52 @@ M.createTerminal = function createTerminal(opts){
   }
   function totalUnits(){
     let u = 0; for (let i = 0; i < rows.length && i <= shown; i++) if (i < shown || partial > 0 || rows[i].k === 'viz') u += i < rows.length ? heightOf(rows[i]) : 0;
-    return u + (promptVisible() ? 1 : 0);
+    return u + (promptVisible() ? 1 + belowPrompt().length : 0);
+  }
+  /* quiet rows under the prompt: the ctrl+r search line, or the tab candidates */
+  function fitSpans(opts){ const len = f => f.reduce((n, x) => n + x[0].length, 0); return opts.find(f => len(f) <= COLS) || opts[opts.length - 1]; }
+  function belowPrompt(){
+    if (rs){
+      const q = rs.q, st = rs.fail ? 'a' : 'b';
+      return [fitSpans([
+        [['search ', 'f'], [q, st], [rs.fail ? '  no match' : '', 'f'], ['   ctrl+r older \u00b7 enter run \u00b7 esc', 'f']],
+        [['search ', 'f'], [q, st], [rs.fail ? '  no match' : '', 'f'], ['   ^R older \u00b7 esc', 'f']],
+        [['search ', 'f'], [q, st]],
+      ])];
+    }
+    const t = tabState;
+    if (!t || !t.cyc || t.list.length < 2 || t.after !== input) return [];
+    const w = Math.min(COLS - 2, Math.max(...t.list.map(x => x.length)) + 2), nc = Math.max(1, Math.floor(COLS / w));
+    const lines = Math.ceil(t.list.length / nc), maxL = Math.min(5, Math.max(2, ROWS - 6));
+    const selL = Math.floor(Math.max(0, t.i) / nc), from = lines <= maxL ? 0 : clamp(selL - maxL + 1, 0, lines - maxL);
+    const out = [];
+    for (let l = from; l < Math.min(lines, from + maxL); l++){
+      const row = [];
+      for (let c = 0; c < nc; c++){
+        const k = l * nc + c; if (k >= t.list.length) break;
+        const name = t.list[k].slice(0, w - 1);
+        row.push([name, k === t.i ? 'i' : 'd'], [' '.repeat(w - name.length), 'n']);
+      }
+      out.push(row);
+    }
+    const more = t.list.length - Math.min(lines, from + maxL) * nc;
+    if (lines > maxL) out.push([[(t.i + 1) + ' of ' + t.list.length + (more > 0 ? '  tab for more' : ''), 'f']]);
+    return out;
   }
   const promptVisible = () => !booting && !typing() && !job && !app;
 
   function drawPrompt(top){
-    const gh = ghost();
+    const gh = rs ? null : ghost();
     const PL = promptLen();
     let off = 0; const room = COLS - PL - 1;
     if (cur > room) off = cur - room;
     const vis = input.slice(off, off + room);
-    drawSpans({ i: 0, s: [...promptSpans(), [vis, 'n']] }, top, 999);
+    let body = [[vis, 'n']];
+    if (rs && rs.q && !rs.fail){                     // the match, brighter
+      const at = input.toLowerCase().indexOf(rs.q.toLowerCase()) - off;
+      if (at >= 0 && at < vis.length) body = [[vis.slice(0, at), 'd'], [vis.slice(at, at + rs.q.length), 'b'], [vis.slice(at + rs.q.length), 'd']];
+    }
+    drawSpans({ i: 0, s: [...promptSpans(), ...body] }, top, 999);
     promptY = top + ch;
     const cx = X(PL + cur - off);
     if (gh){
@@ -4574,11 +4744,20 @@ M.createTerminal = function createTerminal(opts){
     }
   }
   let drawnCards = [];
-  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7]/g;
+  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\ue000]/g;
+  const SPAN_VEC = /[\u2190-\u2193\ue000]/, SPAN_VEC_G = /[\u2190-\u2193\ue000]/g;
   function vecGlyph(c, col, top, colr){
     const cx = X(col) + cw / 2, cy = top + ch * 0.5, a = cw * 0.36;
     g.fillStyle = colr;
     if (c === '\u00b7'){ g.fillRect(cx - 2, cy - 2, 4, 4); return; }
+    if (c === LOCK){                                       // a small padlock: shackle and body
+      const bw = cw * 0.72, bh = ch * 0.3, bx = cx - bw / 2, by = cy - bh * 0.2;
+      g.fillRect(bx, by, bw, bh);
+      g.strokeStyle = colr; g.lineWidth = 2.5; g.beginPath();
+      g.moveTo(cx - bw * 0.3, by); g.lineTo(cx - bw * 0.3, by - bh * 0.45); g.arc(cx, by - bh * 0.45, bw * 0.3, Math.PI, 0); g.lineTo(cx + bw * 0.3, by); g.stroke();
+      g.fillStyle = P.bg; g.fillRect(cx - 1.5, by + bh * 0.3, 3, bh * 0.4);
+      return;
+    }
     const d = { '\u2190': [-1, 0], '\u2192': [1, 0], '\u2191': [0, -1], '\u2193': [0, 1] }[c];
     const [dx, dy] = d, px = -dy, py = dx;                 // tip direction and its perpendicular
     g.beginPath();
@@ -4651,7 +4830,12 @@ M.createTerminal = function createTerminal(opts){
       u += h;
       if (isPartial) break;
     }
-    if (promptVisible() && u >= first && u < first + ROWS) drawPrompt(PADY + (u - first) * ch);
+    if (promptVisible()){
+      if (u >= first && u < first + ROWS) drawPrompt(PADY + (u - first) * ch);
+      belowPrompt().forEach((r, k) => { const y = u + 1 + k; if (y >= first && y < first + ROWS) drawSpans({ i: 0, s: r }, PADY + (y - first) * ch, 999); });
+    } else if (job && !job.choice && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
+      text(COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 0, PADY + (u - first) * ch, 'f');
+    }
     g.restore();
     // scroll position: a thin rail on the right and a quiet note at the bottom
     if (scrollOff > 0){
@@ -4659,11 +4843,10 @@ M.createTerminal = function createTerminal(opts){
       g.fillStyle = P.faint; g.fillRect(railX, railTop, 2, railH);
       const th = Math.max(24, railH * ROWS / total), ty = railTop + (railH - th) * (first / Math.max(1, total - ROWS));
       g.fillStyle = P.dim; g.fillRect(railX - 2, ty, 6, th);
-      const note = ' ' + scrollOff + ' more below  pgdn ';
+      const note = '  ' + scrollOff + ' more below' + (COLS >= 46 ? '  pgdn ' : ' ');
       const nx = COLS - note.length, top = PADY + (ROWS - 1) * ch;
       g.fillStyle = P.bg; g.fillRect(X(nx) - 8, top - 4, note.length * cw + 8, ch + 8);
-      g.fillStyle = P.dim; g.fillRect(X(nx), top + 2, note.length * cw, ch - 4);
-      g.font = font(); g.fillStyle = P.bg; g.fillText(note, X(nx), top + fs * 0.68);
+      g.font = font(); g.fillStyle = P.dim; g.fillText(note, X(nx), top + fs * 0.68);
     }
   }
   /* ---- boot screen ---- */
@@ -4859,6 +5042,7 @@ M.createTerminal = function createTerminal(opts){
       if (!typing()) carry = 0, blinkT0 = now;
       changed = true;
     }
+    if (job && !job.hinted && !app && now - job.t0 > 0.9){ job.hinted = true; changed = true; }
     const on = ((t - blinkT0) % 1.06) < 0.53;
     if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (app && gridCursor)) changed = true; }
     if (!app && animFps > 0 && t - lastAnim >= 1 / animFps - 1e-3) changed = true;
@@ -5691,45 +5875,98 @@ const WMO = { 0: ['Clear', 'sun'], 1: ['Mostly clear', 'part'], 2: ['Partly clou
   82: ['Heavy showers', 'rain'], 85: ['Snow showers', 'snow'], 86: ['Snow showers', 'snow'], 95: ['Thunderstorm', 'storm'], 96: ['Thunder and hail', 'storm'], 99: ['Thunder and hail', 'storm'] };
 const DAYS3 = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WX_CITY = 'kaiav.weather.city';
-async function getJSON(url, io, ms = 8000){
-  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
-  const t = setTimeout(() => ctl && ctl.abort(), ms);
-  try {
-    const r = await fetch(url, ctl ? { signal: ctl.signal } : {});
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return await r.json();
-  } finally { clearTimeout(t); }
-}
-T.cmds.weather = { g: 'tools', desc: 'the weather where you are, or anywhere', usage: 'weather [-c | -f] [city]',
+/* ---- the network: one helper that tells "blocked" apart from "offline", CORS, timeouts and HTTP errors ---- */
+class NetError extends Error { constructor(kind, msg, status){ super(msg); this.kind = kind; this.status = status; } }
+const SANDBOXED = (() => { try { return /claude(usercontent)?\.(ai|com)$/i.test(location.hostname) || location.protocol === 'about:'; } catch (e){ return false; } })();
+const net = {
+  /* -> { status, statusText, ok, headers: [[k, v]], type, text, data, ms, bytes, url } ; throws NetError */
+  async get(url, opt = {}){
+    if (typeof fetch !== 'function') throw new NetError('blocked', 'this browser cannot make requests');
+    let csp = false;
+    const onCsp = e => { if (/^connect-src|^default-src/.test(e.violatedDirective || e.effectiveDirective || '')) csp = true; };
+    try { document.addEventListener('securitypolicyviolation', onCsp); } catch (e){}
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; if (ctl) ctl.abort(); }, opt.timeout || 9000);
+    const t0 = performance.now();
+    try {
+      let r;
+      try {
+        r = await fetch(url, { method: opt.method || 'GET', headers: opt.headers || {}, body: opt.body, signal: ctl ? ctl.signal : undefined, cache: 'no-store' });
+      } catch (e){
+        await new Promise(res => setTimeout(res, 30));          // the CSP event arrives just after the rejection
+        if (timedOut) throw new NetError('timeout', 'no answer after ' + Math.round((opt.timeout || 9000) / 1000) + 's');
+        if (csp) throw new NetError('blocked', "blocked by this preview's sandbox");
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new NetError('offline', 'offline');
+        if (SANDBOXED) throw new NetError('blocked', "blocked by this preview's sandbox");
+        let reach = false;                                     // reachable without CORS? then it was CORS
+        try { await fetch(url, { mode: 'no-cors', cache: 'no-store', signal: ctl ? ctl.signal : undefined }); reach = true; } catch (e2){}
+        if (csp) throw new NetError('blocked', "blocked by this preview's sandbox");
+        if (timedOut) throw new NetError('timeout', 'no answer after ' + Math.round((opt.timeout || 9000) / 1000) + 's');
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new NetError('offline', 'offline');
+        if (reach) throw new NetError('cors', "the server doesn't allow browser requests");
+        throw new NetError('unreachable', 'could not reach ' + host(url));
+      }
+      const text = await r.text();
+      const ms = performance.now() - t0;
+      const headers = []; try { r.headers.forEach((v, k) => headers.push([k, v])); } catch (e){}
+      const type = (r.headers.get('content-type') || '').split(';')[0].trim();
+      const res = { status: r.status, statusText: r.statusText || HTTP_TEXT[r.status] || '', ok: r.ok, headers, type, text, ms, bytes: new Blob([text]).size, url: r.url || url };
+      if (opt.json && !r.ok) throw new NetError('http', 'HTTP ' + r.status + (res.statusText ? ' ' + res.statusText : ''), r.status);
+      if (opt.json || /json/.test(type)){ try { res.data = JSON.parse(text); } catch (e){ if (opt.json) throw new NetError('http', 'the answer was not JSON', r.status); } }
+      return res;
+    } finally { clearTimeout(timer); try { document.removeEventListener('securitypolicyviolation', onCsp); } catch (e){} }
+  },
+  json(url, opt = {}){ return net.get(url, Object.assign({ json: true }, opt)).then(r => r.data); },
+  /* an honest two-line explanation of a failure */
+  fail(io, name, e){
+    if (!(e instanceof NetError)){ io.err(name + ': ' + ((e && e.message) || e) + '\n'); return 1; }
+    const why = {
+      blocked: ["blocked by this preview's sandbox, works on the live site", 'kaiav.pages.dev has the network. offline tools work here'],
+      offline: ['offline', 'this browser has no connection right now'],
+      cors: ["CORS: the server doesn't allow browser requests", 'the site answered, but will not share it with a web page'],
+      timeout: ['timeout, ' + e.message, 'the server is slow or unreachable. try again'],
+      unreachable: [e.message, 'the host may not exist, or the connection dropped'],
+      http: [e.message, e.status === 404 ? 'nothing there' : e.status === 403 || e.status === 429 ? 'refused, or rate limited. try again later' : ''],
+    }[e.kind] || [e.message, ''];
+    if (io.tty && io.ui){
+      const o = io.ui(), ls = wrap(name + ': ' + why[0], io.cols - 1);
+      o.at(0, [name + ': ', 'd'], [ls[0].slice(name.length + 2), 'n']);
+      for (const l of ls.slice(1)) o.at(2, [l, 'n']);
+      if (why[1]) o.para(why[1], 'f', io.cols - 4, 2);
+      io.rich(o);
+    } else io.err(name + ': ' + why[0] + '\n');
+    return 1;
+  },
+};
+const HTTP_TEXT = { 200: 'OK', 201: 'Created', 204: 'No Content', 301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified', 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 405: 'Method Not Allowed', 429: 'Too Many Requests', 500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable' };
+const host = u => { try { return new URL(u).host; } catch (e){ return String(u); } };
+M.net = net;
+T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usage: 'weather [-c | -f] [city]',
   opts: [['-c', 'Celsius'], ['-f', 'Fahrenheit']], ex: ['weather', 'weather tokyo', 'weather -f new york'],
   more: 'Asks open-meteo.com for the weather now and the next three days. With no city it guesses yours from your time zone, then remembers the last city you named. Nothing about you leaves the browser except the city name.',
   async run(argv, io){
     let a = argv.slice(1), unit = null;
     while (a[0] === '-c' || a[0] === '-f'){ unit = a[0] === '-f' ? 'F' : 'C'; a = a.slice(1); }
-    if (!unit){ let l = ''; try { l = navigator.language || ''; } catch (e){} unit = /^en-(US|LR|MM)$/i.test(l) ? 'F' : 'C'; }
+    if (!unit) unit = 'C';   // Celsius unless -f is asked for
     let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e){}
     let q = a.join(' ').trim(), guessed = false;
     if (q) lsSet(WX_CITY, q);
     else q = lsGet(WX_CITY, '');
     if (!q && /^[A-Za-z]+\/[A-Za-z_\-]+/.test(tz) && !/^Etc\//.test(tz)){ q = tz.split('/').pop().replace(/_/g, ' '); guessed = true; }
     if (!q){ io.err('weather: which city? try weather london\n'); return 1; }
-    if (typeof fetch !== 'function'){ io.err('weather: this browser cannot fetch\n'); return 1; }
     if (io.tty){ io.out('asking the sky over ' + q + '...\n', 'faint'); }
     let place, wx;
     try {
-      const g = await getJSON('https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=' + encodeURIComponent(q), io);
+      const g = await net.json('https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=' + encodeURIComponent(q));
       const rs = (g && g.results) || [];
       place = (guessed && rs.find(r => r.timezone === tz)) || rs[0];
       if (!place){ io.err('weather: no place called ' + q + '\n'); if (!a.length) lsSet(WX_CITY, ''); return 1; }
-      wx = await getJSON('https://api.open-meteo.com/v1/forecast?latitude=' + place.latitude + '&longitude=' + place.longitude +
+      wx = await net.json('https://api.open-meteo.com/v1/forecast?latitude=' + place.latitude + '&longitude=' + place.longitude +
         '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day' +
         '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=4' +
-        (unit === 'F' ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : ''), io);
-    } catch (e){
-      io.err('weather: could not reach open-meteo.com' + (e && e.name === 'AbortError' ? ' (timed out)' : '') + '\n');
-      io.err('this page may be offline, or not allowed to fetch from here\n');
-      return 1;
-    }
+        (unit === 'F' ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : ''));
+    } catch (e){ return net.fail(io, 'weather', e); }
     const c = wx && wx.current, d = wx && wx.daily;
     if (!c || !d){ io.err('weather: open-meteo sent something unexpected\n'); return 1; }
     const deg = v => Math.round(v) + '°';
@@ -6022,6 +6259,1218 @@ T.apps.matrix = { g: 'fun', desc: 'digital rain', usage: 'matrix', more: 'Charac
       },
     };
   } };
+
+/* =====================================================================================
+   shared: coloured JSON, span wrapping, little helpers
+   ===================================================================================== */
+const kb = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+const msStr = ms => ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(1) + ' s';
+const clip = (t, n) => t.length <= n ? t : t.slice(0, Math.max(1, n - 3)).trimEnd() + '...';
+const bareUrl = u => String(u || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+const argText = (io, a) => a.length ? a.join(' ') : String(io.stdin || '');
+/* JSON -> lines of { ind, toks: [[text, style]] }: keys dim, strings normal, numbers bright, literals accent, punctuation faint */
+function jsonLines(v){
+  const lines = [];
+  const scalar = x => typeof x === 'string' ? [JSON.stringify(x), 'n'] : typeof x === 'number' ? [String(x), 'b'] : [String(x), 'a'];
+  (function walk(x, ind, pre, comma){
+    const cm = comma ? [[',', 'f']] : [];
+    if (x && typeof x === 'object'){
+      const arr = Array.isArray(x), ks = arr ? x.map((_, i) => i) : Object.keys(x);
+      if (!ks.length){ lines.push({ ind, toks: [...pre, [arr ? '[]' : '{}', 'f'], ...cm] }); return; }
+      lines.push({ ind, toks: [...pre, [arr ? '[' : '{', 'f']] });
+      ks.forEach((k, i) => walk(x[k], ind + 2, arr ? [] : [[JSON.stringify(String(k)), 'd'], [': ', 'f']], i < ks.length - 1));
+      lines.push({ ind, toks: [[arr ? ']' : '}', 'f'], ...cm] });
+    } else lines.push({ ind, toks: [...pre, scalar(x), ...cm] });
+  })(v, 0, [], false);
+  return lines;
+}
+/* cut a line of spans into rows no wider than width; continuation rows are indented by cont */
+function wrapSpans(toks, width, cont = 2){
+  const rows = []; let row = [], w = 0, room = width;
+  for (let [t, st] of toks){
+    while (t.length){
+      if (w >= room){ rows.push(row); row = []; w = 0; room = Math.max(8, width - cont); }
+      const take = t.slice(0, room - w); row.push([take, st]); w += take.length; t = t.slice(take.length);
+    }
+  }
+  rows.push(row);
+  return rows.map((r, i) => ({ cont: i > 0, toks: r }));
+}
+/* print a JSON value on the screen, coloured and wrapped, at most max rows; returns rows not shown */
+function showJSON(o, v, cols, max = 1e9, i0 = 2){
+  let n = 0, hidden = 0;
+  for (const l of jsonLines(v)){
+    for (const r of wrapSpans(l.toks, cols - i0 - l.ind - 1)){
+      if (n >= max){ hidden++; continue; }
+      o.at(i0 + l.ind + (r.cont ? 2 : 0), ...(r.toks.length ? r.toks : [['', 'n']])); n++;
+    }
+  }
+  return hidden;
+}
+
+/* =====================================================================================
+   curl: fetch a url and show what came back
+   ===================================================================================== */
+T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl [-i] [-s] [-m secs] [-X METHOD] [-H "k: v"] [-d data] url',
+  opts: [['-i', 'show the response headers'], ['-s', 'just the body: no status or footer'], ['-X METHOD', 'GET, POST, PUT, DELETE...'], ['-H "k: v"', 'add a request header'], ['-d DATA', 'send a body (and POST)'], ['-m SECS', 'give up after this long (9)']],
+  ex: ['curl api.github.com/zen', 'curl -i httpbin.org/get', 'curl wttr.in/?format=3', 'curl api.ipify.org > ip.txt'],
+  more: 'Makes a real request from your browser. JSON comes back pretty-printed and coloured; long answers are cut short on screen but whole in a pipe or a file. A bare domain means https. The server has to allow requests from web pages (CORS), and the claude.ai preview blocks the network entirely.',
+  async run(argv, io){
+    const a = argv.slice(1); let inc = false, silent = false, method = null, data = null, url = null, secs = 0; const headers = {};
+    for (let i = 0; i < a.length; i++){
+      const x = a[i];
+      if (x === '-i' || x === '--include') inc = true;
+      else if (x === '-s' || x === '--silent') silent = true;
+      else if (x === '-L' || x === '-f') {}
+      else if (x === '-X' || x === '--request'){ method = String(a[++i] || '').toUpperCase(); }
+      else if (x === '-H' || x === '--header'){ const h = String(a[++i] || ''), k = h.indexOf(':'); if (k > 0) headers[h.slice(0, k).trim()] = h.slice(k + 1).trim(); }
+      else if (x === '-d' || x === '--data'){ data = a[++i] == null ? '' : a[i]; }
+      else if (x === '-m' || x === '--max-time'){ secs = parseFloat(a[++i]); if (!(secs > 0)){ io.err('curl: -m wants seconds, like -m 5\n'); return 2; } }
+      else if (/^-/.test(x)){ io.err('curl: unknown option ' + x + '   (man curl)\n'); return 2; }
+      else url = x;
+    }
+    if (!url){ io.err('usage: curl url   (try: curl api.github.com/zen)\n'); return 2; }
+    if (!/^[a-z]+:\/\//i.test(url)) url = 'https://' + url;
+    if (!/^https?:\/\//i.test(url)){ io.err('curl: only http and https\n'); return 2; }
+    if (data != null && !method) method = 'POST';
+    if (data != null && !Object.keys(headers).some(k => /^content-type$/i.test(k))) headers['Content-Type'] = /^\s*[[{]/.test(data) ? 'application/json' : 'application/x-www-form-urlencoded';
+    let r;
+    try { r = await net.get(url, { method: method || 'GET', headers, body: data == null ? undefined : data, timeout: secs ? secs * 1000 : undefined }); }
+    catch (e){ return net.fail(io, 'curl', e); }
+    if (!io.tty){
+      if (inc) io.out('HTTP ' + r.status + ' ' + r.statusText + '\n' + r.headers.map(([k, v]) => k + ': ' + v).join('\n') + '\n\n');
+      io.out(r.text + (r.text && !r.text.endsWith('\n') ? '\n' : ''));
+      return r.ok ? 0 : 22;
+    }
+    const o = io.ui(), max = Math.max(24, io.rows * 2);
+    if (!silent){
+      o.at(0, ['HTTP ' + r.status, r.ok ? 'b' : 'a'], [' ' + r.statusText, 'd']);
+      if (inc){
+        const hs = r.headers.slice(0, 12);
+        for (const [k, v] of hs){ const row = wrapSpans([[k + ': ', 'd'], [v, 'n']], io.cols - 1)[0]; o.at(0, ...row.toks); }
+        if (r.headers.length > hs.length) o.at(0, ['(' + (r.headers.length - hs.length) + ' more headers)', 'f']);
+      }
+      o.blank();
+    }
+    let hidden = 0;
+    if (r.data !== undefined) hidden = showJSON(o, r.data, io.cols, max, 0);
+    else {
+      let n = 0;
+      const text = r.text.replace(/\r/g, '').replace(/\t/g, '  ').replace(/\n+$/, '');
+      for (const line of text ? text.split('\n') : []){
+        for (const row of wrapSpans([[line, 'n']], io.cols)){ if (n >= max){ hidden++; continue; } o.at(row.cont ? 2 : 0, ...(row.toks.length ? row.toks : [['', 'n']])); n++; }
+      }
+      if (!text) o.at(0, ['(empty body)', 'f']);
+    }
+    if (hidden) o.at(0, ['... ' + hidden + ' more lines', 'd'], ['   | less, or > file', 'f']);
+    if (!silent){
+      o.blank();
+      const bits = [String(r.status), kb(r.bytes), msStr(r.ms), r.type].filter(Boolean);
+      o.at(0, [bits.join(' · ').slice(0, io.cols), 'f']);
+    }
+    io.rich(o);
+    return r.ok ? 0 : 22;
+  } };
+T.cmds.fetch = Object.assign({}, T.cmds.curl, { hidden: true, desc: 'same as curl' });
+
+/* =====================================================================================
+   hn, wiki, define, github, ip: live data, each one a small card
+   ===================================================================================== */
+T.cmds.hn = { g: 'net', desc: 'Hacker News, the top stories', usage: 'hn [count]', ex: ['hn', 'hn 5', 'hn 20 | grep -i ai'],
+  more: 'The front page of Hacker News, from its public API. Arrows pick a story, enter opens it, 1 to 9 jump. Piped, it prints points, title and link, one story per line.',
+  async run(argv, io){
+    const n = Math.max(1, Math.min(30, parseInt(argv[1], 10) || (io.tty ? Math.max(5, Math.min(10, io.rows - 8)) : 10)));
+    if (argv[1] && !(parseInt(argv[1], 10) > 0)){ io.err('usage: hn [count]   (1 to 30)\n'); return 2; }
+    let items;
+    try {
+      const ids = await net.json('https://hacker-news.firebaseio.com/v0/topstories.json');
+      items = (await Promise.all(ids.slice(0, n).map(id => net.json('https://hacker-news.firebaseio.com/v0/item/' + id + '.json').catch(() => null)))).filter(Boolean);
+    } catch (e){ return net.fail(io, 'hn', e); }
+    const link = it => it.url || 'https://news.ycombinator.com/item?id=' + it.id;
+    if (!io.tty){ io.out(items.map(it => String(it.score || 0).padStart(5) + '  ' + it.title + '  ' + link(it)).join('\n') + '\n'); return; }
+    const lw = Math.max(...items.map(it => String(it.score || 0).length)) + 2;
+    const room = io.cols - 3 - 5 - lw - 1;
+    const o = io.ui();
+    o.blank().card({ title: 'HACKER NEWS', note: 'top ' + items.length, verb: 'open',
+      items: items.map(it => ({ label: String(it.score || 0), value: io.cols < 46 ? clip(it.title, 64) : clip(it.title, room), full: link(it), url: link(it) })) });
+    io.rich(o);
+    return io.pick(o.lastCard).then(() => {});
+  } };
+
+T.cmds.wiki = { g: 'net', desc: 'the opening of a Wikipedia article', usage: 'wiki topic...', ex: ['wiki alan turing', 'wiki vt100', 'wiki pomodoro technique'],
+  more: 'Looks the topic up on English Wikipedia and prints the summary at the top of the article, with a link you can open.',
+  async run(argv, io){
+    const q = argv.slice(1).join(' ').trim();
+    if (!q){ io.err('usage: wiki topic   (try: wiki alan turing)\n'); return 2; }
+    const sum = t => net.json('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(t.replace(/ /g, '_')) + '?redirect=true');
+    let d;
+    try {
+      try { d = await sum(q); }
+      catch (e){
+        if (e.status !== 404) throw e;
+        const s = await net.json('https://en.wikipedia.org/w/api.php?action=opensearch&limit=1&namespace=0&format=json&origin=*&search=' + encodeURIComponent(q));
+        if (!s[1] || !s[1][0]){ io.err('wiki: no article for ' + q + '\n'); return 1; }
+        d = await sum(s[1][0]);
+      }
+    } catch (e){ return net.fail(io, 'wiki', e); }
+    const url = (d.content_urls && d.content_urls.desktop && d.content_urls.desktop.page) || 'https://en.wikipedia.org/wiki/' + encodeURIComponent(q);
+    const extract = String(d.extract || '').trim();
+    if (!io.tty){ io.out(d.title + '\n' + (d.description ? d.description + '\n' : '') + '\n' + extract + '\n\n' + url + '\n'); return; }
+    const o = io.ui(), w = io.cols - 6;
+    o.blank().at(2, [d.title || q, 'b']);
+    if (d.description) o.para(d.description, 'd', w);
+    o.blank();
+    let ls = wrap(extract, w); const max = Math.max(4, io.rows - 11);
+    if (ls.length > max){ ls = ls.slice(0, max); ls[max - 1] = clip(ls[max - 1] + ' ...', w); }
+    for (const l of ls) o.at(2, [l, 'n']);
+    if (d.type === 'disambiguation') o.blank().at(2, ['this name means several things. try something more specific', 'f']);
+    o.blank().card({ title: 'WIKIPEDIA', items: [{ label: 'read', value: bareUrl(url), full: url, url, hint: 'open' }] });
+    io.rich(o);
+    return io.pick(o.lastCard).then(() => {});
+  } };
+
+T.cmds.define = { g: 'net', desc: 'what a word means', usage: 'define word', ex: ['define serendipity', 'define terminal'],
+  more: 'English definitions from dictionaryapi.dev: the pronunciation, then up to three senses for each part of speech, with an example where there is one.',
+  async run(argv, io){
+    const w = argv.slice(1).join(' ').trim();
+    if (!w){ io.err('usage: define word   (try: define serendipity)\n'); return 2; }
+    let d;
+    try { d = await net.json('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(w.toLowerCase())); }
+    catch (e){ if (e.status === 404){ io.err('define: no entry for ' + w + '\n'); return 1; } return net.fail(io, 'define', e); }
+    const e0 = d[0] || {}, ph = e0.phonetic || ((e0.phonetics || []).find(p => p.text) || {}).text || '';
+    const means = [];
+    for (const e of d) for (const m of e.meanings || []){ const ex = means.find(x => x.pos === m.partOfSpeech); if (ex) ex.defs.push(...m.definitions); else means.push({ pos: m.partOfSpeech, defs: m.definitions.slice() }); }
+    if (!io.tty){ io.out(e0.word + (ph ? '  ' + ph : '') + '\n' + means.map(m => m.pos + '\n' + m.defs.slice(0, 3).map((x, i) => '  ' + (i + 1) + '. ' + x.definition).join('\n')).join('\n') + '\n'); return; }
+    const o = io.ui(), W = io.cols - 8;
+    o.blank().at(2, [e0.word || w, 'b'], [ph ? '   ' + ph : '', 'd']).blank();
+    let budget = Math.max(8, io.rows * 2 - 6);
+    for (const m of means.slice(0, 3)){
+      if (budget <= 2) break;
+      o.at(2, [m.pos, 'a']); budget--;
+      m.defs.slice(0, 3).forEach((x, i) => {
+        if (budget <= 1) return;
+        wrap(x.definition, W).forEach((l, k) => { o.at(k ? 6 : 4, [k ? '' : (i + 1) + ' ', 'f'], [l, 'n']); budget--; });
+        if (x.example && budget > 2) wrap('"' + x.example + '"', W - 2).forEach(l => { o.at(6, [l, 'd']); budget--; });
+      });
+      o.blank(); budget--;
+    }
+    io.rich(o);
+  } };
+
+T.cmds.github = { g: 'net', desc: 'a GitHub profile, by user name', usage: 'github [user]', ex: ['github torvalds', 'github knihalani', 'github'],
+  more: 'A public GitHub profile from api.github.com: name, bio, where, repos, followers and when they joined, with the profile to open. With no name it opens the repository for this site. GitHub allows 60 lookups an hour from one address.',
+  async run(argv, io){
+    const u = (argv[1] || '').replace(/^@/, '');
+    if (!u){ const gh = T.cmds.gh; if (gh && gh !== T.cmds.github) return gh.run(['gh'], io); io.err('usage: github user\n'); return 2; }
+    if (!/^[a-z\d](?:[a-z\d-]{0,38})$/i.test(u)){ io.err('github: that is not a GitHub user name\n'); return 2; }
+    let d;
+    try { d = await net.json('https://api.github.com/users/' + encodeURIComponent(u)); }
+    catch (e){ if (e.status === 404){ io.err('github: no user called ' + u + '\n'); return 1; } return net.fail(io, 'github', e); }
+    const joined = d.created_at ? new Date(d.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '';
+    const rows = [['repos', d.public_repos], ['followers', d.followers], ['following', d.following], ['where', d.location], ['company', d.company], ['joined', joined]]
+      .filter(r => r[1] != null && r[1] !== '').map(([label, v]) => ({ label, value: clip(String(v), io.cols - 22) }));
+    if (!io.tty){ io.out((d.name ? d.name + ' ' : '') + '@' + d.login + '\n' + (d.bio ? d.bio.trim() + '\n' : '') + rows.map(r => r.label.padEnd(11) + r.value).join('\n') + '\n' + d.html_url + '\n'); return; }
+    const o = io.ui();
+    o.blank().at(2, [d.name || d.login, 'b'], [d.name ? '  @' + d.login : '', 'd']);
+    if (d.bio) o.para(d.bio.trim(), 'n', io.cols - 6);
+    o.blank().card({ title: 'GITHUB', note: d.type === 'Organization' ? 'org' : '', items: [...rows, { label: 'profile', value: bareUrl(d.html_url), full: d.html_url, url: d.html_url, hint: 'open' }] });
+    io.rich(o);
+    return io.pick(o.lastCard).then(() => {});
+  } };
+T.cmds['gh-user'] = Object.assign({}, T.cmds.github, { hidden: true, usage: 'gh-user user' });
+
+T.cmds.ip = { g: 'net', desc: 'your public IP address', usage: 'ip', ex: ['ip', 'ip > ip.txt'],
+  more: 'Asks api.ipify.org which address your requests come from. Enter copies it.',
+  async run(argv, io){
+    let d; try { d = await net.json('https://api.ipify.org?format=json'); } catch (e){ return net.fail(io, 'ip', e); }
+    if (!io.tty){ io.out(d.ip + '\n'); return; }
+    const o = io.ui(); o.blank().card({ title: 'IP', note: 'api.ipify.org', items: [{ label: 'public', value: d.ip, copy: d.ip, hint: 'copy' }] });
+    io.rich(o); return io.pick(o.lastCard).then(() => {});
+  } };
+
+/* =====================================================================================
+   qr: a real QR encoder. byte mode, versions 1 to 10, error correction M (or L when long)
+   ===================================================================================== */
+const QR = (() => {
+  const ECC = { L: [7, 10, 15, 20, 26, 18, 20, 24, 30, 18], M: [10, 16, 26, 18, 24, 16, 18, 22, 22, 26] };
+  const BLOCKS = { L: [1, 1, 1, 1, 1, 2, 2, 2, 2, 4], M: [1, 1, 1, 2, 2, 4, 4, 4, 5, 5] };
+  const FMT = { L: 1, M: 0 };
+  const raw = v => { let r = (16 * v + 128) * v + 64; if (v >= 2){ const na = Math.floor(v / 7) + 2; r -= (25 * na - 10) * na - 55; if (v >= 7) r -= 36; } return r; };
+  const dataCw = (v, e) => Math.floor(raw(v) / 8) - ECC[e][v - 1] * BLOCKS[e][v - 1];
+  const mul = (x, y) => { let z = 0; for (let i = 7; i >= 0; i--){ z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; } return z & 255; };
+  function divisor(deg){ const r = new Array(deg).fill(0); r[deg - 1] = 1; let root = 1; for (let i = 0; i < deg; i++){ for (let j = 0; j < deg; j++){ r[j] = mul(r[j], root); if (j + 1 < deg) r[j] ^= r[j + 1]; } root = mul(root, 2); } return r; }
+  function remainder(data, div){ const r = div.map(() => 0); for (const b of data){ const f = b ^ r.shift(); r.push(0); div.forEach((c, i) => { r[i] ^= mul(c, f); }); } return r; }
+  function align(v){ if (v === 1) return []; const n = Math.floor(v / 7) + 2, size = v * 4 + 17, step = Math.ceil((v * 4 + 4) / (n * 2 - 2)) * 2; const r = [6]; for (let p = size - 7; r.length < n; p -= step) r.splice(1, 0, p); return r; }
+  function encode(text, prefer = 'M'){
+    const bytes = Array.from(new TextEncoder().encode(text));
+    let v = 0, e = prefer;
+    for (const ee of prefer === 'L' ? ['L'] : ['M', 'L']){
+      for (let vv = 1; vv <= 10; vv++){ if (4 + (vv < 10 ? 8 : 16) + bytes.length * 8 <= dataCw(vv, ee) * 8){ v = vv; break; } }
+      if (v){ e = ee; break; }
+    }
+    if (!v) return null;
+    // bit stream
+    const bits = []; const put = (x, n) => { for (let i = n - 1; i >= 0; i--) bits.push((x >>> i) & 1); };
+    put(4, 4); put(bytes.length, v < 10 ? 8 : 16); for (const b of bytes) put(b, 8);
+    const cap = dataCw(v, e) * 8;
+    put(0, Math.min(4, cap - bits.length)); while (bits.length % 8) bits.push(0);
+    for (let pad = 0xEC; bits.length < cap; pad ^= 0xEC ^ 0x11) put(pad, 8);
+    const data = []; for (let i = 0; i < bits.length; i += 8){ let b = 0; for (let k = 0; k < 8; k++) b = (b << 1) | bits[i + k]; data.push(b); }
+    // error correction, interleaved
+    const nb = BLOCKS[e][v - 1], el = ECC[e][v - 1], rawCw = Math.floor(raw(v) / 8), nShort = nb - rawCw % nb, shortLen = Math.floor(rawCw / nb);
+    const div = divisor(el), blocks = [];
+    for (let i = 0, k = 0; i < nb; i++){
+      const d = data.slice(k, k + shortLen - el + (i < nShort ? 0 : 1)); k += d.length;
+      const ec = remainder(d, div); if (i < nShort) d.push(0); blocks.push(d.concat(ec));
+    }
+    const cw = []; for (let i = 0; i < blocks[0].length; i++) blocks.forEach((b, j) => { if (i !== shortLen - el || j >= nShort) cw.push(b[i]); });
+    // modules
+    const size = v * 4 + 17, mod = [], fn = [];
+    for (let y = 0; y < size; y++){ mod.push(new Array(size).fill(false)); fn.push(new Array(size).fill(false)); }
+    const set = (x, y, d) => { mod[y][x] = d; fn[y][x] = true; };
+    for (let i = 0; i < size; i++){ set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+    const finder = (cx, cy) => { for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++){ const x = cx + dx, y = cy + dy, d = Math.max(Math.abs(dx), Math.abs(dy)); if (x >= 0 && x < size && y >= 0 && y < size) set(x, y, d !== 2 && d !== 4); } };
+    finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+    const al = align(v), na = al.length;
+    for (let i = 0; i < na; i++) for (let j = 0; j < na; j++){
+      if ((i === 0 && j === 0) || (i === 0 && j === na - 1) || (i === na - 1 && j === 0)) continue;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) set(al[i] + dx, al[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+    }
+    const format = mask => {
+      const d = FMT[e] << 3 | mask; let r = d; for (let i = 0; i < 10; i++) r = (r << 1) ^ ((r >>> 9) * 0x537);
+      const b = ((d << 10) | r) ^ 0x5412, bit = i => ((b >>> i) & 1) === 1;
+      for (let i = 0; i <= 5; i++) set(8, i, bit(i));
+      set(8, 7, bit(6)); set(8, 8, bit(7)); set(7, 8, bit(8));
+      for (let i = 9; i < 15; i++) set(14 - i, 8, bit(i));
+      for (let i = 0; i < 8; i++) set(size - 1 - i, 8, bit(i));
+      for (let i = 8; i < 15; i++) set(8, size - 15 + i, bit(i));
+      set(8, size - 8, true);
+    };
+    format(0);
+    if (v >= 7){
+      let r = v; for (let i = 0; i < 12; i++) r = (r << 1) ^ ((r >>> 11) * 0x1F25);
+      const b = (v << 12) | r;
+      for (let i = 0; i < 18; i++){ const d = ((b >>> i) & 1) === 1, a = size - 11 + i % 3, c = Math.floor(i / 3); set(a, c, d); set(c, a, d); }
+    }
+    let i = 0;
+    for (let right = size - 1; right >= 1; right -= 2){
+      if (right === 6) right = 5;
+      for (let vert = 0; vert < size; vert++) for (let j = 0; j < 2; j++){
+        const x = right - j, up = ((right + 1) & 2) === 0, y = up ? size - 1 - vert : vert;
+        if (!fn[y][x] && i < cw.length * 8){ mod[y][x] = ((cw[i >>> 3] >>> (7 - (i & 7))) & 1) === 1; i++; }
+      }
+    }
+    const MASKS = [(x, y) => (x + y) % 2 === 0, (x, y) => y % 2 === 0, (x, y) => x % 3 === 0, (x, y) => (x + y) % 3 === 0,
+      (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0, (x, y) => x * y % 2 + x * y % 3 === 0,
+      (x, y) => (x * y % 2 + x * y % 3) % 2 === 0, (x, y) => ((x + y) % 2 + x * y % 3) % 2 === 0];
+    const apply = m => { for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!fn[y][x] && MASKS[m](x, y)) mod[y][x] = !mod[y][x]; };
+    const penalty = () => {      // rules 1, 2 and 4 of the spec: enough to pick a sensible mask
+      let p = 0, dark = 0;
+      for (let y = 0; y < size; y++){ let run = 1, runC = 1; for (let x = 0; x < size; x++){ if (mod[y][x]) dark++;
+        if (x){ if (mod[y][x] === mod[y][x - 1]){ run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1;
+                if (mod[x][y] === mod[x - 1][y]){ runC++; if (runC === 5) p += 3; else if (runC > 5) p++; } else runC = 1; } } }
+      for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++){ const c = mod[y][x]; if (c === mod[y][x + 1] && c === mod[y + 1][x] && c === mod[y + 1][x + 1]) p += 3; }
+      return p + Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+    };
+    let best = 0, bp = Infinity;
+    for (let m = 0; m < 8; m++){ apply(m); format(m); const p = penalty(); if (p < bp){ bp = p; best = m; } apply(m); }
+    apply(best); format(best);
+    return { modules: mod, version: v, ecc: e, size };
+  }
+  return { encode };
+})();
+M.qr = QR;
+T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] text...', opts: [['-l', 'low error correction: room for more text']],
+  ex: ['qr risingfounder.net', 'qr kaiav.pages.dev', 'echo hello | qr'],
+  more: 'Draws a QR code your phone camera can read. Up to about 200 characters (270 with -l). Piped or redirected, it comes out as text blocks.',
+  run(argv, io){
+    let a = argv.slice(1), lo = false; if (a[0] === '-l'){ lo = true; a = a.slice(1); }
+    const text = argText(io, a).replace(/\n$/, '');
+    if (!text){ io.err('usage: qr text   (try: qr risingfounder.net)\n'); return 2; }
+    const q = QR.encode(text, lo ? 'L' : 'M');
+    if (!q){ io.err('qr: too long for this little encoder (' + new TextEncoder().encode(text).length + ' bytes; ' + (lo ? 271 : 213) + ' max' + (lo ? '' : ', or 271 with -l') + ')\n'); return 1; }
+    if (!io.tty){ const qz = 2, n = q.size + qz * 2; let s = ''; for (let y = -qz; y < q.size + qz; y++){ for (let x = -qz; x < q.size + qz; x++) s += (q.modules[y] && q.modules[y][x]) ? '##' : '  '; s += '\n'; } io.out(s); return; }
+    const o = io.ui();
+    o.blank().bits(q.modules, 3).blank().at(2, [clip(text.replace(/\s+/g, ' '), io.cols - 14), 'd'], ['   v' + q.version + ' ' + q.ecc, 'f']).blank();
+    io.rich(o);
+  } };
+
+/* =====================================================================================
+   small offline tools: hash, base64, uuid, pass, json, convert, roll, countdown
+   ===================================================================================== */
+const ALGOS = { sha1: 'SHA-1', 'sha-1': 'SHA-1', sha256: 'SHA-256', 'sha-256': 'SHA-256', sha384: 'SHA-384', 'sha-384': 'SHA-384', sha512: 'SHA-512', 'sha-512': 'SHA-512' };
+T.cmds.hash = { g: 'tools', desc: 'SHA hash of text', usage: 'hash [sha1 | sha256 | sha512] [text...]', ex: ['hash hello', 'hash sha1 hello', 'cat README.md | hash sha512'],
+  more: 'Prints the hex digest of its arguments, or of the standard input (byte for byte, newline included, like sha256sum). SHA-256 unless you name another.',
+  async run(argv, io){
+    let a = argv.slice(1), algo = 'SHA-256';
+    if (a[0] && ALGOS[a[0].toLowerCase()]){ algo = ALGOS[a[0].toLowerCase()]; a = a.slice(1); }
+    else if (a[0] && /^(md5|sha\d+|-)/i.test(a[0]) && a.length > 1){ io.err('hash: no ' + a[0] + ' here. sha1, sha256, sha384 or sha512\n'); return 2; }
+    if (!a.length && !io.stdin){ io.err('usage: hash [sha256] text   (or pipe something in)\n'); return 2; }
+    if (!(crypto && crypto.subtle)){ io.err('hash: this page cannot reach the browser crypto (it needs https)\n'); return 1; }
+    const buf = await crypto.subtle.digest(algo, new TextEncoder().encode(argText(io, a)));
+    const hex = Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+    if (io.tty){ const o = io.ui(); for (let i = 0; i < hex.length; i += io.cols - 4) o.at(2, [hex.slice(i, i + io.cols - 4), 'b']); o.at(2, [algo.toLowerCase().replace('-', ''), 'f']); io.rich(o); }
+    else io.out(hex + '\n');
+  } };
+T.cmds.base64 = { g: 'tools', desc: 'encode or decode base64', usage: 'base64 [-d] [text...]', opts: [['-d', 'decode']], ex: ['base64 hello', 'echo aGVsbG8= | base64 -d', 'cat about.txt | base64'],
+  more: 'Encodes its arguments or the standard input as base64 (UTF-8), or decodes with -d.',
+  run(argv, io){
+    let a = argv.slice(1), dec = false; if (a[0] === '-d' || a[0] === '--decode'){ dec = true; a = a.slice(1); }
+    const t = argText(io, a);
+    if (!t){ io.err('usage: base64 [-d] text   (or pipe something in)\n'); return 2; }
+    if (dec){
+      try { const bin = atob(t.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')); const txt = new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))); io.out(txt + (io.tty && !txt.endsWith('\n') ? '\n' : '')); }
+      catch (e){ io.err('base64: that is not base64\n'); return 1; }
+    } else { let bin = ''; for (const b of new TextEncoder().encode(t)) bin += String.fromCharCode(b); io.out(btoa(bin) + '\n'); }
+  } };
+T.cmds.uuid = { g: 'tools', desc: 'random UUIDs', usage: 'uuid [count]', ex: ['uuid', 'uuid 5'], more: 'Version 4 UUIDs from the browser\'s secure random numbers.',
+  run(argv, io){
+    const n = Math.max(1, Math.min(100, parseInt(argv[1], 10) || 1));
+    const one = () => {
+      if (crypto.randomUUID) return crypto.randomUUID();
+      const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = b[6] & 15 | 64; b[8] = b[8] & 63 | 128;
+      const h = Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+      return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+    };
+    io.out(Array.from({ length: n }, one).join('\n') + '\n');
+  } };
+T.cmds.pass = { g: 'tools', desc: 'a strong random password', usage: 'pass [-n] [length]', opts: [['-n', 'letters and digits only']], ex: ['pass', 'pass 32', 'pass -n 16'],
+  more: 'Made in your browser from secure random numbers; it never leaves the page. 20 characters unless you say (8 to 128). Enter copies it.',
+  run(argv, io){
+    let a = argv.slice(1), plain = false; if (a[0] === '-n'){ plain = true; a = a.slice(1); }
+    const len = a[0] ? parseInt(a[0], 10) : 20;
+    if (!(len >= 8 && len <= 128)){ io.err('pass: length from 8 to 128\n'); return 2; }
+    const set = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789' + (plain ? '' : '!@#$%^&*-_=+?');
+    let pw = ''; const lim = 256 - 256 % set.length;
+    while (pw.length < len){ for (const b of crypto.getRandomValues(new Uint8Array(len * 2))){ if (b < lim && pw.length < len) pw += set[b % set.length]; } }
+    if (!io.tty){ io.out(pw + '\n'); return; }
+    const o = io.ui(); o.blank().card({ title: 'PASSWORD', items: [{ label: len + ' chars', value: pw, copy: pw, hint: 'copy' }] });
+    io.rich(o); return io.pick(o.lastCard).then(() => {});
+  } };
+T.cmds.json = { g: 'tools', desc: 'pretty-print JSON', usage: 'json [file]', ex: ["echo '{\"a\":[1,2]}' | json", 'curl api.github.com/users/torvalds | json'],
+  more: 'Reads JSON from a file or the standard input and prints it indented, in colour on the screen.',
+  run(argv, io){
+    let t;
+    if (argv[1]){ t = io.fs.read(argv[1]); if (t == null){ io.err('json: ' + argv[1] + ': No such file\n'); return 1; } } else t = io.stdin || '';
+    if (!t.trim()){ io.err('usage: json file   (or pipe JSON in)\n'); return 2; }
+    let v; try { v = JSON.parse(t); } catch (e){ io.err('json: not valid JSON: ' + String(e.message || e).replace(/^JSON\.parse: /, '') + '\n'); return 1; }
+    if (!io.tty){ io.out(JSON.stringify(v, null, 2) + '\n'); return; }
+    const o = io.ui(); showJSON(o, v, io.cols, 1e9, 0); io.rich(o);
+  } };
+
+const UNITS = (() => {
+  const u = {}, add = (kind, base, names) => { for (const n of names.split(' ')) u[n] = { kind, f: base, name: names.split(' ')[0] }; };
+  [['length', 0.001, 'mm millimeter millimeters millimetre millimetres'], ['length', 0.01, 'cm centimeter centimeters centimetre centimetres'], ['length', 1, 'm meter meters metre metres'],
+   ['length', 1000, 'km kilometer kilometers kilometre kilometres'], ['length', 0.0254, 'in inch inches'], ['length', 0.3048, 'ft foot feet'], ['length', 0.9144, 'yd yard yards'],
+   ['length', 1609.344, 'mi mile miles'], ['length', 1852, 'nmi nauticalmile'],
+   ['mass', 1e-6, 'mg milligram milligrams'], ['mass', 0.001, 'g gram grams'], ['mass', 1, 'kg kilogram kilograms kilo kilos'], ['mass', 1000, 't tonne tonnes'],
+   ['mass', 0.028349523125, 'oz ounce ounces'], ['mass', 0.45359237, 'lb lbs pound pounds'], ['mass', 6.35029318, 'st stone stones'],
+   ['data', 0.125, 'bit bits'], ['data', 1, 'B byte bytes'], ['data', 1e3, 'KB kb kilobyte kilobytes'], ['data', 1e6, 'MB mb megabyte megabytes'], ['data', 1e9, 'GB gb gigabyte gigabytes'],
+   ['data', 1e12, 'TB tb terabyte terabytes'], ['data', 1024, 'KiB kib'], ['data', 1048576, 'MiB mib'], ['data', 1073741824, 'GiB gib'], ['data', 1099511627776, 'TiB tib'],
+   ['time', 1, 's sec secs second seconds'], ['time', 60, 'min mins minute minutes'], ['time', 3600, 'h hr hrs hour hours'], ['time', 86400, 'd day days'], ['time', 604800, 'wk week weeks'],
+   ['volume', 0.001, 'ml milliliter milliliters millilitre millilitres'], ['volume', 1, 'l L liter liters litre litres'], ['volume', 3.785411784, 'gal gallon gallons'], ['volume', 0.2365882365, 'cup cups'],
+   ['temperature', 0, 'C c celsius degc'], ['temperature', 0, 'F f fahrenheit degf'], ['temperature', 0, 'K k kelvin']].forEach(x => add(...x));
+  return u;
+})();
+const findUnit = s => { s = String(s || '').replace(/^°/, '').replace(/\.$/, ''); return UNITS[s] || UNITS[s.toLowerCase()] || null; };
+const toK = (v, n) => n === 'C' ? v + 273.15 : n === 'F' ? (v - 32) * 5 / 9 + 273.15 : v;
+const fromK = (k, n) => n === 'C' ? k - 273.15 : n === 'F' ? (k - 273.15) * 9 / 5 + 32 : k;
+const fmtNum = x => { if (!isFinite(x)) return String(x); const a = Math.abs(x); if (a !== 0 && (a >= 1e12 || a < 1e-6)) return x.toExponential(4); return String(a >= 1e-3 ? +(+x.toPrecision(7)).toFixed(4) : +x.toPrecision(7)); };
+const UNIT_SHOW = { length: ['mm', 'cm', 'm', 'km', 'in', 'ft', 'yd', 'mi'], mass: ['g', 'kg', 'oz', 'lb', 'st'], data: ['B', 'KB', 'MB', 'GB', 'KiB', 'MiB', 'GiB'], time: ['s', 'min', 'h', 'd', 'wk'], volume: ['ml', 'l', 'cup', 'gal'], temperature: ['C', 'F', 'K'] };
+T.cmds.convert = { g: 'tools', desc: 'convert units', usage: 'convert number unit [to unit]', ex: ['convert 5 km to mi', 'convert 72 f c', 'convert 3.5 GB MiB', 'convert 180 lb'],
+  more: 'Length, mass, temperature, data sizes, time and volume. Leave out the second unit to see the number in all the usual ones. KB, MB and GB are powers of 1000; KiB, MiB and GiB powers of 1024.',
+  run(argv, io){
+    const s = argText(io, argv.slice(1)).replace(/\s+/g, ' ').trim();
+    const m = /^(-?\d*\.?\d+(?:e[+-]?\d+)?)\s*(°?[a-z]+)(?:\s+(?:to|in|as|into)?\s*(°?[a-z]+))?\s*$/i.exec(s);
+    if (!m){ io.err('usage: convert 5 km to mi   (man convert for the units)\n'); return 2; }
+    const v = parseFloat(m[1]), from = findUnit(m[2]), to = m[3] ? findUnit(m[3]) : null;
+    if (!from){ io.err('convert: no unit called ' + m[2] + '\n'); return 1; }
+    if (m[3] && !to){ io.err('convert: no unit called ' + m[3] + '\n'); return 1; }
+    if (to && to.kind !== from.kind){ io.err('convert: cannot turn ' + from.kind + ' into ' + to.kind + '\n'); return 1; }
+    const conv = t => from.kind === 'temperature' ? fromK(toK(v, from.name), t.name) : v * from.f / t.f;
+    const targets = to ? [to] : UNIT_SHOW[from.kind].map(n => UNITS[n]).filter(t => t.name !== from.name);
+    if (!io.tty){ io.out(targets.map(t => fmtNum(conv(t)) + ' ' + t.name).join('\n') + '\n'); return; }
+    const o = io.ui(); o.blank();
+    if (to) o.at(2, [fmtNum(v) + ' ' + from.name, 'n'], [' = ', 'f'], [fmtNum(conv(to)) + ' ' + to.name, 'b']);
+    else { o.at(2, [fmtNum(v) + ' ' + from.name, 'b'], ['  ' + from.kind, 'f']).blank(); const w = Math.max(...targets.map(t => fmtNum(conv(t)).length)); for (const t of targets) o.at(4, [fmtNum(conv(t)).padStart(w), 'n'], [' ' + t.name, 'd']); }
+    o.blank(); io.rich(o);
+  } };
+T.cmds.units = Object.assign({}, T.cmds.convert, { hidden: true });
+
+T.cmds.roll = { g: 'tools', desc: 'roll dice', usage: 'roll [NdS[+K]]...', ex: ['roll', 'roll d20', 'roll 2d6+3', 'roll 4d6 d8'],
+  more: 'Dice notation: 2d6+3 means two six-sided dice plus three. One six-sided die unless you say.',
+  run(argv, io){
+    const sin = String(io.stdin || '').trim().split(/\s+/).filter(Boolean);
+    const specs = argv.length > 1 ? argv.slice(1) : sin.length ? sin : ['1d6'];
+    let total = 0; const groups = [];
+    for (const sp of specs){
+      const m = /^(\d*)d(\d+)([+-]\d+)?$/i.exec(sp);
+      if (!m){ io.err('roll: cannot read ' + sp + '. try 2d6+3\n'); return 2; }
+      const n = m[1] ? +m[1] : 1, sides = +m[2], k = m[3] ? +m[3] : 0;
+      if (!(n >= 1 && n <= 100 && sides >= 2 && sides <= 1000)){ io.err('roll: 1 to 100 dice, 2 to 1000 sides\n'); return 2; }
+      const vals = Array.from(crypto.getRandomValues(new Uint32Array(n)), r => r % sides + 1);
+      total += vals.reduce((x, y) => x + y, 0) + k; groups.push({ sp, vals, k });
+    }
+    if (!io.tty){ io.out(groups.map(g => g.vals.join(' ') + (g.k ? (g.k > 0 ? ' +' : ' ') + g.k : '')).join('  ') + ' = ' + total + '\n'); return; }
+    const o = io.ui(); o.blank();
+    const chips = []; groups.forEach((g, gi) => { g.vals.forEach(v => chips.push([[' ' + v + ' ', 'i']])); if (g.k) chips.push([[(g.k > 0 ? '+' : '') + g.k, 'd']]); if (gi < groups.length - 1) chips.push([['+', 'f']]); });
+    o.flow(chips, ' ');
+    o.blank().at(2, ['total ', 'd'], [String(total), 'b'], ['   ' + specs.join(' '), 'f']).blank();
+    io.rich(o);
+  } };
+
+const NAMED_DAYS = { 'new year': '01-01', 'new years': '01-01', christmas: '12-25', xmas: '12-25', halloween: '10-31', 'valentines': '02-14' };
+T.cmds.countdown = { g: 'tools', desc: 'how long until a date', usage: 'countdown date', ex: ['countdown 2027-01-01', 'countdown dec 25', 'countdown christmas', 'countdown 2026-11-03 09:00'],
+  more: 'Days, hours and minutes until a date (or since it, if it has passed). A date without a year means the next one.',
+  run(argv, io){
+    const raw = argText(io, argv.slice(1)).replace(/\s+/g, ' ').trim(); if (!raw){ io.err('usage: countdown date   (try: countdown dec 25)\n'); return 2; }
+    const now = new Date(); let s = raw.toLowerCase(), d;
+    if (NAMED_DAYS[s]) s = now.getFullYear() + '-' + NAMED_DAYS[s];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(s + 'T00:00:00');
+    else if (/^\d{4}-\d{2}-\d{2}[ t]\d{1,2}:\d{2}$/.test(s)) d = new Date(s.replace(' ', 'T'));
+    else { d = new Date(/\b\d{4}\b/.test(s) ? s : s + ' ' + now.getFullYear()); }
+    if (isNaN(d)){ io.err('countdown: cannot read ' + raw + '. try 2027-01-01 or dec 25\n'); return 2; }
+    if (!/\b\d{4}\b/.test(raw) && d < now && now - d > 864e5) d.setFullYear(d.getFullYear() + 1);
+    let ms = d - now; const past = ms < 0; ms = Math.abs(ms);
+    const days = Math.floor(ms / 864e5), hrs = Math.floor(ms / 36e5) % 24, mins = Math.floor(ms / 6e4) % 60;
+    const when = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (d.getHours() || d.getMinutes() ? ', ' + two(d.getHours()) + ':' + two(d.getMinutes()) : '');
+    const rest = hrs + (hrs === 1 ? ' hour, ' : ' hours, ') + mins + (mins === 1 ? ' minute' : ' minutes');
+    if (!io.tty){ io.out(days + ' days, ' + rest + (past ? ' since ' : ' until ') + when + '\n'); return; }
+    const o = io.ui(); o.blank().big(days + (days === 1 ? ' day' : ' days'), 'b').at(2, ['and ' + rest, 'n']).at(2, [(past ? 'since ' : 'until ') + when, 'd']).blank();
+    io.rich(o);
+  } };
+})();
+
+</script>
+<script>
+/* editor.js: a small modeless text editor for the terminal, nano-style (see CONTRACT.md, "Terminal extension API").
+   edit [file]   (also nano, vi, vim: the same editor)
+
+   Layout, top to bottom: an inverse title bar, the text (soft-wrapped at word boundaries, optional line-number
+   gutter), a message / prompt line, and two lines of shortcuts. Plain ASCII only: VT323 has no box glyphs.
+   Built-in (locked) files open read-only; ^S then saves a copy somewhere else.
+   Phones have no Ctrl key: ":w", ":q", ":wq", ":x" or ":q!" typed alone on a line and followed by Enter work too. */
+(() => {
+'use strict';
+const M = window.MAC = window.MAC || {};
+const T = M.TERM = M.TERM || { cmds: {}, apps: {} };
+T.cmds = T.cmds || {}; T.apps = T.apps || {};
+
+const GUTTER_KEY = 'kaiav.edit.gutter';
+const prefGet = () => { try { const v = localStorage.getItem(GUTTER_KEY); return v == null ? null : v === '1'; } catch (e){ return null; } };
+const prefSet = on => { try { localStorage.setItem(GUTTER_KEY, on ? '1' : '0'); } catch (e){} };
+const isHi = c => c >= 0xD800 && c <= 0xDBFF;
+const isLo = c => c >= 0xDC00 && c <= 0xDFFF;
+const isWord = ch => !!ch && /[\wÀ-￿]/.test(ch);
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+const VIM_CMDS = { ':w': 'w', ':q': 'q', ':wq': 'wq', ':x': 'wq', ':q!': 'q!', ':wq!': 'wq' };
+
+function start(api, argv, flavor){
+  const fs = api.fs, cwd = api.cwd || '/', HOME = (api.env && api.env.HOME) || '/home/kaiav';
+  let COLS = api.cols || 54, ROWS = api.rows || 18;
+
+  /* ---- buffer ---- */
+  let lines = [''], cy = 0, cx = 0, goal = -1, anchor = null;
+  let path = null, readOnly = false, isNew = false, finalNL = true, savedText = '';
+  let top = { l: 0, s: 0 };
+  let undo = [], redo = [], lastKind = null, lastT = 0, curId = 0, nextId = 1, savedId = 0;
+  let clip = '', lastCopied = null, cutChain = false;
+  let mode = null;                         // { type, label, input, cur, fresh, ... } while a prompt is open
+  let msg = null;                          // { text, style, until }
+  let gutterPref = prefGet(), gutter = gutterPref == null ? COLS >= 46 : gutterPref;
+  let find = { q: '', on: false, cache: null, origin: null };
+  let saves = 0, wake = false, done = false, modCache = { id: -1, v: false };
+
+  const disp = abs => {
+    if (!abs) return 'untitled';
+    if (cwd !== '/' && abs.startsWith(cwd + '/')) return abs.slice(cwd.length + 1);
+    if (abs === HOME) return '~';
+    if (abs.startsWith(HOME + '/')) return '~/' + abs.slice(HOME.length + 1);
+    return abs;
+  };
+  const say = (text, style, secs) => { msg = { text, style: style || 'dim', until: now() + (secs || 4) * 1000 }; };
+  const joined = () => lines.join('\n');
+  const fileText = () => (lines.length === 1 && lines[0] === '') ? '' : joined() + (finalNL ? '\n' : '');
+  const modified = () => {
+    if (curId === savedId) return false;
+    if (modCache.id !== curId){ modCache = { id: curId, v: joined() !== savedText }; }
+    return modCache.v;
+  };
+  function lockedAt(abs){
+    try {
+      if (typeof fs.isLocked === 'function' && fs.isLocked(abs)) return true;
+      const s = typeof fs.stat === 'function' ? fs.stat(abs) : null;
+      if (s && s.locked) return true;
+    } catch (e){}
+    return false;
+  }
+  function load(text){
+    text = String(text == null ? '' : text).replace(/\r\n?/g, '\n').replace(/\t/g, '  ');
+    finalNL = text === '' || text.endsWith('\n');
+    if (text.endsWith('\n')) text = text.slice(0, -1);
+    lines = text.split('\n'); savedText = joined();
+    cy = cx = 0; top = { l: 0, s: 0 }; anchor = null; goal = -1;
+  }
+
+  /* ---- open ---- */
+  const arg = (argv || []).slice(1).find(a => a && a !== '--');
+  if (arg){
+    path = fs.resolve(arg, cwd);
+    if (fs.isDir && fs.isDir(path)){ api.print(flavor + ': ' + arg + ': is a directory'); api.exit(1); return {}; }
+    const text = fs.read(path);
+    if (text == null){ isNew = true; load(''); }
+    else { load(text); readOnly = lockedAt(path); }
+  }
+  if (readOnly && (flavor === 'vi' || flavor === 'vim')) say(COLS < 54 ? 'nano-style ' + flavor + '. read-only: :w copies' : 'nano-style ' + flavor + ', read-only file. ^S saves a copy', 'dim', 7);
+  else if (readOnly) say(COLS < 54 ? 'built-in file. :w saves a copy, :q quits' : 'built-in file, read-only. ^S saves a copy', 'dim', 7);
+  else if (flavor === 'vi' || flavor === 'vim') say('this ' + flavor + ' is nano-style: just type. ^S save, ^Q quit', 'dim', 7);
+  else if (COLS < 54) say('tip: :wq on its own line saves', 'dim', 7);
+  else if (isNew) say('new file', 'dim');
+
+  /* ---- soft wrap: each line splits into segments; a segment never ends exactly at the right edge,
+     so the cursor always has a cell to sit in ---- */
+  let wrapW = 0, wrapCache = new Map();
+  const gutW = () => gutter ? Math.max(3, String(lines.length).length) + 1 : 0;
+  const textW = () => Math.max(8, COLS - gutW());
+  function segs(l){
+    const line = lines[l] || '', w = textW();
+    if (w !== wrapW || wrapCache.size > 4000){ wrapW = w; wrapCache = new Map(); }
+    let st = wrapCache.get(line);
+    if (st) return st;
+    st = [0];
+    let s = 0;
+    while (line.length - s >= w){
+      let e = s + w;
+      const sp = line.lastIndexOf(' ', s + w - 1);
+      if (sp > s && sp - s >= (w >> 2)) e = sp + 1;
+      else if (isLo(line.charCodeAt(e)) && e - 1 > s) e--;
+      st.push(e); s = e;
+    }
+    wrapCache.set(line, st);
+    return st;
+  }
+  function vpos(l, c){ const st = segs(l); let i = st.length - 1; while (i > 0 && st[i] > c) i--; return { l, s: i, x: c - st[i] }; }
+  const cmpV = (a, b) => a.l - b.l || a.s - b.s;
+  function stepV(p, n){                      // move a visual position by n rows, clamped to the document
+    let { l, s } = p;
+    while (n > 0){ if (s < segs(l).length - 1) s++; else if (l < lines.length - 1){ l++; s = 0; } else break; n--; }
+    while (n < 0){ if (s > 0) s--; else if (l > 0){ l--; s = segs(l).length - 1; } else break; n++; }
+    return { l, s };
+  }
+  function distV(a, b, cap){                 // rows from a down to b (a <= b), stops counting at cap
+    if (a.l === b.l) return b.s - a.s;
+    let d = segs(a.l).length - a.s;
+    for (let l = a.l + 1; l < b.l && d < cap; l++) d += segs(l).length;
+    return d + b.s;
+  }
+  const textRows = () => Math.max(1, ROWS - 4);
+  function ensureVisible(){
+    if (top.l >= lines.length) top = { l: lines.length - 1, s: 0 };
+    if (top.s >= segs(top.l).length) top.s = 0;
+    const p = vpos(cy, cx), n = textRows();
+    if (cmpV(p, top) < 0) top = { l: p.l, s: p.s };
+    else if (distV(top, p, n) >= n) top = stepV(p, -(n - 1));
+  }
+
+  /* ---- selection ---- */
+  const before = (a, b) => a.l < b.l || (a.l === b.l && a.c < b.c);
+  function selRange(){
+    if (!anchor || (anchor.l === cy && anchor.c === cx)) return null;
+    const c = { l: cy, c: cx };
+    return before(anchor, c) ? [anchor, c] : [c, anchor];
+  }
+  function textOf(a, b){
+    if (a.l === b.l) return lines[a.l].slice(a.c, b.c);
+    const out = [lines[a.l].slice(a.c)];
+    for (let l = a.l + 1; l < b.l; l++) out.push(lines[l]);
+    out.push(lines[b.l].slice(0, b.c));
+    return out.join('\n');
+  }
+  function removeRange(a, b){
+    lines.splice(a.l, b.l - a.l + 1, lines[a.l].slice(0, a.c) + lines[b.l].slice(b.c));
+    cy = a.l; cx = a.c; anchor = null;
+  }
+  function insertAt(str){
+    const parts = str.split('\n'), line = lines[cy], head = line.slice(0, cx), tail = line.slice(cx);
+    if (parts.length === 1){ lines[cy] = head + str + tail; cx += str.length; return; }
+    const mid = parts.slice(1, -1), last = parts[parts.length - 1];
+    lines.splice(cy, 1, head + parts[0], ...mid, last + tail);
+    cy += parts.length - 1; cx = last.length;
+  }
+
+  /* ---- undo: snapshots of the line array (strings are shared), grouped by kind of edit ---- */
+  const snap = () => ({ lines: lines.slice(), cy, cx, id: curId });
+  function restore(s){ lines = s.lines; cy = s.cy; cx = s.cx; curId = s.id; anchor = null; goal = -1; }
+  function edit(kind, fn, brk){
+    if (readOnly){ say(COLS < 54 ? 'read-only. :w saves a copy, :q quits' : 'read-only: ^S saves a copy you can edit', 'bright'); return false; }
+    const t = now();
+    if (kind !== lastKind || kind === 'other' || brk || t - lastT > 1500){
+      undo.push(snap()); if (undo.length > 400) undo.shift();
+    }
+    redo = []; lastKind = kind; lastT = t;
+    fn();
+    curId = nextId++; goal = -1; find.cache = null;
+    return true;
+  }
+  const breakGroup = () => { lastKind = null; };
+
+  /* ---- edits ---- */
+  function typeText(str, kind){
+    return edit(kind || 'type', () => { const r = selRange(); if (r) removeRange(r[0], r[1]); insertAt(str); },
+      kind === 'type' && str !== ' ' && cx > 0 && lines[cy][cx - 1] === ' ');
+  }
+  function newline(){
+    if (readOnly) return edit('other');
+    const ind = (/^ */.exec(lines[cy].slice(0, cx)) || [''])[0];
+    edit('other', () => { const r = selRange(); if (r) removeRange(r[0], r[1]); insertAt('\n' + ind); });
+  }
+  function backspace(word){
+    edit('del', () => {
+      const r = selRange(); if (r) return removeRange(r[0], r[1]);
+      if (cx === 0){ if (cy > 0){ const c = lines[cy - 1].length; lines.splice(cy - 1, 2, lines[cy - 1] + lines[cy]); cy--; cx = c; } return; }
+      let to = cx - 1;
+      if (word){ to = wordLeft(cy, cx); }
+      else if (isLo(lines[cy].charCodeAt(to)) && to > 0) to--;
+      else if (/^ +$/.test(lines[cy].slice(0, cx)) && cx % 2 === 0) to = cx - 2;   // soft tab
+      lines[cy] = lines[cy].slice(0, to) + lines[cy].slice(cx); cx = to;
+    });
+  }
+  function del(word){
+    edit('del2', () => {
+      const r = selRange(); if (r) return removeRange(r[0], r[1]);
+      const line = lines[cy];
+      if (cx >= line.length){ if (cy < lines.length - 1) lines.splice(cy, 2, line + lines[cy + 1]); return; }
+      let to = word ? wordRight(cy, cx) : cx + (isHi(line.charCodeAt(cx)) ? 2 : 1);
+      lines[cy] = line.slice(0, cx) + line.slice(to);
+    });
+  }
+  function indent(out){
+    const r = selRange(); const a = r ? r[0].l : cy, b = r ? (r[1].c === 0 && r[1].l > r[0].l ? r[1].l - 1 : r[1].l) : cy;
+    edit('other', () => {
+      for (let l = a; l <= b; l++){
+        if (out){ const n = Math.min(2, (/^ */.exec(lines[l]) || [''])[0].length); lines[l] = lines[l].slice(n); if (l === cy) cx = Math.max(0, cx - n); if (anchor && anchor.l === l) anchor.c = Math.max(0, anchor.c - n); }
+        else { lines[l] = '  ' + lines[l]; if (l === cy) cx += 2; if (anchor && anchor.l === l) anchor.c += 2; }
+      }
+    });
+  }
+
+  /* ---- clipboard: internal, mirrored to the system clipboard when the browser allows ---- */
+  function sysWrite(t){ lastCopied = t; try { navigator.clipboard.writeText(t).catch(() => {}); } catch (e){} }
+  function copy(){
+    const r = selRange();
+    clip = r ? textOf(r[0], r[1]) : lines[cy] + '\n';
+    sysWrite(clip); cutChain = false;
+    say(r ? 'copied ' + plural(clip.length, 'character') : 'copied line ' + (cy + 1));
+  }
+  function cutLine(){
+    if (readOnly) return edit('other');
+    const chain = cutChain;
+    edit('cut', () => {
+      const t = lines[cy] + '\n';
+      clip = chain ? clip + t : t;
+      if (lines.length > 1) lines.splice(cy, 1); else lines[0] = '';
+      if (cy >= lines.length){ cy = lines.length - 1; }
+      cx = 0; anchor = null;
+    }, !chain);
+    sysWrite(clip); cutChain = true;
+    const n = clip.split('\n').length - 1;
+    say(n > 1 ? 'cut ' + n + ' lines' : 'cut line');
+  }
+  function cut(){
+    const r = selRange();
+    if (!r) return cutLine();
+    if (readOnly) return edit('other');
+    const t = textOf(r[0], r[1]);
+    if (edit('other', () => removeRange(r[0], r[1]))){ clip = t; sysWrite(t); say('cut ' + plural(t.length, 'character')); }
+  }
+  function paste(){
+    if (readOnly) return edit('other');
+    const put = t => {
+      if (!t){ say('nothing to paste'); wake = true; return; }
+      typeText(t, 'other'); breakGroup(); wake = true;
+    };
+    let rd = null;
+    try { rd = navigator.clipboard && navigator.clipboard.readText ? navigator.clipboard.readText() : null; } catch (e){ rd = null; }
+    if (!rd || typeof rd.then !== 'function') return put(clip);
+    let settled = false;
+    const fin = t => {
+      if (settled || done) return; settled = true;
+      if (typeof t === 'string' && t && t !== lastCopied) put(t.replace(/\r\n?/g, '\n').replace(/\t/g, '  '));
+      else put(clip);
+    };
+    rd.then(fin, () => fin(null));
+    if (clip) setTimeout(() => fin(null), 700);   // a permission prompt must not hold the paste forever
+  }
+
+  /* ---- movement ---- */
+  function wordLeft(l, c){ const s = lines[l]; let i = c; while (i > 0 && !isWord(s[i - 1])) i--; while (i > 0 && isWord(s[i - 1])) i--; return i; }
+  function wordRight(l, c){ const s = lines[l]; let i = c; while (i < s.length && isWord(s[i])) i++; while (i < s.length && !isWord(s[i])) i++; return i; }
+  function vert(n){
+    const p = vpos(cy, cx); if (goal < 0) goal = p.x;
+    const q = stepV(p, n);
+    if (q.l === p.l && q.s === p.s){ cx = n < 0 ? 0 : lines[cy].length; return; }
+    const st = segs(q.l), end = q.s < st.length - 1 ? st[q.s + 1] - 1 : lines[q.l].length;
+    cy = q.l; cx = Math.min(st[q.s] + goal, end);
+    if (isLo(lines[cy].charCodeAt(cx))) cx--;
+  }
+  function move(k, shift, word, ctrl){
+    const r = selRange();
+    if (shift){ if (!anchor) anchor = { l: cy, c: cx }; }
+    else if (r && (k === 'ArrowLeft' || k === 'ArrowRight')){
+      const p = k === 'ArrowLeft' ? r[0] : r[1]; cy = p.l; cx = p.c; anchor = null; goal = -1; return;
+    } else anchor = null;
+    const line = lines[cy];
+    if (k !== 'ArrowUp' && k !== 'ArrowDown' && k !== 'PageUp' && k !== 'PageDown') goal = -1;
+    switch (k){
+      case 'ArrowLeft':
+        if (cx === 0){ if (cy > 0){ cy--; cx = lines[cy].length; } }
+        else if (word) cx = wordLeft(cy, cx);
+        else { cx--; if (isLo(line.charCodeAt(cx)) && cx > 0) cx--; }
+        break;
+      case 'ArrowRight':
+        if (cx >= line.length){ if (cy < lines.length - 1){ cy++; cx = 0; } }
+        else if (word) cx = wordRight(cy, cx);
+        else cx += isHi(line.charCodeAt(cx)) ? 2 : 1;
+        break;
+      case 'ArrowUp': if (word){ while (cy > 0 && lines[cy - 1].trim()) cy--; if (cy > 0 && cx === 0) cy--; cx = 0; } else vert(-1); break;
+      case 'ArrowDown': if (word){ while (cy < lines.length - 1 && lines[cy + 1].trim()) cy++; if (cy < lines.length - 1) cy++; cx = 0; } else vert(1); break;
+      case 'Home':
+        if (ctrl){ cy = 0; cx = 0; break; }
+        { const ind = (/^ */.exec(line) || [''])[0].length; cx = cx === ind ? 0 : ind; }
+        break;
+      case 'End': if (ctrl) cy = lines.length - 1; cx = lines[cy].length; break;
+      case 'PageUp': top = stepV(top, -(textRows() - 1)); vert(-(textRows() - 1)); break;
+      case 'PageDown': top = stepV(top, textRows() - 1); vert(textRows() - 1); break;
+    }
+    cutChain = false; breakGroup();
+  }
+
+  /* ---- find ---- */
+  function matches(){
+    const q = find.q; if (!q) return [];
+    if (find.cache && find.cache.q === q) return find.cache.list;
+    const fold = q === q.toLowerCase(), needle = fold ? q.toLowerCase() : q, list = [];
+    for (let l = 0; l < lines.length; l++){
+      const s = fold ? lines[l].toLowerCase() : lines[l];
+      for (let i = s.indexOf(needle); i >= 0 && list.length < 5000; i = s.indexOf(needle, i + Math.max(1, needle.length))) list.push({ l, c: i });
+    }
+    find.cache = { q, list };
+    return list;
+  }
+  function findGo(dir, from, inclusive){
+    const list = matches(), q = find.q;
+    if (!q){ return; }
+    if (!list.length){ say('"' + q + '" not found', 'bright'); return; }
+    const at = from || { l: cy, c: cx };
+    let i;
+    if (dir > 0){
+      i = list.findIndex(m => inclusive ? !before(m, at) : before(at, m));
+      if (i < 0){ i = 0; say('search wrapped'); }
+    } else {
+      i = -1; for (let j = list.length - 1; j >= 0; j--) if (before(list[j], at)){ i = j; break; }
+      if (i < 0){ i = list.length - 1; say('search wrapped'); }
+    }
+    cy = list[i].l; cx = list[i].c; anchor = null; goal = -1;
+    find.idx = i;
+  }
+  const curMatch = () => { const list = matches(); const i = list.findIndex(m => m.l === cy && m.c === cx); return i; };
+
+  /* ---- save / quit ---- */
+  function copyName(abs){
+    const segsA = abs.split('/'), base = segsA.pop() || 'file', dot = base.lastIndexOf('.');
+    const name = dot > 0 ? base.slice(0, dot) + '-copy' + base.slice(dot) : base + '-copy';
+    let dir = segsA.join('/') || '/';
+    if (lockedAt(dir) || dir.startsWith('/etc') || dir === '/') dir = HOME;
+    return disp((dir === '/' ? '' : dir) + '/' + name);
+  }
+  function writeTo(abs){
+    if (lockedAt(abs)) return { ok: false, err: 'built-in file, read-only' };
+    let ok, err = '';
+    try { ok = fs.write(abs, fileText()); } catch (e){ ok = false; err = (e && e.message) || String(e); }
+    if (ok === false) return { ok: false, err: err || fs.lastError || 'write failed' };
+    return { ok: true };
+  }
+  function save(abs, then){
+    const res = writeTo(abs);
+    if (!res.ok){
+      if (abs === path && !readOnly){ readOnly = true; }
+      openPrompt('saveas', (abs === path ? 'Read-only. ' : "Can't write there. ") + 'Save as: ', abs === path ? copyName(abs) : disp(abs), then);
+      say(res.err, 'bright', 6);
+      return false;
+    }
+    const was = path; path = abs; readOnly = false; isNew = false;
+    savedText = joined(); savedId = curId; modCache = { id: curId, v: false }; saves++; breakGroup();
+    try { (api.sound || M.sound)?.event('disk'); } catch (e){}
+    say((was && was !== abs ? 'saved a copy: ' : 'wrote ') + plural(lines.length, 'line') + (was !== abs ? ' to ' + disp(abs) : ''));
+    if (then) then();
+    return true;
+  }
+  function saveCmd(then){
+    if (!path) return openPrompt('saveas', 'File name: ', '', then);
+    if (readOnly) return openPrompt('saveas', 'Save a copy as: ', copyName(path), then);
+    return save(path, then);
+  }
+  function finish(how){
+    done = true;
+    const name = disp(path), n = plural(lines.length, 'line');
+    if (how === 'discard') api.print((path ? 'discarded changes to ' + name : 'discarded untitled buffer') + ' · nothing written');
+    else if (saves) api.print('saved ' + name + ' · ' + n);
+    else if (path) api.print('closed ' + name + ' · ' + n + (readOnly ? ' · read-only' : ' · no changes'));
+    api.exit(0);
+  }
+  function quit(force){
+    if (force || !modified()) return finish(force && modified() ? 'discard' : 'close');
+    const long = 'Save changes to ' + disp(path) + '? (y/n/esc) ';
+    openPrompt('quit', long.length < COLS ? long : 'Save changes? (y/n/esc) ', null);
+  }
+
+  /* ---- prompts on the message line ---- */
+  function openPrompt(type, label, input, then){
+    mode = { type, label, input: input == null ? null : String(input), cur: input == null ? 0 : String(input).length, fresh: !!input, then };
+    msg = null;
+  }
+  function submitPrompt(){
+    const m = mode;
+    if (m.type === 'saveas'){
+      const v = m.input.trim();
+      if (!v){ mode = null; say('not saved'); return; }
+      const abs = fs.resolve(v, cwd);
+      if (fs.isDir && fs.isDir(abs)){ say(v + ' is a directory', 'bright'); return; }
+      if (abs !== path && fs.exists && fs.exists(abs) && !m.confirmed){
+        if (lockedAt(abs)){ say(disp(abs) + ' is a built-in file; pick another name', 'bright'); return; }
+        mode = { type: 'overwrite', label: disp(abs) + ' exists. Overwrite? (y/n) ', input: null, abs, then: m.then }; return;
+      }
+      mode = null; save(abs, m.then);
+    } else if (m.type === 'goto'){
+      const mm = /^\s*(-?\d+)?\s*(?:[:,]\s*(\d+))?\s*$/.exec(m.input);
+      mode = null;
+      if (!mm || (!mm[1] && !mm[2])){ if (m.input.trim()) say('not a line number', 'bright'); return; }
+      let n = mm[1] ? +mm[1] : cy + 1; if (n < 0) n = lines.length + 1 + n;
+      cy = Math.max(0, Math.min(lines.length - 1, n - 1));
+      cx = mm[2] ? Math.max(0, Math.min(lines[cy].length, +mm[2] - 1)) : 0; anchor = null; goal = -1; breakGroup();
+    } else if (m.type === 'find'){
+      if (!m.input){ mode = null; find.on = false; return; }
+      find.q = m.input; findGo(1, null, false);
+    } else if (m.type === 'ex'){
+      mode = null;
+      const cmd = VIM_CMDS[':' + m.input.trim()];
+      if (cmd) runVim(cmd); else if (m.input.trim()) say('try :w (save a copy) or :q (quit)', 'bright');
+    }
+  }
+  function promptKey(e){
+    const k = e.key, m = mode, ctrl = e.ctrlKey && !e.altKey;
+    if (m.type === 'quit' || m.type === 'overwrite'){
+      const c = k.toLowerCase();
+      if (m.type === 'quit'){
+        if (c === 'y'){ mode = null; saveCmd(() => finish('saved')); return true; }
+        if (c === 'n'){ mode = null; finish('discard'); return true; }
+      } else {
+        if (c === 'y'){ mode = null; save(m.abs, m.then); return true; }
+        if (c === 'n'){ mode = { type: 'saveas', label: 'Save as: ', input: disp(m.abs), cur: disp(m.abs).length, fresh: false, then: m.then }; return true; }
+      }
+      if (k === 'Escape' || (ctrl && (c === 'c' || c === 'q'))){ mode = null; say('cancelled'); }
+      return true;
+    }
+    if (k === 'Escape' || (ctrl && k.toLowerCase() === 'c') || (ctrl && k.toLowerCase() === 'q')){
+      if (m.type === 'find'){ find.on = false; if (m.origin && !e.shiftKey && k !== 'Escape'){ cy = m.origin.l; cx = m.origin.c; } }
+      mode = null; return true;
+    }
+    if (m.type === 'find'){
+      if ((k === 'Enter' && m.input) || k === 'ArrowDown' || (ctrl && (k.toLowerCase() === 'f' || k.toLowerCase() === 'g'))){
+        if (k === 'Enter' && e.shiftKey) findGo(-1); else findGo(1); m.fresh = false; return true;
+      }
+      if (k === 'ArrowUp' || (ctrl && k.toLowerCase() === 'r')){ findGo(-1); m.fresh = false; return true; }
+    }
+    if (k === 'Enter'){ submitPrompt(); return true; }
+    if (k === 'Backspace'){ if (m.fresh){ m.input = ''; m.cur = 0; } else if (m.cur > 0){ m.input = m.input.slice(0, m.cur - 1) + m.input.slice(m.cur); m.cur--; } m.fresh = false; afterPromptEdit(); return true; }
+    if (k === 'Delete'){ m.input = m.input.slice(0, m.cur) + m.input.slice(m.cur + 1); m.fresh = false; afterPromptEdit(); return true; }
+    if (k === 'ArrowLeft'){ m.cur = Math.max(0, m.cur - 1); m.fresh = false; return true; }
+    if (k === 'ArrowRight'){ m.cur = Math.min(m.input.length, m.cur + 1); m.fresh = false; return true; }
+    if (k === 'Home' || (ctrl && k.toLowerCase() === 'a')){ m.cur = 0; m.fresh = false; return true; }
+    if (k === 'End' || (ctrl && k.toLowerCase() === 'e')){ m.cur = m.input.length; m.fresh = false; return true; }
+    if (ctrl && k.toLowerCase() === 'u'){ m.input = ''; m.cur = 0; afterPromptEdit(); return true; }
+    if ([...k].length === 1 && !(e.ctrlKey && !e.altKey) && k !== '\n' && k !== '\t'){
+      if (m.type === 'goto' && !/[\d:,\- ]/.test(k)) return true;
+      if (m.fresh){ m.input = ''; m.cur = 0; m.fresh = false; }
+      m.input = m.input.slice(0, m.cur) + k + m.input.slice(m.cur); m.cur += k.length; afterPromptEdit(); return true;
+    }
+    return true;
+  }
+  function afterPromptEdit(){
+    if (mode.type !== 'find') return;
+    find.q = mode.input; find.cache = null; msg = null;
+    if (find.q){
+      const list = matches();
+      if (list.length) findGo(1, mode.origin, true);
+      else { cy = mode.origin.l; cx = mode.origin.c; }
+    } else { cy = mode.origin.l; cx = mode.origin.c; }
+  }
+
+  /* ---- vim-ish commands typed on their own line (also the phone way out: no ctrl key there) ---- */
+  function lineCommand(){
+    const t = lines[cy].trim(), cmd = VIM_CMDS[t];
+    if (!cmd || selRange() || cx !== lines[cy].length) return false;
+    if (readOnly){ /* nothing was typed into the buffer; nothing to remove */ }
+    else edit('other', () => {
+      if (lines.length > 1){ lines.splice(cy, 1); if (cy > 0){ cy--; cx = lines[cy].length; } else cx = 0; }
+      else { lines[0] = ''; cx = 0; }
+    });
+    runVim(cmd);
+    return true;
+  }
+  function runVim(cmd){
+    if (cmd === 'q!') return quit(true);
+    if (cmd === 'q') return quit(false);
+    if (cmd === 'w') return saveCmd();
+    saveCmd(() => finish('saved'));
+  }
+
+  /* ---- keys ---- */
+  function key(e){
+    if (done) return false;
+    const k = e.key; if (!k || k === 'Unidentified' || k === 'Process' || k === 'Dead') return false;
+    if (mode) return promptKey(e);
+    const ctrl = e.ctrlKey && !e.altKey, alt = e.altKey && !e.ctrlKey, shift = e.shiftKey;
+    if (ctrl || (e.ctrlKey && e.altKey && k.length > 1)){
+      const c = k.toLowerCase();
+      if (k.startsWith('Arrow') || k === 'Home' || k === 'End'){ move(k, shift, true, true); return true; }
+      if (k === 'Backspace'){ backspace(true); return true; }
+      if (k === 'Delete'){ del(true); return true; }
+      switch (c){
+        case 's': if (shift) openPrompt('saveas', 'Save as: ', path ? disp(path) : '', null); else saveCmd(); return true;
+        case 'o': openPrompt('saveas', 'Save as: ', path ? disp(path) : '', null); return true;
+        case 'q': quit(false); return true;
+        case 'x': cut(); return true;
+        case 'k': cutLine(); return true;
+        case 'c': copy(); return true;
+        case 'v': paste(); return true;
+        case 'z': if (shift) doRedo(); else doUndo(); return true;
+        case 'y': doRedo(); return true;
+        case 'f': { const origin = { l: cy, c: cx }; find.on = true; openPrompt('find', 'Find: ', find.q, null); mode.origin = origin; return true; }
+        case 'g': openPrompt('goto', 'Go to line: ', '', null); return true;
+        case 'l': gutter = !gutter; prefSet(gutter); say('line numbers ' + (gutter ? 'on' : 'off')); return true;
+        case 'a': anchor = { l: 0, c: 0 }; cy = lines.length - 1; cx = lines[cy].length; return true;
+        case 'e': move('End', false, false, false); return true;
+      }
+      return true;                                         // swallow the rest (reload, print...) while editing
+    }
+    switch (k){
+      case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown':
+      case 'Home': case 'End': case 'PageUp': case 'PageDown':
+        move(k, shift, alt, false); return true;
+      case 'Escape':
+        if (selRange()){ anchor = null; return true; }
+        if (find.on){ find.on = false; return true; }
+        quit(false); return true;
+      case 'Enter': case '\n': case '\r':
+        cutChain = false;
+        if (lineCommand()) return true;
+        newline(); return true;
+      case 'Backspace': cutChain = false; backspace(alt); return true;
+      case 'Delete': cutChain = false; del(alt); return true;
+      case 'Tab': case '\t':
+        cutChain = false;
+        if (selRange() || shift) indent(shift);
+        else typeText('  ', 'other');
+        return true;
+    }
+    if ([...k].length === 1 && !e.metaKey){
+      if (readOnly && k === ':'){ openPrompt('ex', ':', '', null); return true; }
+      cutChain = false; typeText(k, 'type'); return true;
+    }
+    return false;
+  }
+  function doUndo(){
+    if (!undo.length){ say('nothing to undo'); return; }
+    redo.push(snap()); restore(undo.pop()); breakGroup(); find.cache = null; say('undone');
+  }
+  function doRedo(){
+    if (!redo.length){ say('nothing to redo'); return; }
+    undo.push(snap()); restore(redo.pop()); breakGroup(); find.cache = null; say('redone');
+  }
+
+  /* ---- taps (if the terminal routes them: grid cell coordinates) ---- */
+  let barHits = [];
+  function tap(x, y){
+    if (done) return false;
+    for (const h of barHits) if (y === h.y && x >= h.x && x < h.x + h.w){ key(h.ev); return true; }
+    if (mode) return false;
+    if (y >= 1 && y <= textRows()){
+      const p = stepV(top, y - 1), st = segs(p.l), gw = gutW();
+      const end = p.s < st.length - 1 ? st[p.s + 1] - 1 : lines[p.l].length;
+      cy = p.l; cx = Math.max(st[p.s], Math.min(end, st[p.s] + x - gw)); anchor = null; goal = -1; breakGroup();
+      return true;
+    }
+    return false;
+  }
+
+  /* ---- drawing ---- */
+  const ev = (k, ctrl) => ({ key: k, ctrlKey: !!ctrl, altKey: false, shiftKey: false, metaKey: false, preventDefault(){} });
+  const SHORTCUTS = [
+    [['^S', 'Save', ev('s', 1)], ['^Q', 'Quit', ev('q', 1)], ['^F', 'Find', ev('f', 1)], ['^G', 'Go to', ev('g', 1)], ['^L', 'Lines', ev('l', 1)]],
+    [['^X', 'Cut', ev('x', 1)], ['^C', 'Copy', ev('c', 1)], ['^V', 'Paste', ev('v', 1)], ['^Z', 'Undo', ev('z', 1)], ['^Y', 'Redo', ev('y', 1)]],
+  ];
+  function barFor(){
+    if (!mode) return SHORTCUTS;
+    const esc = ['Esc', 'Cancel', ev('Escape')];
+    switch (mode.type){
+      case 'find': return [[['Enter', 'Next', ev('Enter')], ['Up', 'Previous', ev('ArrowUp')]], [['Esc', 'Done', ev('Escape')], ['^C', 'Back to start', ev('c', 1)]]];
+      case 'goto': return [[['Enter', 'Go', ev('Enter')], ['12:4', 'Line:col', null]], [esc]];
+      case 'saveas': return [[['Enter', 'Save', ev('Enter')]], [esc]];
+      case 'quit': return [[['Y', 'Save', ev('y')], ['N', "Don't save", ev('n')]], [esc]];
+      case 'ex': return [[['w', 'Save a copy', null], ['q', 'Quit', null]], [['Enter', 'Run', ev('Enter')], esc]];
+      case 'overwrite': return [[['Y', 'Overwrite', ev('y')], ['N', 'New name', ev('n')]], [esc]];
+    }
+    return SHORTCUTS;
+  }
+  function drawBar(scr){
+    barHits = [];
+    const rows = barFor(), y0 = ROWS - 2;
+    const fixed = !mode;
+    const n = fixed ? Math.max(1, Math.min(5, Math.floor((COLS - 1) / 9))) : 0;
+    rows.forEach((row, ri) => {
+      const y = y0 + ri; if (y < 1) return;
+      let x = 1;
+      row.forEach((it, i) => {
+        if (fixed){ if (i >= n) return; x = 1 + Math.floor(i * (COLS - 1) / n); }
+        const w = it[0].length + 1 + it[1].length;
+        if (x + w > COLS) return;
+        scr.put(x, y, it[0], 'bright'); scr.put(x + it[0].length + 1, y, it[1], 'dim');
+        if (it[2]) barHits.push({ x, y, w, ev: it[2] });
+        if (!fixed) x += w + 3;
+      });
+    });
+  }
+  function drawTitle(scr){
+    scr.fill(0, 0, COLS, 1, ' ', 'inverse');
+    const r = selRange();
+    let right = COLS >= 50 ? 'Ln ' + (cy + 1) + ', Col ' + (cx + 1) : (cy + 1) + ':' + (cx + 1);
+    if (r && COLS >= 50){ const n = textOf(r[0], r[1]).length; right = n + ' sel  ' + right; }
+    const left = flavor === 'edit' ? 'edit' : flavor;
+    let name = disp(path) + (modified() ? ' \u2022' : '');
+    const tag = readOnly ? ' [read-only]' : isNew && !modified() ? ' [new]' : '';
+    const avail = COLS - 2 - right.length - 2 - (left.length + 2);
+    if ((name + tag).length > avail){
+      const room = Math.max(4, avail - tag.length);
+      if (name.length > room) name = '...' + name.slice(name.length - room + 3);
+    }
+    const mid = name + tag;
+    let mx = Math.floor((COLS - mid.length) / 2);
+    const minX = left.length + 3, maxX = COLS - right.length - 2 - mid.length;
+    mx = Math.max(minX, Math.min(mx, maxX));
+    scr.put(1, 0, left, 'inverse');
+    scr.put(mx, 0, name, 'inverse');
+    if (tag) scr.put(mx + name.length, 0, tag, 'inverse');
+    scr.put(COLS - 1 - right.length, 0, right, 'inverse');
+  }
+  function drawText(scr){
+    const gw = gutW(), n = textRows(), r = selRange();
+    const showFind = (find.on || (mode && mode.type === 'find')) && find.q;
+    const list = showFind ? matches() : [];
+    const byLine = new Map();
+    for (const m of list){ if (!byLine.has(m.l)) byLine.set(m.l, []); byLine.get(m.l).push(m.c); }
+    const qlen = find.q.length, cur = showFind ? curMatch() : -1, curM = cur >= 0 ? list[cur] : null;
+    let p = { l: top.l, s: top.s };
+    for (let row = 0; row < n; row++){
+      const y = 1 + row;
+      if (p.l >= lines.length) break;
+      const line = lines[p.l], st = segs(p.l), a = st[p.s], b = p.s < st.length - 1 ? st[p.s + 1] : line.length;
+      if (gw){
+        if (p.s === 0){ const num = String(p.l + 1).padStart(gw - 1, ' '); scr.put(0, y, num, p.l === cy ? 'dim' : 'faint'); }
+        else scr.put(gw - 2, y, '.', 'faint');
+      }
+      const hits = byLine.get(p.l);
+      for (let i = a, x = gw; i < b; i++, x++){
+        let ch = line[i];
+        if (isHi(line.charCodeAt(i)) && i + 1 < b){ ch = line.slice(i, i + 2); }
+        let style = 'normal';
+        if (r && !before({ l: p.l, c: i }, r[0]) && before({ l: p.l, c: i }, r[1])) style = 'inverse';
+        else if (hits){
+          for (const c of hits) if (i >= c && i < c + qlen){ style = curM && curM.l === p.l && curM.c === c ? 'inverse' : 'accent'; break; }
+        }
+        scr.put(x, y, ch, style);
+        if (ch.length === 2){ i++; x++; }
+      }
+      if (r && p.s === st.length - 1 && p.l >= r[0].l && p.l < r[1].l) scr.put(gw + (b - a), y, ' ', 'inverse');   // selected newline
+      const q = stepV(p, 1);
+      if (q.l === p.l && q.s === p.s) break;
+      p = q;
+    }
+  }
+  function drawMsg(scr){
+    const y = ROWS - 3; if (y < 1) return;
+    if (mode){
+      const label = mode.label;
+      if (mode.input == null){ scr.put(0, y, label.slice(0, COLS - 1), 'bright'); scr.cursor(Math.min(COLS - 1, label.length), y, 'block'); return; }
+      let extra = '';
+      if (mode.type === 'find' && find.q){ const list = matches(), i = curMatch(); extra = list.length ? (i >= 0 ? (i + 1) + '/' : '') + list.length : 'no match'; }
+      const room = COLS - label.length - (extra ? extra.length + 2 : 0) - 1;
+      let inp = mode.input, off = 0;
+      if (inp.length >= room){ off = Math.max(0, mode.cur - room + 1); inp = inp.slice(off, off + room); }
+      scr.put(0, y, label, 'bright');
+      scr.put(label.length, y, inp, mode.fresh ? 'dim' : 'normal');
+      if (extra) scr.put(COLS - extra.length - 1, y, extra, extra === 'no match' ? 'faint' : 'dim');
+      scr.cursor(label.length + mode.cur - off, y, 'block');
+      return;
+    }
+    if (msg){
+      let t = '[ ' + msg.text + ' ]';
+      if (t.length > COLS) t = msg.text.slice(0, COLS);
+      scr.put(Math.max(0, Math.floor((COLS - t.length) / 2)), y, t, msg.style);
+    }
+  }
+  function render(scr){
+    COLS = scr.cols || COLS; ROWS = scr.rows || ROWS;
+    if (cy >= lines.length) cy = lines.length - 1;
+    if (cx > lines[cy].length) cx = lines[cy].length;
+    ensureVisible();
+    scr.clear();
+    drawTitle(scr);
+    drawText(scr);
+    drawBar(scr);
+    scr.cursor(null);
+    if (!mode){
+      const p = vpos(cy, cx), d = distV(top, p, textRows());
+      scr.cursor(gutW() + p.x, 1 + d, 'block');
+    }
+    drawMsg(scr);
+  }
+  function tick(){
+    let d = false;
+    if (wake){ wake = false; d = true; }
+    if (msg && now() > msg.until){ msg = null; d = true; }
+    return d;
+  }
+
+  /* phones / IME: the terminal hands whole strings here. Newlines go through the Enter path (auto-indent,
+     the :wq line commands), so a pasted or dictated chunk behaves like typing it. */
+  const synth = k => ({ key: k, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, synthetic: true, preventDefault(){} });
+  function insertText(str){
+    if (done) return false;
+    str = String(str == null ? '' : str).replace(/\r\n?/g, '\n');
+    if (!str) return false;
+    if (mode || readOnly || str.length === 1 || /[\b\t]/.test(str)){
+      for (const ch of str){ if (done) break; key(synth(ch === '\n' ? 'Enter' : ch === '\t' ? 'Tab' : ch === '\b' ? 'Backspace' : ch)); }
+      return true;
+    }
+    const parts = str.split('\n');
+    parts.forEach((part, i) => {
+      if (done) return;
+      if (part){ cutChain = false; if (mode) for (const ch of part) promptKey(synth(ch)); else typeText(part, 'other'); }
+      if (i < parts.length - 1 && !done) key(synth('Enter'));
+    });
+    return true;
+  }
+
+  return { key, tick, render, tap, insertText };
+}
+
+const def = (name, desc) => ({ desc, usage: name + ' [file]', start(api, argv){ return start(api, argv, name); } });
+T.apps.edit = def('edit', 'edit a text file (nano-style)');
+T.apps.nano = def('nano', 'edit a text file (same as edit)');
+T.apps.vi = def('vi', 'edit a text file (nano-style, same as edit)');
+T.apps.vim = def('vim', 'edit a text file (nano-style, same as edit)');
 })();
 
 </script>
@@ -6151,7 +7600,7 @@ function phone(){
   const click = (c, d) => { if (sound) try { sound.key(c, d); } catch (e){} };
   const tap = c => { click(c, true); setTimeout(() => click(c, false), 70); };
   kbd.addEventListener('input', () => { const v = kbd.value; kbd.value = ''; for (const ch of v){ term.insertText(ch); tap(ch === ' ' ? 'Space' : 'KeyA'); } $('#hint').style.opacity = '0'; });
-  kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ unlock(); if (term.handleKey(e)) e.preventDefault(); tap(e.key === 'Enter' ? 'Enter' : e.key === 'Backspace' ? 'Backspace' : 'KeyA'); } });
+  kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape', 'Home', 'End', 'PageUp', 'PageDown', 'Delete'].includes(e.key) || e.key.startsWith('Arrow') || ((e.ctrlKey || e.altKey) && e.key.length === 1)){ unlock(); if (term.handleKey(e)) e.preventDefault(); tap(e.key === 'Enter' ? 'Enter' : e.key === 'Backspace' ? 'Backspace' : 'KeyA'); } });
   addEventListener('keydown', e => { if (e.target === kbd || e.metaKey) return; unlock(); if (term.handleKey(e)) e.preventDefault(); });
   stage.addEventListener('pointerdown', () => { unlock(); });
   stage.addEventListener('click', e => {

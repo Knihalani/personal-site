@@ -95,7 +95,7 @@ function phone(){
   const click = (c, d) => { if (sound) try { sound.key(c, d); } catch (e){} };
   const tap = c => { click(c, true); setTimeout(() => click(c, false), 70); };
   kbd.addEventListener('input', () => { const v = kbd.value; kbd.value = ''; for (const ch of v){ term.insertText(ch); tap(ch === ' ' ? 'Space' : 'KeyA'); } $('#hint').style.opacity = '0'; });
-  kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ unlock(); if (term.handleKey(e)) e.preventDefault(); tap(e.key === 'Enter' ? 'Enter' : e.key === 'Backspace' ? 'Backspace' : 'KeyA'); } });
+  kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape', 'Home', 'End', 'PageUp', 'PageDown', 'Delete'].includes(e.key) || e.key.startsWith('Arrow') || ((e.ctrlKey || e.altKey) && e.key.length === 1)){ unlock(); if (term.handleKey(e)) e.preventDefault(); tap(e.key === 'Enter' ? 'Enter' : e.key === 'Backspace' ? 'Backspace' : 'KeyA'); } });
   addEventListener('keydown', e => { if (e.target === kbd || e.metaKey) return; unlock(); if (term.handleKey(e)) e.preventDefault(); });
   stage.addEventListener('pointerdown', () => { unlock(); });
   stage.addEventListener('click', e => {
