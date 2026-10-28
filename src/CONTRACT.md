@@ -63,22 +63,31 @@ motion stay in sync. Unknown codes: pick the nearest key or just bob a finger.
 
 ## terminal.js (terminal agent)
 ```js
-MAC.createTerminal({ content, aspect }) -> {
+MAC.createTerminal({ content, aspect, cols? }) -> {   // cols: 54 on desktop, 40/46 on phones
   canvas,                       // 2D canvas, redrawn only when something changes
-  handleKey(e: KeyboardEvent) -> bool,   // true if consumed (call e.preventDefault())
-  insertText(str),              // for mobile / IME input
+  handleKey(e: KeyboardEvent) -> bool,   // true if consumed (call e.preventDefault()); false lets Tab move focus
+  handleKeyUp(e),               // passed to a running app's keyUp (games)
+  handleTap(u, v) -> bool,      // a click/tap at canvas fractions 0..1: chips, card rows, app tap(col, row)
+  insertText(str),              // phones, IME, paste
   update(dt, t) -> bool,        // advance animations (cursor blink, typing-out output); true if canvas changed
-  run(cmd),                     // run a command programmatically (used for #hash deep links)
+  run(cmd),                     // run a command programmatically (#hash deep links)
+  scroll(dy),                   // wheel / touch scrollback
+  cursorY,                      // bottom of the prompt line, 0..1 of the canvas (phones keep it above the keyboard)
+  busy,                         // an app or command is running (don't rebuild the terminal under it)
 }
 ```
 
 ## main.js (integrator)
-Creates the scene, terminal and typist; routes keydown/keyup to terminal + typist; mobile input via a hidden
-textarea; hash deep links (#eden, #j, #about, #writing run the matching command); one rAF loop; pause when hidden.
+Creates the scene, terminal and typist; routes keydown/keyup to terminal + typist; text input through the hidden
+#kbd field (all devices, so assistive tech has a real input); clicks on the tube go through `api.pickScreen` to
+`term.handleTap`. Hash deep links: #about #eden #j #writing #contact #links #help, and #post/<slug> for the reader
+(anything else in the hash is ignored). One rAF loop, paused when hidden and while the reader is open.
+`flat()` is the terminal-only layout: phones, and desktops without WebGL or three.js, after a context loss or
+repeated render errors. localStorage is swapped for an in-memory store when the browser blocks it (head.html).
 
 ## Testing
-Build into your own scratch folder: `python3 build.py --out <dir>`. Missing modules are stubbed by
-`src/stubs.js`, so each module can be tested alone.
+Build into your own scratch folder: `python3 build.py --out <dir>`. Add `--dev` to include `src/stubs.js`, which
+stubs missing modules so each can be tested alone (production builds leave it out).
 
 ---------------------------------------------------------------------------------------------------
 # v2 additions (POV-only, full terminal, sound)
@@ -95,9 +104,9 @@ The visible parts are the forearms, sleeves and hands, so they must look great f
 MAC.sound = {
   unlock(),                 // call from the first user gesture (keydown / pointerdown)
   key(code, down),          // mechanical key sound for KeyboardEvent.code, on press and release (varies per key, Space/Enter/Shift heavier)
-  event(name),              // 'boot' (CRT power-on thunk + degauss + whine), 'disk' (floppy seek), 'beep' (terminal bell), 'error'
+  event(name),              // 'disk' (floppy seek), 'beep' (terminal bell), 'error'
   setMuted(bool), muted,    // remembered in localStorage
-  update(dt),               // room tone, CRT whine fades
+  update(dt),               // a no-op, kept for callers (no ambience: the owner removed it on purpose)
 }
 ```
 The typist calls `MAC.sound.key(code, true)` at finger contact and `(code, false)` at release (if MAC.sound exists).
