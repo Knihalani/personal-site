@@ -74,6 +74,7 @@ function sanitize(html){
         else if (a === 'data-checked'){ el.setAttribute(a, v === 'true' ? 'true' : 'false'); }
         else el.setAttribute(a, v.slice(0, 500));
       }
+      if (tag === 'a' && !el.hasAttribute('href')){ walk(n, to); continue; }   // an unsafe link keeps its words, not its tag
       if (tag === 'img'){
         if (!el.hasAttribute('src')) continue;
         el.setAttribute('loading', 'lazy'); el.setAttribute('decoding', 'async'); if (!el.hasAttribute('alt')) el.setAttribute('alt', '');
@@ -160,7 +161,8 @@ const CSS = `
 .rd-rule{ height:1px; background:var(--r-faint); border:0; margin:0 }
 .rd-prose{ padding:2.2rem 0 1rem; hyphens:auto; -webkit-hyphens:auto; overflow-wrap:break-word; font-variation-settings:"opsz" 16 }
 .rd-prose > *{ margin:0 0 1.1em }
-.rd-prose p{ text-wrap:pretty }
+.rd-prose p{ text-wrap:pretty; margin:0 0 1.1em }
+.rd-prose li p, .rd-prose blockquote p{ margin:0 0 .5em } .rd-prose li p:last-child, .rd-prose blockquote p:last-child{ margin-bottom:0 }
 .rd-prose h2{ font-size:1.5em; line-height:1.2; font-weight:500; letter-spacing:-.01em; margin:2em 0 .6em; font-variation-settings:"opsz" 48; text-wrap:balance }
 .rd-prose h3{ font-size:1.18em; line-height:1.3; font-weight:600; margin:1.7em 0 .5em; text-wrap:balance }
 .rd-prose h2 + h3{ margin-top:.8em }
@@ -186,7 +188,7 @@ const CSS = `
 .rd-prose li.rd-task > input:checked{ background:var(--r-accent); border-color:var(--r-accent) }
 .rd-prose li.rd-task > input:checked::after{ content:""; width:.28em; height:.52em; border:solid var(--r-sheet); border-width:0 2px 2px 0; transform:translateY(-.06em) rotate(45deg) }
 .rd-prose li.rd-done > .rd-task-body{ color:var(--r-mute) }
-.rd-task-body{ flex:1; min-width:0 } .rd-task-body > p{ margin:0 }
+.rd-task-body{ flex:1; min-width:0 } .rd-task-body p{ margin:0 }
 .rd-prose hr{ border:0; height:auto; margin:2.4em 0; text-align:center; color:var(--r-mute) }
 .rd-prose hr::before{ content:"\\2022\\2003\\2022\\2003\\2022"; font-size:.8em; letter-spacing:.1em }
 .rd-prose figure{ margin:2em 0 }

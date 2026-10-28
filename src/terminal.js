@@ -1442,7 +1442,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function setFoot(card){
     const n = card.acts.length, dot = [' \u00b7 ', 'f'];
-    const verb = card.acts.every(a => a.post) ? 'read' : card.acts.every(a => a.copy) ? 'copy' : card.acts.every(a => !a.copy) ? 'open' : 'open/copy';
+    const verb = card.verb === 'read' || card.acts.every(a => a.post) ? 'read' : card.acts.every(a => a.copy) ? 'copy' : card.acts.every(a => !a.copy) ? 'open' : 'open/copy';
     const len = f => f.reduce((a, x) => a + x[0].length, 0);
     const opts = n > 1 ? [
       [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['1-' + n, 'n'], [' jump', 'f'], dot, ['esc', 'n'], [' back', 'f']],

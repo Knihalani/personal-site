@@ -752,7 +752,7 @@ M.createScene = function createScene(container){
      down a little, the way a real head does, and the lens widens as it goes so the whole keyboard fits. */
   const D2R = Math.PI / 180;
   const LOOK = { yaw: 12 * D2R, down: 35 * D2R, up: 6 * D2R };
-  const REST_FILL = .72;                      // glass height / frame height at rest
+  const REST_FILL = .76;                      // glass height / frame height at rest
   const YAW_REST = 4.5 * D2R, YAW_FULL = 10 * D2R, UP_MAX = 2.5 * D2R;   // how far the head turns: little while reading, more when leaned back
   const flatN = new V3(screenNormal.x, 0, screenNormal.z).normalize();
   const EYE_D = .6, EYE_UP = .125;
