@@ -2,11 +2,11 @@
 /* ================= enemies of the Wilds: five silhouettes, readable telegraphs, leashed to their island ================= */
 const ET = { SLIME: 0, GOBLIN: 1, SENTINEL: 2, WISP: 3, ARCHER: 4 };
 const ESPEC = [
-  { name: 'Bramble slime', hp: 14, hw: .42, h: .8, walk: 1.5, dmg: 2, sight: 9, tele: .55, rec: .65, reach: 1.2, flee: .2 },
-  { name: 'Goblin', hp: 22, hw: .3, h: 1.35, walk: 1.8, run: 3.9, dmg: 3, sight: 11, tele: .5, rec: .55, reach: 1.9, flee: .25 },
-  { name: 'Crystal sentinel', hp: 46, hw: .5, h: 1.9, walk: 1.2, run: 9.5, dmg: 5, sight: 12, tele: .9, rec: 1.3, reach: 1.3, flee: .15 },
-  { name: 'Sky wisp', hp: 12, hw: .32, h: .7, walk: 2.6, run: 10, dmg: 2, sight: 14, tele: .6, rec: .85, reach: 1.1, fly: true, flee: .3 },
-  { name: 'Goblin archer', hp: 16, hw: .3, h: 1.3, walk: 1.8, run: 3.2, dmg: 2.5, sight: 17, tele: .75, rec: .6, reach: 12, flee: .3 }
+  { name: 'Bramble slime', hp: 14, hw: .42, h: .8, walk: 1.5, dmg: 2, sight: 9, tele: .55, rec: .65, reach: 1.2, flee: .2, poise: 5 },
+  { name: 'Goblin', hp: 22, hw: .3, h: 1.35, walk: 1.8, run: 3.9, dmg: 3, sight: 11, tele: .5, rec: .55, reach: 1.9, flee: .25, poise: 9 },
+  { name: 'Crystal sentinel', hp: 46, hw: .5, h: 1.9, walk: 1.2, run: 9.5, dmg: 5, sight: 12, tele: .9, rec: 1.3, reach: 1.3, flee: .15, poise: 26 },
+  { name: 'Sky wisp', hp: 12, hw: .32, h: .7, walk: 2.6, run: 10, dmg: 2, sight: 14, tele: .6, rec: .85, reach: 1.1, fly: true, flee: .3, poise: 4 },
+  { name: 'Goblin archer', hp: 16, hw: .3, h: 1.3, walk: 1.8, run: 3.2, dmg: 2.5, sight: 17, tele: .75, rec: .6, reach: 12, flee: .3, poise: 7 }
 ];
 const ES = { IDLE: 0, NOTICE: 1, CHASE: 2, TELE: 3, ATK: 4, REC: 5, FLEE: 6, RETURN: 7, DEAD: 8 };
 const ENEMIES = [];
@@ -17,6 +17,7 @@ function mkEnemy(I, s, j){
   return { t: s.type, I, isle: OUT_ISL0 + I.k, j, x: s.x, y: s.y + (S.fly ? 3 : 0), z: s.z, px: s.x, py: s.y, pz: s.z, vx: 0, vy: 0, vz: 0, hw: S.hw * k, h: S.h * k, onGround: false, sd: .5, md: .5, stepOff: 0,
     yaw: Math.random() * 6.28, pyaw: 0, hp: S.hp * (s.chief ? 5 : 1), maxhp: S.hp * (s.chief ? 5 : 1), st: ES.IDLE, timer: Math.random() * 2, home: { x: s.x, y: s.y, z: s.z }, guard: s.guard, chief: !!s.chief, sc: s.chief ? k : 0, mod: s.mod || '',
     path: new Int16Array(120), pathLen: 0, pathI: 0, goalErr: 0, replan: 0, stuck: 0, lastD: 0, atkX: 0, atkZ: 0, flash: 0, hitT: 0, burn: 0, burnT: 0, notice: 0, deadT: 0, hopT: 0, orbit: Math.random() * 6.28,
+    poise: S.poise * (s.chief ? 2.5 : 1), maxPoise: S.poise * (s.chief ? 2.5 : 1), poiseT: 0, stagT: 0, critT: 0, pat: 0, chain: 0, atkN: 0, leapCD: 2,
     A: { sq: Spr(1), lean: Spr(), arm: Spr(), glow: 0, gait: 0, blink: 1, blinkT: 1 + Math.random() * 3, mark: Spr() }, i: 0, active: false };
 }
 function enemyTargetOK(e){
@@ -49,10 +50,34 @@ function eSteer(e, speed){
   }
   return [ddx, ddz];
 }
-function eSet(e, st, t){ if (st === ES.TELE && e.st !== ES.TELE) SND.tele(e.t, e); e.st = st; e.timer = t; e.replan = 0; }
+// attack patterns: each type has a basic attack plus a variant, picked when the wind-up starts (and announced by it)
+//   slime: lunge hop | every third, a splash slam in place (ground ring)     goblin: club swing | two-swing combo | leap in from mid range
+//   sentinel: charge | close up, a ground pound (ground ring, jump it)       wisp: dive | a quick second dive      archer: arrow | every third, a three-arrow fan
+const PAT_TELE = [[1, 1.5], [1, 1, .5, 1.3], [1, 1.25], [1, 1, .55], [1, 1.35]];
+function ePattern(e){
+  const d = hyp2(PL.x - e.x, PL.z - e.z), n = e.atkN++, r = Math.random();
+  if (e.t === ET.SLIME) return d < 2.6 && n % 3 === 2 ? 1 : 0;
+  if (e.t === ET.GOBLIN) return d > 3 ? 3 : r < .4 ? 1 : 0;
+  if (e.t === ET.SENTINEL) return d < 3.2 ? 1 : 0;
+  if (e.t === ET.WISP) return r < .35 ? 1 : 0;
+  return n % 3 === 2 ? 1 : 0;
+}
+function eSet(e, st, t){
+  if (st === ES.TELE && e.st !== ES.TELE){ if (e.chain){ e.pat = e.chain; e.chain = 0; } else e.pat = ePattern(e); t *= PAT_TELE[e.t][e.pat] || 1; SND.tele(e.t, e); }
+  e.st = st; e.timer = t; e.replan = 0; }
+// poise: hits wear it down (heavies and finishers much faster); at zero the enemy staggers, drops its attack and takes more crits
+function eStagger(e, T){
+  e.stagT = T; e.poise = e.maxPoise; e.chain = 0; eSet(e, ES.REC, T); e.A.sq.v -= 5;
+  dmgNumber(e.x, e.y + e.h + .8, e.z, 'Stagger', 'stag'); SND.stagger(e);
+}
+// a ring of motes on the ground where an area attack will land
+function teleRing(e, R){ const c = TELE_COL[e.t]; for (let i = 0; i < 3; i++){ const a = Math.random() * 6.283; emit(e.x + Math.cos(a) * R, e.y + .12, e.z + Math.sin(a) * R, 0, .6, 0, c[0] * .6, c[1] * .6, c[2] * .6, .16, .35, 0, 0); } }
+function shockRing(x, y, z, R, c){ for (let i = 0; i < 24; i++){ const a = i / 24 * 6.283; emit(x + Math.cos(a) * .5, y + .15, z + Math.sin(a) * .5, Math.cos(a) * R * 2.4, .7 + Math.random(), Math.sin(a) * R * 2.4, c[0], c[1], c[2], .2, .42, 0, 6); } }
 function tickEnemy(e, dt){
   const S = ESPEC[e.t], dx = PL.x - e.x, dz = PL.z - e.z, dist = hyp2(dx, dz) || .001, dy = PL.y - e.y;
   e.timer -= dt; e.replan -= dt; e.flash = Math.max(0, e.flash - dt * 4); e.hitT = Math.max(0, e.hitT - dt);
+  e.critT = Math.max(0, e.critT - dt); e.poiseT -= dt; if (e.poiseT <= 0 && e.poise < e.maxPoise) e.poise = Math.min(e.maxPoise, e.poise + e.maxPoise * .5 * dt);
+  if (e.stagT > 0){ e.stagT -= dt; const a = tAcc * 9; emit(e.x + Math.cos(a) * .4, e.y + e.h + .25, e.z + Math.sin(a) * .4, 0, .3, 0, e.critT > 0 ? 1.6 : 1, e.critT > 0 ? 1.3 : .95, .45, .13, .3, 2, 0); }
   if (e.burn > 0){ e.burn -= dt; e.burnT -= dt; if (e.burnT <= 0){ e.burnT = 1; damageEnemy(e, 1, false, 0, 0, true); if (e.st === ES.DEAD) return; } }
   const canSee = enemyTargetOK(e), engaged = e.st >= ES.NOTICE && e.st <= ES.REC;
   if (e.st === ES.DEAD){ e.deadT += dt; return; }
@@ -75,6 +100,7 @@ function tickEnemy(e, dt){
         speed = want ? S.run : 0; if (!speed) eFace(e, PL.x, PL.z, 8, dt); break;
       }
       const reachT = e.t === ET.SENTINEL ? 8 : e.t === ET.SLIME ? 3.4 : S.reach;
+      if (e.t === ET.GOBLIN && dist > 3.4 && dist < 6.5 && Math.abs(dy) < 1.5 && e.timer <= 0 && e.onGround && (e.leapCD -= dt) <= 0){ e.leapCD = 3 + Math.random() * 2.5; eSet(e, ES.TELE, S.tele); e.atkX = dx / dist; e.atkZ = dz / dist; break; }
       if (dist < reachT && Math.abs(dy) < 2.2 && e.timer <= 0){ eSet(e, ES.TELE, S.tele); e.atkX = dx / dist; e.atkZ = dz / dist; break; }
       if (e.replan <= 0){ e.replan = .45; findPath(e, Math.floor(PL.x), Math.floor(PL.y + .01), Math.floor(PL.z), e.isle); }
       if (e.t === ET.SLIME){ // slimes travel in hops
@@ -86,11 +112,14 @@ function tickEnemy(e, dt){
     case ES.TELE: // the readable wind-up: everything the player needs to see comes from here
       eFace(e, PL.x, PL.z, e.t === ET.SENTINEL ? 3 : 10, dt);
       if (e.t !== ET.SENTINEL){ e.atkX = dx / dist; e.atkZ = dz / dist; }
+      if (e.pat === 1 && e.t === ET.SLIME) teleRing(e, 2.8); else if (e.pat === 1 && e.t === ET.SENTINEL) teleRing(e, 3.6);
       if (e.timer <= 0) startAttack(e, S, dx, dz, dist); break;
     case ES.ATK:
-      if (e.t === ET.SENTINEL){ ddx = e.atkX * S.run; ddz = e.atkZ * S.run; speed = -1; if (e.timer <= 0 || (Math.abs(e.vx) + Math.abs(e.vz) < 1 && e.timer < .9)) eSet(e, ES.REC, S.rec); if (dist < S.reach + .4 && Math.abs(dy) < 1.6) hurtPlayer(S.dmg, e.x, e.z, 13, e); }
-      else if (e.t === ET.SLIME){ ddx = e.vx; ddz = e.vz; speed = -1; if (dist < S.reach && Math.abs(dy) < 1.4) hurtPlayer(S.dmg, e.x, e.z, 7, e); if (e.onGround && e.timer < .3){ eSet(e, ES.REC, S.rec); e.A.sq.v -= 4; } }
-      else if (e.timer <= 0) eSet(e, ES.REC, S.rec);
+      if (e.t === ET.SENTINEL && e.pat === 1){ speed = -1; if (e.timer <= 0) eSet(e, ES.REC, S.rec * 1.2); }
+      else if (e.t === ET.SLIME && e.pat === 1){ speed = -1; if (e.onGround && e.timer < .85){ e.A.sq.v -= 6; shockRing(e.x, e.y, e.z, 2.8, [.7, .9, .5]); SND.enemyAtk(2, e); if (dist < 2.8 + e.hw && Math.abs(dy) < 1.2) hurtPlayer(S.dmg * 1.5, e.x, e.z, 10, e); eSet(e, ES.REC, S.rec * 1.3); } }
+      else if (e.t === ET.SENTINEL){ ddx = e.atkX * S.run; ddz = e.atkZ * S.run; speed = -1; if (e.timer <= 0 || (Math.abs(e.vx) + Math.abs(e.vz) < 1 && e.timer < .9)) eSet(e, ES.REC, S.rec); if (dist < S.reach + .4 && Math.abs(dy) < 1.6) hurtPlayer(S.dmg, e.x, e.z, 13, e); }
+      else if (e.t === ET.SLIME || (e.t === ET.GOBLIN && e.pat === 3)){ ddx = e.vx; ddz = e.vz; speed = -1; if (dist < S.reach && Math.abs(dy) < 1.4) hurtPlayer(S.dmg, e.x, e.z, e.t === ET.GOBLIN ? 9 : 7, e); if (e.onGround && e.timer < .3){ eSet(e, ES.REC, S.rec); e.A.sq.v -= 4; } }
+      else if (e.timer <= 0){ if (e.t === ET.GOBLIN && e.pat === 1){ e.chain = 2; eSet(e, ES.TELE, S.tele); } else eSet(e, ES.REC, S.rec); }
       break;
     case ES.REC: if (e.timer <= 0) eSet(e, ES.CHASE, .4 + Math.random() * .5); break;
     case ES.FLEE:
@@ -111,11 +140,15 @@ function tickEnemy(e, dt){
 }
 function startAttack(e, S, dx, dz, dist){
   e.st = ES.ATK;
-  if (e.t === ET.SLIME){ const fl = Math.min(dist, 3.6) / .62; e.vx = e.atkX * fl; e.vz = e.atkZ * fl; e.vy = 7.5; e.timer = .9; SND.enemyAtk(0, e); }
+  if (e.t === ET.SLIME && e.pat === 1){ e.vx = e.vz = 0; e.vy = 9; e.timer = 1.3; SND.enemyAtk(0, e); }
+  else if (e.t === ET.GOBLIN && e.pat === 3){ const fl = Math.min(dist, 6) / .55; e.vx = e.atkX * fl; e.vz = e.atkZ * fl; e.vy = 6.5; e.timer = .9; SND.enemyAtk(1, e); }
+  else if (e.t === ET.SENTINEL && e.pat === 1){ e.timer = .55; SND.enemyAtk(2, e); shockRing(e.x, e.y, e.z, 3.6, [.7, .85, 1.2]); camKick = Math.max(camKick, dist < 8 ? .06 : 0);
+    if (dist < 3.6 + e.hw && Math.abs(PL.y - e.y) < 1.2 && PL.onGround) hurtPlayer(S.dmg, e.x, e.z, 12, e); } // jump it
+  else if (e.t === ET.SLIME){ const fl = Math.min(dist, 3.6) / .62; e.vx = e.atkX * fl; e.vz = e.atkZ * fl; e.vy = 7.5; e.timer = .9; SND.enemyAtk(0, e); }
   else if (e.t === ET.GOBLIN){ e.timer = .22; SND.enemyAtk(1, e); const fx = -Math.sin(e.yaw), fz = -Math.cos(e.yaw); const ddx = PL.x - e.x, ddz = PL.z - e.z, d = hyp2(ddx, ddz) || 1;
     if (d < S.reach + .35 && (ddx * fx + ddz * fz) / d > .45 && Math.abs(PL.y - e.y) < 1.6) hurtPlayer(S.dmg, e.x, e.z, 8, e); else dodgeTell(e); }
   else if (e.t === ET.SENTINEL){ e.timer = 1.1; SND.enemyAtk(2, e); }
-  else if (e.t === ET.ARCHER){ e.timer = .25; fireArrow(e); SND.enemyAtk(4, e); }
+  else if (e.t === ET.ARCHER){ e.timer = .25; if (e.pat === 1){ fireArrow(e, -.2); fireArrow(e, 0); fireArrow(e, .2); } else fireArrow(e, 0); SND.enemyAtk(4, e); }
 }
 function dodgeTell(e){ /* a whiff: tiny dust where the club landed */ dust(e.x - Math.sin(e.yaw) * 1.2, e.y, e.z - Math.cos(e.yaw) * 1.2, 4, 1.2); }
 function tickWisp(e, dt, S, dx, dz, dist, dy, canSee){
@@ -124,7 +157,7 @@ function tickWisp(e, dt, S, dx, dz, dist, dy, canSee){
   if (e.st === ES.NOTICE){ if (e.timer <= 0) eSet(e, ES.CHASE, 1.5); tx = e.x; ty = e.y; tz = e.z; }
   else if (e.st === ES.CHASE){ e.orbit += dt * .8; tx = PL.x + Math.cos(e.orbit * 2.2) * 5; tz = PL.z + Math.sin(e.orbit * 2.2) * 5; ty = PL.y + 3.5; sp = 6; if (e.timer <= 0 && dist < 9){ eSet(e, ES.TELE, S.tele); } }
   else if (e.st === ES.TELE){ tx = e.x - dx / dist * .8; tz = e.z - dz / dist * .8; ty = e.y + .6; sp = 2; e.atkX = (PL.x - e.x); e.atkZ = (PL.z - e.z); e.atkY = (PL.y + 1 - e.y); if (e.timer <= 0){ e.st = ES.ATK; e.timer = .55; SND.enemyAtk(3, e); const l = hyp3(e.atkX, e.atkY, e.atkZ) || 1; e.vx = e.atkX / l * S.run; e.vy = e.atkY / l * S.run; e.vz = e.atkZ / l * S.run; } }
-  else if (e.st === ES.ATK){ if (hyp3(PL.x - e.x, PL.y + 1 - e.y, PL.z - e.z) < 1.2) hurtPlayer(S.dmg, e.x, e.z, 6, e); if (e.timer <= 0) eSet(e, ES.REC, S.rec); }
+  else if (e.st === ES.ATK){ if (hyp3(PL.x - e.x, PL.y + 1 - e.y, PL.z - e.z) < 1.2) hurtPlayer(S.dmg, e.x, e.z, 6, e); if (e.timer <= 0){ if (e.pat === 1){ e.chain = 2; eSet(e, ES.TELE, S.tele); } else eSet(e, ES.REC, S.rec); } }
   else if (e.st === ES.REC){ ty = e.y + 2; tx = e.x; tz = e.z; sp = 3; if (e.timer <= 0) eSet(e, ES.CHASE, 1.2); }
   else if (e.st === ES.FLEE){ ty = I.top + 12; tx = e.home.x; tz = e.home.z; sp = 5; if (e.timer <= 0) eSet(e, canSee ? ES.CHASE : ES.IDLE, 1); }
   else if (e.st === ES.RETURN){ sp = 4; e.hp = Math.min(e.maxhp, e.hp + dt * 4); if (hyp2(e.home.x - e.x, e.home.z - e.z) < 3 || e.timer <= 0) eSet(e, ES.IDLE, 1); }
@@ -154,9 +187,11 @@ const eAlpha = () => clamp(eAcc / E_DT, 0, 1);
 
 /* ---- arrows: visible, arcing, dodgeable ---- */
 const ARROWS = []; let arrowMesh = null;
-function fireArrow(e){
+function fireArrow(e, fan){
   const sx = e.x - Math.sin(e.yaw) * .4, sy = e.y + 1.05, sz = e.z - Math.cos(e.yaw) * .4;
-  const tx = PL.x + PL.vx * .35, ty = PL.y + 1.1, tz = PL.z + PL.vz * .35; const dh = hyp2(tx - sx, tz - sz), V = 17, tt = dh / V;
+  let tx = PL.x + PL.vx * .35, tz = PL.z + PL.vz * .35; const ty = PL.y + 1.1;
+  if (fan){ const ox = tx - sx, oz = tz - sz, c = Math.cos(fan), s = Math.sin(fan); tx = sx + ox * c - oz * s; tz = sz + ox * s + oz * c; }
+  const dh = hyp2(tx - sx, tz - sz), V = 17, tt = dh / V;
   let a = null; for (const q of ARROWS) if (!q.on){ a = q; break; } if (!a){ if (ARROWS.length >= 24) return; a = {}; ARROWS.push(a); }
   Object.assign(a, { on: true, x: sx, y: sy, z: sz, vx: (tx - sx) / dh * V, vz: (tz - sz) / dh * V, vy: (ty - sy) / Math.max(tt, .05) + 7 * tt, stuck: 0, age: 0, dmg: ESPEC[ET.ARCHER].dmg, src: e });
 }
@@ -181,7 +216,8 @@ const PMAXHP = 20; let php = PMAXHP, iFrames = 0, combatT = -99, regenAcc = 0, d
 function hurtPlayer(dmg, sx, sz, kb, src){
   if (dead || PL.catching || inSafe(PL.x, PL.z) || state !== 'play') return;
   if (iFrames > 0) return;
-  if (PL.dashCD > DASH_CD - .28){ dmgNumber(PL.x, PL.y + 2.1, PL.z, 'Dodge', 'dodge'); iFrames = .2; return; } // a dash through an attack is a dodge
+  const m = combatDefend(dmg, sx, sz, src); if (m <= 0) return; // dodge i-frames, a clean block or a parry
+  dmg = Math.max(1, Math.round(dmg * m)); kb *= m;
   php = Math.max(0, php - dmg); iFrames = .7; combatT = tAcc; hurtFlash = 1;
   const dx = PL.x - sx, dz = PL.z - sz, d = hyp2(dx, dz) || 1; PL.vx += dx / d * kb; PL.vz += dz / d * kb; PL.vy = Math.max(PL.vy, 4.5); PL.onGround = false;
   PL.punch = Math.max(PL.punch, .9); camKick = Math.max(camKick, .08); SND.hurt(); heartsChanged(true);
@@ -215,34 +251,14 @@ function enemyInSights(maxD){
   for (const e of ENEMIES){ if (e.st === ES.DEAD || !e.active) continue; const cx = e.x - EYE.x, cy = e.y + e.h * .5 - EYE.y, cz = e.z - EYE.z, d = hyp3(cx, cy, cz); if (d > bd + e.hw) continue; const t = cx * f.x + cy * f.y + cz * f.z; if (t < 0) continue; const px = cx - f.x * t, py = cy - f.y * t, pz = cz - f.z * t; if (px * px + py * py + pz * pz < (e.hw + .35) * (e.hw + .35) + e.h * .2){ bd = d; best = e; } }
   return best;
 }
-function playerAttack(){
-  if (atkCD > 0 || dead) return false;
-  const w0 = heldWeapon(), F = w0.f >= 0 ? FAM[w0.f] : null, ch = AS.charged && w0.f === 1; atkCD = 1 / w0.spd * (ch ? 1.3 : 1); combatT = Math.max(combatT, tAcc - 3);
-  const w = ch ? Object.assign({}, w0, { dmg: w0.dmg * 1.6, reach: w0.reach + 1 }) : w0;
-  animSwing(w0, ch); SND.swing(w0.f);
-  const f = fwd(), fl = hyp2(f.x, f.z) || 1, fx = f.x / fl, fz = f.z / fl, arc = F ? F.arc : .7;
-  let hits = 0, crits = 0;
-  for (const e of ENEMIES){
-    if (e.st === ES.DEAD || !e.active) continue;
-    const dx = e.x - PL.x, dz = e.z - PL.z, d = hyp2(dx, dz) || .01, dy = (e.y + e.h * .5) - (PL.y + 1.4);
-    if (d - e.hw > w.reach || Math.abs(dy) > w.reach * .8 + e.h * .5) continue;
-    const ang = Math.acos(clamp((dx * fx + dz * fz) / d, -1, 1)); if (ang > arc + Math.atan2(e.hw, d)) continue;
-    const crit = Math.random() < w.crit; let dmg = w.dmg * (crit ? 1.75 : 1); if (e.t === ET.SENTINEL && e.st === ES.REC) dmg *= 1.5;
-    const kbK = (F ? F.kb : 4) * (wHas(w, 'gust') ? 1.8 : 1) * (e.t === ET.SENTINEL ? .35 : 1);
-    damageEnemy(e, dmg, crit, dx / d * kbK, dz / d * kbK);
-    if (wHas(w, 'ember')){ e.burn = 3; e.burnT = 1; }
-    hits++; if (crit) crits++;
-  }
-  if (hits){ hitStop = Math.min(.09, .045 + hits * .015); camKick = Math.max(camKick, .05); if (crits) SND.crit(); else SND.hit('flesh'); animHitConfirm(); }
-  return true;
-}
-function damageEnemy(e, dmg, crit, kx, kz, dot){
+// the player's side of a fight (combos, heavies, guard, plunge, stamina) lives in cb.js
+function damageEnemy(e, dmg, crit, kx, kz, dot, poise){
   if (e.st === ES.DEAD) return;
   e.hp -= dmg; e.flash = 1; e.hitT = .25; combatT = tAcc;
+  if (!dot){ e.poise -= poise === undefined ? dmg : poise; e.poiseT = 2.2; if (e.poise <= 0 && e.hp > 0) eStagger(e, e.t === ET.SENTINEL ? 1.6 : e.chief ? 1.2 : 1); }
   dmgNumber(e.x, e.y + e.h + .35, e.z, (Math.round(dmg * 10) / 10).toString(), crit ? 'crit' : dot ? 'dot' : '');
   if (kx || kz){ e.vx = kx; e.vz = kz; if (!ESPEC[e.t].fly) e.vy = Math.max(e.vy, 3.2); e.kbT = .22; e.A.sq.v -= 3; }
   if (e.st === ES.IDLE || e.st === ES.RETURN){ eSet(e, ES.NOTICE, .25); e.notice = 1; }
-  if (e.st === ES.TELE && e.t !== ET.SENTINEL && !dot) eSet(e, ES.REC, .35); // a clean hit interrupts most wind-ups
   const c = [[.42, .62, .3], [.45, .6, .32], [.62, .75, .95], [.7, .85, 1], [.45, .6, .32]][e.t];
   for (let i = 0; i < (crit ? 10 : 6); i++){ const a = Math.random() * 6.283; emit(e.x, e.y + e.h * .6, e.z, Math.cos(a) * 2.5 + kx * .3, 1.5 + Math.random() * 2, Math.sin(a) * 2.5 + kz * .3, c[0], c[1], c[2], .14, .5, 0, 9); }
   if (e.hp <= 0){ e.st = ES.DEAD; e.deadT = 0; wildStats.kills++; SND.enemyDie(e.t, e); sparkle(e.x, e.y + .4, e.z, 10, c[0], c[1], c[2]); for (let i = 0; i < 14; i++){ const a = Math.random() * 6.283; emit(e.x, e.y + e.h * .5, e.z, Math.cos(a) * 3, 2 + Math.random() * 3, Math.sin(a) * 3, c[0], c[1], c[2], .2, .8, 0, 9); }
@@ -318,7 +334,7 @@ function renderEnemies(t, dt){
     if (!e.active && e.st !== ES.DEAD) continue;
     if (Math.abs(e.x - camera.position.x) > renderDist + 8 || Math.abs(e.z - camera.position.z) > renderDist + 8) continue;
     const A = e.A, dying = e.st === ES.DEAD ? Math.min(1, e.deadT / .35) : 0; if (dying >= 1) continue;
-    const x = e.px + (e.x - e.px) * a, y = e.py + (e.y - e.py) * a - e.stepOff, z = e.pz + (e.z - e.pz) * a, yaw = e.pyaw + angDiff(e.yaw, e.pyaw) * a;
+    const x = e.px + (e.x - e.px) * a, y = e.py + (e.y - e.py) * a - e.stepOff, z = e.pz + (e.z - e.pz) * a, yaw = e.pyaw + angDiff(e.yaw, e.pyaw) * a + (e.stagT > 0 && !REDUCED ? Math.sin(t * 16) * .22 * Math.min(1, e.stagT * 2) : 0);
     const camYaw = Math.atan2(camera.position.x - x, camera.position.z - z), crx = Math.cos(camYaw), crz = -Math.sin(camYaw);
     const tele = e.st === ES.TELE ? 1 - Math.max(0, e.timer) / ESPEC[e.t].tele : 0, rec = e.st === ES.REC ? 1 : 0, atk = e.st === ES.ATK ? 1 : 0;
     // the flash is white on a hit; the telegraph pulses hot (orange for goblins, blue-white for crystal and wisps)

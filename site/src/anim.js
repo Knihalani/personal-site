@@ -4,8 +4,8 @@
    Families: empty, block, tool, food, sword, spear, axe, dagger, and the grappling hook (drawn while in use).
    Every family has: equip (raise with a flourish), idle sway + breathing, walk/sprint bob by WEIGHT class
    (light hands pump quick and high, heavy ones swing slow and low and lag), use clips with anticipation ->
-   strike (with a smear) -> follow-through -> settle, a combo second swing for weapons (attack again inside
-   the window), a charged thrust for the spear (hold), block-place push, eat/feed, the grapple's fire recoil,
+   strike (with a smear) -> follow-through -> settle, combo swings 1-3 and per-family heavies, guard, parry and
+   plunge (clips and held poses in cb.js, played through HR.swClip and CBP), block-place push, eat/feed, the grapple's fire recoil,
    reel crank and retract, an idle inspect after ~8 s (a different one per family), and a hit-confirm kick.
    Reduced motion keeps the poses but drops spins, smears and most bob.
    ===================================================================== */
@@ -54,7 +54,7 @@ const AS = { fam: 'empty', combo: 0, lastSwingEnd: -9, lastSwingF: -1, charging:
 const _sp = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, gy: 0, gz: 0 };
 function sampleClip(S, t, out){ out.x = out.y = out.z = out.rx = out.ry = out.rz = out.gy = out.gz = 0; if (!S || t >= S.d) return out; for (const k of ['x', 'y', 'z', 'rx', 'ry', 'rz', 'gy', 'gz']) if (S[k]) out[k] = clipAt(S[k], t); return out; }
 function swingPose(t, f){
-  const S = HR.swCharged ? CLIP_SPEAR_CHARGED : (SWING2[f < 0 || f === undefined ? 4 : f] || SWING2[4])[HR.swB || 0];
+  const S = HR.swClip || (HR.swCharged ? CLIP_SPEAR_CHARGED : (SWING2[f < 0 || f === undefined ? 4 : f] || SWING2[4])[HR.swB || 0]);
   sampleClip(S, t, _swp);
   if (smear){ const on = S.sm[1] > 0 && t >= S.sm[0] - .02 && t < S.sm[1] + .12 && !REDUCED; smear.visible = on;
     if (on){ smear.material.uniforms.uP.value = clamp((t - S.sm[0] + .02) / (S.sm[1] - S.sm[0]), 0, 1.4); smear.material.uniforms.uA.value = t < S.sm[1] ? .9 : Math.max(0, 1 - (t - S.sm[1]) / .12) * .9; } }
@@ -64,18 +64,15 @@ function animSwing(w, charged){
   const f = w.f >= 0 ? w.f : 4, now = tAcc;
   // combo: a second swing inside the window after the first one's strike becomes the backhand / follow-up
   HR.swB = (f === AS.lastSwingF && now - AS.lastSwingEnd < .55 && HR.swB === 0) ? 1 : 0; if (charged) HR.swB = 0;
-  HR.swCharged = !!charged; HR.swT = 0; HR.swF = f; AS.lastSwingF = f;
+  HR.swCharged = !!charged; HR.swClip = null; HR.swT = 0; HR.swF = f; AS.lastSwingF = f;
   const S = charged ? CLIP_SPEAR_CHARGED : SWING2[f][HR.swB]; AS.lastSwingEnd = now + S.d * .6;
   if (smear){ setSmearShape(S.sm[2]); const c = w.f >= 0 && RARITY[w.r] ? RARITY[w.r].k : [1, 1, 1]; smear.material.uniforms.uC.value.setRGB(.55 + c[0] * .45, .55 + c[1] * .45, .55 + c[2] * .45); }
   HR.inspT = 9; HR.idleT = 0;
 }
 function animHitConfirm(){ AS.hitT = 0; }
-// spear charge: hold attack with a spear to draw back; release to lunge (more damage, a step forward)
-function spearChargeStart(){ if (heldFamily() !== 'spear' || atkCD > 0) return false; AS.charging = 1; AS.chargeT = 0; return true; }
-function spearChargeRelease(){ if (!AS.charging) return false; const full = AS.chargeT > .45; AS.charging = 0; if (full){ AS.charged = true; playerAttack(); AS.charged = false; const f = fwd(), l = hyp2(f.x, f.z) || 1; if (PL.onGround){ PL.vx += f.x / l * 7; PL.vz += f.z / l * 7; } } else playerAttack(); return true; }
 function updateHandRig(dt, hs, sliding, bobX, bobY){
   const P = PL, RM = REDUCED ? .3 : 1;
-  HR.mineT += dt; HR.placeT += dt; HR.eqT += dt; HR.feedT += dt; AS.hitT += dt; GR.fireT += dt; if (AS.charging) AS.chargeT += dt;
+  HR.mineT += dt; HR.placeT += dt; HR.eqT += dt; HR.feedT += dt; AS.hitT += dt; GR.fireT += dt;
   // equip: lower, swap at the bottom, raise with the new family's flourish
   const fam = heldFamily(), F = FAMS[fam];
   const id = heldId() * 1000 + (inv[sel] && inv[sel].w ? inv[sel].w.f * 10 + inv[sel].w.r + 1 : 0) + (fam === 'grapple' ? 999999 : 0);
@@ -94,7 +91,7 @@ function updateHandRig(dt, hs, sliding, bobX, bobY){
   if (dash){ tz += .14; trz -= .25; }
   if (P.gliding){ ty -= .18; trx += .4; }
   if (GR.st === 2){ ty += .05; trx += .25; tz -= .04; } // hanging on the rope: the launcher is raised toward the anchor
-  if (AS.charging){ const c = Math.min(1, AS.chargeT / .45); tz += .16 * c; ty -= .03 * c; trx -= .12 * c; tx += Math.sin(tAcc * 40) * .003 * c * RM; }
+  combatPose(dt); // charge wind-up, guard and plunge poses (cb.js)
   const bobK = F.bob * RM, idle = noise1(tAcc * .6, 3) * .012 * RM, breathe = Math.sin(tAcc * 1.6) * .006 * (1 + (1 - Math.min(1, hs)) * .5);
   const so = 12 / Math.sqrt(F.w);
   spring(HR.x, tx + bobX * 1.4 * bobK + idle, so, dt); spring(HR.y, ty + bobY * 1.2 * bobK - P.landKick * .7 * F.w + breathe, so, dt); spring(HR.z, tz, so, dt); spring(HR.rx, trx, so * .85, dt); spring(HR.rz, trz, so * .85, dt);
@@ -108,12 +105,12 @@ function updateHandRig(dt, hs, sliding, bobX, bobY){
   const bx = .4 + HR.x.x + HR.lagX.x - fd * .34, by = -.33 + HR.y.x + HR.lagY.x + eY + fd * .14 + gFire * .08, bz = -.7 + HR.z.x + mZ + pZ + fd * .2 + gFire * .2 + hk * .04 + retract * .05;
   HR.swT += dt; const sw = swingPose(HR.swT, HR.swF);
   // inspect idle after 8 s still, one clip per family
-  HR.idleT = (hs < .1 && P.onGround && !mineHeld && !atkHeld && !GR.st && Math.abs(yawRate) < .05 && Math.abs(pr) < .05) ? HR.idleT + dt : 0;
+  HR.idleT = (hs < .1 && P.onGround && !mineHeld && !atkHeld && !CB.guard && !CB.charging && !GR.st && Math.abs(yawRate) < .05 && Math.abs(pr) < .05) ? HR.idleT + dt : 0;
   const IN = INSPECT[AS.fam] || INSPECT.empty;
   if (HR.idleT > 8 && HR.inspT > IN.d + 1) HR.inspT = 0; if (HR.idleT === 0 && HR.inspT < IN.d) HR.inspT = 9; HR.inspT += dt;
   const ins = sampleClip(REDUCED ? null : IN, HR.inspT, _sp);
   const shake = hk * Math.sin(tAcc * 70) * .012 * RM + reel * Math.sin(tAcc * 55) * .006 * RM;
-  hand.position.set(bx - .1 + sw.x + ins.x + shake, by + .06 + sw.y + ins.y, bz + .08 + sw.z + ins.z);
-  hand.rotation.set(-.08 + HR.rx.x + mRx * .9 + fd * .3 + sw.rx + ins.rx - gFire * .5 + hk * .06 + (AS.fam === 'spear' ? eqR : 0), .08 - fd * .5 + sw.ry + ins.ry, HR.rz.x + sw.rz + ins.rz + gFire * .14 + (AS.fam === 'sword' ? eqR * .4 : 0));
+  hand.position.set(bx - .1 + sw.x + ins.x + shake + CBP.x.x, by + .06 + sw.y + ins.y + CBP.y.x, bz + .08 + sw.z + ins.z + CBP.z.x);
+  hand.rotation.set(-.08 + HR.rx.x + mRx * .9 + fd * .3 + sw.rx + ins.rx - gFire * .5 + hk * .06 + (AS.fam === 'spear' ? eqR : 0) + CBP.rx.x, .08 - fd * .5 + sw.ry + ins.ry + CBP.ry.x, HR.rz.x + CBP.rz.x + sw.rz + ins.rz + gFire * .14 + (AS.fam === 'sword' ? eqR * .4 : 0));
   if (handGrip){ AS.gripRZ += (reel ? 14 : 0) * dt; handGrip.rotation.set((AS.fam === 'dagger' ? eqR : 0) + (AS.fam === 'axe' ? -eqR * .3 : 0), ins.gy, ins.gz + (AS.fam === 'grapple' ? Math.sin(AS.gripRZ) * .05 * reel : 0)); }
 }

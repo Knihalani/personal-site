@@ -485,10 +485,10 @@ canvas.addEventListener('pointerdown', e => {
   if (lookMode === 'lock' && !locked){ requestLock(); return; }
   if (e.button === 0){
     if (MOBHIT.m){ pokeMob(MOBHIT.m); animMine(); return; }
-    if (holdingWeapon() || enemyInSights(3)){ if (spearChargeStart()) return; atkHeld = true; playerAttack(); return; }
+    if (holdingWeapon() || enemyInSights(3)){ combatPress(); return; }
     if (lookMode === 'lock') mineHeld = true;
     else { drag.on = true; drag.x = drag.sx = e.clientX; drag.y = drag.sy = e.clientY; drag.moved = false; drag.t0 = performance.now(); }
-  } else if (e.button === 2){ useHeld = true; useAction(true); }
+  } else if (e.button === 2){ if (combatGuard(true)) return; useHeld = true; useAction(true); }
 });
 canvas.addEventListener('pointermove', e => {
   if (e.pointerType !== 'touch' || state !== 'play') return;
@@ -501,16 +501,16 @@ function endPtr(e){
     if (e.pointerId === lookPtr.id){ lookPtr.id = -1; if (performance.now() - lookPtr.t0 < 260 && hyp2(e.clientX - lookPtr.sx, e.clientY - lookPtr.sy) < 12) tapAction(); }
     return;
   }
-  if (e.button === 0){ mineHeld = false; drag.on = false; atkHeld = false; spearChargeRelease(); }
-  if (e.button === 2) useHeld = false;
+  if (e.button === 0){ mineHeld = false; drag.on = false; atkHeld = false; combatRelease(); }
+  if (e.button === 2){ useHeld = false; combatGuard(false); }
 }
 canvas.addEventListener('pointerup', endPtr); canvas.addEventListener('pointercancel', endPtr);
-Wn.addEventListener('pointerup', e => { if (e.pointerType !== 'touch'){ if (e.button === 0){ mineHeld = false; drag.on = false; atkHeld = false; if (state === 'play') spearChargeRelease(); } if (e.button === 2) useHeld = false; } });
+Wn.addEventListener('pointerup', e => { if (e.pointerType !== 'touch'){ if (e.button === 0){ mineHeld = false; drag.on = false; atkHeld = false; if (state === 'play') combatRelease(); } if (e.button === 2){ useHeld = false; combatGuard(false); } } });
 canvas.addEventListener('wheel', e => { if (state !== 'play') return; e.preventDefault(); selectSlot((sel + (e.deltaY > 0 ? 1 : 8)) % 9); }, { passive: false });
 const holdBtn = (q, on, off) => { const b = $(q); b.addEventListener('pointerdown', e => { e.preventDefault(); audioStart(); b.classList.add('on'); on(); try { b.setPointerCapture(e.pointerId); } catch (x){} }); const up = () => { b.classList.remove('on'); off && off(); }; b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('contextmenu', e => e.preventDefault()); };
-holdBtn('#tMine', () => { if (MOBHIT.m){ pokeMob(MOBHIT.m); return; } if (holdingWeapon() || enemyInSights(3)){ if (spearChargeStart()) return; atkHeld = true; playerAttack(); return; } mineHeld = true; }, () => { mineHeld = false; atkHeld = false; spearChargeRelease(); });
+holdBtn('#tMine', () => { if (MOBHIT.m){ pokeMob(MOBHIT.m); return; } if (holdingWeapon() || enemyInSights(3)){ combatPress(); return; } mineHeld = true; }, () => { mineHeld = false; atkHeld = false; combatRelease(); });
 holdBtn('#tJump', () => { INP.jumpEdge = true; INP.jump = true; }, () => { INP.jump = false; });
-holdBtn('#tPlace', () => { useHeld = true; useAction(true); }, () => { useHeld = false; });
+holdBtn('#tPlace', () => { if (combatGuard(true)) return; useHeld = true; useAction(true); }, () => { useHeld = false; combatGuard(false); });
 holdBtn('#tBag', () => { openInv(); }, null);
 holdBtn('#tDash', () => { dashDir(null); }, null);
 holdBtn('#tHook', () => { grappleAction(); }, null);
@@ -832,7 +832,7 @@ function frame(now){
     if (n >= 12) physAcc = 0;
     renderAlpha = physAcc / STEP_DT;
     useCD -= dt; if (useHeld && useCD <= 0 && isBlockItem(heldId())) useAction(false);
-    atkCD = Math.max(0, atkCD - sdt); if (atkHeld && atkCD <= 0) playerAttack();
+    atkCD = Math.max(0, atkCD - sdt); combatTick(dt, sdt);
     stepEnemies(sdt); stepArrows(sdt); tickHealth(dt);
   }
   if (CINE.on) stepCine(dt);
