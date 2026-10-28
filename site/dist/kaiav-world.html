@@ -163,6 +163,32 @@ button.chip{pointer-events:auto}
 #tip em.up{color:#9fe08a} #tip em.dn{color:var(--rose-t)}
 #tip .ta{margin-top:4px;color:var(--ochre)}
 #tip .tc{margin-top:6px;color:var(--stone)}
+.rd{position:fixed;inset:0;z-index:30;display:flex;align-items:stretch;justify-content:center;padding:0;background:rgba(14,13,17,.86)}
+.rd[hidden]{display:none}
+.rd-card{width:min(860px,100%);height:100%;max-height:100dvh;display:flex;flex-direction:column;background:#f4efe4;color:#1f1c21;box-shadow:0 0 0 2px var(--ink-0)}
+.rd-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--ink-1);color:var(--bone)}
+.rd-bar .lbl{flex:1;font:400 16px/24px var(--px);letter-spacing:.06em;text-transform:uppercase;color:var(--ochre)}
+.rd-body{flex:1;overflow-y:auto;padding:28px 20px 64px;-webkit-overflow-scrolling:touch}
+.rd-body>*{max-width:65ch;margin-left:auto;margin-right:auto}
+.rd-intro{font:400 18px/1.6 Georgia,'Iowan Old Style',serif;color:#4a4450;margin-bottom:24px}
+.rd-list{list-style:none;padding:0;display:grid;gap:12px}
+.rd-list a{display:grid;gap:4px;padding:14px 16px;text-decoration:none;color:inherit;background:#fffaf0;box-shadow:0 0 0 2px #d9d0bf}
+.rd-list a:hover,.rd-list a:focus-visible{box-shadow:0 0 0 2px #a8742c;outline:none}
+.rd-list .rt{font:700 20px/1.3 Georgia,serif}.rd-list .rdd{font:400 14px/20px var(--tx);color:#6a6372}.rd-list .rs{font:400 16px/1.5 Georgia,serif;color:#3b3640}
+.rd-empty{text-align:center;padding:48px 16px}.rd-empty h3{font:400 24px/32px var(--px);letter-spacing:.04em;margin:16px 0 8px}.rd-empty p{font:400 18px/1.6 Georgia,serif;color:#4a4450}
+.rd-glyph{display:inline-block;width:48px;height:40px;background:linear-gradient(90deg,#a8742c 0 46%,transparent 46% 54%,#a8742c 54%);box-shadow:inset 0 -6px 0 #6b4a1d}
+.rd-art{font:400 19px/1.7 Georgia,'Iowan Old Style',serif}
+.rd-art h2{font:700 32px/1.25 Georgia,serif;margin:0 0 6px}.rd-art .rdmeta{font:400 14px/20px var(--tx);color:#6a6372;margin:0 0 28px}
+.rd-art h3,.rd-art h4{font:700 22px/1.35 Georgia,serif;margin:1.6em 0 .4em}
+.rd-art p{margin:0 0 1.1em}.rd-art blockquote{margin:0 0 1.1em;padding:0 0 0 16px;border-left:4px solid #c9a86a;color:#4a4450}
+.rd-art a{color:#8a4b12}.rd-art img{max-width:100%;height:auto}.rd-art pre{overflow-x:auto;background:#1f1c21;color:#ece4d2;padding:12px;font:400 14px/1.5 ui-monospace,monospace}
+.rd-art code{font:400 .9em ui-monospace,monospace;background:#e9e1d1;padding:0 .2em}.rd-art pre code{background:none;padding:0}
+.rd-end{margin-top:32px;font:400 14px/20px var(--tx);color:#6a6372;text-align:center}
+.rd.tome .rd-card{background:var(--ink-1);color:var(--bone)}.rd.tome .rd-intro,.rd.tome .rd-art blockquote,.rd.tome .rd-list .rs,.rd.tome .rd-empty p{color:var(--bone-2)}
+.rd.tome .rd-list a{background:#24212a;box-shadow:0 0 0 2px #3a3541}.rd.tome .rd-art a{color:var(--ochre)}.rd.tome .rd-art code{background:#3a3541}.rd.tome .rd-art .rdmeta,.rd.tome .rd-end,.rd.tome .rd-list .rdd{color:var(--stone)}
+.wlistx{list-style:none;padding:0;margin:0 0 16px;display:grid;gap:10px}.wlistx li{display:grid;gap:2px}.wlistx .wd{font-size:14px;opacity:.8}.wlistx .ws{font-size:16px}
+.wempty{margin:0 0 16px}
+@media (max-width:480px){.rd-body{padding:20px 16px 56px}.rd-art{font-size:18px}.rd-art h2{font-size:26px}}
 .atlas{display:grid;gap:4px;margin:0 0 24px}
 .arow{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:6px 10px;background:var(--ink-1);font:700 16px/22px var(--tx);color:var(--bone)}
 .arow .lbl8{color:var(--stone)}
@@ -509,6 +535,12 @@ button.slot:active{transform:translateY(2px)}
   </div>
 </div>
 
+<div id="reader" class="screen scrim rd" role="dialog" aria-modal="true" aria-labelledby="rdTtl" hidden>
+  <div class="rd-card">
+    <div class="rd-bar"><button class="btn f-alt" id="rdBack" type="button" hidden>&larr; All writings</button><span class="lbl" id="rdTtl">Writings</span><button class="x f-alt" id="rdClose" type="button" aria-label="Close (Esc)"><i class="ico" data-ico="close"></i></button></div>
+    <div class="rd-body" id="rdBody" tabindex="0"></div>
+  </div>
+</div>
 <div id="isleCard" class="islecard" aria-live="polite"><span class="ic-k"></span><span class="ic-n"></span><span class="ic-m"></span></div>
 <div id="cine" hidden>
   <span id="cineBeat"></span>
@@ -523,10 +555,11 @@ button.slot:active{transform:translateY(2px)}
   <div class="tcol">
     <span class="meta">A small playable world &middot; 1&ndash;10 minutes</span>
     <h1 class="logo" id="ttl">KAIAV<small>NIHALANI</small></h1>
-    <p class="tag">Founder of Eden. Co-founder of J.</p>
+    <p class="tag" data-copy="tagline">Founder of Eden. Co-founder of J.</p>
     <div class="trow">
       <button class="btn f-btn" id="bPlay" type="button"><i class="ico" data-ico="play" data-ink="1"></i>Play</button>
       <button class="btn f-alt" id="bSkipTitle" type="button">Read it instead</button>
+      <button class="btn f-alt" id="bWritings" type="button" data-copy="writings.title">Writings</button>
     </div>
     <div id="loadbar" aria-hidden="true"><i></i></div>
     <div class="keys f-panel" id="ctlTitle"></div>
@@ -569,46 +602,50 @@ button.slot:active{transform:translateY(2px)}
       <div class="idx-head">
         <h2 id="idxTtl">Kaiav Nihalani, plain text</h2>
         <p>Everything written on the island signs, without the game.</p>
-        <nav aria-label="Sections"><a href="#s-hub">Welcome</a><a href="#s-eden">Eden</a><a href="#s-j">J: Rising Founder</a><a href="#s-about">About</a><a href="#s-contact">Contact</a></nav>
+        <nav aria-label="Sections"><a href="#s-hub">Welcome</a><a href="#s-eden" data-copy="eden.title">Eden</a><a href="#s-j" data-copy="j.title">J: Rising Founder</a><a href="#s-about" data-copy="about.title">About</a><a href="#s-contact" data-copy="contact.title">Contact</a><a href="#s-writings" data-copy="writings.title">Writings</a></nav>
       </div>
       <div id="book">
         <section id="s-hub" data-sign="hub" aria-labelledby="h-hub">
           <span class="kick">Welcome &middot; Home Isle</span>
           <h2 id="h-hub">Kaiav Nihalani</h2>
-          <p class="lead">Founder of Eden. Co-founder of J.</p>
+          <p class="lead" data-copy="tagline">Founder of Eden. Co-founder of J.</p>
+          <div id="c-intro"></div>
           <p>Welcome to my corner of the sky. At the heart of the island stands the Memory Engine: walk up to its console and press <b>E</b> to watch the whole story. You can replay it any time from your journal.</p>
           <div class="keys pk" id="ctlSign"></div>
           <p class="tips">Grab the sky sail from the stand by the plaza and ride the updrafts out to the little islets. Sky relics hide out there and stitch upgrades into your sail. Beyond the banner buoys lie the Wilds: ruins, monsters and loot. Feed a creature its favourite treat and it will join you. Falling is fine: a sky jelly always catches you.</p>
         </section>
         <section id="s-eden" data-sign="eden" aria-labelledby="h-eden">
-          <span class="kick">Founder</span>
-          <h2 id="h-eden">Eden</h2>
-          <p class="lead">Context for agents.</p>
-          <p>Kaiav is the founder of Eden.</p>
+          <span class="kick" data-copy="eden.role">Founder</span>
+          <h2 id="h-eden" data-copy="eden.title">Eden</h2>
+          <p class="lead" data-copy="eden.line">Context for agents.</p>
+          <div id="c-eden"></div>
         </section>
         <section id="s-j" data-sign="j" aria-labelledby="h-j">
-          <span class="kick">Co-founder &middot; with Jose Cruz-Lopez</span>
-          <h2 id="h-j">J: Rising Founder</h2>
-          <p class="lead">An early chance for extraordinary founders.</p>
-          <p>A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world.</p>
-          <dl class="facts"><dt>Cost</dt><dd>No fee, no equity</dd><dt>Length</dt><dd>Three months, remote</dd><dt>Who</dt><dd>Founders aged 23 and under, anywhere</dd></dl>
-          <p>Co-founded by Kaiav Nihalani and Jose Cruz-Lopez.</p>
-          <div class="links"><a class="btn f-btn" href="https://risingfounder.net" target="_blank" rel="noopener">risingfounder.net<i class="ico" data-ico="ext" data-ink="1"></i></a></div>
+          <span class="kick" data-copy="j.role">Co-founder</span>
+          <h2 id="h-j" data-copy="j.title">J: Rising Founder</h2>
+          <p class="lead" data-copy="j.line">An early chance for extraordinary founders.</p>
+          <div id="c-j"></div>
+          <div class="links"><a class="btn f-btn" id="c-jurl" href="https://risingfounder.net" target="_blank" rel="noopener">risingfounder.net<i class="ico" data-ico="ext" data-ink="1"></i></a></div>
         </section>
         <section id="s-about" data-sign="about" aria-labelledby="h-about">
-          <span class="kick">About</span>
-          <h2 id="h-about">About Kaiav</h2>
-          <p class="ph">[About Kaiav — bio coming soon]</p>
+          <span class="kick" data-copy="about.title">About</span>
+          <h2 id="h-about" data-copy="about.title">About</h2>
+          <div id="c-about"></div>
         </section>
         <section id="s-contact" data-sign="contact" aria-labelledby="h-contact">
-          <span class="kick">Say hello</span>
+          <span class="kick" data-copy="contact.title">Say hello</span>
           <h2 id="h-contact">Contact</h2>
-          <p>The email addresses are locked behind a tiny game. Win it to reveal one, or find Kaiav on LinkedIn and X.</p>
+          <p data-copy="contact.line">The email addresses are locked behind a tiny game.</p>
           <div class="gatebox"><div data-contact-gate></div></div>
           <div class="links">
-            <a class="btn f-btn" href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn<i class="ico" data-ico="ext" data-ink="1"></i></a>
-            <a class="btn f-btn" href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X<i class="ico" data-ico="ext" data-ink="1"></i></a>
+            <a class="btn f-btn" id="c-linkedin" href="https://www.linkedin.com/in/kaiav-nihalani-594703356/" target="_blank" rel="noopener">LinkedIn<i class="ico" data-ico="ext" data-ink="1"></i></a>
+            <a class="btn f-btn" id="c-x" href="https://x.com/KaiavRNihalani" target="_blank" rel="noopener">X<i class="ico" data-ico="ext" data-ink="1"></i></a>
           </div>
+        </section>
+        <section id="s-writings" aria-labelledby="h-writings">
+          <span class="kick">Notes and essays</span>
+          <h2 id="h-writings" data-copy="writings.title">Writings</h2>
+          <div id="c-writings"></div>
         </section>
       </div>
     </div>
@@ -651,6 +688,8 @@ button.slot:active{transform:translateY(2px)}
         <div class="tags" id="jrSail"></div>
         <span class="sect lbl8">The Wilds</span>
         <div id="jrWilds"></div>
+        <span class="sect lbl8">Library</span>
+        <div id="jrLib"></div>
         <span class="sect lbl8">Wilds Atlas</span>
         <div class="atlas" id="jrAtlas"></div>
         <span class="sect lbl8">Ring course</span>
@@ -3662,7 +3701,7 @@ function buildDrops(){
 function spawnDrop(id, x, y, z, w, n){
   let d = null; for (const q of DROPS) if (!q.on){ d = q; break; }
   if (!d){ d = DROPS[0]; for (const q of DROPS) if (q.age > d.age) d = q; }
-  d.on = true; d.id = id; d.n = n || 1; d.w = w || null; d.x = x; d.y = y - .14; d.z = z; d.vx = (Math.random() - .5) * 2.4; d.vy = 3.5; d.vz = (Math.random() - .5) * 2.4; d.age = 0; d.mag = -1;
+  d.on = true; d.id = id; d.n = n || 1; d.w = w || null; d.bk = null; d.x = x; d.y = y - .14; d.z = z; d.vx = (Math.random() - .5) * 2.4; d.vy = 3.5; d.vz = (Math.random() - .5) * 2.4; d.age = 0; d.mag = -1;
   return d;
 }
 let pickPitch = 0, pickPitchT = 0;
@@ -3678,7 +3717,7 @@ function stepDrops(dt, t){
       d.mag += dt / .22; const u = Math.min(1, d.mag), a = 1 - u;
       const cx = (d.sx + ex) / 2, cy = Math.max(d.sy, ey) + 1, cz = (d.sz + ez) / 2;
       d.x = a * a * d.sx + 2 * a * u * cx + u * u * ex; d.y = a * a * d.sy + 2 * a * u * cy + u * u * ey; d.z = a * a * d.sz + 2 * a * u * cz + u * u * ez;
-      if (u >= 1){ const left = invAdd(d.id, d.n, d.w); if (left < d.n){ SND.pickup(pickPitch); pickPitch = Math.min(pickPitch + 1, 8); pickPitchT = .6; } if (!left){ d.on = false; continue; } d.n = left; d.mag = -1; d.vx = d.vz = 0; d.vy = 2; if (t - fullWarned > 4){ fullWarned = t; toast('Satchel full'); } }
+      if (u >= 1){ const left = d.bk ? invAddBook(d.bk) : invAdd(d.id, d.n, d.w); if (left < d.n){ SND.pickup(pickPitch); pickPitch = Math.min(pickPitch + 1, 8); pickPitchT = .6; } if (!left){ d.on = false; continue; } d.n = left; d.mag = -1; d.vx = d.vz = 0; d.vy = 2; if (t - fullWarned > 4){ fullWarned = t; toast('Satchel full'); } }
     } else {
       d.vy -= 22 * dt; if (d.vy < -20) d.vy = -20;
       if ((d.sd = d.vy * dt, sweepAxis(d, 1))){ d.vy = d.vy < -2 ? -d.vy * .3 : 0; d.vx *= .6; d.vz *= .6; }
@@ -4431,7 +4470,7 @@ function specRim(I, tx, tz, out){ const o = {}; let dx = tx - I.x, dz = tz - I.z
   for (let s = 0; s < I.r * 2.2; s++){ const x = Math.round(I.x + dx * s), z = Math.round(I.z + dz * s); wgenInline.api.col(I, x, z, o); if (o.in){ lx = x; lz = z; top = o.top; } }
   return { x: lx + dx * (out || 0), z: lz + dz * (out || 0), top }; }
 function layoutWilds(seed){
-  OUT_SEED = seed >>> 0; OUT.length = 0; WILD_UD.length = 0; WILD_LINKS.length = 0; WILD_BRIDGES.length = 0;
+  OUT_SEED = seed >>> 0; OUT.length = 0; WILD_UD.length = 0; STONED.clear(); MODRT.length = 0; WILD_LINKS.length = 0; WILD_BRIDGES.length = 0;
   wgenInline.api.setSeed(OUT_SEED);
   const rand = wgenInline.api.mulberry(OUT_SEED ^ 0x9e3779b9), names = new Set();
   for (const r0 of SIZE_PLAN){
@@ -4641,7 +4680,7 @@ function seededRand(a, b, c){ return wgenInline.api.mulberry(((OUT_SEED * 31 + a
 
 function weaponIconURL(w){ const key = 'w' + w.f + '_' + w.r; if (iconCache[key]) return iconCache[key]; const cv = D.createElement('canvas'); cv.width = cv.height = 32; drawWeapon(cv.getContext('2d'), w.f, w.r); return (iconCache[key] = cv.toDataURL()); }
 const slotIcon = s => s.w ? weaponIconURL(s.w) : iconURL(s.id);
-const slotName = s => s.w ? s.w.nm : itemName(s.id);
+const slotName = s => s.w ? s.w.nm : s.bk ? bookTitle(s) : itemName(s.id);
 
 /* ---- chests: two instanced meshes (body + hinged lid), loot rolled from the seed ---- */
 const CHESTS = []; const chestLooted = new Map(); // key 'k:i' -> time opened (ms since epoch)
@@ -4675,7 +4714,7 @@ function nearestChest(maxD){
 function openChest(c){
   if (c.opened) return; if (c.lock && !MODDONE.has(c.mod)){ const M = MODRT.find(q => q.key === c.mod); toast('Sealed. ' + (M && M.hint ? M.hint + '.' : 'Solve this island\'s challenge to open it.')); SND.deny(); c.shake = .12; return; }
   c.opened = true; c.shake = .18; chestLooted.set(chestKey(c), Date.now()); wildStats.chests++; saveDirty = true;
-  const rand = seededRand(c.k, c.i, c.roll), items = rollChest(rand, c.tier);
+  const rand = seededRand(c.k, c.i, c.roll), items = rollChest(rand, c.tier); { const bk = rollBook(Math.random, c.tier); if (bk) items.push({ id: BOOK0 + bookRarity(bk), n: 1, bk: bk.slug }); }
   let best = 0; for (const it of items) if (it.w) best = Math.max(best, it.w.r);
   SND.chestOpen(best, c); animPlace();
   if (c.grapple && !GEAR.grapple) setTimeout(grantGrapple, 650);
@@ -4684,7 +4723,7 @@ function openChest(c){
     const R = RARITY[best], cx = c.x + .5, cy = c.y + .7, cz = c.z + .5;
     const k = R.k; for (let i = 0; i < 26; i++){ const a = Math.random() * 6.283, sp = 2 + Math.random() * 3; emit(cx, cy, cz, Math.cos(a) * sp, 3 + Math.random() * 4, Math.sin(a) * sp, k[0], k[1], k[2], .2, 1.1, 2, 9); }
     sparkle(cx, cy + .3, cz, 14, k[0], k[1], k[2]); PL.punch = Math.max(PL.punch, .5 + best * .15);
-    items.forEach((it, j) => setTimeout(() => { const d = spawnDrop(it.id, cx, cy + .2, cz, it.w, it.n); if (d){ const a = c.yaw + (j - (items.length - 1) / 2) * .5; d.vx = Math.sin(a) * 2.6; d.vz = Math.cos(a) * 2.6; d.vy = 5.5; d.age = -.3; } }, 90 * j));
+    items.forEach((it, j) => setTimeout(() => { const d = spawnDrop(it.id, cx, cy + .2, cz, it.w, it.n); if (d){ if (it.bk) d.bk = it.bk; const a = c.yaw + (j - (items.length - 1) / 2) * .5; d.vx = Math.sin(a) * 2.6; d.vz = Math.cos(a) * 2.6; d.vy = 5.5; d.age = -.3; } }, 90 * j));
     if (best >= 4) SND.legendary();
     renderJournalSoon();
   }, 190);
@@ -4779,7 +4818,9 @@ function itemArt(id, w){
       g.set(7, 4, 'steel'); g.set(6, 3, 'steel'); g.set(11, 5, 'gem'); if (r >= 3) g.set(12, 6, 'gem'); }
     else { // dagger: a short wide blade, a cross guard, a stubby grip with a gem pommel
       g.line(7, 8, 13, 2, 'blade', 2); g.line(7, 7, 12, 2, 'edge'); g.set(14, 1, 'edge'); g.line(4, 7, 8, 11, 'brass', 2); g.line(2, 12, 5, 9, 'wrap', 2); g.set(1, 13, 'gem'); g.set(1, 14, 'gem'); g.set(2, 13, 'gem'); }
-  } else if (id === STICK){ g.line(3, 13, 12, 4, 'wood', 2); g.set(10, 5, 'leaf'); g.set(11, 4, 'leaf'); g.set(9, 6, 'dark'); }
+  } else if (id >= 131 && id < 136){ const r = id - 131; ramps = { cover: { r: GEM[r], d: 1.6 }, gem: { r: GEM[Math.min(4, r + 1)], d: 2.2, em: r >= 2 ? 1 : 0, flat: 0 } };
+    g.rows(['................', '...ccccccccccc..', '..cccccccccccpp.', '..cbbbcccccccpp.', '..cbccccgccccpp.', '..cbcccgggcccpp.', '..cbccccgccccpp.', '..cbcccccccccpp.', '..cbcccccccccpp.', '..cbbbcccccccpp.', '..ccccccccccccp.', '..dddddddddddd..'], { c: 'cover', b: 'brass', g: 'gem', p: 'dough', d: 'dark' }); }
+  else if (id === STICK){ g.line(3, 13, 12, 4, 'wood', 2); g.set(10, 5, 'leaf'); g.set(11, 4, 'leaf'); g.set(9, 6, 'dark'); }
   else if (id === PICK){ g.line(3, 14, 11, 6, 'wood', 2); g.line(4, 12, 5, 11, 'dark');
     g.rows(['................', '.....sssss......', '...ssssssss.....', '..ss...ssssss...', '.s.....ss.ssss..', '.......ss...sss.', '........s....ss.', '..............s.'], { s: 'stone' }); g.set(9, 4, 'brass'); g.set(10, 5, 'brass'); }
   else if (id === SAIL){ g.rows(['................', '.....cccccc.....', '...ccrrccrrcc...', '..crrccrrccrrc..', '.ccrcc....ccrcc.', '.cc..........cc.', '.p............p.', '..p..p....p..p..', '...p..p..p..p...', '....p..pp..p....', '.....p.pp.p.....', '......pbbp......', '......bbbb......', '.......bb.......'], { c: 'canvas', r: 'sailred', p: 'rope', b: 'brass' }); }
@@ -5211,7 +5252,7 @@ function reseedWilds(seed){
      launch pad on the source island beside its updraft; trails (graded, max one block per step, carved through
      terrain, bridged over gaps) join the landing pad to every launch pad, every module entrance and the vault.
 */
-const MODDONE = new Set(), REVEALED = new Set(), MODRT = [];
+const MODDONE = new Set(), REVEALED = new Set(), MODRT = [], STONED = new Map();
 const THEMES = [
   { id: 'belfry', a: ['The Drowned', 'The Sunken', 'The Silent'], n: ['Belfry', 'Carillon', 'Bell Tower'], b: [0, 3], m: { bells: 5, sunken: 4, library: 2, braziers: 1 } },
   { id: 'kiln', a: ['Kiln of', 'Forge of', 'Hearth of'], n: ['Ashes', 'Cinders', 'Embers'], b: [4, 1], m: { camp: 3, ore: 3, braziers: 3, nest: 1 }, hz: 'vents' },
@@ -5463,7 +5504,11 @@ MOD.trader = { R: 5, build(M, A){ const s = A.site(5); if (!s) return false; con
       if (!ids.length){ SND.voice('kit', { x: M.x, y: M.y, z: M.z - 2 }); toast('"Ten blocks of stone, wood or ruin brick, friend, and this blade is yours."'); }
       else if (M.trades >= 3){ toast('"I have nothing left for you today."'); }
       else { takeItem(ids[0], 10); const seed = (OUT_SEED + M.I.k * 31 + M.trades) >>> 0; let a = seed || 1; const w = rollWeapon(() => { a = (a * 16807) % 2147483647; return a / 2147483647; }, Math.min(4, 1 + M.I.tier)); spawnDrop(WEAPON, M.x + .5, M.y + 1.5, M.z + 1.5, w, 1); M.trades++; SND.reward(); toast('"A fair trade!"'); if (!M.done) modComplete(M); } } else if (!on) M.on = false; } };
-MOD.vault = { R: 0, build(M, A){ const st = A.r.structs.find(s => s.grapple) || A.r.structs[0]; if (!st) return false; const ch = A.r.chests.find(c => c.grapple) || A.r.chests[0]; if (!ch) return false; ch.mod = M.key; M.x = ch.x; M.y = ch.y; M.z = ch.z;
+MOD.vault = { R: 0, build(M, A){ let st = A.r.structs.find(s => s.grapple) || A.r.structs[0], ch = A.r.chests.find(c => c.grapple);
+    if (!st || !ch){ const s = A.site(5); if (!s) return false; const { x, y, z } = s; for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++){ const edge = Math.abs(dx) === 3 || Math.abs(dz) === 3; for (let k = 0; k < 4; k++) if (edge && !(dz === 3 && Math.abs(dx) <= 1 && k < 3)) A.put(x + dx, y + k, z + dz, k === 3 ? PBRICK : RUIN); A.put(x + dx, y + 4, z + dz, PBRICK); A.put(x + dx, y - 1, z + dz, JSTONE); }
+      A.put(x - 2, y + 2, z - 2, LANTERN); A.put(x + 2, y + 2, z - 2, CRYSTAL); A.r.chests.push({ x, y, z: z - 1, tier: 3, s: -1, grapple: 1 }); ch = A.r.chests[A.r.chests.length - 1];
+      A.enemy(4, x + 6, y, z + 6, null); A.enemy(4, x - 6, y, z + 6, null); A.enemy(1, x + 5, y, z - 5, null); A.enemy(1, x - 5, y, z - 5, null); }
+    if (!ch) return false; ch.mod = M.key; M.x = ch.x; M.y = ch.y; M.z = ch.z;
     let best = null; for (const [dx, dz] of [[0, 1], [1, 0], [0, -1], [-1, 0], [0, 2], [2, 0], [0, -2], [-2, 0]]) if (!B_SOLID[getB(ch.x + dx, ch.y, ch.z + dz)]){ best = [ch.x + dx, ch.y, ch.z + dz]; break; }
     if (!best){ best = [ch.x, ch.y, ch.z + 1]; A.put(best[0], best[1], best[2], 0); A.put(best[0], best[1] + 1, best[2], 0); } M.ex = best[0]; M.ey = best[1]; M.ez = best[2]; M.hint = 'The grappling hook rests here, guarded'; return true; },
   tick(M){ if (!M.done && GEAR.grapple) modComplete(M); } };
@@ -5483,9 +5528,39 @@ function buildIslandContent(I, r){
   const pad = (tx, tz, inset) => { const ang = Math.atan2(tz - I.z, tx - I.x), rm = A.rim(ang); I.padAngs.push(ang); let px = Math.round(rm.x - Math.cos(ang) * inset), pz = Math.round(rm.z - Math.sin(ang) * inset);
     if (!A.inI(px, pz)){ px = Math.round(I.x); pz = Math.round(I.z); } const hs = []; for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) if (A.inI(px + dx, pz + dz)) hs.push(A.top(px + dx, pz + dz)); hs.sort((a, b) => a - b); const gy = hs.length ? hs[hs.length >> 1] : I.top;
     A.flatten(px, pz, 3, gy); for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) if (A.inI(px + dx, pz + dz)) A.put(px + dx, gy, pz + dz, (dx + dz) & 1 ? COBBLE : STEP);
-    for (const [dx, dz] of [[-3, -3], [3, 3]]) if (A.inI(px + dx, pz + dz)) A.lamp(px + dx, gy + 1, pz + dz); A.used.push({ x: px, z: pz, R: 3 }); return { x: px, y: gy + 1, z: pz, ang }; };
-  for (const [a, J] of WILD_LINKS){ if (J === I){ I.pads.land = pad(a.x, a.z, 7); I.pads.land.from = a.gate ? -1 : a.k; } }
+    for (const [dx, dz] of [[-3, -3], [3, 3]]) if (A.inI(px + dx, pz + dz)) A.lamp(px + dx, gy + 1, pz + dz); A.used.push({ x: px, z: pz, R: 3 });
+    // a jetty from the pad out past the rim at pad height: nothing to climb between the pad and the open air
+    const ca = Math.cos(ang), sa = Math.sin(ang); for (let s2 = 0; s2 < inset + 4; s2++) for (const w of [-1, 0, 1]){ const x = Math.round(px + ca * s2 - sa * w), z = Math.round(pz + sa * s2 + ca * w); if (A.inI(x, z)){ A.put(x, gy, z, s2 & 1 ? COBBLE : STEP); for (let k = 1; k < 5; k++) A.put(x, gy + k, z, 0); } }
+    return { x: px, y: gy + 1, z: pz, ang }; };
+  for (const [a, J] of WILD_LINKS){ if (J === I){ I.pads.land = pad(a.x, a.z, 5); I.pads.land.from = a.gate ? -1 : a.k; } }
   for (const [a, J] of WILD_LINKS){ if (a === I) I.pads.launch[J.k] = pad(J.x, J.z, 4); }
+  // stepping-stone causeways: every link gets a chain of floating 3x3 stones from launch pad to landing pad,
+  // one sprint-jump apart (2-block gaps), climbing at most one block per stone; built when both ends exist
+  const stones = (a, J) => { const key = (a.gate ? 'g' + WILD_LINKS.findIndex(l => l[1] === J) : a.k) + '>' + J.k; if (STONED.has(key)) return;
+    const S = a.gate ? (J.gatePad = { x: Math.round(a.x), y: a.top + 1, z: Math.round(a.z) }) : a.pads && a.pads.launch[J.k], E = J.pads && J.pads.land; if (!S || !E) return;
+    // leave along the launch jetty, arrive along the landing jetty (both at pad height)
+    const own = (x, z) => x >= 0 && z >= 0 && x < WX && z < WZ && isl[x + z * WX] >= 0;
+    const out = (P0, ang, kk) => { let x = P0.x, z = P0.z, lx = x, lz = z; for (let t = 0; t < 60; t++){ x += Math.cos(ang) * .5; z += Math.sin(ang) * .5; if (isl[Math.round(x) + Math.round(z) * WX] === kk){ lx = Math.round(x); lz = Math.round(z); } else if (t > 2) break; } return { x: lx, z: lz }; };
+    let X0, exitY = S.y; if (a.gate){ let gx = Math.round(S.x), gz = Math.round(S.z), bd = 1e9; for (let dz = -8; dz <= 8; dz++) for (let dx = -8; dx <= 8; dx++){ const x = gx + dx, z = gz + dz; if (x < 0 || z < 0 || x >= WX || z >= WZ) continue; const v = isl[x + z * WX]; if (v >= 0 && v < OUT_ISL0){ const d = Math.hypot(x - E.x, z - E.z); if (d < bd){ bd = d; X0 = { x, z }; } } }
+      if (!X0) return; exitY = hTop[X0.x + X0.z * WX] + 1; S.stand = [X0.x, exitY, X0.z]; } else X0 = out(S, S.ang, OUT_ISL0 + a.k);
+    const X1 = out(E, E.ang, OUT_ISL0 + J.k), entryY = E.y;
+    const dx = X1.x - X0.x, dz = X1.z - X0.z, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L, px = -uz, pz = ux, list = [];
+    const at = d => [Math.round(X0.x + ux * d), Math.round(X0.z + uz * d)], exitD = 0, entryD = L;
+    const d0 = exitD + 2, d1 = entryD - 2; let n = Math.max(1, Math.ceil((d1 - d0) / 5)); const total = entryY - exitY, extra = Math.max(0, Math.ceil((total - (n + 1)) / 6) * 6), m = n >> 1; let y = exitY;
+    // bow the causeway sideways around anything in the way (another island's lobe, a spire)
+    let bow = 0, bc = 1e9; for (const off of [0, 6, -6, 12, -12, 18, -18]){ let c = 0; for (let i = 0; i <= n; i++){ const d = d0 + (d1 - d0) * i / n, t = i / n, q = at(d), qx = Math.round(q[0] + px * off * Math.sin(Math.PI * t)), qz = Math.round(q[1] + pz * off * Math.sin(Math.PI * t)); for (let ddz = -2; ddz <= 2; ddz++) for (let ddx = -2; ddx <= 2; ddx++) if (own(qx + ddx, qz + ddz) && i > 0 && i < n) c++; } if (c < bc){ bc = c; bow = off; } if (!c) break; }
+    if (bow){ let len = 0, pq = null; for (let k = 0; k <= 60; k++){ const t = k / 60, q = at(d0 + (d1 - d0) * t), qq = [q[0] + px * bow * Math.sin(Math.PI * t), q[1] + pz * bow * Math.sin(Math.PI * t)]; if (pq) len += Math.hypot(qq[0] - pq[0], qq[1] - pq[1]); pq = qq; } n = Math.max(n, Math.ceil(len / 4.6)); }
+    const atB = (d, i) => { const q = at(d), t = i / n; return [Math.round(q[0] + px * bow * Math.sin(Math.PI * t)), Math.round(q[1] + pz * bow * Math.sin(Math.PI * t))]; };
+    for (let i = 0; i <= n; i++){ const d = d0 + (d1 - d0) * i / n, [cx, cz] = atB(d, i), want = exitY + Math.round((total - extra) * (i + 1) / (n + 1)) + (i > m ? extra : 0); y = Math.min(y + 1, Math.max(want, y - 3));
+      { let hi = -1; for (let ddz = -1; ddz <= 1; ddz++) for (let ddx = -1; ddx <= 1; ddx++) if (own(cx + ddx, cz + ddz)) hi = Math.max(hi, hTop[cx + ddx + (cz + ddz) * WX]); if (hi >= y - 1) y = hi + 1; }
+      list.push([cx, y, cz]);
+      // mid-gap spiral: whole turns of six stones on a radius-5 circle, one block up each, ending back above this stone
+      if (i === m && extra){ let sd = 1, bo = 1e9; for (const s2 of [1, -1]){ let o = 0; for (let k = 0; k < 6; k++){ const th = Math.atan2(-pz * s2, -px * s2) + k * 1.047; if (own(Math.round(cx + px * 5 * s2 + Math.cos(th) * 5), Math.round(cz + pz * 5 * s2 + Math.sin(th) * 5))) o++; } if (o < bo){ bo = o; sd = s2; } }
+        const ccx = cx + px * 5 * sd, ccz = cz + pz * 5 * sd, th0 = Math.atan2(cz - ccz, cx - ccx); for (let k = 1; k <= extra; k++){ y++; const th = th0 + k * 1.047; list.push([Math.round(ccx + Math.cos(th) * 5), y, Math.round(ccz + Math.sin(th) * 5)]); } } }
+    for (const [cx, cy, cz] of list){ for (let ddz = -1; ddz <= 1; ddz++) for (let ddx = -1; ddx <= 1; ddx++){ if (own(cx + ddx, cz + ddz) && (B_SOLID[getB(cx + ddx, cy - 1, cz + ddz)] || hTop[cx + ddx + (cz + ddz) * WX] >= cy - 2)) continue; A.put(cx + ddx, cy - 1, cz + ddz, (ddx | ddz) ? STONE : MOSS); if (!(ddx | ddz)) A.put(cx, cy - 2, cz, STONE); } for (let ddz = -2; ddz <= 2; ddz++) for (let ddx = -2; ddx <= 2; ddx++) for (let k = 0; k < 3; k++){ const X = cx + ddx, Z = cz + ddz, Y = cy + k; if (getB(X, Y, Z) && (!own(X, Z) || Y > hTop[X + Z * WX])) A.put(X, Y, Z, 0); } }
+    list.forEach((p, i) => { if (i % 3 === 1) A.put(p[0] + 1, p[1], p[2] + 1, LANTERN); });
+    STONED.set(key, { list, S, E, X0, X1, exitY, entryY, ok: !list.length || list[list.length - 1][1] >= entryY - 1 }); };
+  for (const [a, J] of WILD_LINKS){ if (J === I && (a.gate || (a.gen === 2 && a.pads))) stones(a, I); if (a === I && J.gen === 2 && J.pads) stones(I, J); }
   // modules
   const rts = [];
   const FB = ['motes', 'crumble', 'glide', 'gauntlet', 'ore', 'spire'];
@@ -5730,7 +5805,6 @@ function gearIconURL(k, on){
   const out = D.createElement('canvas'); out.width = out.height = 32; const g = out.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(cv, 0, 0, 32, 32);
   return gearIconCache[key] = out.toDataURL();
 }
-
 /* =====================================================================
    THE MEMORY ENGINE: a directed short film, made of voxels
    ---------------------------------------------------------------------
@@ -6279,6 +6353,7 @@ function cineReplay(){
   setState('cine'); $('#cine').classList.add('on'); SND.score('start'); goShot(0);
 }
 
+
 /* =====================================================================
    FIRST-PERSON ANIMATION: one rig, families of clips.
    Families: empty, block, tool, food, sword, spear, axe, dagger, and the grappling hook (drawn while in use).
@@ -6396,6 +6471,114 @@ function updateHandRig(dt, hs, sliding, bobX, bobY){
   hand.position.set(bx - .1 + sw.x + ins.x + shake, by + .06 + sw.y + ins.y, bz + .08 + sw.z + ins.z);
   hand.rotation.set(-.08 + HR.rx.x + mRx * .9 + fd * .3 + sw.rx + ins.rx - gFire * .5 + hk * .06 + (AS.fam === 'spear' ? eqR : 0), .08 - fd * .5 + sw.ry + ins.ry, HR.rz.x + sw.rz + ins.rz + gFire * .14 + (AS.fam === 'sword' ? eqR * .4 : 0));
   if (handGrip){ AS.gripRZ += (reel ? 14 : 0) * dt; handGrip.rotation.set((AS.fam === 'dagger' ? eqR : 0) + (AS.fam === 'axe' ? -eqR * .3 : 0), ins.gy, ins.gz + (AS.fam === 'grapple' ? Math.sin(AS.gripRZ) * .05 * reel : 0)); }
+}
+
+/* ================= site copy, Markdown, the Writings reader and books (x1) =================
+   Copy and writings come from content/copy.md and content/writings/*.md, baked by site/build.py into
+   <script type="application/json" id="kw-content">. Everything the site says outside the film reads copy(key).
+   Markdown is rendered by a compact renderer below: the source is HTML-escaped first, links must be http(s) or #,
+   and open in a new tab. Writings are readable without playing (#writings, #w-<slug>), and each published article
+   is also a unique Book item in Wilds chests; reading it to the end in game grants a one-time reward. */
+const KW_DEFAULT = { copy: { name: 'Kaiav Nihalani', tagline: 'Founder of Eden. Co-founder of J.', intro: '', 'eden.title': 'Eden', 'eden.line': 'Context for agents.', 'eden.role': 'Founder', 'eden.body': '',
+  'j.title': 'J: Rising Founder', 'j.line': 'An early chance for extraordinary founders.', 'j.role': 'Co-founder, with Jose Cruz-Lopez', 'j.url': 'https://risingfounder.net',
+  'j.body': 'A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world. No fee, no equity.', 'about.title': 'About', 'about.body': '[About Kaiav — bio coming soon]',
+  'contact.title': 'Say hello', 'contact.line': 'Emails are locked behind a tiny game. LinkedIn and X are open.', 'links.linkedin': 'https://www.linkedin.com/in/kaiav-nihalani-594703356/', 'links.x': 'https://x.com/KaiavRNihalani',
+  'writings.title': 'Writings', 'writings.intro': 'Notes and essays will appear here.' }, writings: [] };
+let KW_CONTENT = KW_DEFAULT;
+try { const el = D.getElementById('kw-content'); if (el){ const j = JSON.parse(el.textContent); KW_CONTENT = { copy: Object.assign({}, KW_DEFAULT.copy, (j && j.copy) || {}), writings: Array.isArray(j && j.writings) ? j.writings.filter(w => w && w.slug && w.title) : [] }; } } catch (e){ KW_CONTENT = KW_DEFAULT; }
+Wn.KW_CONTENT = KW_CONTENT;
+function copy(key, fallback){ const v = KW_CONTENT.copy[key]; return typeof v === 'string' && v.trim() !== '' ? v : (fallback !== undefined ? fallback : (KW_DEFAULT.copy[key] || '')); }
+const escH = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+// ---- Markdown: headings, paragraphs, emphasis, links, lists, blockquotes, code, images by URL, rules ----
+function mdSafeUrl(u){ u = String(u).trim(); return /^(https?:\/\/|#)/i.test(u) ? u.replace(/"/g, '%22') : ''; }
+function mdInline(s){ // s is already HTML-escaped
+  const codes = []; s = s.replace(/`([^`]+)`/g, (m, c) => { codes.push('<code>' + c + '</code>'); return '\u0000' + (codes.length - 1) + '\u0000'; });
+  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, u) => { const url = mdSafeUrl(u.replace(/&amp;/g, '&')); return url ? '<img src="' + escH(url) + '" alt="' + alt + '" loading="lazy">' : alt; });
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, u) => { const url = mdSafeUrl(u.replace(/&amp;/g, '&')); return url ? '<a href="' + escH(url) + '"' + (url[0] === '#' ? '' : ' target="_blank" rel="noopener"') + '>' + t + '</a>' : t; });
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/__([^_]+)__/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>').replace(/(^|\W)_([^_\s][^_]*)_(?=\W|$)/g, '$1<em>$2</em>');
+  return s.replace(/\u0000(\d+)\u0000/g, (m, i) => codes[+i]);
+}
+function md(src){
+  const L = escH(String(src || '').replace(/\r/g, '')).split('\n'), out = []; let i = 0;
+  while (i < L.length){ const l = L[i];
+    if (/^```/.test(l)){ const buf = []; i++; while (i < L.length && !/^```/.test(L[i])) buf.push(L[i++]); i++; out.push('<pre><code>' + buf.join('\n') + '</code></pre>'); continue; }
+    let m = /^(#{1,6})\s+(.*)$/.exec(l); if (m){ const n = Math.min(6, m[1].length + 1); out.push('<h' + n + '>' + mdInline(m[2]) + '</h' + n + '>'); i++; continue; }
+    if (/^\s*(---|\*\*\*|___)\s*$/.test(l)){ out.push('<hr>'); i++; continue; }
+    if (/^&gt;\s?/.test(l)){ const buf = []; while (i < L.length && /^&gt;\s?/.test(L[i])) buf.push(L[i++].replace(/^&gt;\s?/, '')); out.push('<blockquote>' + md(buf.join('\n').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")) + '</blockquote>'); continue; }
+    if (/^\s*([-*+]|\d+\.)\s+/.test(l)){ const ord = /^\s*\d+\./.test(l), buf = []; while (i < L.length && /^\s*([-*+]|\d+\.)\s+/.test(L[i])) buf.push('<li>' + mdInline(L[i++].replace(/^\s*([-*+]|\d+\.)\s+/, '')) + '</li>'); out.push((ord ? '<ol>' : '<ul>') + buf.join('') + (ord ? '</ol>' : '</ul>')); continue; }
+    if (!l.trim()){ i++; continue; }
+    const buf = []; while (i < L.length && L[i].trim() && !/^(#{1,6}\s|```|&gt;|\s*([-*+]|\d+\.)\s+)/.test(L[i])) buf.push(L[i++]); out.push('<p>' + mdInline(buf.join(' ')) + '</p>'); }
+  return out.join('\n');
+}
+// ---- apply copy to the static page (title, index, signs) ----
+function applyCopy(){
+  const nm = copy('name'), parts = nm.split(' '), set = (sel, v) => { const e = D.querySelector(sel); if (e) e.textContent = v; }, html = (sel, v) => { const e = D.querySelector(sel); if (e) e.innerHTML = v; };
+  const logo = $('#ttl'); if (logo){ logo.textContent = ''; logo.appendChild(D.createTextNode(parts[0].toUpperCase())); const sm = D.createElement('small'); sm.textContent = parts.slice(1).join(' ').toUpperCase(); logo.appendChild(sm); }
+  for (const e of D.querySelectorAll('[data-copy]')) e.textContent = copy(e.dataset.copy);
+  set('#idxTtl', nm + ', plain text'); set('#h-hub', nm);
+  html('#c-intro', copy('intro') ? md(copy('intro')) : '');
+  html('#c-eden', md(copy('eden.body', nm + ' is the founder of ' + copy('eden.title') + '.')));
+  html('#c-j', md(copy('j.body')));
+  html('#c-about', md(copy('about.body')));
+  const ju = mdSafeUrl(copy('j.url')), ja = $('#c-jurl'); if (ja){ if (ju){ ja.href = ju; ja.firstChild.nodeValue = ju.replace(/^https?:\/\//, '').replace(/\/$/, ''); ja.hidden = false; } else ja.hidden = true; }
+  const li = $('#c-linkedin'), xx = $('#c-x'); if (li){ const u = mdSafeUrl(copy('links.linkedin')); li.hidden = !u; if (u) li.href = u; } if (xx){ const u = mdSafeUrl(copy('links.x')); xx.hidden = !u; if (u) xx.href = u; }
+  renderIndexWritings();
+}
+// ---- writings: list, article, reader (site style, or the in-game tome) ----
+const WRITINGS = () => KW_CONTENT.writings;
+const wordsOf = w => (String(w.body || '').match(/\S+/g) || []).length;
+function bookRarity(w){ const n = wordsOf(w); return n < 300 ? 0 : n < 800 ? 1 : n < 1600 ? 2 : n < 3000 ? 3 : 4; }
+const BOOK0 = 131; for (let r = 0; r < 5; r++) I_NAME[BOOK0 + r] = 'Book';
+const isBook = id => id >= BOOK0 && id < BOOK0 + 5;
+const BOOKS_FOUND = new Set(), BOOKS_READ = new Set();
+const RD = { open: false, mode: 'site', slug: '', t0: 0, need: 0, back: 'title', granted: false };
+function fmtDate(d){ if (!d) return ''; const t = Date.parse(d); return isNaN(t) ? escH(d) : new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }); }
+function renderIndexWritings(){ const el = $('#c-writings'); if (!el) return; const W = WRITINGS();
+  el.innerHTML = W.length ? '<ul class="wlistx">' + W.map(w => '<li><a href="#w-' + escH(w.slug) + '">' + escH(w.title) + '</a>' + (w.date ? '<span class="wd">' + fmtDate(w.date) + '</span>' : '') + (w.summary ? '<span class="ws">' + escH(w.summary) + '</span>' : '') + '</li>').join('') + '</ul>'
+    : '<p class="wempty"><b>No writings yet.</b> ' + escH(copy('writings.intro')) + '</p>'; }
+function readerList(){ const W = WRITINGS(), body = $('#rdBody');
+  $('#rdTtl').textContent = copy('writings.title'); $('#rdBack').hidden = true; RD.slug = '';
+  body.innerHTML = (W.length ? '<div class="rd-intro">' + md(copy('writings.intro')) + '</div>' : '') + (W.length ? '<ul class="rd-list">' + W.map(w => { const found = RD.mode !== 'tome' || BOOKS_FOUND.has(w.slug);
+      return '<li><a href="#w-' + escH(w.slug) + '" data-w="' + escH(w.slug) + '"><span class="rt">' + escH(w.title) + '</span>' + (w.date ? '<span class="rdd">' + fmtDate(w.date) + '</span>' : '') + (w.summary ? '<span class="rs">' + escH(w.summary) + '</span>' : '') + (BOOKS_READ.has(w.slug) ? '<span class="rread lbl8">Read</span>' : '') + '</a></li>'; }).join('') + '</ul>'
+    : '<div class="rd-empty"><span class="rd-glyph" aria-hidden="true"></span><h3>No writings yet</h3><p>' + escH(copy('writings.intro')) + '</p></div>');
+  body.scrollTop = 0; }
+function readerArticle(slug){ const w = WRITINGS().find(q => q.slug === slug), body = $('#rdBody'); if (!w){ readerList(); return; }
+  RD.slug = slug; $('#rdTtl').textContent = RD.mode === 'tome' ? 'Book' : copy('writings.title'); $('#rdBack').hidden = false;
+  const n = wordsOf(w); body.innerHTML = '<article class="rd-art"><header><h2>' + escH(w.title) + '</h2><p class="rdmeta">' + (w.date ? fmtDate(w.date) + ' · ' : '') + Math.max(1, Math.round(n / 230)) + ' min read</p></header>' + md(w.body) + '<p class="rd-end" id="rdEnd">' + (RD.mode === 'tome' && !BOOKS_READ.has(slug) ? 'Read to here to finish the book.' : 'The end.') + '</p></article>';
+  body.scrollTop = 0; RD.t0 = performance.now(); RD.need = n / 230 * 60 * .6 * 1000; RD.granted = BOOKS_READ.has(slug); }
+function openReader(mode, slug){
+  RD.mode = mode || 'site'; const el = $('#reader'); el.classList.toggle('tome', RD.mode === 'tome');
+  if (!RD.open){ RD.back = state; RD.open = true; if (SCREENS.reader !== el) SCREENS.reader = el; setState('reader'); }
+  if (slug) readerArticle(slug); else readerList(); setTimeout(() => { try { $('#rdClose').focus({ preventScroll: true }); } catch (e){} }, 40);
+}
+function closeReader(){ if (!RD.open) return; RD.open = false; try { if (/^#(writings|w-)/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search); } catch (e){}
+  const b = RD.back; if (b === 'play' || b === 'inv') resumePlay(true); else setState(b === 'reader' ? 'title' : b); }
+function readerScroll(){ if (RD.mode !== 'tome' || !RD.slug || RD.granted) return; const b = $('#rdBody'); if (b.scrollTop + b.clientHeight < b.scrollHeight - 12) return;
+  const left = RD.need - (performance.now() - RD.t0); if (left > 0){ const e = $('#rdEnd'); if (e) e.textContent = 'Take your time: about ' + Math.ceil(left / 1000) + ' more seconds with this one.'; clearTimeout(RD.retry); RD.retry = setTimeout(readerScroll, Math.min(left + 100, 4000)); return; }
+  RD.granted = true; BOOKS_READ.add(RD.slug); saveDirty = true; const w = WRITINGS().find(q => q.slug === RD.slug), r = w ? bookRarity(w) : 0;
+  let a = (OUT_SEED ^ RD.slug.length * 7919) >>> 0 || 1; const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
+  const wpn = rollWeapon(rnd, Math.max(1, r)); if (state === 'reader') setTimeout(() => { spawnDrop(WEAPON, PL.x, PL.y + 1.6, PL.z, wpn, 1); for (let i = 0; i <= r; i++) spawnDrop(BISCUIT, PL.x, PL.y + 1.6, PL.z); }, 50);
+  SND.reward(); const e = $('#rdEnd'); if (e) e.textContent = 'Well read. A reward waits at your feet.'; toastCard('Well read', (w ? w.title : 'A book') + ' · ' + BOOKS_READ.size + ' read so far', 5000); renderJournalSoon(); }
+// a book for a chest: unfound articles, rarer ones weighted toward deeper chests
+function rollBook(rand, tier){ const W = WRITINGS(); if (!W.length) return null; const ch = [.0, .14, .28, .45][Math.min(3, tier)] || 0; if (rand() > ch) return null;
+  const pool = W.filter(w => !BOOKS_FOUND.has(w.slug) && !inv.some(s => s && s.bk === w.slug)); if (!pool.length) return null;
+  let tot = 0; const wts = pool.map(w => { const r = bookRarity(w), k = r <= tier + 1 ? 1 : .15; tot += k; return k; }); let x = rand() * tot; for (let i = 0; i < pool.length; i++){ x -= wts[i]; if (x <= 0) return pool[i]; } return pool[0]; }
+function invAddBook(slug){ const w = WRITINGS().find(q => q.slug === slug); if (!w) return 1; for (let i = 0; i < 36; i++) if (!inv[i]){ inv[i] = { id: BOOK0 + bookRarity(w), n: 1, bk: slug }; BOOKS_FOUND.add(slug); invChanged(); bumpSlot(i); toastCard('A book', w.title + '. Use it to read.', 4500); SND.page(); saveDirty = true; renderJournalSoon(); return 0; } return 1; }
+function bookTitle(s){ const w = s && s.bk && WRITINGS().find(q => q.slug === s.bk); return w ? w.title : 'Book'; }
+function renderLibrary(){ const el = $('#jrLib'); if (!el) return; const W = WRITINGS();
+  el.innerHTML = W.length ? '<div class="wstat"><b>' + BOOKS_READ.size + '</b><span>well read</span></div><div class="wstat"><b>' + BOOKS_FOUND.size + '/' + W.length + '</b><span>books found</span></div>'
+      + W.map(w => BOOKS_FOUND.has(w.slug) ? '<div class="wrow"><span>' + escH(w.title) + (BOOKS_READ.has(w.slug) ? ' · read' : '') + '</span><a class="btn f-alt" href="#w-' + escH(w.slug) + '">Read</a></div>' : '<div class="wrow off"><span>? ? ?</span><span class="lbl8">Somewhere in a Wilds chest</span></div>').join('')
+    : '<p class="jr-note">No books are out in the world yet. ' + escH(copy('writings.intro')) + '</p>'; }
+function routeHash(){ const h = location.hash || ''; if (h === '#writings') openReader('site'); else if (/^#w-[a-z0-9-]+$/.test(h)) openReader(RD.open ? RD.mode : 'site', h.slice(3)); }
+function initContent(){
+  applyCopy();
+  const el = $('#reader'); if (el) SCREENS.reader = el;
+  $('#rdClose').addEventListener('click', () => closeReader()); $('#rdBack').addEventListener('click', () => { readerList(); try { history.replaceState(null, '', '#writings'); } catch (e){} });
+  $('#rdBody').addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[data-w]'); if (a){ e.preventDefault(); readerArticle(a.dataset.w); try { history.replaceState(null, '', '#w-' + a.dataset.w); } catch (x){} } });
+  $('#rdBody').addEventListener('scroll', readerScroll, { passive: true });
+  const bw = $('#bWritings'); if (bw) bw.addEventListener('click', () => openReader('site'));
+  Wn.addEventListener('hashchange', routeHash);
+  D.addEventListener('keydown', e => { if (RD.open && e.code === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeReader(); } }, true);
 }
 
 /* ================= pixel UI kit: frames + icons drawn at native pixel scale ================= */
@@ -6647,7 +6830,7 @@ D.addEventListener('pointerlockerror', () => { if (!recentlyUnlocked()){ lookMod
 function startPlay(){ audioStart(); setState('play'); requestLock(); try { canvas.focus({ preventScroll: true }); } catch (e){} tutShow(); }
 function resumePlay(gesture){ setState('play'); if (gesture) requestLock(); }
 function gateOpen(){ const ov = D.querySelector('.kcg-overlay'); return !!(ov && !ov.classList.contains('kcg-hide')); }
-const SIGN_LABEL = { hub: 'The Hub', eden: 'Eden', j: 'J Island', about: 'About', contact: 'Contact' };
+const SIGN_LABEL = { hub: 'The Hub', eden: copy('eden.title'), j: copy('j.title'), about: copy('about.title'), contact: copy('contact.title') };
 const panelEl = SCREENS.panel;
 function openPanel(mode, id){
   if (state !== 'panel') prevState = state;
@@ -6749,7 +6932,7 @@ function renderJournal(){
     $('#jrWilds').innerHTML = '<div class="wstat"><b>' + seen + '/' + OUT.length + '</b><span>islands found</span></div><div class="wstat"><b>' + wildStats.chests + '</b><span>chests opened</span></div><div class="wstat"><b>' + wildStats.kills + '</b><span>foes defeated</span></div>'
       + '<p class="jr-note">' + (b ? 'Best find: <b style="color:' + RARITY[b.r].c + '">' + esc(wFull(b)) + '</b> (' + wDps(b).toFixed(1) + ' damage per second)' : 'No weapons yet. Chests in the ruins and camps hold them.') + '</p>'
       + '<p class="jr-note dim2">Outer seed #' + (OUT_SEED % 100000) + '. The safe skies end at the banner buoys.</p>'; }
-  renderAtlas();
+  renderAtlas(); renderLibrary();
   $('#jrRings').textContent = RC.done ? 'Cleared. Best ' + RC.best.toFixed(1) + 's' : 'Not cleared yet. It starts at the east rim\'s updraft.';
   $('#jrFriends').innerHTML = ['puffle', 'kit'].map(k => '<span class="' + (friends.has(k) ? 'on' : '') + '">' + SPEC[k].name + '</span>').join('') ;
   $('#jrFest').innerHTML = found.size === SHARDS.length ? '<button class="btn f-btn" type="button" id="bFest">Light the lanterns again</button>' : '<p class="dim" style="margin:0;font:400 14px/20px var(--tx)">Find every shard to light the sky festival.</p>';
@@ -6939,6 +7122,7 @@ function useAction(first){
   if (HIT.ok && HIT.id === SIGN){ const s = nearestSign(HIT.x + .5, PL.y, HIT.z + .5, 7); if (s && first){ openPanel('sign', s.id); return; } }
   const id = heldId();
   if (id === SEED){ if (first) startVine(); return; }
+  if (isBook(id)){ if (first) openReader('tome', inv[sel].bk); return; }
   if (first && !isBlockItem(id) && GEAR.grapple){ grappleAction(); return; }
   if (useCD > 0 && first) return;
   placeBlock(); useCD = .2;
@@ -7161,8 +7345,8 @@ function saveGame(){
   try {
     const e = []; edits.forEach((v, k) => { e.push(k, v); });
     const s = PL.safe || PL;
-    localStorage.setItem(SKEY, JSON.stringify({ v: 5, e, inv: inv.map(s => s ? (s.w ? [s.id, s.n, s.w] : [s.id, s.n]) : 0), w: { seed: OUT_SEED, ch: [...chestLooted], st: { c: wildStats.chests, k: wildStats.kills, d: wildStats.deaths, b: wildStats.best }, seen: OUT.filter(I => I.seen).map(I => I.k), hp: php, lw: lastWay }, p: [+s.x.toFixed(2), +s.y.toFixed(2), +s.z.toFixed(2), +PL.yaw.toFixed(3), +PL.pitch.toFixed(3)], t: +dayT.toFixed(4), sel,
-      o: { sens, mute: AU.muted, vol: AU.vol, tp: third, bob: headBob, tips: tipsOn, aj: autoJump }, g: { found: [...found], visited: [...visited], ways: [...ways], friends: [...friends], comp: companion ? MOBS.indexOf(companion) : -1, tut: tutStep, sail: SAIL_STAND ? SAIL_STAND.taken : false, gold: goldSail, story: storySeen, gear: [GEAR.sail ? 1 : 0, GEAR.grapple ? 1 : 0], vis: [...vistas], md: [...MODDONE], rv: [...REVEALED], rc: RC.done ? +RC.best.toFixed(2) : 0 } }));
+    localStorage.setItem(SKEY, JSON.stringify({ v: 5, e, inv: inv.map(s => s ? (s.w ? [s.id, s.n, s.w] : s.bk ? [s.id, s.n, 0, s.bk] : [s.id, s.n]) : 0), w: { seed: OUT_SEED, ch: [...chestLooted], st: { c: wildStats.chests, k: wildStats.kills, d: wildStats.deaths, b: wildStats.best }, seen: OUT.filter(I => I.seen).map(I => I.k), hp: php, lw: lastWay }, p: [+s.x.toFixed(2), +s.y.toFixed(2), +s.z.toFixed(2), +PL.yaw.toFixed(3), +PL.pitch.toFixed(3)], t: +dayT.toFixed(4), sel,
+      o: { sens, mute: AU.muted, vol: AU.vol, tp: third, bob: headBob, tips: tipsOn, aj: autoJump }, g: { found: [...found], visited: [...visited], ways: [...ways], friends: [...friends], comp: companion ? MOBS.indexOf(companion) : -1, tut: tutStep, sail: SAIL_STAND ? SAIL_STAND.taken : false, gold: goldSail, story: storySeen, gear: [GEAR.sail ? 1 : 0, GEAR.grapple ? 1 : 0], vis: [...vistas], md: [...MODDONE], bf: [...BOOKS_FOUND], br: [...BOOKS_READ], rv: [...REVEALED], rc: RC.done ? +RC.best.toFixed(2) : 0 } }));
     saveDirty = false;
   } catch (err){}
 }
@@ -7171,14 +7355,14 @@ function applySave(sv){
   try {
     if (!sv || sv.v !== 5) return false;
     const e = sv.e || []; for (let i = 0; i + 1 < e.length; i += 2){ const k = e[i] | 0, v = e[i + 1] | 0; if (k >= 0 && k < world.length && v >= 0 && v < NB && (v === 0 || B_NAME[v]) && !B_PROT[world[k]]){ if (world[k] !== v){ if (!orig.has(k)) orig.set(k, world[k]); world[k] = v; edits.set(k, v); } } }
-    inv.fill(null); (sv.inv || []).forEach((s, i) => { if (s && i < 36 && (B_NAME[s[0]] || I_NAME[s[0]])){ inv[i] = { id: s[0], n: clamp(s[1] | 0, 1, maxStack(s[0])) }; if (s[0] === WEAPON){ const w = s[2]; if (w && FAM[w.f] && RARITY[w.r] && isFinite(w.dmg)) inv[i].w = { f: w.f | 0, r: w.r | 0, dmg: +w.dmg, spd: +w.spd, reach: +w.reach, crit: +w.crit, ax: (w.ax || []).filter(a => AFFIX[a]), nm: String(w.nm).slice(0, 60) }; else inv[i] = null; } } });
+    inv.fill(null); (sv.inv || []).forEach((s, i) => { if (s && i < 36 && (B_NAME[s[0]] || I_NAME[s[0]])){ inv[i] = { id: s[0], n: clamp(s[1] | 0, 1, maxStack(s[0])) }; if (isBook(s[0])){ if (s[3] && WRITINGS().some(w => w.slug === s[3])) inv[i].bk = String(s[3]); else inv[i] = null; } else if (s[0] === WEAPON){ const w = s[2]; if (w && FAM[w.f] && RARITY[w.r] && isFinite(w.dmg)) inv[i].w = { f: w.f | 0, r: w.r | 0, dmg: +w.dmg, spd: +w.spd, reach: +w.reach, crit: +w.crit, ax: (w.ax || []).filter(a => AFFIX[a]), nm: String(w.nm).slice(0, 60) }; else inv[i] = null; } } });
     if (sv.w){ const W = sv.w; savedSeed = W.seed >>> 0; (W.ch || []).forEach(p => { if (Array.isArray(p) && typeof p[0] === 'string') chestLooted.set(p[0], +p[1] || 0); }); if (W.st){ wildStats.chests = W.st.c | 0; wildStats.kills = W.st.k | 0; wildStats.deaths = W.st.d | 0; const b = W.st.b; if (b && FAM[b.f] && RARITY[b.r]) wildStats.best = b; } savedSeen = W.seen || []; if (isFinite(W.hp)) php = clamp(W.hp | 0, 1, PMAXHP); if (SIGN_LABEL[W.lw]) lastWay = W.lw; }
     if (sv.p && isFinite(sv.p[0]) && sv.p[1] > CATCH_Y){ PL.x = sv.p[0]; PL.y = sv.p[1]; PL.z = sv.p[2]; PL.yaw = sv.p[3] || 0; PL.pitch = sv.p[4] || 0; PL.safe = { x: PL.x, y: PL.y, z: PL.z, yaw: PL.yaw }; }
     if (isFinite(sv.t)) dayT = ((sv.t % 1) + 1) % 1;
     sel = clamp(sv.sel | 0, 0, 8);
     if (sv.o){ sens = clamp(+sv.o.sens || 1, .4, 3); $('#sens').value = sens; AU.muted = !!sv.o.mute; if (sv.o.vol) for (const k in AU.vol) if (typeof sv.o.vol[k] === 'number') AU.vol[k] = clamp(sv.o.vol[k], 0, 1); third = !!sv.o.tp; headBob = sv.o.bob !== false && !REDUCED; tipsOn = sv.o.tips !== false; if (typeof sv.o.aj === 'boolean') autoJump = sv.o.aj; }
     const g = sv.g || {};
-    (g.found || []).forEach(i => found.add(i)); (g.md || []).forEach(k => MODDONE.add(k)); (g.rv || []).forEach(k => REVEALED.add(k)); (g.visited || []).forEach(i => visited.add(i)); (g.ways || []).forEach(i => ways.add(i)); (g.friends || []).forEach(i => friends.add(i));
+    (g.found || []).forEach(i => found.add(i)); (g.md || []).forEach(k => MODDONE.add(k)); (g.bf || []).forEach(k => BOOKS_FOUND.add(String(k))); (g.br || []).forEach(k => BOOKS_READ.add(String(k))); (g.rv || []).forEach(k => REVEALED.add(k)); (g.visited || []).forEach(i => visited.add(i)); (g.ways || []).forEach(i => ways.add(i)); (g.friends || []).forEach(i => friends.add(i));
     tutStep = clamp(g.tut | 0, 0, TUT.length); if (SAIL_STAND && g.sail) SAIL_STAND.taken = true; goldSail = !!g.gold; storySeen = !!g.story; if (Array.isArray(g.gear)){ GEAR.sail = !!g.gear[0]; GEAR.grapple = !!g.gear[1]; } (g.vis || []).forEach(v => vistas.add(v | 0));
     pendingComp = g.comp; if (g.rc > 0){ RC.done = true; RC.best = g.rc; } updateSailLevel(false);
     edits.forEach((v, k) => { if (v === 0 && REGROWS[baseAt(k)]){ const x = k % WX, zz = (k / WX) | 0; REGROW.push({ x, y: (zz / WZ) | 0, z: zz % WZ, id: baseAt(k), t: 20 + Math.random() * 60 }); } });
@@ -7293,8 +7477,8 @@ canvas.addEventListener('webglcontextrestored', () => { ctxLost = false; chunks.
 
 // ---- boot: world generation is spread over frames so the title animates immediately ----
 function boot(){
-  setState('title');
-  if (!glOK){ hudEl.hidden = true; $('#bPlay').disabled = true; openIndex(); return; }
+  initContent(); setState('title');
+  if (!glOK){ hudEl.hidden = true; $('#bPlay').disabled = true; openIndex(); routeHash(); return; }
   buildSky(); onResize(); updateSky();
   camera.position.set(HOMEC.x + 110, 92, HOMEC.z); camera.lookAt(HOMEC.x, 58, HOMEC.z);
   renderer.render(scene, camera);
@@ -7324,7 +7508,7 @@ function finishBoot(){
   setMuted(AU.muted); syncMix(); setThird(third); invChanged(); $('#vBob').textContent = headBob ? 'On' : 'Off'; $('#vAuto').textContent = autoJump ? 'On' : 'Off'; $('#vTips').textContent = tipsOn ? 'On' : 'Off';
   startMesher(); pumpMeshing(30);
   U.uReveal.value = 0;
-  last = performance.now(); raf = requestAnimationFrame(frame);
+  last = performance.now(); raf = requestAnimationFrame(frame); routeHash();
   if (D.fonts && D.fonts.load) Promise.all([D.fonts.load("700 40px 'Silkscreen'"), D.fonts.load("400 20px 'Silkscreen'")]).then(redrawSigns).catch(() => {});
 }
 function setGold(){ if (sailRig) setSailGold(sailRig); if (standSail) setSailGold(standSail); }
