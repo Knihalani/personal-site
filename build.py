@@ -11,7 +11,7 @@ root = pathlib.Path(__file__).resolve().parent
 src = root / 'src'
 out = pathlib.Path(sys.argv[sys.argv.index('--out') + 1]) if '--out' in sys.argv else root
 out.mkdir(parents=True, exist_ok=True)
-ORDER = ['content.js', 'keysamples.js', 'sound.js', 'scene.js', 'room.js', 'typist.js', 'terminal.js', 'apps.js', 'stubs.js', 'main.js']
+ORDER = ['content.js', 'keysamples.js', 'sound.js', 'scene.js', 'room.js', 'typist.js', 'terminal.js', 'apps.js', 'extras.js', 'stubs.js', 'main.js']
 scripts = ''.join(f'<script>\n{(src / n).read_text(encoding="utf-8")}\n</script>\n' for n in ORDER if (src / n).exists())
 body = (src / 'head.html').read_text(encoding='utf-8') + '\n' + scripts
 (out / 'site.html').write_text(body, encoding='utf-8')

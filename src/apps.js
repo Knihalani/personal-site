@@ -501,18 +501,21 @@ T.apps.donut = {
    LAMP: the real desk lamp in the 3D room
    ===================================================================================== */
 const lamp = {
-  desc: 'turn the desk lamp in the room on or off',
-  usage: 'lamp on|off|toggle',
+  g: 'fun',
+  desc: 'switch the desk lamp in the room',
+  usage: 'lamp [on | off | status]',
+  ex: ['lamp', 'lamp off', 'lamp status'],
+  more: 'The lamp on the desk in the 3D room. With no argument it flips: on goes off, off goes on.',
   run(argv, io){
     const w = M.world;
     const arg = (argv[1] || '').toLowerCase();
     if (!w || typeof w.lamp !== 'function'){
-      io.out('lamp: the lamp cord does not reach this terminal.', 'dim');
+      io.err('lamp: no lamp here. it is on the desk in the 3D room\n');
       io.exit && io.exit(1);
       return;
     }
     const state = !!w.lampOn;
-    if (!arg || arg === 'status'){
+    if (arg === 'status'){
       io.out('the lamp is ' + (state ? 'on.' : 'off.') + '  ', 'normal');
       io.out('usage: ' + lamp.usage + '\n', 'faint');
       return;
@@ -520,7 +523,7 @@ const lamp = {
     let want;
     if (['on', '1', 'yes', 'up'].includes(arg)) want = true;
     else if (['off', '0', 'no', 'down', 'out'].includes(arg)) want = false;
-    else if (['toggle', 'flip', 'switch'].includes(arg)) want = !state;
+    else if (!arg || ['toggle', 'flip', 'switch'].includes(arg)) want = !state;
     else { io.err('lamp: no idea how to "' + arg + '" a lamp. usage: ' + lamp.usage + '\n'); io.exit && io.exit(2); return; }
     if (want === state){
       io.out(state ? 'the lamp is already on.\n' : 'it is already dark in here.\n', 'dim');
@@ -532,5 +535,5 @@ const lamp = {
   },
 };
 T.cmds.lamp = lamp;
-T.cmds.lights = Object.assign({}, lamp, { usage: 'lights on|off|toggle', desc: 'same as lamp' });
+T.cmds.lights = Object.assign({}, lamp, { hidden: true, usage: 'lights [on | off | status]', desc: 'same as lamp' });
 })();

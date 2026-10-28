@@ -564,22 +564,25 @@ M.createTerminal = function createTerminal(opts){
     '  writing     posts',
     '  links       LinkedIn, X and GitHub',
     '  contact     email addresses',
-    '  linkedin    x    gh    one link each',
-    '  open x      open a link in a new tab',
-    '  snake       a game',
-    '  tetris      a game',
-    '  donut       a spinning donut',
-    '  lamp off    turn off the desk lamp',
-    '  neofetch    about this machine', '',
+    '  open x      open a link in a new tab', '',
+    '## things to do', '',
+    '  weather     the sky where you are',
+    '  todo        a to-do list',
+    '  timer 5m    count down, then beep',
+    '  pomodoro    focus 25, break 5',
+    '  typing      a typing test',
+    '  tetris      a game (snake too)',
+    '  banner hi   big letters',
+    '  lamp        the desk lamp', '',
     '## the shell', '',
-    '  help        every command, grouped',
-    '  man grep    the manual page for any command',
+    '  help        what you can type',
+    '  man grep    the manual for grep',
     '  cat README.md | grep try',
     '  echo hello > notes/hello.txt',
     '  ls -l ~/notes', '',
-    'Files you make are kept in this browser.',
-    'Tab completes. Up and down recall history.',
-    'Ctrl+C stops a command.', '',
+    'Files you make stay in this browser.',
+    'Tab completes. Up and down recall',
+    'history. Ctrl+C stops a command.', '',
   ].join('\n');
   FS.seed([HOME, HOME + '/notes', HOME + '/writing', '/etc', '/tmp'], [
     { path: HOME + '/README.md', text: README },
@@ -598,7 +601,7 @@ M.createTerminal = function createTerminal(opts){
   function welcome(o){
     o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line(['type ', 'f'], ['help', 'n'], [' to begin, or try', 'f'])
-.flow(['about', 'eden', 'j', 'writing', 'links', 'contact', 'tetris'].map(w => [[w, 'n']]), '  ')
+.flow(['about', 'eden', 'j', 'links', 'contact', 'weather', 'tetris'].map(w => [[w, 'n']]), '  ')
       .line(['new here? ', 'f'], ['cat README.md', 'd'])
       .blank();
     return o;
@@ -715,7 +718,10 @@ M.createTerminal = function createTerminal(opts){
   for (const n of ['about', 'eden', 'j', 'writing', 'links']) def(n, doc(n));
   def('open', { g: 'read', desc: 'open a link: a url, ' + OPEN.map(o => o.name).join(', '), usage: 'open <url | j | gh | linkedin | x>', ex: ['open j', 'open https://risingfounder.net'], run(argv, io){
     const q = argv.slice(1).join(' ').trim();
-    if (!q){ io.write('open what? ', 'dim'); io.write(OPEN.map(x => x.name).join('  ') + '\n'); return 1; }
+    if (!q){
+      if (!io.tty){ io.write(OPEN.map(x => pad(x.name, 10) + x.url).join('\n') + '\n'); return; }
+      return io.choose(OPEN.map(x => ({ short: x.title, label: x.short, url: x.url })), 'open').then(() => {});
+    }
     let url = null, label = '';
     if (/^(https?:\/\/|mailto:)\S+$/i.test(q)){ url = q; label = bare(q); }
     else if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(q)){ url = 'https://' + q; label = bare(q); }
@@ -759,7 +765,7 @@ M.createTerminal = function createTerminal(opts){
       if (o.l){
         const w = Math.max(...ents.map(e => human(e.size).length));
         for (const e of ents){
-          io.write((e.dir ? 'drwxr-xr-x' : '-rw-r--r--') + '  kaiav  ', 'faint');
+          io.write((e.dir ? 'drwxr-xr-x' : '-rw-r--r--') + (COLS >= 50 || !io.tty ? '  kaiav  ' : '  '), 'faint');
           io.write((e.dir ? '-' : human(e.size)).padStart(w) + '  ' + fmtDate(e.mtime) + '  ', 'dim');
           io.write(e.name + (e.dir && e.name[0] !== '.' ? '/' : '') + '\n', e.dir ? 'bright' : 'normal');
         }
@@ -987,15 +993,21 @@ M.createTerminal = function createTerminal(opts){
     if (argv[1]){ const a = parseInt(argv[1], 10); if (!(a >= 1 && a <= 12)){ io.err('cal: month must be 1 to 12\n'); return 1; } m = a - 1; }
     if (argv[2]){ const b = parseInt(argv[2], 10); if (!(b >= 1 && b <= 9999)){ io.err('cal: year must be 1 to 9999\n'); return 1; } y = b; }
     const title = MONTHS[m] + ' ' + y;
-    io.write(' '.repeat(Math.floor((20 - title.length) / 2)) + title + '\n', 'bright');
-    io.write('Su Mo Tu We Th Fr Sa\n', 'dim');
     const first = new Date(y, m, 1).getDay(), days = new Date(y, m + 1, 0).getDate();
-    let col = first; io.write('   '.repeat(first));
-    for (let d = 1; d <= days; d++){
-      const today = d === t.getDate() && m === t.getMonth() && y === t.getFullYear();
-      io.write(String(d).padStart(2), today && io.tty ? 'inverse' : 'normal');
-      col++; io.write(col % 7 === 0 || d === days ? '\n' : ' ');
+    const weeks = []; let wk = new Array(first).fill(0);
+    for (let d = 1; d <= days; d++){ wk.push(d); if (wk.length === 7){ weeks.push(wk); wk = []; } }
+    if (wk.length) weeks.push(wk);
+    if (!io.tty){
+      io.write(' '.repeat(Math.floor((20 - title.length) / 2)) + title + '\nSu Mo Tu We Th Fr Sa\n' + weeks.map(w => w.map(d => d ? String(d).padStart(2) : '  ').join(' ').replace(/\s+$/, '')).join('\n') + '\n');
+      return;
     }
+    const isToday = d => d === t.getDate() && m === t.getMonth() && y === t.getFullYear();
+    const o = out(); o.blank().at(2, [' '.repeat(Math.floor((26 - title.length) / 2)) + title, 'b']).blank();
+    o.at(2, ...['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((n, i) => [(i ? '  ' : '') + n, i === 0 || i === 6 ? 'f' : 'd']));
+    for (const w of weeks) o.at(2, ...w.flatMap((d, i) => [[i ? '  ' : '', 'n'], [d ? String(d).padStart(2) : '  ', isToday(d) ? 'i' : i === 0 || i === 6 ? 'd' : 'n']]));
+    o.blank();
+    if (!argv[1]) o.at(2, ['cal 2 2027', 'd'], [' another month', 'f']).blank();
+    io.rich(o);
   } });
   def('uptime', { g: 'system', desc: 'time since you arrived', usage: 'uptime', run(argv, io){
     io.write('up ', 'dim'); io.write(uptimeStr(), 'bright'); io.write('  since you arrived, ', 'dim'); io.write(String(ran)); io.write(ran === 1 ? ' command\n' : ' commands\n', 'dim');
@@ -1036,25 +1048,43 @@ M.createTerminal = function createTerminal(opts){
     if (hasAlias(n) && n !== name) o.at(0, ['(' + n + ' is an alias for ' + ALIASES[n] + ')', 'f']).blank();
     if (io.tty) io.rich(o); else io.write(o.rows.map(textOf).join('\n') + '\n');
   } });
-  def('help', { g: 'system', desc: 'every command, grouped', usage: 'help [command]', run(argv, io){
-    if (argv[1]) return B.man.run(['man', argv[1]], io);
-    const groups = [['read', 'read'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
-    const by = {};
-    for (const [n, c] of Object.entries(M.TERM.cmds)){ if (!c || c.hidden || typeof c.run !== 'function') continue; const gname = c.g && groups.some(x => x[0] === c.g) ? c.g : 'more'; (by[gname] = by[gname] || []).push(n); }
-    const apps = Object.keys(M.TERM.apps).filter(n => M.TERM.apps[n] && typeof M.TERM.apps[n].start === 'function');
-    const o = out(); o.blank().head('help').blank();
-    const line = (label, names, st) => {
+  /* help: a short, curated page by default (everything a visitor is likely to want, fitting one screen);
+     help all lists every command, grouped by its g; help <cmd> is man */
+  const HELP_TOP = [
+    ['kaiav', ['about', 'eden', 'j', 'writing', 'links', 'contact']],
+    ['tools', ['weather', 'todo', 'timer', 'pomodoro', 'clock', 'cal']],
+    ['play', ['tetris', 'snake', 'typing', 'donut', 'matrix', 'banner', 'fortune', 'cowsay', 'lamp']],
+    ['files', ['ls', 'cd', 'cat', 'tree', 'mkdir', 'mv', 'cp', 'rm']],
+    ['text', ['echo', 'grep', 'sed', 'sort', 'wc', 'head', 'tail']],
+    ['shell', ['man', 'history', 'alias', 'clear', 'neofetch']],
+  ];
+  const HELP_ALL = [['read', 'kaiav'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
+  def('help', { g: 'system', desc: 'what you can type here', usage: 'help [all | command]', ex: ['help', 'help all', 'help weather'], run(argv, io){
+    if (argv[1] && argv[1] !== 'all' && argv[1] !== '-a') return B.man.run(['man', argv[1]], io);
+    const all = !!argv[1];
+    const exists = n => (M.TERM.cmds[n] && !M.TERM.cmds[n].hidden && typeof M.TERM.cmds[n].run === 'function') || (M.TERM.apps[n] && typeof M.TERM.apps[n].start === 'function');
+    let groups;
+    if (all){
+      const by = {};
+      const add = (n, c) => { const gk = c.g && HELP_ALL.some(x => x[0] === c.g) ? c.g : 'misc'; (by[gk] = by[gk] || []).push(n); };
+      for (const [n, c] of Object.entries(M.TERM.cmds)) if (c && !c.hidden && typeof c.run === 'function') add(n, c);
+      for (const [n, a] of Object.entries(M.TERM.apps)) if (a && typeof a.start === 'function' && !M.TERM.cmds[n]) add(n, Object.assign({ g: 'fun' }, a));
+      groups = HELP_ALL.filter(([k]) => by[k]).map(([k, label]) => [label, by[k]]);
+    } else groups = HELP_TOP.map(([label, names]) => [label, names.filter(exists)]).filter(x => x[1].length);
+    if (!io.tty){ io.write(groups.map(([l, ns]) => pad(l, 8) + ns.join(' ')).join('\n') + '\n'); return; }
+    const LW = COLS >= 50 ? 9 : 8, room = COLS - 2 - LW;
+    const o = out(); o.blank().head(all ? 'every command' : 'help', all ? '' : 'help all for more').blank();
+    for (const [label, names] of groups){
       const ws = []; let l = '';
-      for (const n of names){ if (l && l.length + 2 + n.length > COLS - 16){ ws.push(l); l = n; } else l = l ? l + '  ' + n : n; }
+      for (const n of names){ if (l && l.length + 2 + n.length > room){ ws.push(l); l = n; } else l = l ? l + '  ' + n : n; }
       if (l) ws.push(l);
-      ws.forEach((w, k) => o.at(2, [pad(k ? '' : label, 10), 'd'], [w, st]));
-    };
-    for (const [gk, label] of groups) if (by[gk]) line(label, by[gk], gk === 'read' ? 'b' : 'n');
-    if (apps.length) line('apps', apps, 'b');
-    if (by.more) line('extras', by.more, 'n');
-    o.blank().flow([[['man <cmd>', 'n'], [' details', 'f']], [['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']],
-      [['open <name>', 'n'], [' opens a link', 'f']], [['cat README.md', 'n'], [' a guide', 'f']]], '   ').blank();
-    if (io.tty) io.rich(o); else io.write(o.rows.map(textOf).join('\n') + '\n');
+      ws.forEach((w, k) => o.at(2, [pad(k ? '' : label, LW), 'd'], [w, label === 'kaiav' ? 'b' : 'n']));
+    }
+    o.blank();
+    const tip = [[['man <cmd>', 'n'], [' details', 'f']], [['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']]];
+    if (!all) tip.push([['open <name>', 'n'], [' a link', 'f']], [['help all', 'n'], [' everything', 'f']]);
+    o.flow(tip, '   ').blank();
+    io.rich(o);
   } });
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
     if (argv[1] === '-c'){ history = []; hIdx = 0; try { localStorage.setItem(HIST_KEY, '[]'); } catch (e){} return; }
@@ -1313,7 +1343,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function makeIo(ctx, j){
     const io = {
-      stdin: ctx.stdin, fs: FS, env: ENV, cwd, cols: COLS, rows: ROWS, tty: ctx.sink.tty, code: null,
+      stdin: ctx.stdin, fs: FS, ui: out, env: ENV, cwd, cols: COLS, rows: ROWS, tty: ctx.sink.tty, code: null,
       out(t, style){ if (!j.dead && t != null) ctx.sink.write(String(t), style); },
       write(t, style){ io.out(t, style); },
       err(t){ if (!j.dead && t != null) ctx.errSink.write(String(t), 'dim'); },

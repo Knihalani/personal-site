@@ -131,7 +131,7 @@ function surfaceNets(sdf, lo, hi, h){
   const G = new Float32Array(cx * cy * cz);
   for (let k = 0; k < cz; k++) for (let j = 0; j < cy; j++) for (let i = 0; i < cx; i++)
     G[i + cx * (j + cy * k)] = sdf(lo[0] + i * C * h, lo[1] + j * C * h, lo[2] + k * C * h);
-  const F = new Float32Array(nx * ny * nz), band = 5 * h;
+  const F = new Float32Array(nx * ny * nz), band = 3.8 * h;
   for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
     const g = G[Math.round(i / C) + cx * (Math.round(j / C) + cy * Math.round(k / C))];
     const edge = i === 0 || j === 0 || k === 0 || i === nx - 1 || j === ny - 1 || k === nz - 1;
@@ -364,7 +364,7 @@ M.createTypist = function createTypist(api){
       H.homeQ.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, back))
         .multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -H.side * .2));
       const kc = H.fingers.slice(1).reduce((a, F) => a.add(F.base.position), V3()).multiplyScalar(.25);
-      const target = C.clone().addScaledVector(n, .056).addScaledVector(kfw, -.046);
+      const target = C.clone().addScaledVector(n, .047).addScaledVector(kfw, -.053);
       H.homeW.copy(target).sub(kc.clone().applyQuaternion(H.homeQ));
       H.W = new VSpring(H.homeW); H.hold.copy(H.homeW); H.region = new VSpring(H.homeW);
       const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(1, 1, 1)).invert();
@@ -728,7 +728,7 @@ M.createTypist = function createTypist(api){
     // per finger: hand->bone transforms, lengths and radii (lateral; the dorsal-ventral axis is flattened)
     const CH = H.fingers.map(F => {
       const f = F.f, th = f === 0, R = FR[f];
-      const rj = th ? [.0158, R[1] * 1.1, R[2] * 1.12, R[2] * 1.02] : [R[0] * 1.13, R[1] * 1.12, R[2] * 1.1, R[2] * .98];
+      const rj = th ? [.0135, R[1] * 1.1, R[2] * 1.12, R[2] * 1.02] : [R[0] * 1.06, R[1] * 1.06, R[2] * 1.06, R[2] * .98];
       const gs = [F.g0, F.g1, F.g2];
       const segs = gs.map((g, j) => ({ e: inv(rel(g)), L: F.L[j], r0: rj[j], r1: rj[j + 1], rm: (rj[j] + rj[j + 1]) * .5 * (th && j === 0 ? 1 : .93) }));
       const pts = gs.map(g => V3().setFromMatrixPosition(rel(g))); pts.push(V3(0, 0, -F.L[2]).applyMatrix4(rel(F.g2)));
@@ -746,29 +746,29 @@ M.createTypist = function createTypist(api){
     const palmDist = (x, y, z) => {
       const xs = x * ts, ze = zK + 11 * (xs - .005) * (xs - .005) + .003, zb = .012, zl = zb - ze;
       const t = (z - ze) / zl, tc = clamp(t, 0, 1);
-      const w = .0392 - .0105 * smooth(.3, 1, tc), u = (xs + .001 + .002 * tc) / w, v = 2 * t - 1;
+      const w = .0362 - .0092 * smooth(.3, 1, tc), u = (xs + .001 + .002 * tc) / w, v = 2 * t - 1;
       const uu = Math.min(1, u * u);
-      const hy = y > 0 ? (.0108 + .0055 * smooth(.45, 1, tc)) * (1 - .3 * uu) : (.0112 + .0068 * smooth(.3, 1, tc)) * (1 - .22 * uu);
+      const hy = y > 0 ? (.0098 + .0022 * smooth(.45, 1, tc)) * (1 - .32 * uu) : (.0108 + .0062 * smooth(.3, 1, tc)) * (1 - .22 * uu);
       const au = Math.abs(u), av = Math.abs(v), ym = Math.abs(y) / hy;
-      const s4 = au ** 4 + av ** 4, sv = Math.pow(s4, .25) + 1e-9;
-      const r = Math.pow(sv ** PE + ym ** PE, 1 / PE) + 1e-9;
-      const dRs = (sv / r) ** (PE - 1), dRy = (ym / r) ** (PE - 1);
-      const gx = dRs * au ** 3 / sv ** 3 / w, gz = dRs * av ** 3 / sv ** 3 * 2 / zl, gy = dRy / hy;
+      const u2 = au * au, v2 = av * av, sv = Math.sqrt(Math.sqrt(u2 * u2 + v2 * v2)) + 1e-9;
+      const sp = Math.pow(sv, PE), yp = Math.pow(ym, PE), r = Math.pow(sp + yp, 1 / PE) + 1e-9;
+      const dRs = sp / sv / (r ** PE / r), dRy = yp / (ym + 1e-12) / (r ** PE / r);
+      const s3 = sv * sv * sv, gx = dRs * u2 * au / s3 / w, gz = dRs * v2 * av / s3 * 2 / zl, gy = dRy / hy;
       return (r - 1) / Math.hypot(gx, gy, gz);
     };
     // wrist and forearm: an elliptical section (5.5 x 3.5 cm at the wrist) widening toward the elbow
     const Fe = inv(rel(H.fore));
     const foreDist = (x, y, z) => {
-      ap(Fe, x, y, z); const sb = L2 - q[1], k = smooth(-.01, .08, sb), a = .0272 + .0038 * k, b = .0172 + .0048 * k;
+      ap(Fe, x, y, z); const sb = L2 - q[1], k = smooth(.0, .085, sb), a = .0252 + .004 * k, b = .0155 + .005 * k; q[2] += .0015 * (1 - k);
       const e = Math.hypot(q[0] / a, q[2] / b) + 1e-9;
       const c1 = -sb / .014, c2 = (sb - .085) / .02, cap = Math.max(0, c1, c2), cs = cap === c1 ? .014 : .02;
-      const r = Math.pow(e ** 4 + cap ** 4, .25) + 1e-9;
+      const e2 = e * e, cc = cap * cap, r = Math.sqrt(Math.sqrt(e2 * e2 + cc * cc)) + 1e-9;
       const de = (e / r) ** 3, dc = (cap / r) ** 3;
       const gx = de * q[0] / (a * a * e), gz = de * q[2] / (b * b * e), gy = dc / cs;
       return (r - 1) / Math.hypot(gx, gy, gz);
     };
     const palmD = (x, y, z) => {
-      let d = smin(palmDist(x, y, z), foreDist(x, y, z), .024);
+      let d = smin(palmDist(x, y, z), foreDist(x, y, z), .015);
       for (let f = 1; f < 5; f++){            // the knuckle heads
         const S = CH[f].segs[0]; ap(S.e, x, y, z);
         d = smin(d, Math.hypot(q[0], (q[1] - .36 * S.r0) * 1.1, q[2] - .001) - .9 * S.r0, .007);
@@ -776,7 +776,7 @@ M.createTypist = function createTypist(api){
       return d;
     };
     const sdf = (x, y, z) => {
-      const pg = smin(palmD(x, y, z), segD(CH[0].segs[0], x, y, z, 1.25), .014);        // + the thumb's fleshy metacarpal (thenar)
+      const pg = smin(palmD(x, y, z), segD(CH[0].segs[0], x, y, z, 1.25), .011);        // + the thumb's fleshy metacarpal (thenar)
       let d = pg;
       for (const C of CH){
         if (Math.hypot(x - C.c.x, y - C.c.y, z - C.c.z) - C.rad > pg + .01) continue;
@@ -790,15 +790,16 @@ M.createTypist = function createTypist(api){
     const dF = V3(0, 1, 0).transformDirection(rel(H.fore));        // elbow -> wrist, in hand space
     grow(V3()); grow(dF.clone().multiplyScalar(-.1)); grow(V3(0, 0, .02));
     for (let i = 0; i < 3; i++){ lo[i] -= .012; hi[i] += .012; }
-    const SN = surfaceNets(sdf, lo, hi, SKIN_H);
+    const SN = surfaceNets(sdf, lo, hi, SKIN_H); const tSN = (typeof performance !== "undefined" ? performance : Date).now() - t0;
     const nv = SN.pos.length / 3, P = new Float32Array(SN.pos), N = new Float32Array(nv * 3), SI = new Uint16Array(nv * 4), SW = new Float32Array(nv * 4);
-    const grad = (x, y, z, o) => { const e = .0003; o[0] = sdf(x + e, y, z) - sdf(x - e, y, z); o[1] = sdf(x, y + e, z) - sdf(x, y - e, z); o[2] = sdf(x, y, z + e) - sdf(x, y, z - e);
-      const l = Math.hypot(o[0], o[1], o[2]) || 1; o[0] /= l; o[1] /= l; o[2] /= l; return l / (2 * e); };
+    const grad = (x, y, z, o) => {      // tetrahedral gradient: 4 samples
+      const e = .0003, a = sdf(x + e, y - e, z - e), b = sdf(x - e, y - e, z + e), c = sdf(x - e, y + e, z - e), d = sdf(x + e, y + e, z + e);
+      o[0] = a - b - c + d; o[1] = -a - b + c + d; o[2] = -a + b - c + d;
+      const l = Math.hypot(o[0], o[1], o[2]) || 1; o[0] /= l; o[1] /= l; o[2] /= l; };
     const g = [0, 0, 0], w = new Float32Array(17), pp = V3(), ab = V3(), ap2 = V3();
     for (let i = 0; i < nv; i++){
       let x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2];
-      for (let it = 0; it < 2; it++){ const d = sdf(x, y, z); grad(x, y, z, g); x -= d * g[0]; y -= d * g[1]; z -= d * g[2]; }   // onto the surface
-      grad(x, y, z, g);
+      const d0 = sdf(x, y, z); grad(x, y, z, g); x -= d0 * g[0]; y -= d0 * g[1]; z -= d0 * g[2];    // onto the surface
       P[i * 3] = x; P[i * 3 + 1] = y; P[i * 3 + 2] = z; N[i * 3] = g[0]; N[i * 3 + 1] = g[1]; N[i * 3 + 2] = g[2];
       // weights: palm vs each finger by a soft nearest-part rule, then along the finger by smooth steps at the joints
       w.fill(0);
@@ -837,7 +838,7 @@ M.createTypist = function createTypist(api){
     sm.bind(new THREE.Skeleton(bones), H.hand.matrixWorld.clone());     // inverses taken from the current (home) pose
     sm.frustumCulled = false; sm.castShadow = true; sm.receiveShadow = true; sm.name = 'hand-skin';
     root.add(sm); H.skin = sm;
-    skinStats.push({ verts: nv, tris: SN.idx.length / 3, ms: Math.round((typeof performance !== 'undefined' ? performance : Date).now() - t0) });
+    skinStats.push({ verts: nv, tris: SN.idx.length / 3, nets: Math.round(tSN), ms: Math.round((typeof performance !== 'undefined' ? performance : Date).now() - t0) });
   }
 
   root.userData.dbg = { hands, s, skinStats, contacts, spineOff, lean0 };
