@@ -399,6 +399,18 @@ M.createTerminal = function createTerminal(opts){
       /* a boxed panel: title in the top border, label/value rows, selectable rows (url or copy) with
          number shortcuts, and a footer line of keys while it is waiting for a choice */
       card(spec){ const c = makeCard(spec); r.push(c); o.lastCard = c; return o; },
+      /* groups of spans laid out left to right with a gap, wrapping at the grid width */
+      flow(groups, gap = '  ', i = 2){
+        let line = [], w = 0;
+        for (const gr of groups){
+          const gw = gr.reduce((a, x) => a + x[0].length, 0);
+          if (line.length && w + gap.length + gw > COLS - i){ o.at(i, ...line); line = []; w = 0; }
+          if (line.length){ line.push([gap, 'f']); w += gap.length; }
+          line.push(...gr); w += gw;
+        }
+        if (line.length) o.at(i, ...line);
+        return o;
+      },
       link(label, url, i = 2, labelW = 0, shown){
         const sp = []; if (label) sp.push([pad(label, labelW), 'd']);
         sp.push([shown || url, 'n', { url }]); r.push({ k: 't', i, s: sp }); return o;
@@ -420,9 +432,20 @@ M.createTerminal = function createTerminal(opts){
     const acts = items.filter(it => it.ai >= 0);
     const room = it => (COLS - 3) - (5 + lw) - (it.hint ? it.hint.length + 2 : 0);
     if (items.some(it => it.value.length > room(it))) for (const it of items) it.hint = '';   // values win over hints
-    for (const it of items) if (it.value.length > room(it)) it.value = it.value.slice(0, Math.max(1, room(it) - 3)) + '...';
-    return { k: 'card', title: spec.title, note: spec.note || '', items, acts, lw, sel: -1, verb: spec.verb || 'open',
-      foot: null, h: items.length + (acts.length ? 3 : 2) };
+    /* narrow screens: the label goes above the value, and a long value wraps at / . @ rather than being cut */
+    const stacked = COLS < 46 || items.some(it => it.value.length > room(it));
+    const vroom = COLS - 8;
+    let y = 0;
+    for (const it of items){
+      it.y = y;
+      if (!stacked){ it.lines = [it.value]; it.n = 1; y++; continue; }
+      const parts = []; let v = it.value;
+      while (v.length > vroom){ let cut = Math.max(v.lastIndexOf('/', vroom - 1), v.lastIndexOf('.', vroom - 1), v.lastIndexOf('@', vroom - 1), v.lastIndexOf(' ', vroom)); if (cut < vroom / 2) cut = vroom - 1; parts.push(v.slice(0, cut + 1).trimEnd()); v = v.slice(cut + 1).trimStart(); }
+      parts.push(v); it.lines = parts; it.n = 1 + parts.length; y += it.n;
+    }
+    const note = spec.note && spec.title.length + spec.note.length + 10 <= COLS ? spec.note : '';
+    return { k: 'card', title: spec.title, note, items, acts, lw, stacked, body: y, sel: -1, verb: spec.verb || 'open',
+      foot: null, h: y + (acts.length ? 3 : 2) };
   }
 
   function pushRow(r){ openRow = null; rows.push(r); dirty = true; }
@@ -575,7 +598,7 @@ M.createTerminal = function createTerminal(opts){
   function welcome(o){
     o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line(['type ', 'f'], ['help', 'n'], [' to begin, or try', 'f'])
-      .line(['about', 'n'], ['  ', 'f'], ['eden', 'n'], ['  ', 'f'], ['j', 'n'], ['  ', 'f'], ['writing', 'n'], ['  ', 'f'], ['links', 'n'], ['  ', 'f'], ['contact', 'n'], ['  ', 'f'], ['tetris', 'n'])
+.flow(['about', 'eden', 'j', 'writing', 'links', 'contact', 'tetris'].map(w => [[w, 'n']]), '  ')
       .line(['new here? ', 'f'], ['cat README.md', 'd'])
       .blank();
     return o;
@@ -595,7 +618,7 @@ M.createTerminal = function createTerminal(opts){
     },
     j(o){
       o.blank().big(J.title || 'J').line([J.role || '', 'd']).blank()
-        .line([J.line || '', 'b']).para(J.body || '', 'n').blank()
+        .para(J.line || '', 'b').para(J.body || '', 'n').blank()
         .card({ title: 'J', note: 'j.txt', items: [...(J.facts || []).map(f => ({ label: f[0], value: f[1] })),
           { label: 'site', value: bare(URLS.j), full: URLS.j, url: URLS.j, hint: 'open' }] }).blank();
       return o;
@@ -1029,8 +1052,8 @@ M.createTerminal = function createTerminal(opts){
     for (const [gk, label] of groups) if (by[gk]) line(label, by[gk], gk === 'read' ? 'b' : 'n');
     if (apps.length) line('apps', apps, 'b');
     if (by.more) line('extras', by.more, 'n');
-    o.blank().at(2, ['man <cmd>', 'n'], [' for details   ', 'f'], ['tab', 'n'], [' completes   ', 'f'], ['ctrl+c', 'n'], [' stops', 'f'])
-      .at(2, ['open <name>', 'n'], [' opens a link   ', 'f'], ['cat README.md', 'n'], [' a guide', 'f']).blank();
+    o.blank().flow([[['man <cmd>', 'n'], [' details', 'f']], [['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']],
+      [['open <name>', 'n'], [' opens a link', 'f']], [['cat README.md', 'n'], [' a guide', 'f']]], '   ').blank();
     if (io.tty) io.rich(o); else io.write(o.rows.map(textOf).join('\n') + '\n');
   } });
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
@@ -1327,9 +1350,16 @@ M.createTerminal = function createTerminal(opts){
   function setFoot(card){
     const n = card.acts.length, dot = [' \u00b7 ', 'f'];
     const verb = card.acts.every(a => a.copy) ? 'copy' : card.acts.every(a => !a.copy) ? 'open' : 'open/copy';
-    card.foot = n > 1
-      ? [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['1-' + n, 'n'], [' jump', 'f'], dot, ['esc', 'n'], [' back', 'f']]
-      : [['enter', 'n'], [' ' + verb, 'f'], dot, ['any other key', 'n'], [' back', 'f']];
+    const len = f => f.reduce((a, x) => a + x[0].length, 0);
+    const opts = n > 1 ? [
+      [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['1-' + n, 'n'], [' jump', 'f'], dot, ['esc', 'n'], [' back', 'f']],
+      [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['esc', 'n'], [' back', 'f']],
+      [['  ', 'n', null, 'arrows'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['esc', 'n']],
+    ] : [
+      [['enter', 'n'], [' ' + verb, 'f'], dot, ['any other key', 'n'], [' back', 'f']],
+      [['enter', 'n'], [' ' + verb, 'f'], dot, ['esc', 'n'], [' back', 'f']],
+    ];
+    card.foot = opts.find(f => len(f) <= COLS - 3) || opts[opts.length - 1];
   }
   /* a key while a choice is waiting; returns true when consumed */
   function choiceKey(e){
@@ -1350,7 +1380,9 @@ M.createTerminal = function createTerminal(opts){
         if (job) job.plain += (ok ? 'Copied ' : 'Copy ') + it.copy + '. ';
       } else {
         const ok = openTarget(it.url);
-        card.foot = [['  ', 'b', null, 'out'], ['opening ', 'd'], [it.full ? bare(it.full) : it.value, 'b']].concat(ok ? [] : [['  blocked? try open ' + bare(it.url), 'f']]);
+        let shown = it.full ? bare(it.full) : it.value;
+        if (shown.length + 12 > COLS) shown = it.value.length + 12 <= COLS ? it.value : it.label;
+        card.foot = [['  ', 'b', null, 'out'], ['opening ', 'd'], [shown, 'b']].concat(ok || COLS < 50 ? [] : [['  blocked? try open ' + bare(it.url), 'f']]);
         if (job) job.plain += 'Opening ' + (it.full || it.value) + '. ';
       }
     } else { card.sel = -1; card.foot = [['back', 'f']]; }
@@ -1644,6 +1676,13 @@ M.createTerminal = function createTerminal(opts){
     if (k.length === 1 && !ctrl){ insert(k); touched(); return true; }
     return false;
   }
+  /* key releases: only full-screen apps care (app.keyUp, optional) */
+  function handleKeyUp(e){
+    if (!app || !app.inst || typeof app.inst.keyUp !== 'function') return false;
+    const st = app;
+    if (appCall('keyUp', e) && app === st) st.dirty = true;
+    return true;
+  }
   function insertText(str){
     if (booting){ skipBoot(); }
     if (app){ for (const ch of String(str)){ const st = app; if (!st) break; if (appCall('key', { key: ch === '\n' ? 'Enter' : ch, code: '', ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, preventDefault(){} })) st.dirty = true; } return; }
@@ -1679,7 +1718,7 @@ M.createTerminal = function createTerminal(opts){
   const color = st => st === 'f' ? P.faint : st === 'd' ? P.dim : st === 'b' ? P.bright : st === 'a' ? P.accent : st === 'z' ? P.bg : P.normal;
   /* a card: vector rules in the phosphor (VT323 has no box glyphs), cells on the text grid */
   function drawCard(r, top){
-    const n = r.items.length, active = r.sel >= 0 && !r.done;
+    const n = r.body, active = r.sel >= 0 && !r.done;
     const x0 = X(1) + cw * 0.5, x1 = X(COLS - 1) - cw * 0.5;
     const yT = top + ch * 0.48, yB = top + ch * (n + 1.48);
     g.fillStyle = active ? P.dim : P.faint;
@@ -1689,15 +1728,16 @@ M.createTerminal = function createTerminal(opts){
     g.fillRect(x0, yT, 2, yB - yT); g.fillRect(x1, yT, 2, yB - yT + 2); g.fillRect(x0, yB, x1 - x0 + 2, 2);
     text(r.title, 3, top, 'b');
     if (r.note) text(r.note, COLS - 3 - r.note.length, top, 'f');
-    r.items.forEach((it, i) => {
-      const rt = top + ch * (i + 1);
+    r.items.forEach(it => {
+      const rt = top + ch * (it.y + 1);
       const on = active && it.ai === r.sel, chosen = r.done && it.ai === r.sel;
-      if (on){ g.fillStyle = P.normal; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch - 6); }
+      if (on){ g.fillStyle = P.normal; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
       const st = s => on ? 'z' : s;
       if (it.ai >= 0) text(String(it.ai + 1), 3, rt, st(chosen ? 'b' : 'f'));
       text(it.label, 5, rt, st('d'));
-      text(it.value, 5 + r.lw, rt, st(it.ai >= 0 ? 'b' : 'n'));
-      if (it.hint) text(it.hint, COLS - 3 - it.hint.length, rt, st(on ? 'z' : 'f'));
+      if (r.stacked) it.lines.forEach((l, k) => text(l, 5, rt + ch * (k + 1), st(it.ai >= 0 ? 'b' : 'n')));
+      else text(it.value, 5 + r.lw, rt, st(it.ai >= 0 ? 'b' : 'n'));
+      if (it.hint) text(it.hint, COLS - 3 - it.hint.length, rt, st('f'));
     });
     if (r.foot){
       const ft = top + ch * (n + 2), mark = r.foot[0][3], cx = X(2), cy = ft + ch * 0.5, a = cw * 0.38;
@@ -1775,6 +1815,20 @@ M.createTerminal = function createTerminal(opts){
       if (under){ g.font = font(); g.fillStyle = P.bg; g.fillText(under, cx, top + fs * 0.68); }
     }
   }
+  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7]/g;
+  function vecGlyph(c, col, top, colr){
+    const cx = X(col) + cw / 2, cy = top + ch * 0.5, a = cw * 0.36;
+    g.fillStyle = colr;
+    if (c === '\u00b7'){ g.fillRect(cx - 2, cy - 2, 4, 4); return; }
+    const d = { '\u2190': [-1, 0], '\u2192': [1, 0], '\u2191': [0, -1], '\u2193': [0, 1] }[c];
+    const [dx, dy] = d, px = -dy, py = dx;                 // tip direction and its perpendicular
+    g.beginPath();
+    g.moveTo(cx + dx * a * 1.2, cy + dy * a * 1.2);
+    g.lineTo(cx + px * a * 0.8, cy + py * a * 0.8);
+    g.lineTo(cx - px * a * 0.8, cy - py * a * 0.8);
+    g.closePath(); g.fill();
+    g.lineWidth = 3; g.strokeStyle = colr; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx - dx * a * 1.2, cy - dy * a * 1.2); g.stroke();
+  }
   function drawGrid(){
     g.font = font();
     for (let y = 0; y < ROWS; y++){
@@ -1783,8 +1837,11 @@ M.createTerminal = function createTerminal(opts){
       while (x < COLS){
         const s = r[x][1]; let x1 = x, str = '';
         while (x1 < COLS && r[x1][1] === s){ str += r[x1][0]; x1++; }
-        if (s.inv){ g.fillStyle = s.fg; g.fillRect(X(x), top, (x1 - x) * cw + 0.5, ch); if (str.trim()){ g.fillStyle = P.bg; g.fillText(str, X(x), top + fs * 0.68); } }
-        else if (str.trim()){ g.fillStyle = s.fg; g.fillText(str, X(x), top + fs * 0.68); }
+        const plain = str.replace(VEC_RE, ' ');
+        if (s.inv){ g.fillStyle = s.fg; g.fillRect(X(x), top, (x1 - x) * cw + 0.5, ch); if (plain.trim()){ g.fillStyle = P.bg; g.fillText(plain, X(x), top + fs * 0.68); } }
+        else if (plain.trim()){ g.fillStyle = s.fg; g.fillText(plain, X(x), top + fs * 0.68); }
+        if (plain !== str) for (let k = 0; k < str.length; k++) if (VEC_RE.test(str[k])){ VEC_RE.lastIndex = 0; vecGlyph(str[k], x + k, top, s.inv ? P.bg : s.fg); }
+        VEC_RE.lastIndex = 0;
         x = x1;
       }
     }
@@ -1860,11 +1917,11 @@ M.createTerminal = function createTerminal(opts){
     // memory check: a bar of 32 cells filling, the count rolling up
     const mp = clamp((t - 0.28) / 0.62, 0, 1);
     text('MEMORY', 0, top(2), 'd');
-    const cells = 32, filled = Math.floor(cells * mp);
+    const cells = Math.max(8, Math.min(32, Math.floor((COLS - 20) / 0.75))), filled = Math.floor(cells * mp), bEnd = Math.ceil(10 + cells * 0.75);
     for (let i = 0; i < cells; i++){ g.fillStyle = i < filled ? P.normal : P.faint; g.fillRect(X(10 + i * 0.75), top(2) + 9, cw * 0.75 - 3, ch - 18); }
     const kb = Math.floor(640 * mp / 16) * 16;
-    text(String(kb).padStart(3, ' ') + 'K', 36, top(2), mp < 1 ? 'n' : 'b');
-    if (mp >= 1) text('OK', 42, top(2), 'b');
+    text(String(kb).padStart(3, ' ') + 'K', bEnd + 1, top(2), mp < 1 ? 'n' : 'b');
+    if (mp >= 1) text('OK', bEnd + 6, top(2), 'b');
     if (t < 0.95) return;
     // disk: a platter spinning up, then ready
     const dp = clamp((t - 0.95) / 0.5, 0, 1);
@@ -1877,7 +1934,7 @@ M.createTerminal = function createTerminal(opts){
     text(dp < 1 ? 'spinning up' + '.'.repeat(1 + Math.floor(t * 8) % 3) : 'ready', 12, top(3), dp < 1 ? 'n' : 'b');
     if (t < 1.45) return;
     text('TERM', 0, top(4), 'd'); text('vt  ' + COLS + ' x ' + ROWS, 10, top(4), 'n');
-    if (t > 1.6) text('OK', 42, top(4), 'b');
+    if (t > 1.6) text('OK', bEnd + 6, top(4), 'b');
   }
 
   /* ---- inline visualisations, drawn in phosphor ---- */
@@ -1951,7 +2008,14 @@ M.createTerminal = function createTerminal(opts){
     });
   }
   function drawEmpty(x, y, w, h, age, t){
-    // an empty sheet with a folded corner and a waiting caret
+    // an empty sheet with a folded corner and a waiting caret (narrow screens: just the words)
+    if (COLS < 50){
+      text('No posts yet.', 2, y + ch * 0.9, 'b');
+      text('New ones will appear here.', 2, y + ch * 2.0, 'd');
+      text('Meanwhile:', 2, y + ch * 3.0, 'd');
+      text('about   eden   j   links', 2, y + ch * 4.0, 'n');
+      return;
+    }
     const pw = cw * 10, ph = h - ch * 0.6, px = x, py = y + ch * 0.3, fold = cw * 2;
     g.strokeStyle = P.dim; g.lineWidth = 2; g.setLineDash([8, 6]);
     g.beginPath(); g.moveTo(px, py); g.lineTo(px + pw - fold, py); g.lineTo(px + pw, py + fold); g.lineTo(px + pw, py + ph); g.lineTo(px, py + ph); g.closePath(); g.stroke();
@@ -1966,11 +2030,11 @@ M.createTerminal = function createTerminal(opts){
   function drawFetch(x, y, w, h, age, t){
     // the KN-84 itself, in outline: a compact all-in-one with its screen lit, and a keyboard
     const ap = REDUCED ? 1 : ease(age / 0.5);
-    const col = Math.max(14, COLS - 31);
+    const col = COLS < 50 ? 0 : Math.max(14, COLS - 31);
     const bx = x, by = y + ch * 0.2, bw = cw * Math.min(18, col - 6), bh = ch * 7.6;
     g.strokeStyle = P.normal; g.lineWidth = 2;
-    g.strokeRect(bx, by, bw, bh * ap);
-    if (ap >= 1){
+    if (col) g.strokeRect(bx, by, bw, bh * ap);
+    if (col && ap >= 1){
       const sx = bx + cw * 2, sy = by + ch * 0.7, sw = bw - cw * 4, sh = ch * 4.4;
       g.strokeStyle = P.dim; g.strokeRect(sx, sy, sw, sh);
       g.fillStyle = P.faint; g.fillRect(sx + 6, sy + 6, sw - 12, sh - 12);
@@ -2043,6 +2107,6 @@ M.createTerminal = function createTerminal(opts){
   }
 
   draw();
-  return { canvas, handleKey, insertText, update, run, scroll, get cursorY(){ return promptY / H; } };
+  return { canvas, handleKey, handleKeyUp, insertText, update, run, scroll, get cursorY(){ return promptY / H; } };
 };
 })();

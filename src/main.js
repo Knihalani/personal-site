@@ -98,7 +98,11 @@ function phone(){
   kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ unlock(); if (term.handleKey(e)) e.preventDefault(); tap(e.key === 'Enter' ? 'Enter' : e.key === 'Backspace' ? 'Backspace' : 'KeyA'); } });
   addEventListener('keydown', e => { if (e.target === kbd || e.metaKey) return; unlock(); if (term.handleKey(e)) e.preventDefault(); });
   stage.addEventListener('pointerdown', () => { unlock(); });
-  stage.addEventListener('click', () => kbd.focus());
+  stage.addEventListener('click', e => {
+    const r = cv.getBoundingClientRect();
+    if (term.handleTap && term.handleTap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)){ unlock(); return; }   // a card row: copy / open
+    kbd.focus();
+  });
   // touch drag scrolls the terminal's history
   let ty = null; stage.addEventListener('touchstart', e => { ty = e.touches[0].clientY; }, { passive: true });
   stage.addEventListener('touchmove', e => { if (ty == null || !term.scroll) return; const y = e.touches[0].clientY; term.scroll((ty - y) * 2.5); ty = y; e.preventDefault(); }, { passive: false });

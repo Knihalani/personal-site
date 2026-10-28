@@ -112,63 +112,66 @@ function tint(g, fn){
   for (let i = 0; i < P.count; i++){ const c = fn(P.getX(i), P.getY(i), P.getZ(i)); C[i * 3] = c[0]; C[i * 3 + 1] = c[1]; C[i * 3 + 2] = c[2]; }
   g.setAttribute('color', new THREE.BufferAttribute(C, 3)); return g;
 }
-const KNUCKLE = [1, .8, .76], PLAIN = [1, 1, 1];
-const mix3 = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+const PLAIN = [1, 1, 1];
 
-/* One finger segment along -Z (dorsal = +Y): tapered, slightly flattened palm-to-back, flushed at the knuckle. */
-function fingerSeg(r0, r1, len, distal){
-  const g = capsule(r0, r1, len, 24, null, v => {
-    const t = clamp(v.y / len, 0, 1), rr = Math.hypot(v.x, v.z) || 1;
-    const waist = 1 - .055 * Math.sin(PI * clamp(t, 0, 1)) * (distal ? .5 : 1);     // segments slim between the joints
-    v.x *= waist; v.z *= waist;
-    if (v.z > 0) v.z += r0 * .16 * gauss(v.y / len + .02, .16) * (v.z / rr);        // the joint knob on the back
-    v.z *= .87 - (distal ? .05 * t : 0);                 // flatter toward the pad
-    v.x *= 1 + (distal ? .05 * smooth(.4, 1, t) : 0);     // fingertips spread a touch
-    if (distal && v.z < 0) v.z -= .0012 * gauss(t - .62, .3);   // the fleshy pad
-  }, 7);
-  g.rotateX(-PI / 2);
-  return tint(g, (x, y, z) => {
-    const back = smooth(-.2 * r0, .6 * r0, y);
-    let k = back * gauss(z / r0, .9) * .9;                                       // knuckle at the proximal joint
-    if (distal) k = Math.max(k, .6 * smooth(-len * .6, -len - r1, z));       // warm fingertip
-    let c = mix3(PLAIN, KNUCKLE, clamp(k, 0, 1));
-    // dorsal wrinkle lines over the joint, palmar crease under it
-    const cr = back * (gauss(z / r0 + .25, .07) + .7 * gauss(z / r0 + .5, .06)) + (1 - back) * gauss(z / r0 + .05, .1) * .8;
-    c = mix3(c, [.72, .55, .5], clamp(cr * .5, 0, .5));
-    return c;
-  });
+/* ---------------- the hand surface: a signed-distance field, polygonised once with surface nets ---------------- */
+const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * .25; };
+/* round cone along +h from radius r1 at h = 0 to r2 at h = L (r = radial distance) */
+function roundCone(r, h, r1, r2, L){
+  const b = (r1 - r2) / L, a = Math.sqrt(1 - b * b), k = -b * r + a * h;
+  if (k < 0) return Math.hypot(r, h) - r1;
+  if (k > a * L) return Math.hypot(r, h - L) - r2;
+  return a * r + b * h - r1;
 }
-
-/* The palm: a superellipsoid with a dorsal arch, knuckle heads, faint extensor tendons and a thenar pad. */
-function palmGeo(ts, KX){
-  const g = new THREE.SphereGeometry(1, 64, 40), P = g.attributes.position, C = new Float32Array(P.count * 3);
-  for (let i = 0; i < P.count; i++){
-    const ux = P.getX(i), uy = P.getY(i), uz0 = P.getZ(i);
-    const uz = Math.sign(uz0) * Math.pow(Math.abs(uz0), .55);
-    const t = (uz + 1) / 2;                                    // 0 = knuckle end, 1 = wrist end
-    const z = -.093 + t * .097;
-    const w = .0405 - .0135 * smooth(.3, 1, t) + .002 * (ux * ts > 0 ? smooth(.2, .7, t) * (1 - smooth(.7, 1, t)) : 0);
-    const x = Math.sign(ux) * Math.pow(Math.abs(ux), .7) * w, xn = x / .0415;
-    const top = .0108 * (1 - .45 * xn * xn) * (1 - .25 * smooth(.6, 1, t)) + .0014;
-    const bot = .0102 * (1 - .35 * xn * xn) + .0065 * gauss(x - ts * .02, .014) * gauss(z + .035, .03) + .003 * gauss(x + ts * .022, .012) * gauss(z + .04, .035);
-    let y = uy > 0 ? Math.pow(uy, .75) * top : -Math.pow(-uy, .75) * bot;
-    let red = 0;
-    if (uy > 0){
-      for (const kx of KX){
-        const b = gauss(x - kx, .0062) * gauss(z + .086, .008);
-        y += .0052 * b * uy; red = Math.max(red, b);
-        y += .0011 * gauss(x - kx * (1 - .35 * t), .0026) * smooth(.15, .45, t) * (1 - smooth(.6, .95, t)) * uy;   // extensor tendons
-      }
-    }
-    P.setXYZ(i, x, y, z);
-    let c = mix3(PLAIN, KNUCKLE, clamp(red * .85, 0, 1));
-    if (uy > 0) c = mix3(c, [1.02, .97, .9], .5 * smooth(.2, .7, t));                      // the back of the hand: a touch paler, less red
-    const mot = 1 + .035 * Math.sin(x * 310 + z * 90) * Math.sin(z * 260 - x * 70);       // faint mottling
-    c = [c[0] * mot, c[1] * mot, c[2] * mot];
-    C[i * 3] = c[0]; C[i * 3 + 1] = c[1]; C[i * 3 + 2] = c[2];
+/* Surface nets over [lo, hi] with cell size h: one vertex per surface cell, one quad per sign-changing edge.
+   Far-field values come from a coarse pass so only the narrow band near the surface is evaluated finely. */
+function surfaceNets(sdf, lo, hi, h){
+  const nx = Math.ceil((hi[0] - lo[0]) / h) + 1, ny = Math.ceil((hi[1] - lo[1]) / h) + 1, nz = Math.ceil((hi[2] - lo[2]) / h) + 1;
+  const C = 3, cx = Math.ceil((nx - 1) / C) + 1, cy = Math.ceil((ny - 1) / C) + 1, cz = Math.ceil((nz - 1) / C) + 1;
+  const G = new Float32Array(cx * cy * cz);
+  for (let k = 0; k < cz; k++) for (let j = 0; j < cy; j++) for (let i = 0; i < cx; i++)
+    G[i + cx * (j + cy * k)] = sdf(lo[0] + i * C * h, lo[1] + j * C * h, lo[2] + k * C * h);
+  const F = new Float32Array(nx * ny * nz), band = 5 * h;
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
+    const g = G[Math.round(i / C) + cx * (Math.round(j / C) + cy * Math.round(k / C))];
+    const edge = i === 0 || j === 0 || k === 0 || i === nx - 1 || j === ny - 1 || k === nz - 1;
+    F[i + nx * (j + ny * k)] = edge ? Math.max(h, Math.abs(g)) : Math.abs(g) > band ? g : sdf(lo[0] + i * h, lo[1] + j * h, lo[2] + k * h);
   }
-  g.setAttribute('color', new THREE.BufferAttribute(C, 3));
-  return weldNormals(g);
+  const id = (i, j, k) => i + nx * (j + ny * k), cid = (i, j, k) => i + (nx - 1) * (j + (ny - 1) * k);
+  const cell = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1), pos = [];
+  const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+  const cv = new Float32Array(8);
+  for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++){
+    let m = 0;
+    for (let c = 0; c < 8; c++){ cv[c] = F[id(i + (c & 1), j + (c >> 1 & 1), k + (c >> 2))]; if (cv[c] < 0) m |= 1 << c; }
+    if (m === 0 || m === 255) continue;
+    let sx = 0, sy = 0, sz = 0, n = 0;
+    for (const [a, b] of E){
+      if ((cv[a] < 0) === (cv[b] < 0)) continue;
+      const t = cv[a] / (cv[a] - cv[b]);
+      sx += (a & 1) + ((b & 1) - (a & 1)) * t; sy += (a >> 1 & 1) + ((b >> 1 & 1) - (a >> 1 & 1)) * t; sz += (a >> 2) + ((b >> 2) - (a >> 2)) * t; n++;
+    }
+    cell[cid(i, j, k)] = pos.length / 3;
+    pos.push(lo[0] + (i + sx / n) * h, lo[1] + (j + sy / n) * h, lo[2] + (k + sz / n) * h);
+  }
+  const idx = [];
+  const quad = (a, b, c, d, flip) => {
+    if (a < 0 || b < 0 || c < 0 || d < 0) return;
+    if (flip){ const t = b; b = d; d = t; }
+    const d1 = (pos[a * 3] - pos[c * 3]) ** 2 + (pos[a * 3 + 1] - pos[c * 3 + 1]) ** 2 + (pos[a * 3 + 2] - pos[c * 3 + 2]) ** 2;
+    const d2 = (pos[b * 3] - pos[d * 3]) ** 2 + (pos[b * 3 + 1] - pos[d * 3 + 1]) ** 2 + (pos[b * 3 + 2] - pos[d * 3 + 2]) ** 2;
+    if (d1 < d2) idx.push(a, b, c, a, c, d); else idx.push(a, b, d, b, c, d);
+  };
+  for (let k = 1; k < nz - 1; k++) for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++){
+    const f0 = F[id(i, j, k)] < 0;
+    if (i < nx - 1 && f0 !== (F[id(i + 1, j, k)] < 0))
+      quad(cell[cid(i, j - 1, k - 1)], cell[cid(i, j, k - 1)], cell[cid(i, j, k)], cell[cid(i, j - 1, k)], !f0);
+    if (j < ny - 1 && f0 !== (F[id(i, j + 1, k)] < 0))
+      quad(cell[cid(i - 1, j, k - 1)], cell[cid(i - 1, j, k)], cell[cid(i, j, k)], cell[cid(i, j, k - 1)], !f0);
+    if (k < nz - 1 && f0 !== (F[id(i, j, k + 1)] < 0))
+      quad(cell[cid(i - 1, j - 1, k)], cell[cid(i, j - 1, k)], cell[cid(i, j, k)], cell[cid(i - 1, j, k)], !f0);
+  }
+  return { pos, idx };
 }
 
 /* ---------------- materials: skin with wrap-diffuse subsurface + rim; cloth with a soft fresnel sheen ---------------- */
@@ -274,7 +277,7 @@ M.createTypist = function createTypist(api){
     uCrtC: { value: new THREE.Color(.36, 1, .62).multiplyScalar(.075) }, uLampC: { value: new THREE.Color(1, .7, .46).multiplyScalar(.2) },
     uAmbC: { value: new THREE.Color(.11, .13, .2).multiplyScalar(.12) },
   };
-  const cloth = makeMat('cloth', U), cuffM = makeMat('cuff', U), skin = makeMat('skin', U), nailM = makeMat('nail', U);
+  const cloth = makeMat('cloth', U), cuffM = makeMat('cuff', U), skin = makeMat('skin', U);
   const ghost = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });   // casts the body's shadow, never seen
   const mesh = (geo, mat, parent, pos, rot) => {
     const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = mat !== ghost;
@@ -308,41 +311,30 @@ M.createTypist = function createTypist(api){
   const upperGeo = capsule(.046, .041, L1, 40,
     (a, y) => .05 * Math.sin(y * 70 + 1.8 * Math.sin(a * 2 + .5)) * smooth(.17, .27, y) + .025 * Math.sin(a * 4 + y * 22) + .02 * Math.sin(a * 3 - y * 30) * (1 - smooth(.04, .12, y)),
     v => { v.x *= 1.04; v.z *= .94; });
+  // the forearm sleeve: drapes from the elbow and ends in a ribbed cuff mid-forearm, so a slim wrist shows
   const sleeveFold = (a, y) => (1 - smooth(.0, .1, y)) * (.075 * Math.sin(y * 92 + 1.6 * Math.sin(a * 2 + 1)) + .03 * Math.sin(a * 5 + y * 40))            // bunching at the elbow
-      + smooth(.05, .1, y) * (1 - smooth(.15, .18, y)) * (.028 * Math.sin(a * 3 + y * 28) + .014 * Math.sin(a * 7 - y * 22))          // drape along the forearm
-      + smooth(.15, .168, y) * (1 - smooth(.188, .2, y)) * .045 * Math.sin(a * 4 + y * 50 + 1);                                       // slack piling onto the cuff
-  const RIBS = 30, ribBand = y => smooth(.203, .209, y) * (1 - smooth(.233, .239, y));
-  const foreGeo = lathe([[.0001, -.05], [.028, -.046], [.044, -.034], [.052, -.012], [.054, .018], [.051, .05], [.048, .09], [.0455, .13], [.0445, .158], [.0465, .177], [.045, .192],
-    [.039, .2], [.0345, .205], [.034, .209], [.0338, .214], [.0338, .22], [.0338, .226], [.0336, .232], [.031, .2385], [.0255, .2415], [.0001, .242]].map(([r, y]) => [r * (y > .19 ? .84 : .8), y]), 150,
+      + smooth(.05, .1, y) * (1 - smooth(.13, .155, y)) * (.028 * Math.sin(a * 3 + y * 28) + .014 * Math.sin(a * 7 - y * 22))          // drape along the forearm
+      + smooth(.13, .15, y) * (1 - smooth(.158, .166, y)) * .045 * Math.sin(a * 4 + y * 50 + 1);                                       // slack piling onto the cuff
+  const RIBS = 30, ribBand = y => smooth(.168, .173, y) * (1 - smooth(.192, .197, y));
+  const foreGeo = lathe([[.0001, -.05], [.028, -.046], [.044, -.034], [.052, -.012], [.054, .018], [.051, .05], [.048, .09], [.046, .12], [.0452, .145], [.0456, .158],
+    [.0425, .166], [.039, .171], [.038, .18], [.038, .19], [.0372, .197], [.0345, .2012], [.0315, .2022], [.0292, .199]], 150,
     (a, y) => sleeveFold(a, y) + ribBand(y) * .05 * Math.max(-.6, Math.cos(a * RIBS)),                        // + rib knit on the cuff
     v => { v.x *= 1.1; v.z *= .86; });
-  // the fabric's own shading: fold valleys darker, the knit cuff darker still with shadowed rib grooves
-  tint(foreGeo, (x, y, z) => {
-    const a = Math.atan2(z / .86, x / 1.1), rb = ribBand(y);
-    let k = 1 + clamp(sleeveFold(a, y) * 3.2, -.3, .12);
-    k *= 1 - .2 * rb; k *= 1 - .3 * rb * clamp(.5 - .5 * Math.cos(a * RIBS), 0, 1);
-    return [k, k, k];
-  });
-  const wristGeo = tint(capsule(.0185, .0185, .05, 28, null, v => { v.x *= 1.25; v.z *= .72; v.z += .002 * smooth(.02, .05, v.y); }, 6), () => PLAIN);
+  tint(foreGeo, () => PLAIN);
   const elbowGeo = blob(.047, .047, .047, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
 
   /* ---------- hands ---------- */
   const FL = [[.036, .03, .026], [.041, .025, .019], [.045, .028, .02], [.042, .026, .019], [.032, .02, .0165]];
   const FR = [[.0098, .0088, .0078], [.0075, .0067, .0059], [.0077, .0069, .006], [.0072, .0064, .0056], [.0062, .0055, .0049]];
   const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));
-  const segGeo = FL.map((L, f) => L.map((l, j) => fingerSeg(FR[f][j], j < 2 ? FR[f][j + 1] : FR[f][j] * .9, l, j === 2)));
-  const nailGeo = FL.map((L, f) => { const r = FR[f][2]; const g = blob(r * .8, r * .22, L[2] * .5, (x, y, z) => -.15 * Math.max(0, -y), 20, 12);
-    const P = g.attributes.position; for (let i = 0; i < P.count; i++){ const x = P.getX(i); P.setY(i, P.getY(i) - x * x / (r * 2.2)); } return weldNormals(g); });
 
   const hands = [];
   for (let h = 0; h < 2; h++){
     const side = h ? 1 : -1, ts = -side;            // ts: which local x side the thumb is on
     const hand = new THREE.Group(); root.add(hand);
     const KN = [V3(ts * .031, -.007, -.03), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.08)];
-    mesh(palmGeo(ts, KN.slice(1).map(k => k.x)), skin, hand);
-    mesh(tint(blob(.015, .0115, .028, null, 24, 16), () => PLAIN), skin, hand, V3(ts * .022, -.005, -.032), [0, -ts * .25, 0]);   // thenar
     const upper = new THREE.Group(); root.add(upper); mesh(upperGeo, cloth, upper); mesh(elbowGeo, cloth, upper, V3(0, L1, 0));
-    const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, cuffM, fore); mesh(wristGeo, skin, fore, V3(0, .21, 0));
+    const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, cuffM, fore);
     const fingers = [];
     for (let f = 0; f < 5; f++){
       const base = new THREE.Group(); base.position.copy(KN[f]); hand.add(base);
@@ -350,15 +342,12 @@ M.createTypist = function createTypist(api){
       const g0 = new THREE.Group(); g0.rotation.order = 'YXZ'; base.add(g0);
       const g1 = new THREE.Group(); g1.position.z = -FL[f][0]; g0.add(g1);
       const g2 = new THREE.Group(); g2.position.z = -FL[f][1]; g1.add(g2);
-      mesh(segGeo[f][0], skin, g0); mesh(segGeo[f][1], skin, g1); mesh(segGeo[f][2], skin, g2);
-      const nl = mesh(nailGeo[f], nailM, g2, V3(0, FR[f][2] * .8, -FL[f][2] * .6), [-.06, 0, 0]);
-      if (f === 0) nl.rotation.z = ts * .25;
       fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][2] * .9 * .87 + .0004,
         mode: 'idle', code: null, vcode: null, real: false, pressed: false, upReq: false, t: 0, tC: 0, Td: .08, lift: .005, relT: 9,
         w: S(0), depth: S(0), act: 0, K: V3(), from: V3(), P: V3(), tip: V3(), restLocal: V3(), restHome: V3(), reach: V3(), start: 0,
         fid: new VSpring(V3()), fidT: V3(), fidAt: 1 + Math.random() * 4, queue: [], vel: V3(), prevP: V3(), v0: V3() });
     }
-    hands.push({ h, side, ts, hand, upper, fore, fingers, homeW: V3(), homeQ: new THREE.Quaternion(), deskW: V3(), deskQ: new THREE.Quaternion(),
+    hands.push({ h, side, ts, KN, hand, upper, fore, fingers, homeW: V3(), homeQ: new THREE.Quaternion(), deskW: V3(), deskQ: new THREE.Quaternion(),
       W: null, hold: V3(), region: null, nudge: V3(), lastActive: -9, yaw: S(0), desk: S(0), deskT: 0, elbowOut: S(0) });
   }
 

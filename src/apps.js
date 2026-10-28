@@ -70,7 +70,8 @@ T.apps.tetris = {
   desc: 'the falling blocks. arrows, space, c to hold',
   usage: 'tetris',
   start(api){
-    const BH = Math.max(10, Math.min(20, (api.rows || 23) - 2));   // well + floor + feet must fit the grid
+    const STACK = (api.cols || 72) < 47;                               // phones: the panel goes under the well
+    const BH = Math.max(10, Math.min(20, (api.rows || 23) - (STACK ? 15 : 2)));   // well + floor + feet (+ panel) must fit
     const board = Array.from({ length: BH }, () => Array(BW).fill(null));
     let bag = [], queue = [], cur = null, hold = null, canHold = true;
     let score = 0, lines = 0, level = 1, hi = hiGet(TETRIS_HI), newHi = false;
@@ -181,9 +182,9 @@ T.apps.tetris = {
       render(scr){
         scr.clear(); scr.cursor(0, 0, null);
         const W = BW * 2 + 4;
-        const compact = scr.cols < 64 || scr.rows < 22;      // one stacked panel to the right of the well
-        const ox = compact ? Math.max(0, ((scr.cols - (W + 3 + 20)) / 2) | 0) : ((scr.cols - W) / 2) | 0;
-        const oy = Math.max(0, ((scr.rows - BH - 2) / 2) | 0);
+        const compact = STACK || scr.cols < 64 || scr.rows < 22;      // one panel, beside the well or under it
+        const ox = STACK ? Math.max(0, ((scr.cols - W) / 2) | 0) : compact ? Math.max(0, ((scr.cols - (W + 3 + 20)) / 2) | 0) : ((scr.cols - W) / 2) | 0;
+        const oy = Math.max(0, ((scr.rows - BH - 2 - (STACK ? 13 : 0)) / 2) | 0);
         const bx = ox + 2;  // first board column
         // well: classic "<!" ... "!>" sides
         for (let y = 0; y < BH; y++){
@@ -208,13 +209,13 @@ T.apps.tetris = {
         const mini = (p, x, y, level) => { if (!p) return; const n = SHAPES[p].length; const off = n === 4 ? 0 : 1;
           for (const [cx, cy] of STATES[p][0]) scr.put(x + (cx + off) * 2, y + cy - (p === 'I' ? 1 : 0), '  ', blk(level)); };
         if (compact){
-          const rx = ox + W + 3;
-          scr.put(rx, oy, 'NEXT', 'dim'); mini(queue[0], rx, oy + 1, 'bright');
-          scr.put(rx + 10, oy, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx + 10, oy + 1, canHold ? 'normal' : 'faint');
+          const rx = STACK ? ox + 2 : ox + W + 3, ry = STACK ? oy + BH + 3 : oy;
+          scr.put(rx, ry, 'NEXT', 'dim'); mini(queue[0], rx, ry + 1, 'bright');
+          scr.put(rx + 10, ry, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx + 10, ry + 1, canHold ? 'normal' : 'faint');
           [['SCORE', score, 'bright'], ['HIGH', Math.max(hi, score), score > hi ? 'bright' : 'normal'], ['LEVEL', level, 'normal'], ['LINES', lines, 'normal']]
-            .forEach(([a, v, st], i) => { scr.put(rx, oy + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, oy + 4 + i, String(v), st); });
+            .forEach(([a, v, st], i) => { scr.put(rx, ry + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, ry + 4 + i, String(v), st); });
           const ks = [['<- ->', 'move'], ['up x', 'rotate'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
-          const ky = oy + 9, two = scr.rows - ky < ks.length;
+          const ky = ry + 9, two = STACK || scr.rows - ky < ks.length;
           const short = [['<->', 'move'], ['up', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           (two ? short : ks).forEach(([a, b], i) => {
             const x = rx + (two ? (i % 2) * 11 : 0), y = ky + (two ? i >> 1 : i);
@@ -393,10 +394,17 @@ T.apps.snake = {
 const LUM = '.,-:;=+!*#$@';      // VT323 draws ~ as a squiggle, so it is left out
 const LUM_STYLE = ['faint', 'faint', 'faint', 'dim', 'dim', 'dim', 'normal', 'normal', 'normal', 'bright', 'bright', 'bright'];
 T.apps.donut = {
-  desc: 'a spinning ascii donut (after a1k0n). arrows steer, any key quits',
+  desc: 'a spinning ascii donut (after a1k0n). hold the arrows to spin it',
   usage: 'donut',
   start(api){
-    let A = 1, B = 0, vA = 1.0, vB = 0.5;     // angles and spin speeds (rad/s)
+    const IDLE_A = 1.0, IDLE_B = 0.5, SPIN = 3.4;   // idle drift and held-arrow spin (rad/s)
+    let A = 1, B = 0, vA = IDLE_A, vB = IDLE_B;     // angles and spin speeds (rad/s)
+    let idle = 1, paused = false, t = 0, gotUp = false, note = '', noteT = 0;
+    const held = { up: 0, down: 0, left: 0, right: 0 };   // time of the last keydown, 0 when released
+    const DIR = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right' };
+    // without keyup events, a held key is assumed released ~150 ms after its last auto-repeat
+    const isHeld = d => held[d] > 0 && (gotUp || t - held[d] < 0.15);
+    const say = s => { note = s; noteT = t; };
     let cols = api.cols || 72, rows = api.rows || 23;
     let chars = [], styles = [], acc = 0;
     function frame(){
@@ -406,8 +414,9 @@ T.apps.donut = {
       const R1 = 1, R2 = 2, K2 = 5;
       // scale so the donut fills the grid height; character cells are ~2x taller than wide
       const h = rows - 1;                                   // bottom row holds the hint
-      const K1y = h * K2 * 3 / (8 * (R1 + R2)) * 1.02;
+      let K1y = h * K2 * 3 / (8 * (R1 + R2)) * 1.02;
       const K1x = Math.min(K1y * 2.05, cols * K2 * 3 / (8 * (R1 + R2)) * 1.02);
+      K1y = Math.min(K1y, K1x / 2.05);                      // keep it round on tall, narrow (phone) grids
       for (let th = 0; th < 6.283; th += 0.05){
         const ct = Math.cos(th), st = Math.sin(th);
         for (let ph = 0; ph < 6.283; ph += 0.015){
@@ -435,19 +444,32 @@ T.apps.donut = {
     return {
       key(e){
         const k = e.key;
-        if (k === 'ArrowLeft'){ vB -= 0.35; return true; }
-        if (k === 'ArrowRight'){ vB += 0.35; return true; }
-        if (k === 'ArrowUp'){ vA += 0.35; return true; }
-        if (k === 'ArrowDown'){ vA -= 0.35; return true; }
-        if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(k)) return true;
-        api.exit(0);
-        return true;
+        if (DIR[k]){ held[DIR[k]] = t || 1e-6; return true; }
+        if (isQuit(k)){ api.exit(0); return true; }
+        if (k === ' '){ paused = !paused; say(paused ? 'paused' : ''); return true; }
+        if (k === '+' || k === '='){ idle = Math.min(4, idle * 1.4); say('idle speed x' + idle.toFixed(1)); return true; }
+        if (k === '-' || k === '_'){ idle = Math.max(0.15, idle / 1.4); say('idle speed x' + idle.toFixed(1)); return true; }
+        if (k === 'r' || k === 'R'){ A = 1; B = 0; vA = IDLE_A; vB = IDLE_B; idle = 1; paused = false; say('reset'); frame(); return true; }
+        return true;                         // everything else is ignored, not a way out
+      },
+      keyUp(e){
+        gotUp = true;
+        const d = DIR[e.key]; if (d) held[d] = 0;
+        return false;
       },
       tick(dt){
-        dt = Math.min(secs(dt), 0.1);
+        dt = Math.min(secs(dt), 0.1); t += dt;
+        const ay = (isHeld('up') ? 1 : 0) - (isHeld('down') ? 1 : 0);
+        const bx = (isHeld('right') ? 1 : 0) - (isHeld('left') ? 1 : 0);
+        const restA = paused ? 0 : IDLE_A * idle, restB = paused ? 0 : IDLE_B * idle;
+        // held: snap quickly to a firm spin; released: coast, easing back to the idle drift
+        vA += ((ay ? ay * SPIN : restA) - vA) * Math.min(1, dt * (ay ? 10 : 1.1));
+        vB += ((bx ? bx * SPIN : restB) - vB) * Math.min(1, dt * (bx ? 10 : 1.1));
         A += vA * dt; B += vB * dt;
         acc += dt;
-        if (acc < 1 / 40) return false;     // ~40 fps is plenty for a phosphor tube
+        const noteDirty = note && note !== 'paused' && t - noteT > 1.6 ? (note = '', true) : false;
+        if (Math.abs(vA) + Math.abs(vB) < 1e-3 && !noteDirty) return false;
+        if (acc < 1 / 40 && !noteDirty) return false;     // ~40 fps is plenty for a phosphor tube
         acc = 0; frame();
         return true;
       },
@@ -466,7 +488,10 @@ T.apps.donut = {
             scr.put(x - s.length, y, s, st);
           }
         }
-        center(scr, rows - 1, 'arrows steer the spin  .  any other key leaves', 'faint');
+        const hint = note ? note + '  \u00b7  ' + (paused ? 'space resumes' : 'q quit')
+          : cols >= 46 ? '\u2190\u2191\u2193\u2192 spin \u00b7 space pause \u00b7 +/- speed \u00b7 q quit'
+          : '\u2190\u2191\u2193\u2192 spin \u00b7 space \u00b7 +/- \u00b7 q';
+        center(scr, rows - 1, hint, note ? 'dim' : 'faint');
       },
     };
   },
