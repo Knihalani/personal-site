@@ -229,7 +229,7 @@ M.createScene = function createScene(container){
   const screenU = {
     uTex: { value: blankTex }, uHas: { value: 0 }, uRes: { value: new THREE.Vector2(1024, 768) }, uTime: { value: 0 },
     uFlicker: { value: 1 }, uRoll: { value: REDUCED ? 0 : 1 }, uPhos: { value: new THREE.Vector3(...PHOSPHOR) }, uMono: { value: .88 },
-    uLamp: { value: new V3() }, uInset: { value: new THREE.Vector2(.045, .05) }, uBright: { value: 1 },
+    uLamp: { value: new V3() }, uInset: { value: new THREE.Vector2(.045, .05) }, uBright: { value: 1 }, uLampAmt: { value: 1 },
   };
   const screenMat = new THREE.ShaderMaterial({
     uniforms: screenU, extensions: { derivatives: true },
@@ -238,7 +238,7 @@ M.createScene = function createScene(container){
       void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal);
         gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: `
-      uniform sampler2D uTex; uniform float uHas, uTime, uFlicker, uRoll, uMono, uBright; uniform vec2 uRes, uInset; uniform vec3 uPhos, uLamp;
+      uniform sampler2D uTex; uniform float uHas, uTime, uFlicker, uRoll, uMono, uBright, uLampAmt; uniform vec2 uRes, uInset; uniform vec3 uPhos, uLamp;
       varying vec2 vUv; varying vec3 vW; varying vec3 vN;
       float luma(vec3 c){ return dot(c, vec3(.299, .587, .114)); }
       vec3 phos(vec3 c){ float l = luma(c); vec3 m = uPhos * l + vec3(pow(l, 3.)) * .32; return mix(c, m, uMono); }
@@ -285,8 +285,10 @@ M.createScene = function createScene(container){
         vec3 V = normalize(cameraPosition - vW), N = normalize(vN);
         vec3 L = normalize(uLamp - vW), R = reflect(-V, N);
         float rl = max(dot(R, L), 0.);
-        vec3 refl = vec3(1., .74, .48) * (pow(rl, 220.) * .5 + pow(rl, 18.) * .05 + pow(rl, 4.) * .018);
-        refl += vec3(1., .78, .55) * .03 * smoothstep(.5, 0., length((vUv - vec2(.05, .9)) * vec2(1., 1.4)));  // lamp-lit room, top left
+        vec3 refl = vec3(1., .74, .48) * (pow(rl, 220.) * .5 + pow(rl, 18.) * .05 + pow(rl, 4.) * .018) * uLampAmt;
+        refl += vec3(1., .78, .55) * .03 * uLampAmt * smoothstep(.5, 0., length((vUv - vec2(.05, .9)) * vec2(1., 1.4)));  // lamp-lit room, top left
+        // the window, faint and cool, ghosted in the upper left of the glass
+        refl += vec3(.25, .32, .5) * .012 * smoothstep(.22, .0, length((vUv - vec2(.12, .8)) * vec2(1.3, 1.)));
         refl += vec3(.03, .036, .045) * pow(1. - max(dot(N, V), 0.), 3.);
         refl += vec3(.006, .007, .009) * smoothstep(.2, 1., vUv.y);   // a hint of the dark room above
         // the outer rim of the image falls off where the beam lands at a steep angle
@@ -514,6 +516,7 @@ M.createScene = function createScene(container){
   const LAMP = { base: new V3(-.5, DESK_Y, -.25), elbow: new V3(-.54, 1.12, -.31), head: new V3(-.31, 1.13, -.07), target: new V3(-.17, DESK_Y, .13) };
   const lampDir = new V3().subVectors(LAMP.target, LAMP.head).normalize();
   const bulbPos = new V3();
+  let bulbMat = null, shadeInnerMat = null;
   {
     const enamel = new THREE.MeshStandardMaterial({ color: lin(0x1d2620), roughness: .42, metalness: .35 }); // bottle-green enamel, nearly black
     const brass = new THREE.MeshStandardMaterial({ color: lin(0xb08a52), roughness: .35, metalness: .9 });
@@ -538,9 +541,10 @@ M.createScene = function createScene(container){
     const prof = [[0, 0], [.018, 0], [.024, -.006], [.028, -.03], [.036, -.056], [.052, -.086], [.068, -.11], [.073, -.118], [.0745, -.122], [.071, -.123]].reverse().map(([x, y]) => new THREE.Vector2(x, y)); // bottom-up so normals face out
     const shade = new THREE.Group();
     const outer = mesh(new THREE.LatheGeometry(prof, 48), enamel); shade.add(outer);
-    const innerM = new THREE.MeshStandardMaterial({ color: lin(0xe8dcc4), emissive: lin(0xffc58a), emissiveIntensity: .12, roughness: .7, side: THREE.BackSide });
+    const innerM = shadeInnerMat = new THREE.MeshStandardMaterial({ color: lin(0xe8dcc4), emissive: lin(0xffc58a), emissiveIntensity: .12, roughness: .7, side: THREE.BackSide });
     shade.add(mesh(new THREE.LatheGeometry(prof.map(v => new THREE.Vector2(v.x * .985, v.y)), 48), innerM, false));
-    const bulb = mesh(new THREE.SphereGeometry(.024, 24, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, .86, .62), toneMapped: false }), false);
+    bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, .86, .62), toneMapped: false });
+    const bulb = mesh(new THREE.SphereGeometry(.024, 24, 16), bulbMat, false);
     bulb.position.y = -.074; shade.add(bulb);
     shade.add(mesh(new THREE.CylinderGeometry(.012, .016, .03, 16), brass)); // socket collar
     shade.position.copy(LAMP.head).addScaledVector(lampDir, -.02);
@@ -558,7 +562,7 @@ M.createScene = function createScene(container){
   lamp.shadow.bias = -.0004; lamp.shadow.normalBias = .004;
   scene.add(lamp, lamp.target);
   // bounce off the lit desk: a low warm fill that keeps the darks from going dead
-  const bounce = new THREE.PointLight(lin(0x9a7656), .2, 2.5, 2); bounce.position.set(-.08, DESK_Y + .09, .16); scene.add(bounce);
+  const bounce = new THREE.PointLight(lin(0xa08872), .14, 2.5, 2); bounce.position.set(-.08, DESK_Y + .09, .16); scene.add(bounce);
   // the tube lights the room: a wide, shadowless green-white spot from the glass
   const glow = new THREE.SpotLight(new THREE.Color(PHOSPHOR[0] * .8, PHOSPHOR[1], PHOSPHOR[2] * .9), .5, 3, 1.25, 1, 2);
   glow.position.copy(screenCenter).addScaledVector(screenNormal, .02); glow.target.position.copy(screenCenter).addScaledVector(screenNormal, 1).add(new V3(0, -.35, 0));
@@ -569,22 +573,23 @@ M.createScene = function createScene(container){
   screenU.uLamp.value.copy(bulbPos);
 
   /* ---- light shaft and dust in the beam ---- */
+  const shaftAmt = { value: 1 };
   {
     const len = bulbPos.distanceTo(LAMP.target) * 1.05, r0 = .06, r1 = len * Math.tan(.6) * .95;
     const cg = new THREE.CylinderGeometry(r0, r1, len, 40, 1, true); cg.translate(0, -len / 2, 0);
     const cone = new THREE.Mesh(cg, new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-      uniforms: { uLen: { value: len } },
+      uniforms: { uLen: { value: len }, uAmt: shaftAmt },
       vertexShader: `varying float vA; varying vec3 vN; varying vec3 vV; uniform float uLen;
         void main(){ vA = -position.y / uLen; vec4 w = modelMatrix * vec4(position, 1.); vN = normalize(mat3(modelMatrix) * normal); vV = normalize(cameraPosition - w.xyz);
           gl_Position = projectionMatrix * viewMatrix * w; }`,
-      fragmentShader: `varying float vA; varying vec3 vN; varying vec3 vV;
-        void main(){ float e = pow(abs(dot(vN, vV)), 2.2); float a = e * pow(1. - vA, 1.4) * smoothstep(0., .08, vA) * .05;
+      fragmentShader: `varying float vA; varying vec3 vN; varying vec3 vV; uniform float uAmt;
+        void main(){ float e = pow(abs(dot(vN, vV)), 2.2); float a = e * pow(1. - vA, 1.4) * smoothstep(0., .08, vA) * .05 * uAmt;
           gl_FragColor = vec4(vec3(1., .78, .52) * a, 1.); }`,
     }));
     cone.position.copy(bulbPos); cone.quaternion.setFromUnitVectors(new V3(0, -1, 0), lampDir); cone.renderOrder = 2; scene.add(cone);
   }
-  const dustU = { uTime: { value: 0 }, uLampPos: { value: bulbPos.clone() }, uLampDir: { value: lampDir.clone() }, uCos: { value: Math.cos(.62) }, uPR: { value: pixelRatio }, uScale: { value: 800 } };
+  const dustU = { uTime: { value: 0 }, uLampPos: { value: bulbPos.clone() }, uLampDir: { value: lampDir.clone() }, uCos: { value: Math.cos(.62) }, uPR: { value: pixelRatio }, uScale: { value: 800 }, uAmt: shaftAmt };
   {
     const N = 340, pos = new Float32Array(N * 3), sd = new Float32Array(N * 3);
     const side = new V3().crossVectors(lampDir, new V3(0, 1, 0)).normalize(), up2 = new V3().crossVectors(side, lampDir).normalize();
@@ -594,11 +599,11 @@ M.createScene = function createScene(container){
       pos.set([p.x, p.y, p.z], i * 3); sd.set([rnd(), rnd(), rnd()], i * 3); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('seed', new THREE.BufferAttribute(sd, 3));
     const dust = new THREE.Points(g, new THREE.ShaderMaterial({ uniforms: dustU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      vertexShader: `attribute vec3 seed; uniform float uTime, uCos, uPR, uScale; uniform vec3 uLampPos, uLampDir; varying float vA;
+      vertexShader: `attribute vec3 seed; uniform float uTime, uCos, uPR, uScale, uAmt; uniform vec3 uLampPos, uLampDir; varying float vA;
         void main(){ float t = uTime; vec3 p = position;
           p += vec3(sin(t * .11 + seed.x * 6.28) * .035 + sin(t * .37 + seed.z * 12.) * .006, sin(t * .07 + seed.y * 6.28) * .03 - .01 * sin(t * .05 + seed.x * 3.), cos(t * .09 + seed.z * 6.28) * .035);
           vec3 d = p - uLampPos; float dist = length(d); float c = dot(d / dist, uLampDir);
-          vA = smoothstep(uCos - .02, uCos + .1, c) * (.35 + .65 * seed.x) * smoothstep(.06, .16, dist) * (.55 + .45 * sin(t * (.6 + seed.y) + seed.x * 40.));
+          vA = smoothstep(uCos - .02, uCos + .1, c) * (.35 + .65 * seed.x) * smoothstep(.06, .16, dist) * (.55 + .45 * sin(t * (.6 + seed.y) + seed.x * 40.)) * uAmt;
           vec4 mv = modelViewMatrix * vec4(p, 1.); gl_Position = projectionMatrix * mv;
           gl_PointSize = (1.2 + 2.2 * seed.y * seed.y) * uPR * uScale * .0025 / -mv.z; }`,
       fragmentShader: `varying float vA; void main(){ float r = length(gl_PointCoord - .5); float a = smoothstep(.5, .05, r) * vA * .55; gl_FragColor = vec4(vec3(1., .82, .6) * a, 1.); }` }));

@@ -73,60 +73,68 @@ function finish(out, sr, peak, fadeMs){
 function onePoleLP(out, sr, f){ const a = Math.exp(-TAU * f / sr); let y = 0; for (let i = 0; i < out.length; i++){ y = out[i] + a * (y - out[i]); out[i] = y; } return out; }
 
 /* ---------------- keyswitch synthesis ----------------
-   A 1980s keyswitch (think complicated-Alps / buckling-era boards in a beige case): a crisp tactile click
-   at actuation, then the bottom-out clack of the slider hitting the housing and the hollow case thump,
-   on release a lighter tick of the slider returning. */
+   Tuned for the round, creamy "thock" of a premium board in a solid, slightly hollow case:
+   down = a soft, short tactile tick, then a warm bottom-out whose energy lives at 180-450 Hz and dies in
+   ~60-90 ms, coloured by one or two woody case resonances; up = a quieter, drier, higher clack with a
+   faint spring/plastic overtone. High frequencies are kept gentle so fast typing is a pleasant patter. */
 const KEY_CLASSES = {
-  // body/clack/clickF: Hz ranges; tau: body decay; click: click amount; rattle: stabiliser clicks; down/up: levels
-  normal: { body: [230, 330], clack: [1700, 2600], clickF: [3400, 5200], tau: 0.020, click: 1.0, rattle: 0, len: 0.13, down: 0.30, up: 0.12 },
-  soft:   { body: [210, 280], clack: [1500, 2100], clickF: [3000, 4200], tau: 0.016, click: 0.5, rattle: 0, len: 0.12, down: 0.20, up: 0.08 },
-  heavy:  { body: [165, 215], clack: [1300, 1800], clickF: [3000, 4400], tau: 0.030, click: 0.9, rattle: 2, len: 0.18, down: 0.36, up: 0.15 },
-  space:  { body: [120, 150], clack: [1000, 1400], clickF: [2800, 3800], tau: 0.042, click: 0.7, rattle: 5, len: 0.26, down: 0.38, up: 0.17 },
+  // body: fundamental Hz range; tau: body decay (s); tick: tactile tick amount; case: [Hz, Hz] woody peaks;
+  // stab: stabiliser tick; len: buffer length (s); down/up: playback levels
+  normal: { body: [215, 290], tau: 0.026, tick: 1.0, case: [[620, 820], [1150, 1450]], stab: 0, len: 0.16, down: 0.40, up: 0.15 },
+  soft:   { body: [200, 260], tau: 0.024, tick: 0.55, case: [[580, 760], [1100, 1350]], stab: 0, len: 0.15, down: 0.31, up: 0.11 },
+  heavy:  { body: [185, 235], tau: 0.031, tick: 0.85, case: [[520, 700], [1000, 1250]], stab: 1, len: 0.19, down: 0.52, up: 0.17 },
+  space:  { body: [140, 168], tau: 0.036, tick: 0.6, case: [[400, 520], [850, 1050]], stab: 1, len: 0.24, down: 0.52, up: 0.18 },
 };
+
+/* Noise-excited resonator: a short noise puff through a high-Q band-pass, so the ring decays naturally
+   (tau ~ Q / (pi f)) and every hit has a slightly different grain. */
+function resonate(out, sr, r, t0, f, decay, amp, exc){
+  const Q = Math.max(1, Math.PI * f * decay);
+  burst(out, sr, r, t0, exc || 0.0008, 'bp', f, Q, amp * Math.sqrt(Q) * 0.6, decay * 7);
+}
 
 function synthKeyDown(cls, sr, seed){
   const r = rng(seed), c = KEY_CLASSES[cls], L = (a) => a[0] + (a[1] - a[0]) * r();
   const out = new Float32Array(Math.round(c.len * sr));
-  const body = L(c.body), clack = L(c.clack), clickF = L(c.clickF);
-  const tb = 0.0055 + r() * 0.005;                      // actuation click -> bottom-out gap
-  /* 1. tactile click (leaf / click-plate snap) */
-  burst(out, sr, r, 0, 0.00045 + r() * 0.0003, 'bp', clickF, 1.3, 0.55 * c.click);
-  burst(out, sr, r, 0.0007, 0.0004, 'hp', 2500, 0.7, 0.18 * c.click);
-  /* 2. bottom-out clack: plastic on plastic */
-  burst(out, sr, r, tb, 0.0011 + r() * 0.0006, 'bp', clack, 2.2, 0.85);
-  burst(out, sr, r, tb, 0.0005, 'bp', clack * 2.1, 3, 0.22);
-  /* 3. the "thock": keycap + slider + case resonances */
-  ring(out, sr, tb, body, c.tau * (0.9 + r() * 0.25), 0.55, 0.08);
-  ring(out, sr, tb, body * (2.55 + r() * 0.3), c.tau * 0.45, 0.24);
-  ring(out, sr, tb + 0.0003, clack * (1.25 + r() * 0.2), 0.0035, 0.12);
-  ring(out, sr, tb, 92 + r() * 30, c.tau * 1.6, cls === 'space' ? 0.32 : 0.16);   // hollow case
-  /* 4. stabiliser rattle (space / enter / backspace) */
-  if (c.rattle){
-    let t = tb + 0.003;
-    for (let i = 0; i < c.rattle; i++){
-      t += 0.0025 + r() * 0.006;
-      burst(out, sr, r, t, 0.00035, 'bp', 2600 + r() * 1400, 4, 0.26 * Math.pow(0.72, i));
-    }
-    ring(out, sr, tb + 0.001, 2900 + r() * 300, 0.018, 0.025);  // the wire's faint metallic ping
-    ring(out, sr, tb + 0.001, 4550 + r() * 300, 0.012, 0.015);
+  const body = L(c.body), tau = c.tau * (0.9 + r() * 0.2);
+  const tb = 0.0035 + r() * 0.004;                      // tactile bump -> bottom-out gap
+  /* 1. soft tactile tick: short, low-ish, never piercing */
+  burst(out, sr, r, 0, 0.00028 + r() * 0.00012, 'bp', 2200 + r() * 1500, 1.1, 0.16 * c.tick);
+  /* 2. bottom-out impact: a dark, rounded contact rather than a bright clack */
+  burst(out, sr, r, tb, 0.0012 + r() * 0.0005, 'lp', 1300 + r() * 400, 0.7, 0.38);
+  burst(out, sr, r, tb, 0.0006, 'bp', 1900 + r() * 500, 1.2, 0.14);
+  /* 3. the thock: warm body (fundamental + a fifth-ish partial), slightly settling in pitch */
+  ring(out, sr, tb, body, tau, 0.55, 0.05);
+  ring(out, sr, tb + 0.0002, body * (1.48 + r() * 0.12), tau * 0.75, 0.32, 0.03);
+  resonate(out, sr, r, tb, body * (1.02 + r() * 0.04), tau * 0.9, 0.22);
+  ring(out, sr, tb, body * 0.52, tau * 1.25, cls === 'space' ? 0.22 : 0.09);   // weight under the body
+  /* 4. hollow, woody case colour */
+  resonate(out, sr, r, tb, L(c.case[0]), 0.014 + r() * 0.004, 0.26);
+  resonate(out, sr, r, tb + 0.0004, L(c.case[1]), 0.007, 0.13);
+  /* 5. stabiliser: one soft, damped tick a moment after (no rattle) */
+  if (c.stab){
+    const ts = tb + 0.009 + r() * 0.006;
+    burst(out, sr, r, ts, 0.0003, 'bp', 2000 + r() * 600, 1.4, 0.05);
+    ring(out, sr, ts, body * 2.1, 0.006, 0.05);
   }
-  onePoleLP(out, sr, 9000);
-  return finish(out, sr, 1, 8);
+  onePoleLP(out, sr, 5200);
+  return finish(out, sr, 1, 10);
 }
 function synthKeyUp(cls, sr, seed){
   const r = rng(seed ^ 0x9e3779b9), c = KEY_CLASSES[cls], L = (a) => a[0] + (a[1] - a[0]) * r();
-  const out = new Float32Array(Math.round(c.len * 0.7 * sr));
-  const body = L(c.body), clack = L(c.clack);
-  burst(out, sr, r, 0, 0.0004 + r() * 0.0002, 'bp', 3300 + r() * 1000, 1.5, 0.35 * (0.6 + 0.4 * c.click));
-  const tr = 0.003 + r() * 0.003;                       // slider hits the top stop
-  burst(out, sr, r, tr, 0.0008, 'bp', clack * 1.2, 2.2, 0.5);
-  ring(out, sr, tr, body * 1.9, 0.006, 0.2);
-  ring(out, sr, tr, body, c.tau * 0.5, 0.18);
-  if (c.rattle){
-    let t = tr + 0.002;
-    for (let i = 0; i < Math.ceil(c.rattle * 0.6); i++){ t += 0.003 + r() * 0.006; burst(out, sr, r, t, 0.0003, 'bp', 2800 + r() * 1200, 4, 0.2 * Math.pow(0.7, i)); }
-  }
-  onePoleLP(out, sr, 8500);
+  const out = new Float32Array(Math.round(0.09 * sr));
+  const body = L(c.body);
+  const tr = 0.002 + r() * 0.002;                       // slider meets the top of its housing
+  /* crisp, dry clack: higher than the down-stroke, short */
+  burst(out, sr, r, 0, 0.00022, 'bp', 2600 + r() * 600, 1.2, 0.08);
+  burst(out, sr, r, tr, 0.0006 + r() * 0.0002, 'bp', 1700 + r() * 600, 1.4, 0.5);
+  ring(out, sr, tr, body * (2.6 + r() * 0.4), 0.0065, 0.3);
+  ring(out, sr, tr, body * 1.5, 0.010, 0.14);
+  resonate(out, sr, r, tr, L(c.case[1]) * 1.1, 0.005, 0.08);
+  /* a faint spring / plastic overtone */
+  ring(out, sr, tr + 0.0005, 3300 + r() * 900, 0.004, 0.035);
+  if (cls === 'space') ring(out, sr, tr, body, 0.018, 0.18);   // even the space return stays round
+  onePoleLP(out, sr, 6500);
   return finish(out, sr, 1, 6);
 }
 
@@ -304,7 +312,7 @@ function infoFor(code){
     cls: keyClass(code),
     rate: 0.955 + r() * 0.09,                 // per-key pitch
     gain: 0.86 + r() * 0.22,                  // per-key level
-    bright: 4800 + r() * 4200,                // per-key cap/filter character
+    bright: 3600 + r() * 2600,                // per-key cap/filter character (gentle highs)
     pan: (x - 0.5) * 0.5,
     pool: Math.floor(r() * 1000),             // which slice of the variant pool this key leans on
     last: -1,

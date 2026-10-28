@@ -7,6 +7,11 @@ const TOUCH = matchMedia('(pointer: coarse)').matches;
 const stage = $('#stage');
 let api;
 try { api = M.createScene(stage); } catch (e){ console.error(e); $('#loading').textContent = 'this needs WebGL'; return; }
+if (M.dressRoom) { try { M.dressRoom(api); } catch (e){ console.error(e); } }
+M.world = {
+  lamp: on => api.setLamp ? api.setLamp(on === undefined ? !api.lampOn : on) : null,
+  get lampOn(){ return !!api.lampOn; },
+};
 const term = M.createTerminal({ content: M.CONTENT, aspect: api.screenAspect });
 api.setScreenCanvas(term.canvas);
 const typist = M.createTypist(api); if (typist.object3d && !typist.object3d.parent) api.add(typist.object3d);
