@@ -23,7 +23,7 @@ body.phone #stage{ overflow: hidden; touch-action: none }
 #mute:focus-visible, #stage canvas:focus-visible{ outline: 1px solid rgba(233,226,208,.5); outline-offset: -4px }
 #kbd{ position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; resize: none }
 .sr{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
-#loading{ position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); font: 500 11px var(--mono); letter-spacing: .3em; text-transform: uppercase; transition: opacity .8s; z-index: 3; background: var(--bg) }
+#loading{ position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); font: 500 11px var(--mono); letter-spacing: .3em; text-transform: uppercase; transition: opacity .35s; z-index: 3; background: var(--bg) }
 #loading.gone{ opacity: 0; pointer-events: none }
 @media (prefers-reduced-motion: reduce){ #hint, #loading{ transition: none } }
 </style>
@@ -666,13 +666,15 @@ Engine.prototype.tick = function (dt){
 };
 
 /* ---------------- public API ---------------- */
-let eng = null, booted = false, muted = false, hidden = false;
+let eng = null, booted = false, muted = false, hidden = false, unlockedAt = 0;
 try { muted = localStorage.getItem(LS_KEY) === '1'; } catch (e){}
 
 function ready(){
   if (!eng) return false;
   const ctx = eng.ctx;
-  if (ctx.state !== 'running'){ if (!muted && !hidden && ctx.state === 'suspended') ctx.resume().catch(() => {}); return false; }
+  /* the first keystroke usually lands while resume() is still in flight: schedule it anyway. A suspended context's
+     clock is frozen, so the hit plays the instant the context starts rather than being dropped. */
+  if (ctx.state !== 'running'){ if (!muted && !hidden && ctx.state === 'suspended'){ ctx.resume().catch(() => {}); return unlockedAt > 0 && performance.now() - unlockedAt < 1500; } return false; }
   return !muted;
 }
 
@@ -687,6 +689,7 @@ const sound = {
         eng = new Engine(ctx);
         eng.out.gain.value = muted ? 0 : 1;
       }
+      if (!unlockedAt) unlockedAt = performance.now();
       const ctx = eng.ctx, go = () => {
         if (booted) return; booted = true;
         /* spread the synthesis over a few tasks so the first keystroke never hitches */
@@ -847,7 +850,11 @@ M.createScene = function createScene(container){
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   if (!renderer.capabilities.isWebGL2 && !renderer.getContext()) throw new Error('no webgl');
-  let pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  /* pixel ratio: up to 2, but never more than ~3.7 MP of render target (a 1920x1080 window on a 2x display renders
+     at ~1.33x; 1280x800 at 2x stays near 1.9x). The tube text is still magnified at rest, so it stays sharp. */
+  const PX_BUDGET = 3.7e6;
+  const prFor = (w, h) => Math.max(1, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(PX_BUDGET / Math.max(1, w * h))));
+  let pixelRatio = prFor(innerWidth, innerHeight), prCap = 2;
   renderer.setPixelRatio(pixelRatio);
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -855,6 +862,7 @@ M.createScene = function createScene(container){
   renderer.physicallyCorrectLights = true;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;   // the lamp is fixed: the shadow pass re-renders only while something moves (see render())
   renderer.setClearColor(0x050608, 1);
   renderer.domElement.setAttribute('tabindex', '0');
   container.appendChild(renderer.domElement);
@@ -884,7 +892,7 @@ M.createScene = function createScene(container){
   /* ================= THE COMPUTER ================= */
   const CW = .246, CH = .345, CD = .275, CR = .022;
   const SLOPE = Math.tan(5 * Math.PI / 180), SLOPE_Y0 = -.112; // face leans back above the chin
-  const BZ = { y: .046, hw: .1075, hh: .0835, r: .024, wall: .017, depth: .021 }; // recessed CRT bezel
+  const BZ = { y: .046, hw: .1095, hh: .0855, r: .023, wall: .015, depth: .021 }; // recessed CRT bezel (v11: tube ~4% bigger, bezel thinner)
   const faceZ = y => CD / 2 - Math.max(0, y - SLOPE_Y0) * SLOPE;
   const SLOT = { x: .043, y: -.074, hw: .047, hh: .0028 };
   const computer = new THREE.Group();
@@ -954,10 +962,10 @@ M.createScene = function createScene(container){
       const UV = g.attributes.uv; for (let i = 0; i < UV.count; i++) UV.setXY(i, UV.getX(i) * 4, UV.getY(i) * 4);
       return g; };
     {
-      const lip = mesh(frameGeo(BZ.hw + .0085, BZ.hh + .0085, BZ.r + .0085, BZ.hw + .0022, BZ.hh + .0022, BZ.r + .0022, .0006, .0017, .0019, 5), lipM);
+      const lip = mesh(frameGeo(BZ.hw + .0075, BZ.hh + .0075, BZ.r + .0075, BZ.hw + .002, BZ.hh + .002, BZ.r + .002, .0006, .0017, .0019, 5), lipM);
       const z = faceZ(BZ.y); lip.position.set(0, BZ.y, z - .0006); lip.rotation.x = -Math.atan(SLOPE); computer.add(lip);
       // a hairline parting groove just outside the lip, where the bezel moulding meets the case
-      const gs = rrShape(BZ.hw + .0118, BZ.hh + .0118, BZ.r + .0118); gs.holes.push(rrShape(BZ.hw + .0106, BZ.hh + .0106, BZ.r + .0106));
+      const gs = rrShape(BZ.hw + .0107, BZ.hh + .0107, BZ.r + .0107); gs.holes.push(rrShape(BZ.hw + .0096, BZ.hh + .0096, BZ.r + .0096));
       const groove = mesh(new THREE.ShapeGeometry(gs, 12), new THREE.MeshStandardMaterial({ color: lin(0x6d6556), roughness: .8 }), false);
       groove.position.set(0, BZ.y, faceZ(BZ.y) + .0003); groove.rotation.x = -Math.atan(SLOPE); computer.add(groove);
     }
@@ -1003,7 +1011,7 @@ M.createScene = function createScene(container){
   const screenU = {
     uTex: { value: blankTex }, uHas: { value: 0 }, uRes: { value: new THREE.Vector2(1024, 768) }, uTime: { value: 0 },
     uFlicker: { value: 1 }, uRoll: { value: REDUCED ? 0 : 1 }, uPhos: { value: new THREE.Vector3(...PHOSPHOR) }, uMono: { value: .88 },
-    uLamp: { value: new V3() }, uInset: { value: new THREE.Vector2(.045, .05) }, uBright: { value: 1 }, uLampAmt: { value: 1 },
+    uWarm: { value: 1 }, uLamp: { value: new V3() }, uInset: { value: new THREE.Vector2(.036, .042) }, uBright: { value: 1 }, uLampAmt: { value: 1 },
   };
   const screenMat = new THREE.ShaderMaterial({
     uniforms: screenU, extensions: { derivatives: true },
@@ -1012,7 +1020,7 @@ M.createScene = function createScene(container){
       void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal);
         gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: `
-      uniform sampler2D uTex; uniform float uHas, uTime, uFlicker, uRoll, uMono, uBright, uLampAmt; uniform vec2 uRes, uInset; uniform vec3 uPhos, uLamp;
+      uniform sampler2D uTex; uniform float uHas, uTime, uFlicker, uRoll, uMono, uBright, uLampAmt, uWarm; uniform vec2 uRes, uInset; uniform vec3 uPhos, uLamp;
       varying vec2 vUv; varying vec3 vW; varying vec3 vN;
       float luma(vec3 c){ return dot(c, vec3(.299, .587, .114)); }
       vec3 phos(vec3 c){ float l = luma(c); vec3 m = uPhos * l + vec3(pow(l, 3.)) * .32; return mix(c, m, uMono); }
@@ -1049,6 +1057,10 @@ M.createScene = function createScene(container){
           float v = 16. * t.x * t.y * (1. - t.x) * (1. - t.y); col *= mix(.74, 1., pow(clamp(v, 0., 1.), .3));
           col *= uFlicker * (1. + uRoll * .012 * smoothstep(.0, .5, .5 - abs(fract(t.y - uTime * .06) - .5) * 6.));
           col *= inside * uBright;
+          // power-on: the raster opens out from a bright horizontal line, then the phosphor settles to full
+          if (uWarm < 1.){ float op = smoothstep(0., .45, uWarm), hy = abs(t.y - .5);
+            float band = 1. - smoothstep(.5 * op * op, .5 * op * op + .004 + .01 * (1. - op), hy);
+            col = col * band * smoothstep(.2, 1., uWarm) + uPhos * band * .5 * (1. - smoothstep(.0, .55, uWarm)) * inside; }
         }
         // the unlit tube is a dark grey-green, slightly lighter in the middle where the glass is thickest
         vec3 base = vec3(.018, .024, .021) * (1. - .45 * length(vUv - .5));
@@ -1218,8 +1230,6 @@ M.createScene = function createScene(container){
     }
     const atlas = tex(ac, true, ANISO);
     const topM = new THREE.MeshStandardMaterial({ map: atlas, roughness: .62 });
-    const sideA = new THREE.MeshStandardMaterial({ color: new THREE.Color(...ALPHA_C.map(c => c / 255)).convertSRGBToLinear().multiplyScalar(.93), roughness: .6 });
-    const sideM = new THREE.MeshStandardMaterial({ color: new THREE.Color(...MOD_C.map(c => c / 255)).convertSRGBToLinear().multiplyScalar(.93), roughness: .6 });
 
     // case: base slab plus a raised surround, all in the same slightly-more-yellowed plastic
     const kbC = paint(256, 128, (u, v, o) => { plasticBase(u, v, o, 1, .45); o[1] *= .985; o[2] *= .95; });
@@ -1247,9 +1257,11 @@ M.createScene = function createScene(container){
           const xn = Math.min(1, Math.abs(p.x) / (hw - .0013)); p.y -= DISH * (1 - xn * xn) * top * (w > 2 ? .6 : 1);
         });
         const UV = g.attributes.uv, face = g.userData.face;
-        for (let i = 0; i < UV.count; i++) if (face[i] === 2) UV.setXY(i, lerp(u0, u1, UV.getX(i)), lerp(v0, v1, UV.getY(i)));
-        const sm = mod ? sideM : sideA;
-        const cap = mesh(g, [sm, sm, topM, sm, sm, sm]);
+        // one material per cap (one draw call instead of six): the skirt samples a clean corner of its own cell,
+        // which carries the cap colour shaded slightly darker, like the old separate side material
+        const su = u1 - 4 / AW, sv = v0 + 4 / AH;
+        for (let i = 0; i < UV.count; i++) if (face[i] === 2) UV.setXY(i, lerp(u0, u1, UV.getX(i)), lerp(v0, v1, UV.getY(i))); else UV.setXY(i, su, sv);
+        const cap = mesh(g, topM);
         const holder = new THREE.Group();
         const restY = KEY_BASE + KEY_H / 2 + ROW_LIFT[r];
         holder.position.set(-7.5 * U + (col + w / 2) * U, restY, KB.kz0 + (r - 2) * U);
@@ -1294,7 +1306,7 @@ M.createScene = function createScene(container){
       const r = .0058 * sstep(.08, .16, t) * sstep(.86, .78, t), th = t * 48 * Math.PI * 2;
       p.addScaledVector(side, Math.cos(th) * r).addScaledVector(up2, Math.sin(th) * r); pts.push(p);
     }
-    const cable = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 1400, .0017, 6, false), new THREE.MeshStandardMaterial({ color: lin(0xb9b09b), roughness: .55 }));
+    const cable = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 760, .0017, 6, false), new THREE.MeshStandardMaterial({ color: lin(0xb9b09b), roughness: .55 }));
     scene.add(cable);
     const plug = mesh(new THREE.BoxGeometry(.011, .007, .012), new THREE.MeshStandardMaterial({ color: lin(0xb3a993), roughness: .6 }));
     plug.position.copy(computer.localToWorld(new V3(-.07, -.148, faceZ(-.148) + .006))); plug.rotation.y = computerYaw; scene.add(plug);
@@ -1324,12 +1336,13 @@ M.createScene = function createScene(container){
       const off = new V3().crossVectors(d, s1).normalize().multiplyScalar(.016), side = s1.clone().normalize(), w = new V3().crossVectors(d, side).normalize();
       for (const sg of [1, -1]){ const pts = []; for (let i = 0; i <= 220; i++){ const t = i / 220, th = t * 46 * Math.PI * 2;
           pts.push(a.clone().addScaledVector(d, t * Lr).add(off).addScaledVector(side, sg * .011 + Math.cos(th) * .0032).addScaledVector(w, Math.sin(th) * .0032)); }
-        g.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 440, .0007, 4), brass)); } }
+        g.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 260, .0007, 4), brass)); } }
     // the shade: a bell with a rolled lip, enamel outside, warm white inside
     const prof = [[0, 0], [.018, 0], [.024, -.006], [.028, -.03], [.036, -.056], [.052, -.086], [.068, -.11], [.073, -.118], [.0745, -.122], [.071, -.123]].reverse().map(([x, y]) => new THREE.Vector2(x, y)); // bottom-up so normals face out
     const shade = new THREE.Group();
-    const outer = mesh(new THREE.LatheGeometry(prof, 48), enamel); shade.add(outer);
-    const innerM = shadeInnerMat = new THREE.MeshStandardMaterial({ color: lin(0xe8dcc4), emissive: lin(0xffc58a), emissiveIntensity: .12, roughness: .7, side: THREE.BackSide });
+    const enamelShade = enamel.clone(); enamelShade.side = THREE.DoubleSide;
+    const outer = mesh(new THREE.LatheGeometry(prof, 48), enamelShade); shade.add(outer);
+    const innerM = shadeInnerMat = new THREE.MeshStandardMaterial({ color: lin(0xe8dcc4), emissive: lin(0xffc58a), emissiveIntensity: .12, roughness: .7, side: THREE.DoubleSide });
     shade.add(mesh(new THREE.LatheGeometry(prof.map(v => new THREE.Vector2(v.x * .985, v.y)), 48), innerM, false));
     bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, .86, .62), toneMapped: false });
     const bulb = mesh(new THREE.SphereGeometry(.024, 24, 16), bulbMat, false);
@@ -1486,6 +1499,8 @@ M.createScene = function createScene(container){
      down a little, the way a real head does, and the lens widens as it goes so the whole keyboard fits. */
   const D2R = Math.PI / 180;
   const LOOK = { yaw: 12 * D2R, down: 35 * D2R, up: 6 * D2R };
+  const REST_FILL = .76;                      // glass height / frame height at rest
+  const YAW_REST = 4.5 * D2R, YAW_FULL = 10 * D2R, UP_MAX = 2.5 * D2R;   // how far the head turns: little while reading, more when leaned back
   const flatN = new V3(screenNormal.x, 0, screenNormal.z).normalize();
   const EYE_D = .6, EYE_UP = .125;
   const eyeRest = screenCenter.clone().addScaledVector(flatN, EYE_D); eyeRest.y = screenCenter.y + EYE_UP;
@@ -1533,9 +1548,10 @@ M.createScene = function createScene(container){
   const shot = { screen: { pos: new V3(), q: new THREE.Quaternion(), fov: 30 }, full: { pos: eyeFull.clone(), q: new THREE.Quaternion(), fov: 40 } };
   const viewS = { x: 0, v: 0, t: 0 };   // 0 = screen, 1 = full
   function solveShots(){
-    // screen: the glass fills ~86% of the height (or ~92% of the width on portrait screens), dead centre, square-on
+    // screen: the glass fills ~72% of the height (or ~84% of the width on narrow windows), dead centre, square-on,
+    // so the bezel and a margin of the case frame it all round
     const fovS = 30, tv = Math.tan(fovS / 2 * D2R);
-    const need = Math.max((GH / 2) / .86, (GW / 2) / (.92 * aspect));
+    const need = Math.max((GH / 2) / REST_FILL, (GW / 2) / (.84 * aspect));
     shot.screen.pos.copy(screenCenter).addScaledVector(camN, need / tv).addScaledVector(camUpS, .0);
     shot.screen.q.copy(camQS); shot.screen.fov = fovS;
     // full: aim and fov solved so the machine, keyboard and hands sit centred with a small margin
@@ -1558,7 +1574,7 @@ M.createScene = function createScene(container){
     // the pointer looks around: down leans back toward the full view (the hands), sideways/up turn the head a little
     const down = clamp(-pitchS.x / LOOK.down, 0, 1);
     const k = sstep(0, 1, 1 - (1 - clamp(viewS.x, 0, 1)) * (1 - down));
-    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * (1 - .45 * k);
+    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * lerp(YAW_REST, YAW_FULL, k);
     camera.position.lerpVectors(shot.screen.pos, shot.full.pos, k);
     // the head travels a slight arc (up and back first) rather than a straight dolly
     camera.position.y += Math.sin(k * Math.PI) * .04;
@@ -1622,7 +1638,16 @@ M.createScene = function createScene(container){
   }
 
   /* ================= API ================= */
-  let frames = 0, slowAcc = 0, perfT = 0;
+  let frames = 0, slowAcc = 0, perfT = 0, sag = 0;
+  /* the reveal: from black, the tube powers on (a bright line opens into the raster) while the lamp glows up and
+     the eye adapts. ~1.3 s; the first keystroke or a lean skips to the end. Reduced motion: no reveal. */
+  const intro = { t: REDUCED ? 9 : 0, end: 1.35 };
+  const skipIntro = () => { if (intro.t < intro.end) intro.t = intro.end; };
+  /* render on demand: the loop calls render() every frame, but a still picture (settled camera, no key or lamp
+     motion, nothing new on the tube) is drawn at ~20 fps so the flicker and dust keep breathing at a fraction of
+     the GPU cost. The shadow map re-renders only while hands or keys move, plus a slow refresh for idle fidgets. */
+  let sinceMove = 0, sinceRender = 9, screenDirty = true, shadowAge = 9, drew = false, warmed = false;
+  const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
   const api = {
     renderer, scene, camera, screenAspect: SCREEN_ASPECT,
     setScreenCanvas(c){
@@ -1634,12 +1659,24 @@ M.createScene = function createScene(container){
       screenTex.encoding = THREE.LinearEncoding; screenTex.wrapS = screenTex.wrapT = THREE.ClampToEdgeWrapping;
       screenU.uTex.value = screenTex; screenU.uHas.value = 1; screenU.uRes.value.set(c.width, c.height); lumDirty = true;
     },
-    markScreenDirty(){ if (screenTex){ screenTex.needsUpdate = true; lumDirty = true; } },
+    markScreenDirty(){ if (screenTex){ screenTex.needsUpdate = true; lumDirty = true; screenDirty = true; } },
+    /* clientX/Y -> where that point lands on the terminal canvas: {u, v} in 0..1 from its top-left, or null off the
+       image. Follows the CRT shader's mapping (barrel bow, then the overscan inset), so it matches what is drawn. */
+    pickScreen(cx, cy){
+      const r = renderer.domElement.getBoundingClientRect(); if (!r.width || !r.height) return null;
+      _ndc.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+      _ray.setFromCamera(_ndc, camera);
+      const hit = _ray.intersectObject(glass, false)[0]; if (!hit || !hit.uv) return null;
+      const x = hit.uv.x - .5, y = hit.uv.y - .5, b = 1 + .055 * (x * x + y * y);
+      const I = screenU.uInset.value, u = (x * b + .5 - I.x) / (1 - 2 * I.x), v = (y * b + .5 - I.y) / (1 - 2 * I.y);
+      if (u < 0 || u > 1 || v < 0 || v > 1) return null;
+      return { u, v: 1 - v };
+    },
     keyboard: {
       hasKey: code => keys.has(code) || keys.has(ALIAS[code]),
       keyWorldPos(code){ const k = keys.get(code) || keys.get(ALIAS[code]); return k ? k.world.clone() : null; },
       keyRow(code){ const k = keys.get(code) || keys.get(ALIAS[code]); return k ? k.row : -1; },
-      press(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = -TRAVEL; activeKeys.add(k); api.nudge(k.row === 4 ? .45 : .3); } },
+      press(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = -TRAVEL; activeKeys.add(k); sinceMove = 0; api.nudge(k.row === 4 ? .45 : .3); } },
       release(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = 0; activeKeys.add(k); } },
     },
     rig: { seat: SEAT.clone(), keyboardCenter, keyboardNormal, screenCenter: screenCenter.clone(), screenNormal: screenNormal.clone(), lampPosition: bulbPos.clone(), keySpacing: U,
@@ -1655,19 +1692,27 @@ M.createScene = function createScene(container){
     toggleView(){ api.setView(viewS.t ? 'screen' : 'full'); },
     get view(){ return viewS.t ? 'full' : 'screen'; },
     /* the desk lamp: true/false; get lampOn for the current switch state */
-    setLamp(on){ on = !!on; if (on === lampS.on) return; lampS.on = on; lampS.t = 0; },
+    setLamp(on){ on = !!on; if (on === lampS.on) return; lampS.on = on; lampS.t = 0; sag = REDUCED ? 0 : 1; },
     get lampOn(){ return lampS.on; },
     /* nx, ny in -1..1 from the pointer (0,0 = the screen). ny > 0 looks down toward the keyboard. */
     setLook(nx, ny){
       nx = clamp(+nx || 0, -1, 1); ny = clamp(+ny || 0, -1, 1);
-      yawS.t = -curve(nx) * LOOK.yaw;
-      const cy = curve(ny); pitchS.t = cy > 0 ? -cy * LOOK.down : -cy * LOOK.up;
+      // a wide dead zone around the reading view: the whole upper half of the window and the middle band are rest,
+      // so the screen holds still while the cursor wanders over it. Leaning back starts a third of the way down.
+      // yaw is normalised here (-1..1) and scaled in applyCamera: ~4.5 deg while reading, ~10 deg leaned back.
+      const ax = Math.abs(nx), sx = sstep(.18, .95, ax);
+      yawS.t = -Math.sign(nx) * sx;
+      pitchS.t = ny > 0 ? -sstep(.3, .92, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
     },
     setPointer(nx, ny){ api.setLook(nx, ny); },
     /* a keystroke: the head dips toward the work for a moment */
-    nudge(amount = 1){ if (false) leanS.v += 7 * clamp(amount, 0, 2); },
+    nudge(){ skipIntro(); sinceMove = 0; },
     update(dt, t){
       breathT += dt;
+      if (intro.t < intro.end && pitchS.t < -.2) skipIntro();   // leaning back skips the reveal too
+      const drewLast = drew; drew = false;
+      sinceMove += dt; sinceRender += dt;
+      if (Math.abs(yawS.v) + Math.abs(pitchS.v) + Math.abs(viewS.v) > 2e-3 || Math.abs(yawS.t - yawS.x) + Math.abs(pitchS.t - pitchS.x) > 1e-3) sinceMove = 0;
       crit(yawS, 3.4, dt); crit(pitchS, 3.1, dt); crit(viewS, 3.2, dt);   // slow, critically damped: glides, never overshoots
       { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h; leanS.v += (-110 * leanS.x - 2 * .75 * 10.5 * leanS.v) * h; leanS.x += leanS.v * h; } }
       leanS.x = clamp(leanS.x, -.3, 1);
@@ -1684,24 +1729,54 @@ M.createScene = function createScene(container){
       // tube: flicker, roll, and how much light the text throws into the room
       screenU.uTime.value = t;
       screenU.uFlicker.value = REDUCED ? 1 : 1 + .0045 * Math.sin(t * 2 * Math.PI * 7.7) + .003 * Math.sin(t * 2 * Math.PI * 1.3) + .002 * (Math.random() - .5);
-      lumTimer -= dt; if (lumDirty && lumTimer <= 0){ lumDirty = false; lumTimer = .25; sampleLum(); }
+      lumTimer -= dt; if (lumDirty && lumTimer <= 0){ lumDirty = false; lumTimer = 1.2; sampleLum(); }   // a GPU->CPU readback of the terminal canvas: keep it rare
       lum += (lumTarget - lum) * (1 - Math.exp(-dt * 4));
-      lampLevel(dt); applyLamp(dt);
+      lampLevel(dt);
+      if (intro.t < intro.end + .5){
+        intro.t += dt; const it = intro.t;
+        // the lamp's filament glows up a beat after the tube; the eye opens from black over the first half second
+        lampS.level = Math.min(lampS.level, lampS.on ? sstep(.25, 1.25, it) : lampS.level);
+        screenU.uWarm.value = clamp(it / 1.1, 0, 1);
+        sinceMove = 0;
+      } else {
+        screenU.uWarm.value = 1;
+        // once the reveal is over, compile every material that is still off-screen (desk, keys, room) on idle time,
+        // so the first lean back does not stall on shader compiles
+        if (!warmed){ warmed = true; const ric = window.requestIdleCallback || (f => setTimeout(f, 50)); ric(() => { try { renderer.compile(scene, camera); } catch (e){} }); }
+      }
+      applyLamp(dt);
+      if (intro.t < intro.end + .5) renderer.toneMappingExposure *= sstep(0, .6, intro.t);
+      // the tube sags for a moment when the lamp switches on or off: they share a wall socket
+      if (sag > 0){ sag = Math.max(0, sag - dt * 5); sinceMove = 0; }
+      screenU.uBright.value = 1 - .22 * Math.sin(Math.min(1, sag) * Math.PI) * (sag > .5 ? 1 : .6);
+      if (lampS.level > .002 && lampS.level < .999) sinceMove = 0;
       glow.intensity = (.2 + .6 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.6 * lampS.adapt);
       spill.intensity = (.0025 + .01 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.5 * lampS.adapt);
       dustU.uTime.value = REDUCED ? 40 : t;
       // keep it smooth on modest GPUs: step the pixel ratio down if frames run long
-      perfT += dt; frames++; if (dt > .026) slowAcc++;
-      if (perfT > 2.5){ if (slowAcc / frames > .5 && pixelRatio > 1){ pixelRatio = Math.max(1, pixelRatio - .25); renderer.setPixelRatio(pixelRatio); dustU.uPR.value = pixelRatio;
+      // only frames that were actually drawn count (idle frames are throttled), and not during the reveal
+      if (drewLast && intro.t > intro.end){ perfT += dt; frames++; if (dt > .026) slowAcc++; }
+      if (perfT > 2.5){ if (frames > 20 && slowAcc / frames > .5 && pixelRatio > 1){ pixelRatio = prCap = Math.max(1, pixelRatio - .25); renderer.setPixelRatio(pixelRatio); dustU.uPR.value = pixelRatio;
           const s = renderer.getSize(new THREE.Vector2()); renderer.setSize(s.x, s.y, false); } perfT = 0; frames = 0; slowAcc = 0; }
     },
-    render(){ scene.updateMatrixWorld(); hideNearEye(); renderer.render(scene, camera); },
+    render(){
+      const busy = sinceMove < 1.6 || activeKeys.size > 0 || screenDirty;
+      if (!busy && sinceRender < 1 / 20 - .004) return;
+      sinceRender = 0; screenDirty = false; drew = true;
+      // shadows: every frame while hands/keys/lamp move; otherwise a slow refresh (hands fidget), slower still at rest
+      const leaned = sstep(0, 1, 1 - (1 - clamp(viewS.x, 0, 1)) * (1 - clamp(-pitchS.x / LOOK.down, 0, 1)));
+      shadowAge++;
+      if (sinceMove < 1.6 || shadowAge > (leaned > .05 ? 3 : 20)){ renderer.shadowMap.needsUpdate = true; shadowAge = 0; }
+      scene.updateMatrixWorld(); hideNearEye(); renderer.render(scene, camera);
+    },
     resize(w, h){
-      renderer.setSize(w, h, false); aspect = w / Math.max(1, h); camera.aspect = aspect; camera.updateProjectionMatrix();
+      const pr = Math.min(prFor(w, h), prCap); if (Math.abs(pr - pixelRatio) > .01){ pixelRatio = pr; renderer.setPixelRatio(pr); dustU.uPR.value = pr; }
+      renderer.setSize(w, h, false); aspect = w / Math.max(1, h); screenDirty = true; camera.aspect = aspect; camera.updateProjectionMatrix();
       dustU.uScale.value = h;
       frameLens(); solveShots(); applyCamera(breathT);
     },
   };
+  api._dbg = { yawS, pitchS, viewS, intro, shot };
   api.resize(container.clientWidth || innerWidth, container.clientHeight || innerHeight);
   return api;
 };
@@ -2025,14 +2100,14 @@ function roundCone(r, h, r1, r2, L){
 }
 /* Surface nets over [lo, hi] with cell size h: one vertex per surface cell, one quad per sign-changing edge.
    Far-field values come from a coarse pass so only the narrow band near the surface is evaluated finely. */
-function surfaceNets(sdf, lo, hi, h){
+function* surfaceNets(sdf, lo, hi, h){
   const nx = Math.ceil((hi[0] - lo[0]) / h) + 1, ny = Math.ceil((hi[1] - lo[1]) / h) + 1, nz = Math.ceil((hi[2] - lo[2]) / h) + 1;
   const C = 3, cx = Math.ceil((nx - 1) / C) + 1, cy = Math.ceil((ny - 1) / C) + 1, cz = Math.ceil((nz - 1) / C) + 1;
   const G = new Float32Array(cx * cy * cz);
-  for (let k = 0; k < cz; k++) for (let j = 0; j < cy; j++) for (let i = 0; i < cx; i++)
-    G[i + cx * (j + cy * k)] = sdf(lo[0] + i * C * h, lo[1] + j * C * h, lo[2] + k * C * h);
+  for (let k = 0; k < cz; k++){ for (let j = 0; j < cy; j++) for (let i = 0; i < cx; i++)
+    G[i + cx * (j + cy * k)] = sdf(lo[0] + i * C * h, lo[1] + j * C * h, lo[2] + k * C * h); yield; }
   const F = new Float32Array(nx * ny * nz), band = 3.8 * h;
-  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
+  for (let k = 0; k < nz; k++, yield) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
     const g = G[Math.round(i / C) + cx * (Math.round(j / C) + cy * Math.round(k / C))];
     const edge = i === 0 || j === 0 || k === 0 || i === nx - 1 || j === ny - 1 || k === nz - 1;
     F[i + nx * (j + ny * k)] = edge ? Math.max(h, Math.abs(g)) : Math.abs(g) > band ? g : sdf(lo[0] + i * h, lo[1] + j * h, lo[2] + k * h);
@@ -2041,7 +2116,7 @@ function surfaceNets(sdf, lo, hi, h){
   const cell = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1), pos = [];
   const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
   const cv = new Float32Array(8);
-  for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++){
+  for (let k = 0; k < nz - 1; k++, yield) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++){
     let m = 0;
     for (let c = 0; c < 8; c++){ cv[c] = F[id(i + (c & 1), j + (c >> 1 & 1), k + (c >> 2))]; if (cv[c] < 0) m |= 1 << c; }
     if (m === 0 || m === 255) continue;
@@ -2091,7 +2166,7 @@ function makeMat(kind, U){
     float nc = dot(sN, normalize(uScrP - vTP)), nl = dot(sN, normalize(uLampP - vTP));
     float fr = pow(1.0 - clamp(dot(sN, sV), 0.0, 1.0), 4.0);
     float lit = clamp(0.55 * max(nc, 0.0) + 0.35 * max(nl, 0.0) + 0.15, 0.0, 1.0);
-    outgoingLight = vec3(0.0015) + fr * lit * vec3(0.05, 0.075, 0.1);
+    outgoingLight = vec3(0.0015) + fr * lit * vec3(0.07, 0.095, 0.12);
   }
 #include <output_fragment>`);
   };
@@ -2616,10 +2691,16 @@ M.createTypist = function createTypist(api){
   /* ---------- the skin: one continuous surface per hand (palm, knuckles, fingers, thumb, wrist and forearm), modelled
      as a signed-distance field in the settled home pose, polygonised once, and skinned to the wrist, forearm and
      finger joints. Idle hands show the sculpted shape exactly; strikes bend it at the joints. ---------- */
+  /* Meshing both hands costs ~0.8 s of CPU, so it is not done before the first frame: each hand's field is set up
+     now (capturing the home pose and the bind matrices), then polygonised in small slices on idle time after the
+     page is interactive. At rest the camera faces the tube, so the hands are never seen before they are ready. */
   root.updateMatrixWorld(true);
   const skinStats = [];
-  for (const H of hands){
-    const t0 = (typeof performance !== 'undefined' ? performance : Date).now();
+  const now = () => (typeof performance !== 'undefined' ? performance : Date).now();
+  const skinJobs = hands.map(H => function* (){
+    const t0 = now();
+    const bindM = H.hand.matrixWorld.clone(), bones = [H.hand, H.fore]; H.fingers.forEach(F => bones.push(F.g0, F.g1, F.g2));
+    const boneInv = bones.map(b => b.matrixWorld.clone().invert());
     const ts = H.ts, q = [0, 0, 0];
     const handInv = H.hand.matrixWorld.clone().invert();
     const rel = o => handInv.clone().multiply(o.matrixWorld);           // a bone's rest frame in hand space
@@ -2690,7 +2771,8 @@ M.createTypist = function createTypist(api){
     const dF = V3(0, 1, 0).transformDirection(rel(H.fore));        // elbow -> wrist, in hand space
     grow(V3()); grow(dF.clone().multiplyScalar(-.1)); grow(V3(0, 0, .02));
     for (let i = 0; i < 3; i++){ lo[i] -= .012; hi[i] += .012; }
-    const SN = surfaceNets(sdf, lo, hi, SKIN_H); const tSN = (typeof performance !== "undefined" ? performance : Date).now() - t0;
+    yield 'setup';
+    const SN = yield* surfaceNets(sdf, lo, hi, SKIN_H); const tSN = now() - t0;
     const nv = SN.pos.length / 3, P = new Float32Array(SN.pos), N = new Float32Array(nv * 3), SI = new Uint16Array(nv * 4), SW = new Float32Array(nv * 4);
     const grad = (x, y, z, o) => {      // tetrahedral gradient: 4 samples
       const e = .0003, a = sdf(x + e, y - e, z - e), b = sdf(x - e, y - e, z + e), c = sdf(x - e, y + e, z - e), d = sdf(x + e, y + e, z + e);
@@ -2698,6 +2780,7 @@ M.createTypist = function createTypist(api){
       const l = Math.hypot(o[0], o[1], o[2]) || 1; o[0] /= l; o[1] /= l; o[2] /= l; };
     const g = [0, 0, 0], w = new Float32Array(17), pp = V3(), ab = V3(), ap2 = V3();
     for (let i = 0; i < nv; i++){
+      if ((i & 127) === 127) yield;
       let x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2];
       const d0 = sdf(x, y, z); grad(x, y, z, g); x -= d0 * g[0]; y -= d0 * g[1]; z -= d0 * g[2];    // onto the surface
       P[i * 3] = x; P[i * 3 + 1] = y; P[i * 3 + 2] = z; N[i * 3] = g[0]; N[i * 3 + 1] = g[1]; N[i * 3 + 2] = g[2];
@@ -2733,12 +2816,23 @@ M.createTypist = function createTypist(api){
     geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
     geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
     geo.setIndex(SN.idx);
-    const bones = [H.hand, H.fore]; H.fingers.forEach(F => bones.push(F.g0, F.g1, F.g2));
     const sm = new THREE.SkinnedMesh(geo, skin);
-    sm.bind(new THREE.Skeleton(bones), H.hand.matrixWorld.clone());     // inverses taken from the current (home) pose
+    sm.bind(new THREE.Skeleton(bones, boneInv), bindM);     // inverses captured in the home pose, before any key was struck
     sm.frustumCulled = false; sm.castShadow = true; sm.receiveShadow = true; sm.name = 'hand-skin';
     root.add(sm); H.skin = sm;
-    skinStats.push({ verts: nv, tris: SN.idx.length / 3, nets: Math.round(tSN), ms: Math.round((typeof performance !== 'undefined' ? performance : Date).now() - t0) });
+    skinStats.push({ verts: nv, tris: SN.idx.length / 3, nets: Math.round(tSN), ms: Math.round(now() - t0) });
+  }());
+  for (const g of skinJobs) g.next();            // set up now: runs to the 'setup' yield, so the bind pose is the home pose
+  {
+    // then mesh in ~6 ms slices between frames; a hidden tab or no idle time still finishes (timeout)
+    const idle = window.requestIdleCallback ? (f => requestIdleCallback(f, { timeout: 60 })) : (f => setTimeout(f, 16));
+    let j = 0;
+    const slice = () => {
+      const end = now() + 8;
+      while (j < skinJobs.length && now() < end){ if (skinJobs[j].next().done) j++; }
+      if (j < skinJobs.length) idle(slice); else if (api.renderer && api.scene && api.camera) try { api.renderer.compile(api.scene, api.camera); } catch (e){}
+    };
+    setTimeout(() => idle(slice), 250);
   }
 
   root.userData.dbg = { hands, s, skinStats, contacts, spineOff, lean0 };
@@ -2802,6 +2896,7 @@ function fscore(q, c){
   if (c.startsWith(q)) return 900 - (c.length - q.length);
   const at = c.indexOf(q);
   if (at >= 0 && q.length >= 2) return 700 - at;
+  if (q.length >= 3 && Math.abs(q.length - c.length) <= 1 && osa(q, c) === 1) return 520;   // one slip (lss -> ls) beats a loose subsequence (lss -> less)
   if (q.length >= 2){
     let from = 0, gaps = 0, last = -1, ok = true;
     for (const chr of q){ const j = c.indexOf(chr, from); if (j < 0){ ok = false; break; } gaps += last < 0 ? j * 2 : j - last - 1; last = j; from = j + 1; }
@@ -3141,11 +3236,14 @@ M.createTerminal = function createTerminal(opts){
   let links = [], sel = -1;            // selectable link items in the latest output
   let suggestion = '';                 // "did you mean" target, shown as ghost on an empty prompt
   let tabState = null;
-  let ahead = '';           // keys typed while a command runs, waiting for the next prompt
+  let ahead = '';           // keys typed while a command runs, waiting for the next prompt ('\n' = a queued Enter)
+  let okRuns = 0;           // commands that worked this visit (the first-visit hint goes after two)
+  let runQueued = false;    // a whole line came in with the type-ahead: run it on the next frame
   let rs = null;            // ctrl+r search: { q, i, draft, dcur }
   let history = [];
   try { const h = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); if (Array.isArray(h)) history = h.filter(s => typeof s === 'string').slice(-200); } catch (e){}
   let hIdx = history.length, hDraft = '', hPrefix = '';
+  const fresh = !history.length;     // a first-time visitor (nothing typed here before)
   let ran = 0;
   let job = null;                      // the running command line, if any
   let app = null;                      // the full-screen app, if any
@@ -3247,7 +3345,7 @@ M.createTerminal = function createTerminal(opts){
   function pushRow(r){ openRow = null; rows.push(r); dirty = true; }
   function emit(o, mirrorText){            // rich rows straight to the scrollback (outside a job)
     links = []; sel = -1;
-    for (const r of o.rows){ if (r.k === 't') for (const s of r.s) if (s[2]) links.push(s[2]); pushRow(r); }
+    for (const r of o.rows){ if (r.k === 't') for (const s of r.s) if (s[2] && s[2].url) links.push(s[2]); pushRow(r); }
     trim();
     mirror(mirrorText || o.rows.map(plainOf).filter(Boolean).join('. '));
     toBottom(); dirty = true;
@@ -3307,7 +3405,7 @@ M.createTerminal = function createTerminal(opts){
     },
     rich(o){
       openRow = null;
-      for (const r of o.rows){ if (r.k === 't') for (const s of r.s) if (s[2]) links.push(s[2]); rows.push(r); }
+      for (const r of o.rows){ if (r.k === 't') for (const s of r.s) if (s[2] && s[2].url) links.push(s[2]); rows.push(r); }
       if (job) job.plain += o.rows.map(plainOf).filter(Boolean).join('. ') + ' ';
       dirty = true;
     },
@@ -3436,19 +3534,22 @@ M.createTerminal = function createTerminal(opts){
   /* ---- documents ---- */
   function welcome(o){
     o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
-      .line(['type ', 'f'], ['help', 'n'], [' to begin, or try', 'f'])
-.flow(['about', 'eden', 'j', 'links', 'contact', 'weather', 'tetris'].map(w => [[w, 'n']]), '  ')
+      .line(['type a word and press enter, or ' + (TAP ? 'tap' : 'click') + ' one', 'd'])
+      .flow(['about', 'eden', 'j', 'contact', 'links', 'weather', 'tetris'].map(w => [chip(w, 'b')]), '  ')
       .blank();
-    if (!history.length) o.line(['new here? ', 'f'], ['cat README.md', 'n'], [COLS >= 46 ? ' is a short guide' : ' first', 'f'])
-      .line(['tab', 'n'], [' completes   ', 'f'], ['\u2191', 'n'], [' recalls', 'f'], COLS >= 46 ? ['   ctrl+r', 'n'] : ['', 'n'], [COLS >= 46 ? ' searches' : '', 'f']).blank();
-    else o.line(['new here? ', 'f'], ['cat README.md', 'd']).blank();
+    if (!history.length) o.line(chip('help', 'n'), [' shows everything you can do', 'f']).blank();
+    else o.line(chip('help', 'n'), ['   tab completes   ', 'f'], ['\u2191', 'n'], [' recalls', 'f']).blank();
     return o;
   }
+  /* a command chip: a word that, clicked or tapped, types and runs itself. A faint underline marks it. */
+  const TAP = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  function chip(w, st = 'n', cmd){ return [w, st, { cmd: cmd || w }]; }
+  function chips(ws, st = 'n'){ const r = []; ws.forEach((w, k) => { if (k) r.push(['  ', 'f']); r.push(chip(w, st)); }); return r; }
   const DOCS = {
     about(o){
       o.blank().head('about', 'about.txt').blank().big(C.name || '').line([A.role || '', 'n']).blank();
       for (const p of A.body || []) o.para(p, /^\[.*\]$/.test(p) ? 'd' : 'n');
-      o.blank().line(['see also  ', 'f'], ['eden', 'd'], ['  ', 'f'], ['j', 'd'], ['  ', 'f'], ['links', 'd']).blank();
+      o.blank().line(['see also  ', 'f'], ...chips(['contact', 'eden', 'j', 'links'], 'n')).blank();
       return o;
     },
     eden(o){
@@ -3456,20 +3557,21 @@ M.createTerminal = function createTerminal(opts){
         .card({ title: 'EDEN', note: 'eden.txt', items: [{ label: 'role', value: E.role || '' }, { label: 'what', value: E.line || '' }] })
         .blank();
       if (E.body) o.para(E.body, 'n').blank();
-      o.viz(6, drawEden, () => 30).blank();
+      o.viz(6, drawEden, () => 30).blank().line(['see also  ', 'f'], ...chips(['contact', 'j', 'about'], 'n')).blank();
       return o;
     },
     j(o){
       o.blank().big(J.title || 'J').line([J.role || '', 'd']).blank()
         .para(J.line || '', 'b').blank().para(J.body || '', 'n').blank()
         .card({ title: 'J', note: 'j.txt', items: [...(J.facts || []).map(f => ({ label: f[0], value: f[1] })),
-          { label: 'site', value: bare(URLS.j), full: URLS.j, url: URLS.j, hint: 'open' }] }).blank();
+          { label: 'site', value: bare(URLS.j), full: URLS.j, url: URLS.j, hint: 'open' }] }).blank()
+        .line(['see also  ', 'f'], ...chips(['contact', 'eden', 'about'], 'n')).blank();
       return o;
     },
     writing(o){
       o.blank().head('writing', 'writing/').blank();
       const ps = posts();
-      if (!ps.length){ o.viz(5, drawEmpty, () => 4).blank(); return o; }
+      if (!ps.length){ o.viz(5, drawEmpty, () => 4).blank().line(['see also  ', 'f'], ...chips(['contact', 'about'], 'n')).blank(); return o; }
       /* one row per post: date, title; narrow screens stack them and add the summary. A post with html opens
          the reader; one with only a url opens the link */
       o.card({ title: 'POSTS', note: ps.length + (ps.length === 1 ? ' post' : ' posts'), verb: 'read', items: ps.map(p => ({
@@ -3479,7 +3581,7 @@ M.createTerminal = function createTerminal(opts){
     },
     links(o){
       o.blank().card({ title: 'LINKS', note: 'links.txt', items: LINKLIST().map(t => ({ label: t.title, value: t.short, full: t.url, url: t.url, hint: t.name })) })
-        .blank().at(2, ['also ', 'f'], ['contact', 'n'], ['  ', 'f'], ['j', 'n'], ['  ', 'f'], ['open <name>', 'n']).blank();
+        .blank().at(2, ['also  ', 'f'], ...chips(['contact', 'j'], 'n'), ['  ', 'f'], ['open <name>', 'n']).blank();
       return o;
     },
   };
@@ -3650,7 +3752,7 @@ M.createTerminal = function createTerminal(opts){
     if (!t || t === '~') t = HOME; else if (t === '-'){ t = ENV.OLDPWD || cwd; io.write(tildify(t) + '\n'); }
     const p = FS.resolve(t, cwd);
     if (!FS.exists(p)){ io.err('cd: no such directory: ' + argv[1] + '\n'); hintPath('cd', argv[1]); return 1; }
-    if (!FS.isDir(p)){ io.err('cd: not a directory: ' + argv[1] + '\n'); return 1; }
+    if (!FS.isDir(p)){ io.err('cd: ' + argv[1] + ' is a file, not a folder\n'); if (job) job.hint = 'cat ' + argv[1]; return 1; }
     setCwd(p);
   } });
   def('pwd', { g: 'files', desc: 'print the working directory', usage: 'pwd', run(argv, io){ io.write(cwd + '\n'); } });
@@ -3779,57 +3881,6 @@ M.createTerminal = function createTerminal(opts){
     if (o.u) ls = ls.filter((x, i) => i === 0 || x !== ls[i - 1]);
     if (ls.length) io.write(ls.join('\n') + '\n');
   } });
-  def('uniq', { g: 'text', desc: 'drop repeated adjacent lines', usage: 'uniq [-c] [file]', opts: [['-c', 'prefix each line with its count']], ex: ['sort words.txt | uniq -c'], run(argv, io){
-    const { o, a } = getopts(argv.slice(1));
-    const ls = sources(io, a, 'uniq').flatMap(s => linesOf(s.text)); const r = [];
-    for (const l of ls){ if (r.length && r[r.length - 1][0] === l) r[r.length - 1][1]++; else r.push([l, 1]); }
-    if (r.length) io.write(r.map(([l, n]) => (o.c ? String(n).padStart(7) + ' ' : '') + l).join('\n') + '\n');
-  } });
-  def('tr', { g: 'text', desc: 'translate or delete characters', usage: 'tr [-d] set1 [set2]', ex: ["echo hello | tr a-z A-Z", "echo hello | tr -d l"], run(argv, io){
-    const { o, a } = getopts(argv.slice(1));
-    if (!a.length || (!o.d && a.length < 2)){ io.err('usage: tr [-d] set1 [set2]\n'); return 1; }
-    const s1 = expandSet(a[0]), s2 = o.d ? '' : expandSet(a[1]);
-    let r = '';
-    for (const c of io.stdin || ''){ const k = s1.indexOf(c); if (k < 0) r += c; else if (!o.d) r += s2[Math.min(k, s2.length - 1)] || ''; }
-    io.write(r);
-  } });
-  def('cut', { g: 'text', desc: 'pick columns from each line', usage: 'cut -d X -f LIST | -c LIST [file...]', opts: [['-d X', 'field separator (tab)'], ['-f LIST', 'fields, like 1,3 or 2-'], ['-c LIST', 'characters']], ex: ['cut -d " " -f 1 links.txt'], run(argv, io){
-    const { o, a } = getopts(argv.slice(1), 'dfc');
-    if (!o.f && !o.c){ io.err('usage: cut -d X -f LIST | -c LIST [file...]\n'); return 1; }
-    const want = fieldList(o.f || o.c), d = o.d || '\t';
-    const r = sources(io, a, 'cut').flatMap(s => linesOf(s.text)).map(l => o.c ? [...l].filter((_, i) => want(i + 1)).join('') : !l.includes(d) ? l : l.split(d).filter((_, i) => want(i + 1)).join(d));
-    if (r.length) io.write(r.join('\n') + '\n');
-  } });
-  def('sed', { g: 'text', desc: 'find and replace', usage: "sed 's/find/replace/[g][i]' [file...]", ex: ["echo hello | sed 's/l/L/g'", "sed 's/eden/Eden/i' notes/x.txt"], run(argv, io){
-    const a = argv.slice(1).filter(x => x !== '-e');
-    const sc = a[0] || '';
-    if (sc[0] !== 's' || sc.length < 4){ io.err("sed: only s/find/replace/flags is supported\n"); return 1; }
-    const dl = sc[1], parts = []; let curp = '';
-    for (let i = 2; i < sc.length; i++){
-      if (sc[i] === '\\' && sc[i + 1] === dl){ curp += dl; i++; continue; }
-      if (sc[i] === dl){ parts.push(curp); curp = ''; continue; }
-      curp += sc[i];
-    }
-    parts.push(curp);
-    if (parts.length < 3){ io.err('sed: unterminated s command\n'); return 1; }
-    const [find, rep, flags] = parts;
-    let re; try { re = new RegExp(find.replace(/\\([(){}|+?])/g, '$1'), (flags.includes('g') ? 'g' : '') + (flags.includes('i') || flags.includes('I') ? 'i' : '')); }
-    catch (e){ io.err('sed: bad pattern: ' + find + '\n'); return 1; }
-    let r = '';
-    for (let i = 0; i < rep.length; i++){
-      const c = rep[i];
-      if (c === '\\' && i + 1 < rep.length){ const n = rep[++i]; r += /\d/.test(n) ? '$' + n : n === 'n' ? '\n' : n === '&' ? '&' : n === '$' ? '$$' : n; }
-      else if (c === '&') r += '$&';
-      else if (c === '$') r += '$$';
-      else r += c;
-    }
-    const ls = sources(io, a.slice(1), 'sed').flatMap(s => linesOf(s.text)).map(l => l.replace(re, r));
-    if (ls.length) io.write(ls.join('\n') + '\n');
-  } });
-  def('rev', { g: 'text', desc: 'reverse each line', usage: 'rev [file...]', run(argv, io){
-    const ls = sources(io, argv.slice(1), 'rev').flatMap(s => linesOf(s.text)).map(l => [...l].reverse().join(''));
-    if (ls.length) io.write(ls.join('\n') + '\n');
-  } });
 
   /* system */
   def('date', { g: 'system', desc: 'now, in your time zone', usage: 'date', run(argv, io){
@@ -3870,13 +3921,6 @@ M.createTerminal = function createTerminal(opts){
     io.write('up ', 'dim'); io.write(uptimeStr(), 'bright'); io.write('  since you arrived, ', 'dim'); io.write(String(ran)); io.write(ran === 1 ? ' command\n' : ' commands\n', 'dim');
   } });
   def('whoami', { g: 'system', desc: 'your user name', usage: 'whoami', run(argv, io){ io.write(ENV.USER + '\n'); } });
-  def('hostname', { g: 'system', desc: "this machine's name", usage: 'hostname', run(argv, io){ io.write('kn84\n'); } });
-  def('uname', { g: 'system', desc: 'about the system', usage: 'uname [-a] [-s] [-n] [-r] [-m]', opts: [['-a', 'everything']], run(argv, io){
-    const { o } = getopts(argv.slice(1)); const f = { s: 'KNOS', n: 'kn84', r: '1.04', v: '#1 1984', m: 'KN-84' };
-    const keys = o.a ? ['s', 'n', 'r', 'v', 'm'] : Object.keys(f).filter(k => o[k]);
-    io.write((keys.length ? keys : ['s']).map(k => f[k]).join(' ') + '\n');
-  } });
-  def('env', { g: 'system', desc: 'the environment', usage: 'env', run(argv, io){ io.write(Object.keys(ENV).sort().map(k => k + '=' + ENV[k]).join('\n') + '\n'); } });
   def('which', { g: 'system', desc: 'what a command is', usage: 'which name...', run(argv, io){
     let miss = 0;
     for (const n of argv.slice(1)){
@@ -3907,41 +3951,49 @@ M.createTerminal = function createTerminal(opts){
   } });
   /* help: a short, curated page by default (everything a visitor is likely to want, fitting one screen);
      help all lists every command, grouped by its g; help <cmd> is man */
+  /* plain help is for someone who has never used a terminal: what you can do, in words, with commands to click */
   const HELP_TOP = [
-    ['kaiav', ['about', 'eden', 'j', 'writing', 'links', 'contact']],
-    ['net', ['weather', 'curl', 'hn', 'wiki', 'define', 'github', 'ip']],
-    ['tools', ['todo', 'timer', 'pomodoro', 'qr', 'convert', 'pass', 'hash', 'roll', 'countdown', 'cal']],
-    ['play', ['tetris', 'snake', 'typing', 'donut', 'matrix', 'banner', 'fortune', 'cowsay', 'lamp']],
-    ['files', ['ls', 'cd', 'cat', 'tree', 'mkdir', 'mv', 'cp', 'rm']],
-    ['text', ['echo', 'grep', 'sed', 'sort', 'wc', 'head', 'tail']],
-    ['shell', ['man', 'history', 'alias', 'clear', 'neofetch']],
+    ['about Kaiav', 'who he is, what he builds', ['about', 'eden', 'j', 'writing', 'contact', 'links']],
+    ['do something', 'small, useful tools', ['weather', 'todo', 'qr', 'pass', 'vault', 'timer']],
+    ['play', 'a game for a minute', ['tetris', 'snake', 'typing', 'donut']],
+    ['files', 'look around this computer', ['ls', 'cat', 'edit']],
   ];
   const HELP_ALL = [['read', 'kaiav'], ['net', 'net'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
   def('help', { g: 'system', desc: 'what you can type here', usage: 'help [all | command]', ex: ['help', 'help all', 'help weather'], run(argv, io){
     if (argv[1] && argv[1] !== 'all' && argv[1] !== '-a') return B.man.run(['man', argv[1]], io);
     const all = !!argv[1];
     const exists = n => (M.TERM.cmds[n] && !M.TERM.cmds[n].hidden && typeof M.TERM.cmds[n].run === 'function') || (M.TERM.apps[n] && typeof M.TERM.apps[n].start === 'function');
-    let groups;
-    if (all){
-      const by = {};
-      const add = (n, c) => { const gk = c.g && HELP_ALL.some(x => x[0] === c.g) ? c.g : 'misc'; (by[gk] = by[gk] || []).push(n); };
-      for (const [n, c] of Object.entries(M.TERM.cmds)) if (c && !c.hidden && typeof c.run === 'function') add(n, c);
-      for (const [n, a] of Object.entries(M.TERM.apps)) if (a && typeof a.start === 'function' && !M.TERM.cmds[n]) add(n, Object.assign({ g: 'fun' }, a));
-      groups = HELP_ALL.filter(([k]) => by[k]).map(([k, label]) => [label, by[k]]);
-    } else groups = HELP_TOP.map(([label, names]) => [label, names.filter(exists)]).filter(x => x[1].length);
+    if (!all){
+      const groups = HELP_TOP.map(([label, what, names]) => [label, what, names.filter(exists)]).filter(x => x[2].length);
+      if (!io.tty){ io.write(groups.map(([l, w, ns]) => l + ' (' + w + ')\n  ' + ns.join('  ')).join('\n') + '\n\nhelp all for everything. man <command> for details.\n'); return; }
+      const o = out(); o.blank().head('help').blank()
+        .line(['type a word and press enter, or ' + (TAP ? 'tap' : 'click') + ' one', 'd']).blank();
+      for (const [label, what, names] of groups){
+        o.line([label, 'b'], [COLS - 4 - label.length - what.length >= 2 ? '  ' + what : '', 'f']);
+        o.flow(names.map(n => [chip(n, 'n')]), '  ', 4);
+      }
+      o.blank().flow([[chip('help all', 'n'), [' for everything', 'f']], [['man <command>', 'n'], [' for details', 'f']]], '  ·  ').blank();
+      io.rich(o); return;
+    }
+    const by = {};
+    const add = (n, c) => { const gk = c.g && HELP_ALL.some(x => x[0] === c.g) ? c.g : 'misc'; (by[gk] = by[gk] || []).push(n); };
+    for (const [n, c] of Object.entries(M.TERM.cmds)) if (c && !c.hidden && typeof c.run === 'function') add(n, c);
+    for (const [n, a] of Object.entries(M.TERM.apps)) if (a && typeof a.start === 'function' && !M.TERM.cmds[n]) add(n, Object.assign({ g: 'fun' }, a));
+    const groups = HELP_ALL.filter(([k]) => by[k]).map(([k, label]) => [label, by[k]]);
     if (!io.tty){ io.write(groups.map(([l, ns]) => pad(l, 8) + ns.join(' ')).join('\n') + '\n'); return; }
     const LW = COLS >= 50 ? 9 : 8, room = COLS - 2 - LW;
-    const o = out(); o.blank().head(all ? 'every command' : 'help', all ? '' : 'help all for more').blank();
+    const o = out(); o.blank().head('every command').blank();
     for (const [label, names] of groups){
-      const ws = []; let l = '';
-      for (const n of names){ if (l && l.length + 2 + n.length > room){ ws.push(l); l = n; } else l = l ? l + '  ' + n : n; }
-      if (l) ws.push(l);
-      ws.forEach((w, k) => o.at(2, [pad(k ? '' : label, LW), 'd'], [w, label === 'kaiav' ? 'b' : 'n']));
+      let line = [], w = 0, first = true;
+      const flush = () => { o.at(2, [pad(first ? label : '', LW), 'd'], ...line); line = []; w = 0; first = false; };
+      for (const n of names){
+        if (line.length && w + 2 + n.length > room) flush();
+        if (line.length){ line.push(['  ', 'f']); w += 2; }
+        line.push(chip(n, label === 'kaiav' ? 'b' : 'n')); w += n.length;
+      }
+      if (line.length) flush();
     }
-    o.blank();
-    const tip = [[['man <cmd>', 'n'], [' details', 'f']], [['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']]];
-    if (!all) tip.push([['open <name>', 'n'], [' a link', 'f']], [['help all', 'n'], [' everything', 'f']]);
-    o.flow(tip, '   ').blank();
+    o.blank().flow([[['man <cmd>', 'n'], [' details', 'f']], [['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']]], '   ').blank();
     io.rich(o);
   } });
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
@@ -3949,11 +4001,6 @@ M.createTerminal = function createTerminal(opts){
     if (!history.length){ io.write('no history yet\n', 'dim'); return; }
     history.forEach((s, i) => { io.write(String(i + 1).padStart(5, ' ') + '  ', 'faint'); io.write(s + '\n'); });
   } });
-  def('export', { g: 'shell', desc: 'set an environment variable', usage: 'export NAME=value', ex: ['export GREETING=hi', 'echo $GREETING'], run(argv, io){
-    if (argv.length < 2){ for (const k of Object.keys(ENV).sort()) io.write('export ' + k + '="' + ENV[k] + '"\n'); return; }
-    for (const a of argv.slice(1)){ const m = /^([A-Za-z_]\w*)(?:=(.*))?$/s.exec(a); if (!m){ io.err('export: not a valid name: ' + a + '\n'); io.exit(1); continue; } if (m[2] != null) ENV[m[1]] = m[2]; else if (!(m[1] in ENV)) ENV[m[1]] = ''; }
-  } });
-  def('unset', { g: 'shell', desc: 'remove an environment variable', usage: 'unset NAME...', run(argv){ for (const a of argv.slice(1)) delete ENV[a]; } });
   def('alias', { g: 'shell', desc: 'name a command line', usage: "alias [name='command']", ex: ["alias hi='echo hello'", 'alias'], run(argv, io){
     if (argv.length < 2){ for (const k of Object.keys(ALIASES).sort()) io.write('alias ' + k + "='" + ALIASES[k] + "'\n"); return; }
     for (const a of argv.slice(1)){
@@ -3963,12 +4010,7 @@ M.createTerminal = function createTerminal(opts){
     }
     saveAliases();
   } });
-  def('unalias', { g: 'shell', desc: 'remove an alias', usage: 'unalias name...', run(argv, io){
-    for (const a of argv.slice(1)){ if (hasAlias(a)) delete ALIASES[a]; else { io.err('unalias: ' + a + ': not found\n'); io.exit(1); } }
-    saveAliases();
-  } });
   def('clear', { g: 'system', desc: 'clear the screen', usage: 'clear', run(argv, io){ if (io.tty) clearScreen(); } });
-  def('reset', { g: 'system', desc: 'clear the screen and start fresh', usage: 'reset', run(argv, io){ if (!io.tty) return; clearScreen(); io.rich(welcome(out())); } });
   def('neofetch', { g: 'system', desc: 'about this machine', usage: 'neofetch', run(argv, io){
     const info = fetchInfo();
     if (!io.tty){ io.write('kaiav@kn84\n' + info.map(([k, v]) => pad(k, 10) + v).join('\n') + '\n'); return; }
@@ -3977,19 +4019,6 @@ M.createTerminal = function createTerminal(opts){
   } });
 
   /* misc */
-  def('seq', { g: 'misc', desc: 'count', usage: 'seq [first [step]] last', ex: ['seq 5', 'seq 10 -2 0'], run(argv, io){
-    const n = argv.slice(1).map(Number);
-    if (!n.length || n.some(x => !isFinite(x))){ io.err('usage: seq [first [step]] last\n'); return 1; }
-    const [a, s, b] = n.length === 1 ? [1, 1, n[0]] : n.length === 2 ? [n[0], 1, n[1]] : n;
-    if (!s){ io.err('seq: step cannot be zero\n'); return 1; }
-    const r = []; for (let x = a; s > 0 ? x <= b : x >= b; x += s){ r.push(+x.toFixed(10)); if (r.length >= 10000) break; }
-    if (r.length) io.write(r.join('\n') + '\n');
-  } });
-  def('sleep', { g: 'misc', desc: 'wait a while (ctrl+c stops it)', usage: 'sleep seconds', run(argv, io){
-    const m = /^(\d*\.?\d+)([smh]?)$/.exec(argv[1] || '');
-    if (!m){ io.err('usage: sleep seconds\n'); return 1; }
-    return io.sleep(parseFloat(m[1]) * ({ '': 1, s: 1, m: 60, h: 3600 })[m[2]] * 1000);
-  } });
   def('bc', { g: 'misc', desc: 'a calculator', usage: 'bc [expression]', opts: [], more: 'Arithmetic with + - * / % ^ and parentheses, plus sqrt, abs, floor, ceil, round and pi. Reads the expression from its arguments, or one per line from a pipe.', ex: ['bc 2^10', "echo '(1+2)*3' | bc"], run(argv, io){
     const src = argv.length > 1 ? [argv.slice(1).join(' ')] : linesOf(io.stdin || '');
     if (!src.length){ io.err('usage: bc expression   (try: bc 2^10)\n'); return 1; }
@@ -3998,14 +4027,12 @@ M.createTerminal = function createTerminal(opts){
       try { const v = calc(l); if (v != null) io.write(v + '\n'); } catch (e){ io.err('bc: ' + (e.message || 'syntax error') + '\n'); io.exit(1); }
     }
   } });
-  def('true', { g: 'misc', desc: 'do nothing, successfully', usage: 'true', run(){ return 0; } });
-  def('false', { g: 'misc', desc: 'do nothing, unsuccessfully', usage: 'false', run(){ return 1; } });
   let exits = 0;
   def('exit', { g: 'misc', desc: 'leave', usage: 'exit', run(argv, io){
     const lines = ["you can't leave. the coffee's still hot.", 'not yet. the lamp is warm and the coffee is still hot.', "logout refused: there's still coffee in the mug.", 'the door is the browser tab. the coffee is right here.'];
     io.write(lines[exits++ % lines.length] + '\n', 'dim');
   } });
-  const SHELL_BUILTIN = ['cd', 'export', 'unset', 'alias', 'unalias', 'history', 'exit', 'help', 'echo', 'pwd', 'true', 'false'];
+  const SHELL_BUILTIN = ['cd', 'alias', 'history', 'exit', 'help', 'echo', 'pwd'];
   for (const [n, c] of Object.entries(B)) if (!M.TERM.cmds[n]) M.TERM.cmds[n] = c;
   const CONTENT_KW = { about: ['bio', 'kaiav', 'me'], eden: ['agents', 'context'], j: ['rising', 'rising founder', 'jose'], writing: ['blog', 'posts', 'essays'], links: ['linkedin', 'twitter', 'social', 'contact'] };
   /* everything you can type as a command, read fresh each time so late registrations count */
@@ -4126,12 +4153,18 @@ M.createTerminal = function createTerminal(opts){
     if (!noHist && history[history.length - 1] !== line){ history.push(line); if (history.length > 200) history.shift(); try { localStorage.setItem(HIST_KEY, JSON.stringify(history)); } catch (e){} }
     hIdx = history.length; ran++;
   }
+  function flushAhead(){                 // the type-ahead lands on the prompt; a queued Enter runs it next frame
+    const a = ahead; ahead = ''; const nl = a.indexOf('\n');
+    insert(nl < 0 ? a : a.slice(0, nl));
+    if (nl >= 0){ ahead = a.slice(nl + 1); runQueued = true; }
+  }
   function finishJob(j){
     if (job !== j) return;
     for (const t of j.timers) clearTimeout(t);
     job = null; openRow = null;
-    if (j.hint){ suggestion = j.hint; tty.write('did you mean ', 'dim'); tty.write(j.hint, 'bright'); tty.write('?  press enter\n', 'faint'); j.plain += ' Did you mean ' + j.hint + '?'; }
-    if (ahead){ const a = ahead; ahead = ''; insert(a); }
+    if (status === 0 && !j.dead) okRuns++;
+    if (j.hint){ suggestion = j.hint; tty.rich(out().at(0, ['did you mean ', 'd'], chip(j.hint, 'b'), ['?  press enter', 'f'])); j.plain += ' Did you mean ' + j.hint + '?'; }
+    if (ahead) flushAhead();
     trim(); mirror(j.plain || ''); toBottom(); dirty = true; touched();
     if (REDUCED) revealAll();
   }
@@ -4178,6 +4211,8 @@ M.createTerminal = function createTerminal(opts){
     return st;
   }
   async function runCmd(argv, ctx, j){
+    const lc = String(argv[0]).toLowerCase();                       // LS works like ls
+    if (lc !== argv[0] && !M.TERM.apps[argv[0]] && !M.TERM.cmds[argv[0]] && (M.TERM.apps[lc] || M.TERM.cmds[lc])) argv[0] = lc;
     const name = argv[0];
     const appDef = M.TERM.apps[name], cmd = M.TERM.cmds[name];
     if (appDef && typeof appDef.start === 'function') return launchApp(name, argv, ctx, j);
@@ -4197,7 +4232,7 @@ M.createTerminal = function createTerminal(opts){
     errLine(ctx.errSink, name + ': command not found\n');
     const f = fuzzy(name, cmdItems());
     if (f){ j.hint = [f.item.name, ...argv.slice(1)].join(' '); }
-    else if (ctx.errSink === tty){ tty.write('type ', 'faint'); tty.write('help'); tty.write(' for the list\n', 'faint'); }
+    else if (ctx.errSink === tty) tty.rich(out().at(0, ['this shell knows commands, not sentences. try ', 'f'], chip('help', 'n')));
     return 127;
   }
   function makeIo(ctx, j){
@@ -4228,6 +4263,20 @@ M.createTerminal = function createTerminal(opts){
           dirty = true;
         });
       },
+      /* ask for a line (opts.secret: drawn as dots, never echoed or mirrored) or, with opts.keys, one key.
+         Resolves with the text / the key (lowercased), or null on esc. A one-key ask passes other
+         printable keys on to the next prompt, so nothing typed is lost. */
+      ask(prompt, opts){
+        opts = opts || {};
+        if (!ctx.sink.tty || j.dead) return Promise.resolve(null);
+        return new Promise(res => {
+          openRow = null;
+          j.ask = { spans: Array.isArray(prompt) ? prompt : [[String(prompt), 'd']], secret: !!opts.secret, one: Array.isArray(opts.keys), keys: opts.keys || [], buf: '', res, i: opts.i != null ? opts.i : 2 };
+          if (!opts.secret) mirror(j.ask.spans.map(x => x[0]).join(''));
+          blinkT0 = now; dirty = true;
+        });
+      },
+      redraw(){ dirty = true; },
       runApp(name, argv){
         const a = Array.isArray(argv) ? (argv[0] === name ? argv : [name, ...argv]) : [name];
         if (!M.TERM.apps[name]) return Promise.resolve(127);
@@ -4238,7 +4287,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function setFoot(card){
     const n = card.acts.length, dot = [' \u00b7 ', 'f'];
-    const verb = card.acts.every(a => a.post) ? 'read' : card.acts.every(a => a.copy) ? 'copy' : card.acts.every(a => !a.copy) ? 'open' : 'open/copy';
+    const verb = card.verb === 'read' || card.acts.every(a => a.post) ? 'read' : card.acts.every(a => a.copy) ? 'copy' : card.acts.every(a => !a.copy) ? 'open' : 'open/copy';
     const len = f => f.reduce((a, x) => a + x[0].length, 0);
     const opts = n > 1 ? [
       [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['1-' + n, 'n'], [' jump', 'f'], dot, ['esc', 'n'], [' back', 'f']],
@@ -4260,8 +4309,9 @@ M.createTerminal = function createTerminal(opts){
       said = ok ? 'Opened ' + it.value + ' in the reader. Escape comes back.' : 'The reader is not available.';
     } else if (it.copy){
       const ok = copyText(it.copy); sfx('beep');
-      card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [it.copy, 'b']] : [['select and copy: ', 'd'], [it.copy, 'b']];
-      said = (ok ? 'Copied ' : 'Copy ') + it.copy + '.';
+      const what = it.secret ? it.label : it.copy;            // a secret (a vault password) is never drawn or read out
+      card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [what, 'b']] : it.secret ? [['could not reach the clipboard', 'd']] : [['select and copy: ', 'd'], [it.copy, 'b']];
+      said = (ok ? 'Copied ' : 'Could not copy ') + what + '.';
     } else {
       const ok = openTarget(it.url);
       let shown = it.full ? bare(it.full) : it.value;
@@ -4296,7 +4346,48 @@ M.createTerminal = function createTerminal(opts){
         return true;
       }
     }
+    /* a command chip types and runs its command; an inline link opens. A finger gets a little slack. */
+    const slack = cw * 0.6;
+    for (const h of drawnHits){
+      if (px < h.x0 - slack || px > h.x1 + slack || py < h.top - 4 || py >= h.bot + 4) continue;
+      if (h.link.cmd){
+        if (app || (job && !job.choice)) return false;
+        if (job && job.choice){ const c2 = job.choice; job.choice = null; c2.card.sel = -1; c2.card.foot = [['back', 'f']]; c2.res(null); }
+        revealAll(); const line = h.link.cmd;
+        if (job) ahead = line + '\n'; else { input = ''; cur = 0; execute(line); }
+        sfx('beep'); touched(); return true;
+      }
+      const w = openTarget(h.link.url); const o = out(); o.at(0, ['opening ', 'd'], [bare(h.link.url), 'n']); if (!w) o.at(0, ['if nothing opened, the address is above', 'f']);
+      if (!job) emit(o); touched(); return true;
+    }
     return false;
+  }
+  /* a key while io.ask is waiting */
+  function askKey(e){
+    const a = job.ask, k = e.key, ctl = e.ctrlKey && !e.altKey;
+    if (ctl && k.toLowerCase() === 'c'){ endAsk(null); interrupt(); return true; }
+    if (a.one){
+      if (k.length > 1 && !['Enter', 'Escape', 'Backspace', 'Tab'].includes(k)) return true;
+      const kk = k.length === 1 ? k.toLowerCase() : k, hit = a.keys.includes(kk);
+      endAsk(hit ? kk : k === 'Escape' ? null : kk);
+      if (!hit && k.length === 1 && k !== ' ' && !e.ctrlKey && !e.altKey) ahead += k;
+      return true;
+    }
+    if (k === 'Enter'){ endAsk(a.buf); return true; }
+    if (k === 'Escape'){ endAsk(null); return true; }
+    if (k === 'Backspace' || (ctl && k.toLowerCase() === 'u')){ a.buf = k === 'Backspace' && !e.ctrlKey && !e.altKey ? a.buf.slice(0, -1) : ''; }
+    else if (k.length === 1 && !e.ctrlKey && !e.altKey && a.buf.length < 256 && k >= ' ') a.buf += k;
+    blinkT0 = now; blinkOn = true; dirty = true;
+    return true;
+  }
+  function endAsk(v){
+    const a = job.ask; job.ask = null;
+    if (!a.one){
+      const echo = a.secret ? '\u2022'.repeat(Math.min(a.buf.length, 16)) : a.buf;
+      rows.push({ k: 't', i: a.i, s: [...a.spans, [echo, a.secret ? 'd' : 'n']].concat(v == null ? [['  esc', 'f']] : []) }); shown = rows.length; partial = 0;
+    }
+    a.buf = ''; dirty = true; toBottom();
+    a.res(v);
   }
   /* a key while a choice is waiting; returns true when consumed */
   function choiceKey(e){
@@ -4407,13 +4498,34 @@ M.createTerminal = function createTerminal(opts){
     return [['kaiav', 'd'], [':', 'f'], [p, 'n'], [' $ ', 'd']];
   }
   const promptLen = () => promptSpans().reduce((n, s) => n + s[0].length, 0);
+  /* forgiveness for people new to shells: a copied "$ " prompt, cd.., and a few plain-English questions */
+  const PHRASES = [
+    [/^(hi|hello|hey|hiya|yo|sup|howdy|hola|good (morning|afternoon|evening)|gm)( there)?$/, 'hello'],
+    [/^(who are you|who is (this|kaiav|he)|who'?s kaiav|about (you|me|kaiav)|tell me about (yourself|kaiav)|bio)$/, 'about'],
+    [/^(what is this|what'?s this|what is this place|what can i do|what do i do|how does this work|how do i use this|commands|menu|start|instructions|h)$/, 'help'],
+    [/^(contact( me)?|email|e-?mail me|get in touch|reach out|hire|hire (you|me|kaiav)|say hi)$/, 'contact'],
+    [/^(games?|play|play a game|fun)$/, 'games'],
+    [/^(socials?|linkedin|twitter)$/, 'links'],
+    [/^(blog|posts|essays|articles)$/, 'writing'],
+  ];
+  function forgive(line){
+    let l = line.replace(/^\s*[$%#>]\s+/, '');                 // pasted with its prompt
+    if (/^\s*kaiav:\S*\s*\$\s+/.test(l)) l = l.replace(/^\s*kaiav:\S*\s*\$\s+/, '');
+    l = l.replace(/^(\s*)cd(\.\.|~|\/)(?=\s|$|\/)/, '$1cd $2');     // cd.. and cd~
+    const q = l.trim().toLowerCase().replace(/[?!.,]+$/, '').replace(/\s+/g, ' ');
+    if (!q || /[|;&<>$`'"]/.test(q)) return l;
+    const w = q.split(' ')[0];
+    if (M.TERM.cmds[w] || M.TERM.apps[w] || hasAlias(w)) return l;   // a real command wins
+    for (const [re, cmd] of PHRASES) if (re.test(q) && (M.TERM.cmds[cmd] || M.TERM.apps[cmd])) return cmd;
+    return l;
+  }
   function execute(raw, programmatic){
     rows.push({ k: 't', i: 0, s: [...promptSpans(), [raw, 'n']] }); shown = rows.length; partial = 0;
     openRow = null;
     input = ''; cur = 0; suggestion = ''; tabState = null; sel = -1;
     hIdx = history.length; hDraft = '';
     if (!raw.trim()){ toBottom(); dirty = true; return; }
-    runLine(raw, programmatic);
+    runLine(forgive(raw), programmatic);
   }
 
   /* ---- completion and typeahead ---- */
@@ -4429,6 +4541,11 @@ M.createTerminal = function createTerminal(opts){
     if (/^(man|which|help)$/.test(cname)) return { kind: 'arg', q: word, from: i, items: cmdItems() };
     if (cname === 'read' || /^open\s+post$/.test(pre.slice(segStart + 1).trim())) return { kind: 'arg', q: word, from: i, items: POSTITEMS };
     if (cname === 'open') return { kind: 'arg', q: word, from: i, items: OPEN };
+    const cdef = M.TERM.cmds[cname];                                   // a command can complete its own arguments
+    if (cdef && typeof cdef.complete === 'function' && !word.includes('/')){
+      let l = null; try { l = cdef.complete(pre.slice(segStart + 1).trim().split(/\s+/).slice(1), word); } catch (e){}
+      if (Array.isArray(l) && l.length) return { kind: 'arg', q: word, from: i, items: l.map(n => ({ name: String(n) })), all: true };
+    }
     if (word.startsWith('$')) return { kind: 'path', q: word.slice(1), from: i + 1, items: Object.keys(ENV).map(k => ({ name: k })) };
     const slash = word.lastIndexOf('/');
     const dirPart = word.slice(0, slash + 1), q = word.slice(slash + 1);
@@ -4443,7 +4560,7 @@ M.createTerminal = function createTerminal(opts){
       if (!l.length) l = ctx.items.filter(it => it.name.toLowerCase().startsWith(ctx.q.toLowerCase()));
       return l.map(it => it.name);
     }
-    if (!ctx.q) return ctx.kind === 'arg' && (ctx.items === OPEN || ctx.items === POSTITEMS) ? ctx.items.map(i => i.name) : [];
+    if (!ctx.q) return ctx.kind === 'arg' && (ctx.all || ctx.items === OPEN || ctx.items === POSTITEMS) ? ctx.items.map(i => i.name) : [];
     const scored = [];
     for (const it of ctx.items){
       let s = fscore(ctx.q, it.name);
@@ -4509,7 +4626,7 @@ M.createTerminal = function createTerminal(opts){
   function wordLeft(p){ while (p > 0 && !isWord(input[p - 1])) p--; while (p > 0 && isWord(input[p - 1])) p--; return p; }
   function wordRight(p){ while (p < input.length && !isWord(input[p])) p++; while (p < input.length && isWord(input[p])) p++; return p; }
   function insert(s){
-    s = s.replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\x7e -￿]/g, '');
+    s = s.replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\x7e\u00a0-\uffff]|[\ud800-\udfff\u0300-\u036f\u200b-\u200f\ufe00-\ufe0f]/g, '');   // one cell per char: no emoji, combining marks or zero-width
     if (!s) return;
     if (input.length + s.length > 240) s = s.slice(0, 240 - input.length);
     input = input.slice(0, cur) + s + input.slice(cur); cur += s.length;
@@ -4563,7 +4680,7 @@ M.createTerminal = function createTerminal(opts){
     if (!k || k === 'Shift' || k === 'Control' || k === 'Alt' || k === 'Meta' || k === 'CapsLock' || k === 'Dead') return false;
     if (e.metaKey) return false;
     if (/^F\d+$/.test(k)) return false;
-    if (booting){ skipBoot(); return true; }
+    if (booting){ skipBoot(); if (k === 'Escape' || k === 'Enter' || k === ' ') return true; }   // any other key skips the boot AND counts
     const ctrl = e.ctrlKey, alt = e.altKey, c = k.toLowerCase();
     if (app){                                   // apps get keys first
       const st = app;
@@ -4572,14 +4689,16 @@ M.createTerminal = function createTerminal(opts){
       if (ctrl && c === 'c' && app === st) interrupt();
       return true;
     }
+    if (job && job.ask){ if (typing()) revealAll(); return askKey(e); }
     if (job && job.choice){ if (typing()) revealAll(); return choiceKey(e); }
-    if (typing()){ revealAll(); if (k === 'Enter' || k === 'Escape' || k === ' ' && !input) return true; }
+    if (typing()){ revealAll(); if (!input && (k === 'Enter' || k === 'Escape' || k === ' ')) return true; }   // a key skips the typing-out; a typed line still runs
     if (job){                                   // a command is running: only ctrl+c, ctrl+l and scrolling
       if (ctrl && c === 'c'){ interrupt(); return true; }
       if (ctrl && c === 'l'){ clearScreen(); return true; }
       if (k === 'PageUp'){ scrollBy(ROWS - 2); return true; }
       if (k === 'PageDown'){ scrollBy(-(ROWS - 2)); return true; }
-      if (k.length === 1 && !ctrl && !alt){ if (ahead.length < 200) ahead += k; return true; }     // typed ahead: lands on the next prompt
+      if (k.length === 1 && !ctrl && !alt){ if (ahead.length < 400) ahead += k; return true; }     // typed ahead: lands on the next prompt
+      if (k === 'Enter' && !alt){ if (ahead.length < 400) ahead += '\n'; return true; }            // ...and Enter queues it, like a real tty
       if (k === 'Backspace'){ ahead = ahead.slice(0, -1); return true; }
       return ['Enter', 'Tab', 'Escape'].includes(k);
     }
@@ -4661,15 +4780,17 @@ M.createTerminal = function createTerminal(opts){
       }
       return;
     }
+    if (job && job.ask){ for (const ch of String(str)){ if (!job || !job.ask) break; askKey({ key: ch === '\n' || ch === '\r' ? 'Enter' : ch, ctrlKey: false, altKey: false }); } return; }
     if (job && job.choice){                     // phones: a tapped key answers the card
       for (const ch of String(str)){ if (!job || !job.choice) break; choiceKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false, shiftKey: false }); }
       return;
     }
-    if (job){ ahead += String(str).replace(/[\r\n\t]/g, ''); return; }
+    if (job){ ahead = (ahead + String(str).replace(/\r\n?/g, '\n').replace(/\t/g, ' ')).slice(0, 4000); return; }
     if (rs){ for (const ch of String(str)) searchKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false }); return; }
     if (typing()) revealAll();
-    const parts = String(str).split(/\r?\n/);
-    parts.forEach((p, i) => { insert(p); if (i < parts.length - 1 && !job) execute(input); });
+    const parts = String(str).replace(/\t/g, ' ').split(/\r\n?|\n/);
+    insert(parts[0]);
+    if (parts.length > 1){ execute(input); ahead = parts.slice(1).join('\n').slice(0, 4000); if (!job) flushAhead(); }   // a pasted script: one line at a time
     touched();
   }
   function run(cmd){
@@ -4738,7 +4859,9 @@ M.createTerminal = function createTerminal(opts){
   const X = col => PADX + col * cw;
   let promptY = 0;   // bottom of the prompt line, canvas px (phones keep it above the on-screen keyboard)
   function text(s, col, top, st, k = 1){
-    g.font = font(k); g.fillStyle = color(st); g.fillText(s, X(col), top + fs * k * 0.68);
+    g.font = font(k); g.fillStyle = color(st);
+    if (k === 1 && SPAN_VEC.test(s)){ const c0 = color(st); g.fillText(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68); for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, c0); return; }
+    g.fillText(s, X(col), top + fs * k * 0.68);
   }
   function drawSpans(r, top, limit, k = 1){
     let col = r.i || 0, left = limit;
@@ -4753,7 +4876,8 @@ M.createTerminal = function createTerminal(opts){
         g.fillText(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
         for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : color(sp[1]));
       } else g.fillText(s, X(col), top + fs * k * 0.68);
-      if (link && !selected){ g.fillStyle = P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, 2); }
+      if (link && !selected){ g.fillStyle = link.cmd ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, 2); }
+      if (link && (link.cmd || link.url) && s.trim()) drawnHits.push({ x0: X(col), x1: X(col + s.length * k), top, bot: top + ch * k, link });
       col += s.length * k;
     }
   }
@@ -4769,7 +4893,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function totalUnits(){
     let u = 0; for (let i = 0; i < rows.length && i <= shown; i++) if (i < shown || partial > 0 || rows[i].k === 'viz') u += i < rows.length ? heightOf(rows[i]) : 0;
-    return u + (promptVisible() ? 1 + belowPrompt().length : 0);
+    return u + (promptVisible() ? 1 + belowPrompt().length : job && job.ask && !app && !typing() ? 1 : 0);
   }
   /* quiet rows under the prompt: the ctrl+r search line, or the tab candidates */
   function fitSpans(opts){ const len = f => f.reduce((n, x) => n + x[0].length, 0); return opts.find(f => len(f) <= COLS) || opts[opts.length - 1]; }
@@ -4783,7 +4907,11 @@ M.createTerminal = function createTerminal(opts){
       ])];
     }
     const t = tabState;
-    if (!t || !t.cyc || t.list.length < 2 || t.after !== input) return [];
+    if (!t || !t.cyc || t.list.length < 2 || t.after !== input){
+      if (!fresh || okRuns >= 2 || sel >= 0) return [];            // first visit: a quiet nudge until a command or two has worked
+      if (input) return [[['press ', 'f'], ['enter', 'd'], [' to run it', 'f']]];
+      return [[['try ', 'f'], chip('about', 'd'), ['  or  ', 'f'], chip('help', 'd'), [COLS >= 46 ? '   type it, then press enter' : '', 'f']]];
+    }
     const w = Math.min(COLS - 2, Math.max(...t.list.map(x => x.length)) + 2), nc = Math.max(1, Math.floor(COLS / w));
     const lines = Math.ceil(t.list.length / nc), maxL = Math.min(5, Math.max(2, ROWS - 6));
     const selL = Math.floor(Math.max(0, t.i) / nc), from = lines <= maxL ? 0 : clamp(selL - maxL + 1, 0, lines - maxL);
@@ -4803,6 +4931,14 @@ M.createTerminal = function createTerminal(opts){
   }
   const promptVisible = () => !booting && !typing() && !job && !app;
 
+  function drawAsk(top){                 // io.ask's line: the question, what is typed (dots when secret), a cursor
+    const a = job.ask, room = Math.max(4, COLS - a.i - a.spans.reduce((n, x) => n + x[0].length, 0) - 1);
+    let b = a.secret ? '\u2022'.repeat(a.buf.length) : a.buf; if (b.length > room) b = b.slice(-room);
+    const sp = [...a.spans, [b, a.secret ? 'd' : 'n']];
+    drawSpans({ i: a.i, s: sp }, top, 999);
+    promptY = top + ch;
+    if (!a.one && blinkOn){ const col = a.i + sp.reduce((n, x) => n + x[0].length, 0); if (col < COLS){ g.fillStyle = P.normal; g.fillRect(X(col), top + 3, cw, ch - 6); } }
+  }
   function drawPrompt(top){
     const gh = rs ? null : ghost();
     const PL = promptLen();
@@ -4835,13 +4971,14 @@ M.createTerminal = function createTerminal(opts){
       if (under){ g.font = font(); g.fillStyle = P.bg; g.fillText(under, cx, top + fs * 0.68); }
     }
   }
-  let drawnCards = [];
-  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\ue000]/g;
-  const SPAN_VEC = /[\u2190-\u2193\ue000]/, SPAN_VEC_G = /[\u2190-\u2193\ue000]/g;
+  let drawnCards = [], drawnHits = [];   // what is on screen and can be clicked or tapped
+  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\u2022\ue000]/g;
+  const SPAN_VEC = /[\u2190-\u2193\u2022\ue000]/, SPAN_VEC_G = /[\u2190-\u2193\u2022\ue000]/g;
   function vecGlyph(c, col, top, colr){
     const cx = X(col) + cw / 2, cy = top + ch * 0.5, a = cw * 0.36;
     g.fillStyle = colr;
     if (c === '\u00b7'){ g.fillRect(cx - 2, cy - 2, 4, 4); return; }
+    if (c === '\u2022'){ g.beginPath(); g.arc(cx, cy + 1, cw * 0.19, 0, 6.2832); g.fill(); return; }   // a masked character
     if (c === LOCK){                                       // a small padlock: shackle and body
       const bw = cw * 0.72, bh = ch * 0.3, bx = cx - bw / 2, by = cy - bh * 0.2;
       g.fillRect(bx, by, bw, bh);
@@ -4890,7 +5027,7 @@ M.createTerminal = function createTerminal(opts){
     g.textBaseline = 'alphabetic';
     animFps = 0;
     if (booting){ drawBoot(); return; }
-    drawnCards = [];
+    drawnCards = []; drawnHits.length = 0;
     if (app){ drawGrid(); return; }
     // lay out units bottom-anchored
     const total = totalUnits();
@@ -4925,6 +5062,8 @@ M.createTerminal = function createTerminal(opts){
     if (promptVisible()){
       if (u >= first && u < first + ROWS) drawPrompt(PADY + (u - first) * ch);
       belowPrompt().forEach((r, k) => { const y = u + 1 + k; if (y >= first && y < first + ROWS) drawSpans({ i: 0, s: r }, PADY + (y - first) * ch, 999); });
+    } else if (job && job.ask && !app && !typing()){
+      if (u >= first && u < first + ROWS) drawAsk(PADY + (u - first) * ch);
     } else if (job && !job.choice && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
       text(COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 0, PADY + (u - first) * ch, 'f');
     }
@@ -5134,9 +5273,10 @@ M.createTerminal = function createTerminal(opts){
       if (!typing()) carry = 0, blinkT0 = now;
       changed = true;
     }
+    if (runQueued && !job && !app && !rs){ runQueued = false; execute(input); if (!job) flushAhead(); changed = true; }
     if (job && !job.hinted && !app && now - job.t0 > 0.9){ job.hinted = true; changed = true; }
     const on = ((t - blinkT0) % 1.06) < 0.53;
-    if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (app && gridCursor)) changed = true; }
+    if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (job && job.ask && !job.ask.one) || (app && gridCursor)) changed = true; }
     if (!app && animFps > 0 && t - lastAnim >= 1 / animFps - 1e-3) changed = true;
     if (!app) for (const r of drawnCards) if (r.flash != null && t - r.flash < 0.45) changed = true;   // tap / pick flash
     if (changed){ draw(); lastAnim = t; dirty = false; }
@@ -5151,7 +5291,7 @@ M.createTerminal = function createTerminal(opts){
 </script>
 <script>
 /* apps.js: full-screen apps and small commands for the terminal (see CONTRACT.md, "Terminal extension API").
-   tetris, snake, donut (full-screen) and lamp / lights (plain command).
+   tetris, snake, donut (full-screen) and lamp (plain command).
 
    Drawing: VT323 has no block-element glyphs, so solid cells are drawn the way a real VT did it: inverse
    video spaces. A block's brightness comes from { fg: level, inverse: true } where level is one of the
@@ -5687,7 +5827,14 @@ const lamp = {
   },
 };
 T.cmds.lamp = lamp;
-T.cmds.lights = Object.assign({}, lamp, { hidden: true, usage: 'lights [on | off | status]', desc: 'same as lamp' });
+/* games: what there is to play, as words to click */
+T.cmds.games = { g: 'fun', hidden: true, desc: 'what you can play', usage: 'games', run(argv, io){
+  const list = [['tetris', 'blocks'], ['snake', 'eat, grow'], ['typing', 'how fast you type'], ['donut', 'a spinning torus']].filter(([n]) => T.apps[n] || T.cmds[n]);
+  if (!io.tty){ io.out(list.map(x => x[0]).join('\n') + '\n'); return; }
+  const o = io.ui(); o.blank();
+  for (const [n, d] of list) o.at(2, [n, 'b', { cmd: n }], [' '.repeat(Math.max(2, 9 - n.length)) + d, 'f']);
+  o.blank().at(2, ['esc or q leaves a game', 'f']).blank(); io.rich(o);
+} };
 })();
 
 </script>
@@ -6036,10 +6183,12 @@ const host = u => { try { return new URL(u).host; } catch (e){ return String(u);
 M.net = net;
 T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usage: 'weather [-c | -f] [city]',
   opts: [['-c', 'Celsius'], ['-f', 'Fahrenheit']], ex: ['weather', 'weather tokyo', 'weather -f new york'],
+  complete: () => ['london', 'tokyo', 'paris', 'mumbai', 'sydney', 'singapore', 'berlin', 'dubai', 'toronto', 'nairobi', 'seoul', 'reykjavik'],
   more: 'Asks open-meteo.com for the weather now and the next three days. With no city it guesses yours from your time zone, then remembers the last city you named. Nothing about you leaves the browser except the city name.',
   async run(argv, io){
     let a = argv.slice(1), unit = null;
     while (a[0] === '-c' || a[0] === '-f'){ unit = a[0] === '-f' ? 'F' : 'C'; a = a.slice(1); }
+    if (a[0] && /^-/.test(a[0])){ io.err('weather: unknown option ' + a[0] + '  (try: weather -f tokyo)\n'); return 2; }
     if (!unit) unit = 'C';   // Celsius unless -f is asked for
     let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e){}
     let q = a.join(' ').trim(), guessed = false;
@@ -6463,7 +6612,6 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
     io.rich(o);
     return r.ok ? 0 : 22;
   } };
-T.cmds.fetch = Object.assign({}, T.cmds.curl, { hidden: true, desc: 'same as curl' });
 
 /* =====================================================================================
    hn, wiki, define, github, ip: live data, each one a small card
@@ -6726,18 +6874,29 @@ T.cmds.uuid = { g: 'tools', desc: 'random UUIDs', usage: 'uuid [count]', ex: ['u
     };
     io.out(Array.from({ length: n }, one).join('\n') + '\n');
   } };
-T.cmds.pass = { g: 'tools', desc: 'a strong random password', usage: 'pass [-n] [length]', opts: [['-n', 'letters and digits only']], ex: ['pass', 'pass 32', 'pass -n 16'],
-  more: 'Made in your browser from secure random numbers; it never leaves the page. 20 characters unless you say (8 to 128). Enter copies it.',
-  run(argv, io){
+T.cmds.pass = { g: 'tools', desc: 'a strong random password', usage: 'pass [-n] [length]', opts: [['-n', 'letters and digits only']], ex: ['pass', 'pass 32', 'pass -n 16', 'vault'],
+  more: 'Made in your browser from secure random numbers; it never leaves the page. 20 characters unless you say (8 to 128). Then: c copies it, s saves it in your encrypted vault (see man vault), h hides it from the screen.',
+  async run(argv, io){
     let a = argv.slice(1), plain = false; if (a[0] === '-n'){ plain = true; a = a.slice(1); }
+    if (a[0] && !/^\d+$/.test(a[0])){ io.err('pass: ' + a[0] + ' is not a length  (try: pass 24)\n'); return 2; }
     const len = a[0] ? parseInt(a[0], 10) : 20;
     if (!(len >= 8 && len <= 128)){ io.err('pass: length from 8 to 128\n'); return 2; }
-    const set = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789' + (plain ? '' : '!@#$%^&*-_=+?');
-    let pw = ''; const lim = 256 - 256 % set.length;
-    while (pw.length < len){ for (const b of crypto.getRandomValues(new Uint8Array(len * 2))){ if (b < lim && pw.length < len) pw += set[b % set.length]; } }
-    if (!io.tty){ io.out(pw + '\n'); return; }
-    const o = io.ui(); o.blank().card({ title: 'PASSWORD', items: [{ label: len + ' chars', value: pw, copy: pw, hint: 'copy' }] });
-    io.rich(o); return io.pick(o.lastCard).then(() => {});
+    const pw = genPass(len, plain);
+    if (!io.tty || !io.ask){ io.out(pw + '\n'); return; }
+    const o = io.ui(); o.blank().card({ title: 'PASSWORD', note: len + ' chars', items: [{ label: 'new', value: pw }] }).blank();
+    io.rich(o);
+    const it = o.lastCard.items[0];
+    const hide = () => { it.value = DOT.repeat(Math.min(16, pw.length)); it.lines = (it.lines || [it.value]).map((l, k) => k ? '' : it.value); io.redraw(); };
+    let saved = false, hidden = false;
+    for (;;){
+      const keys = [['c', 'copy']].concat(saved ? [] : [['s', 'save']], hidden ? [] : [['h', 'hide']]);
+      const spans = []; keys.forEach(([k, d], n) => { if (n) spans.push(['  ·  ', 'f']); spans.push([k, 'n'], [' ' + d, 'f']); }); spans.push(['  ·  any other key done', 'f']);
+      const k = await io.ask(spans, { keys: keys.map(x => x[0]) });
+      if (k === 'c'){ const ok = await copy(pw); io.out(ok ? '  copied\n' : '  could not reach the clipboard\n', ok ? 'dim' : 'normal'); }
+      else if (k === 's'){ if (await vaultSave(io, pw)){ saved = true; } }
+      else if (k === 'h'){ hide(); hidden = true; }
+      else break;
+    }
   } };
 T.cmds.json = { g: 'tools', desc: 'pretty-print JSON', usage: 'json [file]', ex: ["echo '{\"a\":[1,2]}' | json", 'curl api.github.com/users/torvalds | json'],
   more: 'Reads JSON from a file or the standard input and prints it indented, in colour on the screen.',
@@ -6787,7 +6946,6 @@ T.cmds.convert = { g: 'tools', desc: 'convert units', usage: 'convert number uni
     else { o.at(2, [fmtNum(v) + ' ' + from.name, 'b'], ['  ' + from.kind, 'f']).blank(); const w = Math.max(...targets.map(t => fmtNum(conv(t)).length)); for (const t of targets) o.at(4, [fmtNum(conv(t)).padStart(w), 'n'], [' ' + t.name, 'd']); }
     o.blank(); io.rich(o);
   } };
-T.cmds.units = Object.assign({}, T.cmds.convert, { hidden: true });
 
 T.cmds.roll = { g: 'tools', desc: 'roll dice', usage: 'roll [NdS[+K]]...', ex: ['roll', 'roll d20', 'roll 2d6+3', 'roll 4d6 d8'],
   more: 'Dice notation: 2d6+3 means two six-sided dice plus three. One six-sided die unless you say.',
@@ -6831,6 +6989,174 @@ T.cmds.countdown = { g: 'tools', desc: 'how long until a date', usage: 'countdow
     const o = io.ui(); o.blank().big(days + (days === 1 ? ' day' : ' days'), 'b').at(2, ['and ' + rest, 'n']).at(2, [(past ? 'since ' : 'until ') + when, 'd']).blank();
     io.rich(o);
   } };
+/* ---- vault: passwords kept in this browser, encrypted with the visitor's passphrase ----
+   PBKDF2-SHA256 (300k) -> AES-GCM-256, a fresh IV per write. Only the ciphertext is stored, in its own
+   localStorage key (never the virtual FS, so cat / grep / ls cannot see it). The key lives in memory and
+   is dropped after 5 idle minutes or when the tab is hidden. */
+const DOT = '•';
+const VKEY = 'kaiav.vault.v1', VITER = 300000, VIDLE = 5 * 60 * 1000;
+const V = { key: null, items: null, timer: 0 };
+const b64 = u8 => { let s = ''; for (const b of u8) s += String.fromCharCode(b); return btoa(s); };
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const vRead = () => { try { const b = JSON.parse(localStorage.getItem(VKEY) || 'null'); return b && b.ct && b.salt && b.iv ? b : null; } catch (e){ return null; } };
+function genPass(len, plain){
+  const set = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789' + (plain ? '' : '!@#$%^&*-_=+?');
+  let pw = ''; const lim = 256 - 256 % set.length;
+  while (pw.length < len){ for (const b of crypto.getRandomValues(new Uint8Array(len * 2))){ if (b < lim && pw.length < len) pw += set[b % set.length]; } }
+  return pw;
+}
+async function copy(t){
+  try { if (navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(t); return true; } } catch (e){}
+  try { const ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0;left:-99px'; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.value = ''; ta.remove(); return ok; } catch (e){ return false; }
+}
+function vLock(){ if (V.items) for (const it of V.items) it.pw = ''; V.key = null; V.items = null; clearTimeout(V.timer); }
+function vTouch(){ clearTimeout(V.timer); V.timer = setTimeout(vLock, VIDLE); }
+try { document.addEventListener('visibilitychange', () => { if (document.hidden) vLock(); }); } catch (e){}
+async function vDerive(pass, salt, iter){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function vSeal(){
+  const old = vRead(); const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, V.key, new TextEncoder().encode(JSON.stringify({ items: V.items }))));
+  const blob = { v: 1, kdf: 'PBKDF2-SHA256', iter: V.iter, salt: V.salt, iv: b64(iv), ct: b64(ct) };
+  try { localStorage.setItem(VKEY, JSON.stringify(blob)); return true; } catch (e){ if (old) {} return false; }
+}
+/* resolves true when the vault is open (setting it up on first use) */
+async function vUnlock(io){
+  if (!(window.crypto && crypto.subtle)){ io.err('vault: this browser cannot encrypt here (it needs a secure page)\n'); return false; }
+  if (V.key){ vTouch(); return true; }
+  if (!io.tty || !io.ask){ io.err('vault: locked. run vault on the screen to unlock it\n'); return false; }
+  const blob = vRead();
+  if (!blob){
+    const o = io.ui(); o.blank().head('new vault').blank()
+      .para('Pick a passphrase. It encrypts your saved passwords on this device, and only here.', 'n', io.cols - 6)
+      .para('There is no recovery: forget it and the vault cannot be opened, by anyone.', 'd', io.cols - 6).blank();
+    io.rich(o);
+    const p1 = await io.ask('passphrase  ', { secret: true }); if (!p1) return false;
+    if (p1.length < 8){ io.err('vault: use at least 8 characters\n'); return false; }
+    const p2 = await io.ask('again       ', { secret: true }); if (p2 == null) return false;
+    if (p1 !== p2){ io.err('vault: those did not match. nothing was saved\n'); return false; }
+    io.out('  deriving a key...\n', 'faint');
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    V.key = await vDerive(p1, salt, VITER); V.salt = b64(salt); V.iter = VITER; V.items = [];
+    if (!(await vSeal())){ vLock(); io.err('vault: this browser would not store it\n'); return false; }
+    vTouch(); return true;
+  }
+  const p = await io.ask('passphrase  ', { secret: true }); if (!p) return false;
+  io.out('  unlocking...\n', 'faint');
+  try {
+    const key = await vDerive(p, unb64(blob.salt), blob.iter || VITER);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(blob.iv) }, key, unb64(blob.ct));
+    const data = JSON.parse(new TextDecoder().decode(pt));
+    V.key = key; V.salt = blob.salt; V.iter = blob.iter || VITER; V.items = Array.isArray(data.items) ? data.items : [];
+    vTouch(); return true;
+  } catch (e){ io.err('vault: wrong passphrase\n'); return false; }
+}
+const vFind = l => V.items.find(it => it.label === l) || V.items.find(it => it.label.toLowerCase() === String(l).toLowerCase());
+const cleanLabel = l => String(l || '').trim().replace(/\s+/g, '-').slice(0, 32);
+async function vaultSave(io, pw, label){
+  if (!(await vUnlock(io))) return false;
+  label = cleanLabel(label || await io.ask('label (e.g. github)  '));
+  if (!label){ io.out('  not saved\n', 'faint'); return false; }
+  if (vFind(label)){ io.err('vault: ' + label + ' is already saved  (try: vault rm ' + label + ')\n'); return false; }
+  V.items.push({ label, pw, created: new Date().toISOString().slice(0, 10) });
+  if (!(await vSeal())){ V.items.pop(); io.err('vault: could not store it\n'); return false; }
+  io.out('  saved as ', 'dim'); io.out(label, 'bright'); io.out(' in your vault, encrypted\n', 'dim');
+  return true;
+}
+const VSUB = ['add', 'get', 'rm', 'rename', 'lock', 'export', 'import', 'reset'];
+T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this browser', usage: 'vault [add | get | rm | rename | lock | export | import | reset] [label]',
+  ex: ['vault', 'vault add github', 'vault get github', 'vault rename github gh', 'vault lock', 'pass  then s to save'],
+  more: 'Passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. Nothing is sent anywhere. Clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. It locks after 5 idle minutes or when you leave the tab. Handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault so you can keep a copy; vault import takes it back.',
+  complete(args){ if (!args.length) return VSUB; if (['get', 'rm', 'rename'].includes(args[0]) && args.length === 1 && V.items) return V.items.map(it => it.label); return null; },
+  async run(argv, io){
+    const sub = argv[1] || '', arg = argv[2];
+    if (sub && !VSUB.includes(sub) && sub !== 'list' && sub !== 'ls'){
+      const near = VSUB.find(x => x.startsWith(sub.slice(0, 2)));
+      io.err('vault: no ' + sub + ' here  (try: vault' + (near ? ' ' + near : '') + ')\n'); return 2;
+    }
+    if (sub === 'lock'){ const was = !!V.key; vLock(); io.out(was ? 'vault locked\n' : 'vault was already locked\n', 'dim'); return; }
+    if (sub === 'export'){
+      const b = vRead(); if (!b){ io.err('vault: nothing to export yet\n'); return 1; }
+      const s = 'kn84vault:' + btoa(JSON.stringify(b));
+      if (!io.tty){ io.out(s + '\n'); return; }
+      io.out('  your vault, still encrypted. keep it somewhere safe;\n  vault import takes it back.\n\n', 'dim');
+      for (let k = 0; k < s.length; k += io.cols - 4) io.out('  ' + s.slice(k, k + io.cols - 4) + '\n', 'faint');
+      const ok = await copy(s); io.out(ok ? '\n  copied to the clipboard\n' : '\n', 'dim'); return;
+    }
+    if (sub === 'import'){
+      let s = (argv.slice(2).join('') || io.stdin || '').replace(/\s+/g, '');
+      if (!s && io.ask) s = ((await io.ask('paste the export  ')) || '').replace(/\s+/g, '');
+      let b = null; try { b = JSON.parse(atob(s.replace(/^kn84vault:/, ''))); } catch (e){}
+      if (!b || !b.ct || !b.salt || !b.iv){ io.err('vault: that is not a vault export\n'); return 1; }
+      if (vRead() && io.ask){ const k = await io.ask([['replace the vault on this device? ', 'n'], ['y', 'b'], [' yes  ·  any other key no', 'f']], { keys: ['y'] }); if (k !== 'y'){ io.out('  kept the one you have\n', 'dim'); return; } }
+      try { localStorage.setItem(VKEY, JSON.stringify(b)); } catch (e){ io.err('vault: could not store it\n'); return 1; }
+      vLock(); io.out('  imported. it opens with the passphrase it was made with\n', 'dim'); return;
+    }
+    if (sub === 'reset'){
+      if (!vRead()){ io.out('no vault here\n', 'dim'); return; }
+      if (!io.ask){ io.err('vault: reset needs the screen\n'); return 1; }
+      io.out('  this deletes every saved password on this device, for good.\n', 'normal');
+      const t = await io.ask([['type ', 'f'], ['delete', 'b'], [' to confirm  ', 'f']]);
+      if (t !== 'delete'){ io.out('  nothing deleted\n', 'dim'); return; }
+      vLock(); try { localStorage.removeItem(VKEY); } catch (e){}
+      io.out('  vault deleted\n', 'dim'); return;
+    }
+    if (!(await vUnlock(io))) return 1;
+    if (!sub || sub === 'list' || sub === 'ls'){
+      if (!V.items.length){
+        const o = io.ui(); o.blank().line(['your vault is empty. ', 'd'], ['vault add <label>', 'n'], [' or ', 'f'], ['pass', 'n', { cmd: 'pass' }], [' then s', 'f']).blank(); io.rich(o); return;
+      }
+      if (!io.tty){ io.out(V.items.map(it => it.label + '  ' + it.created).join('\n') + '\n'); return; }
+      const o = io.ui(); o.blank().card({ title: 'VAULT', note: V.items.length + (V.items.length === 1 ? ' password' : ' passwords'), verb: 'copy',
+        items: V.items.map(it => ({ label: it.label, value: 'saved ' + it.created, copy: it.pw, secret: true, hint: 'copy' })) }).blank();
+      io.rich(o); await io.pick(o.lastCard); return;
+    }
+    if (sub === 'add'){
+      const label = cleanLabel(arg || await io.ask('label (e.g. github)  '));
+      if (!label) return 1;
+      if (vFind(label)){ io.err('vault: ' + label + ' is already saved  (try: vault rm ' + label + ')\n'); return 1; }
+      const k = await io.ask([['g', 'n'], [' generate one  ·  ', 'f'], ['p', 'n'], [' paste your own', 'f']], { keys: ['g', 'p'] });
+      let pw = null;
+      if (k === 'g') pw = genPass(20, false);
+      else if (k === 'p') pw = await io.ask('password  ', { secret: true });
+      if (!pw){ io.out('  not saved\n', 'faint'); return 1; }
+      const ok = await vaultSave(io, pw, label); if (ok && k === 'g' && await copy(pw)) io.out('  and copied to the clipboard\n', 'dim');
+      pw = ''; return ok ? 0 : 1;
+    }
+    const need = n => { if (!arg){ io.err('usage: vault ' + n + ' <label>\n'); return null; } const it = vFind(arg); if (!it){ const near = V.items.find(x => x.label.toLowerCase().startsWith(arg.toLowerCase().slice(0, 2))); io.err('vault: nothing saved as ' + arg + (near ? '  (did you mean ' + near.label + '?)' : '') + '\n'); } return it || null; };
+    if (sub === 'get'){
+      const it = need('get'); if (!it) return 1;
+      const ok = await copy(it.pw);
+      const o = io.ui(); const val = [DOT.repeat(12), 'b'];
+      o.blank().at(2, [it.label + '  ', 'd'], val, [ok ? '  copied' : '  (clipboard blocked)', 'f']).blank(); io.rich(o);
+      const k = await io.ask([['r', 'n'], [' reveal for 10 seconds  ·  any other key done', 'f']], { keys: ['r'] });
+      if (k === 'r'){ val[0] = it.pw; io.redraw(); setTimeout(() => { val[0] = DOT.repeat(12); io.redraw(); }, 10000); }
+      return;
+    }
+    if (sub === 'rm'){
+      const it = need('rm'); if (!it) return 1;
+      const k = await io.ask([['remove ' + it.label + '? ', 'n'], ['y', 'b'], [' yes  ·  any other key no', 'f']], { keys: ['y'] });
+      if (k !== 'y'){ io.out('  kept\n', 'dim'); return; }
+      V.items = V.items.filter(x => x !== it); it.pw = ''; await vSeal(); io.out('  removed ' + it.label + '\n', 'dim'); return;
+    }
+    if (sub === 'rename'){
+      const it = need('rename'); if (!it) return 1;
+      const to = cleanLabel(argv[3] || await io.ask('new label  '));
+      if (!to) return 1; if (vFind(to) && vFind(to) !== it){ io.err('vault: ' + to + ' is taken\n'); return 1; }
+      const was = it.label; it.label = to; await vSeal(); io.out('  ' + was + ' is now ' + to + '\n', 'dim'); return;
+    }
+  } };
+
+/* a hello for people who type one */
+T.cmds.hello = { g: 'fun', hidden: true, desc: 'say hi', usage: 'hello', run(argv, io){
+  if (!io.tty){ io.out('hi. try about, or help.\n'); return; }
+  const c = w => [w, 'b', { cmd: w }];
+  const o = io.ui(); o.blank().at(2, ['hi, welcome to ' + (M.CONTENT && M.CONTENT.name ? M.CONTENT.name.split(' ')[0] + "'s" : 'this') + ' desk.', 'n'])
+    .at(2, ['try ', 'f'], c('about'), ['  ', 'f'], c('contact'), ['  or  ', 'f'], c('help'), ['  for everything', 'f']).blank();
+  io.rich(o);
+} };
 })();
 
 </script>
@@ -6916,7 +7242,7 @@ function start(api, argv, flavor){
   }
   if (readOnly && (flavor === 'vi' || flavor === 'vim')) say(COLS < 54 ? 'nano-style ' + flavor + '. read-only: :w copies' : 'nano-style ' + flavor + ', read-only file. ^S saves a copy', 'dim', 7);
   else if (readOnly) say(COLS < 54 ? 'built-in file. :w saves a copy, :q quits' : 'built-in file, read-only. ^S saves a copy', 'dim', 7);
-  else if (flavor === 'vi' || flavor === 'vim') say('this ' + flavor + ' is nano-style: just type. ^S save, ^Q quit', 'dim', 7);
+  else if (flavor === 'vi' || flavor === 'vim') say('this ' + flavor + ' is nano-style: just type. ^S save, esc quits', 'dim', 7);
   else if (COLS < 54) say('tip: :wq on its own line saves', 'dim', 7);
   else if (isNew) say('new file', 'dim');
 
@@ -7323,6 +7649,7 @@ function start(api, argv, flavor){
     if (done) return false;
     const k = e.key; if (!k || k === 'Unidentified' || k === 'Process' || k === 'Dead') return false;
     if (mode) return promptKey(e);
+    if (k === 'Escape' && !e.ctrlKey && !e.altKey){ quit(false); return true; }   // esc leaves, like everywhere else (asks first if unsaved)
     const ctrl = e.ctrlKey && !e.altKey, alt = e.altKey && !e.ctrlKey, shift = e.shiftKey;
     if (ctrl || (e.ctrlKey && e.altKey && k.length > 1)){
       const c = k.toLowerCase();
@@ -7643,6 +7970,7 @@ function sanitize(html){
         else if (a === 'data-checked'){ el.setAttribute(a, v === 'true' ? 'true' : 'false'); }
         else el.setAttribute(a, v.slice(0, 500));
       }
+      if (tag === 'a' && !el.hasAttribute('href')){ walk(n, to); continue; }   // an unsafe link keeps its words, not its tag
       if (tag === 'img'){
         if (!el.hasAttribute('src')) continue;
         el.setAttribute('loading', 'lazy'); el.setAttribute('decoding', 'async'); if (!el.hasAttribute('alt')) el.setAttribute('alt', '');
@@ -7727,9 +8055,10 @@ const CSS = `
 .rd-tags{ display:flex; flex-wrap:wrap; gap:6px; margin:1.3em 0 0; padding:0; list-style:none }
 .rd-tags li{ font:500 11px/1 var(--r-mono); letter-spacing:.06em; color:var(--r-mute); border:1px solid var(--r-faint); border-radius:999px; padding:5px 9px 5px }
 .rd-rule{ height:1px; background:var(--r-faint); border:0; margin:0 }
-.rd-prose{ padding:2.2rem 0 1rem; hyphens:auto; -webkit-hyphens:auto; overflow-wrap:break-word; font-variation-settings:"opsz" 16 }
+.rd-prose{ padding:2.2rem 0 1rem; hyphens:manual; overflow-wrap:break-word; font-variation-settings:"opsz" 16 }
 .rd-prose > *{ margin:0 0 1.1em }
-.rd-prose p{ text-wrap:pretty }
+.rd-prose p{ text-wrap:pretty; margin:0 0 1.1em }
+.rd-prose li p, .rd-prose blockquote p{ margin:0 0 .5em } .rd-prose li p:last-child, .rd-prose blockquote p:last-child{ margin-bottom:0 }
 .rd-prose h2{ font-size:1.5em; line-height:1.2; font-weight:500; letter-spacing:-.01em; margin:2em 0 .6em; font-variation-settings:"opsz" 48; text-wrap:balance }
 .rd-prose h3{ font-size:1.18em; line-height:1.3; font-weight:600; margin:1.7em 0 .5em; text-wrap:balance }
 .rd-prose h2 + h3{ margin-top:.8em }
@@ -7755,7 +8084,7 @@ const CSS = `
 .rd-prose li.rd-task > input:checked{ background:var(--r-accent); border-color:var(--r-accent) }
 .rd-prose li.rd-task > input:checked::after{ content:""; width:.28em; height:.52em; border:solid var(--r-sheet); border-width:0 2px 2px 0; transform:translateY(-.06em) rotate(45deg) }
 .rd-prose li.rd-done > .rd-task-body{ color:var(--r-mute) }
-.rd-task-body{ flex:1; min-width:0 } .rd-task-body > p{ margin:0 }
+.rd-task-body{ flex:1; min-width:0 } .rd-task-body p{ margin:0 }
 .rd-prose hr{ border:0; height:auto; margin:2.4em 0; text-align:center; color:var(--r-mute) }
 .rd-prose hr::before{ content:"\\2022\\2003\\2022\\2003\\2022"; font-size:.8em; letter-spacing:.1em }
 .rd-prose figure{ margin:2em 0 }
@@ -7781,7 +8110,7 @@ const CSS = `
   .rd-bar .rd-where{ display:none }
   .rd-col{ padding:0 max(20px, env(safe-area-inset-left, 0px)) 0 max(20px, env(safe-area-inset-right, 0px)) }
   .rd-head{ padding:2.4rem 0 1.6rem }
-  .rd-prose{ padding-top:1.6rem }
+  .rd-prose{ padding-top:1.6rem; hyphens:auto; -webkit-hyphens:auto }
   .rd-nav{ grid-template-columns:1fr } .rd-nav .rd-next{ grid-column:1 }
 }
 @media (prefers-reduced-motion: reduce){
@@ -8037,7 +8366,12 @@ kbd.addEventListener('keyup', e => { onUp(e); e.stopPropagation(); });
 addEventListener('wheel', e => { if (reading()) return; if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
 addEventListener('keydown', e => { if (reading()) return; if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
 stage.addEventListener('pointerdown', () => unlock());
-addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && !REDUCED) look(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1); });
+/* clicking the tube: command words and card rows on the terminal are clickable (the scene maps the click to the canvas) */
+stage.addEventListener('click', e => {
+  if (reading() || !api.pickScreen || !term.handleTap) return;
+  const p = api.pickScreen(e.clientX, e.clientY); if (p && term.handleTap(p.u, p.v)){ unlock(); if (api.markScreenDirty) api.markScreenDirty(); }
+});
+addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && !REDUCED && !reading()) look(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1); });
 D.documentElement.addEventListener('mouseleave', () => look(0, 0));
 
 let typed = false;
@@ -8055,6 +8389,7 @@ function frame(now){
   raf = requestAnimationFrame(frame);
   const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt;
   if (term.update(dt, T)) api.markScreenDirty();
+  if (reading()) return;   // the reader sheet covers the room: hold the last frame and save the GPU
   typist.update(dt, T); api.update(dt, T); if (sound && sound.update) sound.update(dt); api.render();
 }
 D.addEventListener('visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });

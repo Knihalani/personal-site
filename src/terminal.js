@@ -1836,7 +1836,7 @@ M.createTerminal = function createTerminal(opts){
     if (!k || k === 'Shift' || k === 'Control' || k === 'Alt' || k === 'Meta' || k === 'CapsLock' || k === 'Dead') return false;
     if (e.metaKey) return false;
     if (/^F\d+$/.test(k)) return false;
-    if (booting){ skipBoot(); return true; }
+    if (booting){ skipBoot(); if (k === 'Escape' || k === 'Enter' || k === ' ') return true; }   // any other key skips the boot AND counts
     const ctrl = e.ctrlKey, alt = e.altKey, c = k.toLowerCase();
     if (app){                                   // apps get keys first
       const st = app;

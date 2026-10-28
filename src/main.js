@@ -59,6 +59,11 @@ kbd.addEventListener('keyup', e => { onUp(e); e.stopPropagation(); });
 addEventListener('wheel', e => { if (reading()) return; if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
 addEventListener('keydown', e => { if (reading()) return; if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
 stage.addEventListener('pointerdown', () => unlock());
+/* clicking the tube: command words and card rows on the terminal are clickable (the scene maps the click to the canvas) */
+stage.addEventListener('click', e => {
+  if (reading() || !api.pickScreen || !term.handleTap) return;
+  const p = api.pickScreen(e.clientX, e.clientY); if (p && term.handleTap(p.u, p.v)){ unlock(); if (api.markScreenDirty) api.markScreenDirty(); }
+});
 addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && !REDUCED && !reading()) look(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1); });
 D.documentElement.addEventListener('mouseleave', () => look(0, 0));
 
@@ -77,6 +82,7 @@ function frame(now){
   raf = requestAnimationFrame(frame);
   const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt;
   if (term.update(dt, T)) api.markScreenDirty();
+  if (reading()) return;   // the reader sheet covers the room: hold the last frame and save the GPU
   typist.update(dt, T); api.update(dt, T); if (sound && sound.update) sound.update(dt); api.render();
 }
 D.addEventListener('visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });
