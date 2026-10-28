@@ -683,7 +683,7 @@ M.createScene = function createScene(container){
     }
     // wide: three-quarter, over the right shoulder; portrait: closer and lower, the tube in the upper middle
     const p = clamp((1.15 - aspect) / .6, 0, 1);
-    const wide = pose(new V3(1.12, 1.56, 1.96), new V3(.02, .91, -.06), 23.5 * clamp(1.55 / aspect, 1, 1.25));
+    const wide = pose(new V3(1.5, 1.52, 1.62), new V3(-.02, .9, .02), 25 * clamp(1.55 / aspect, 1, 1.25));
     const tall = pose(new V3(.34, 1.27, 1.06), new V3(-.01, .9, -.06), 50);
     return pose(wide.pos.clone().lerp(tall.pos, p), wide.target.clone().lerp(tall.target, p), lerp(wide.fov, tall.fov, p));
   }

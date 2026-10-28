@@ -240,11 +240,11 @@ M.createTypist = function createTypist(api){
   mesh(blob(.068, .052, .056, (x, y, z) => .02 * Math.sin(x * 8 + y * 5)), hairM, head, V3(0, .07, .036));
   { // loose tufts break the skull's outline so it reads as hair, not a helmet
     let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    const tuft = blob(.022, .011, .032, (x, y, z) => .1 * Math.max(0, z));
-    for (let i = 0; i < 16; i++){
-      const az = (i / 16) * PI * 2 + rnd() * .3, el = .3 + rnd() * .7;
+    const tuft = blob(.016, .008, .024, (x, y, z) => .08 * Math.max(0, z));
+    for (let i = 0; i < 9; i++){
+      const az = (i / 9) * PI * 2 + rnd() * .3, el = .25 + rnd() * .45;
       const dir = V3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
-      const m = mesh(tuft, hairM, head, V3(dir.x * .078, .128 + dir.y * .08, .004 + dir.z * .092));
+      const m = mesh(tuft, hairM, head, V3(dir.x * .07, .124 + dir.y * .07, .004 + dir.z * .085));
       m.lookAt(m.position.clone().add(V3(dir.x * .6, -.25 + rnd() * .2, dir.z * .6 + .5)));
       m.rotateZ(rnd() * PI);
     }
