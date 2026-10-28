@@ -142,7 +142,7 @@ T.apps.tetris = {
         const k = e.key;
         help = false;
         if (over){
-          if (k === 'Enter' || k === 'r' || k === 'R' || k === ' ') restart();
+          if (k === 'Enter' || k === 'r' || k === 'R') restart();
           else if (isQuit(k)) api.exit(0);
           return true;
         }
@@ -296,7 +296,7 @@ T.apps.snake = {
       key(e){
         const k = e.key;
         if (over){
-          if (k === 'Enter' || k === ' ' || k === 'r' || k === 'R') reset();
+          if (k === 'Enter' || k === 'r' || k === 'R') reset();
           else if (isQuit(k)) api.exit(0);
           return true;
         }
@@ -341,7 +341,7 @@ T.apps.snake = {
           at(body[i][0], body[i][1], '  ', blk(f < 0.5 ? 'normal' : f < 0.85 ? 'dim' : 'faint'));
         }
         const [hx, hy] = body[0];
-        at(hx, hy, over ? 'xx' : '  ', over ? 'bright' : blk('bright'));
+        at(hx, hy, over ? 'xx' : '  ', blk('bright'));
         const cw = 30, cx = ox + 1 + ((GW * 2 - cw) / 2 | 0), cy = oy + ((GH - 9) / 2 | 0) + 1;
         const c = (y, s, st) => scr.put(cx + ((cw - s.length) / 2 | 0), cy + y, s, st);
         if (over){
@@ -369,7 +369,7 @@ T.apps.snake = {
 /* =====================================================================================
    DONUT: a1k0n's spinning torus, luminance mapped to phosphor levels
    ===================================================================================== */
-const LUM = '.,-~:;=!*#$@';
+const LUM = '.,-:;=+!*#$@';      // VT323 draws ~ as a squiggle, so it is left out
 const LUM_STYLE = ['faint', 'faint', 'faint', 'dim', 'dim', 'dim', 'normal', 'normal', 'normal', 'bright', 'bright', 'bright'];
 T.apps.donut = {
   desc: 'a spinning ascii donut (after a1k0n). arrows steer, any key quits',
@@ -384,8 +384,9 @@ T.apps.donut = {
       const cA = Math.cos(A), sA = Math.sin(A), cB = Math.cos(B), sB = Math.sin(B);
       const R1 = 1, R2 = 2, K2 = 5;
       // scale so the donut fills the grid height; character cells are ~2x taller than wide
-      const K1y = rows * K2 * 3 / (8 * (R1 + R2)) * 1.25;
-      const K1x = Math.min(K1y * 2, cols * K2 * 3 / (8 * (R1 + R2)) * 1.25);
+      const h = rows - 1;                                   // bottom row holds the hint
+      const K1y = h * K2 * 3 / (8 * (R1 + R2)) * 1.02;
+      const K1x = Math.min(K1y * 2.05, cols * K2 * 3 / (8 * (R1 + R2)) * 1.02);
       for (let th = 0; th < 6.283; th += 0.05){
         const ct = Math.cos(th), st = Math.sin(th);
         for (let ph = 0; ph < 6.283; ph += 0.015){
@@ -396,8 +397,8 @@ T.apps.donut = {
           const zz = K2 + cA * cx * sp + cy * sA;
           const ooz = 1 / zz;
           const xp = (cols / 2 + K1x * ooz * x) | 0;
-          const yp = (rows / 2 - K1y * ooz * y) | 0;
-          if (xp < 0 || xp >= cols || yp < 0 || yp >= rows) continue;
+          const yp = (h / 2 - K1y * ooz * y) | 0;
+          if (xp < 0 || xp >= cols || yp < 0 || yp >= h) continue;
           const L = cp * ct * sB - cA * ct * sp - sA * st + cB * (cA * st - ct * sA * sp);
           const i = xp + yp * cols;
           if (ooz > z[i]){
@@ -444,7 +445,7 @@ T.apps.donut = {
             scr.put(x - s.length, y, s, st);
           }
         }
-        scr.put(cols - 31, rows - 1, 'arrows steer . any key to leave', 'faint');
+        center(scr, rows - 1, 'arrows steer the spin  .  any other key leaves', 'faint');
       },
     };
   },

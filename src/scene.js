@@ -201,8 +201,38 @@ M.createScene = function createScene(container){
     });
     computer.add(mesh(body, [mSideR, mSideL, mTop, mBack, mFront, mBack]));
 
-    // floppy slot: a dark mouth with a soft lip, and the eject notch
+    // moulded bezel lip: a soft raised rim around the tube recess, its profile rounded by a multi-step bevel
+    const backT = T(backC); backT.wrapS = backT.wrapT = THREE.RepeatWrapping;
+    const lipM = plasticMat(backT, null, { roughness: .5 });
+    const frameGeo = (ohw, ohh, or, ihw, ihh, ir, depth, bt, bs, segs) => {
+      const sh = rrShape(ohw, ohh, or); sh.holes.push(rrShape(ihw, ihh, ir));
+      const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelThickness: bt, bevelSize: bs, bevelSegments: segs, curveSegments: 10 });
+      const UV = g.attributes.uv; for (let i = 0; i < UV.count; i++) UV.setXY(i, UV.getX(i) * 4, UV.getY(i) * 4);
+      return g; };
+    {
+      const lip = mesh(frameGeo(BZ.hw + .0085, BZ.hh + .0085, BZ.r + .0085, BZ.hw + .0022, BZ.hh + .0022, BZ.r + .0022, .0006, .0017, .0019, 5), lipM);
+      const z = faceZ(BZ.y); lip.position.set(0, BZ.y, z - .0006); lip.rotation.x = -Math.atan(SLOPE); computer.add(lip);
+      // a hairline parting groove just outside the lip, where the bezel moulding meets the case
+      const gs = rrShape(BZ.hw + .0118, BZ.hh + .0118, BZ.r + .0118); gs.holes.push(rrShape(BZ.hw + .0106, BZ.hh + .0106, BZ.r + .0106));
+      const groove = mesh(new THREE.ShapeGeometry(gs, 12), new THREE.MeshStandardMaterial({ color: lin(0x6d6556), roughness: .8 }), false);
+      groove.position.set(0, BZ.y, faceZ(BZ.y) + .0003); groove.rotation.x = -Math.atan(SLOPE); computer.add(groove);
+    }
+    // floppy slot: a raised mouth with real depth, a dark throat, the spring door set back inside, and the eject button
     const dark = new THREE.MeshStandardMaterial({ color: lin(0x0b0a09), roughness: .9 });
+    {
+      const mouth = mesh(frameGeo(SLOT.hw + .0042, SLOT.hh + .0034, SLOT.hh + .0034, SLOT.hw + .0004, SLOT.hh + .0004, SLOT.hh * .95, .0018, .0011, .0012, 3), lipM);
+      mouth.position.set(SLOT.x, SLOT.y, faceZ(SLOT.y) - .0004); mouth.rotation.x = -Math.atan(SLOPE); computer.add(mouth);
+      // throat walls in shadow, so the opening reads as a slot rather than a sticker
+      const throat = mesh(new THREE.BoxGeometry(SLOT.hw * 2 + .0006, SLOT.hh * 2 + .0006, .0042), new THREE.MeshStandardMaterial({ color: lin(0x15130f), roughness: .95, side: THREE.BackSide }), false);
+      throat.position.set(SLOT.x, SLOT.y, faceZ(SLOT.y) + .0006); throat.rotation.x = -Math.atan(SLOPE); computer.add(throat);
+      const door = mesh(new THREE.PlaneGeometry(SLOT.hw * 2 - .002, SLOT.hh * 2 - .0004), new THREE.MeshStandardMaterial({ color: lin(0x2a2722), roughness: .55, metalness: .3 }), false);
+      door.position.set(SLOT.x, SLOT.y + .0002, faceZ(SLOT.y) + .0009); door.rotation.x = -Math.atan(SLOPE) - .18; computer.add(door);
+      const eject = mesh(roundedBox(.011, .0042, .004, .0012, 2), lipM);
+      eject.position.set(SLOT.x + SLOT.hw - .008, SLOT.y - SLOT.hh - .0095, faceZ(SLOT.y - .0095) + .0009); eject.rotation.x = -Math.atan(SLOPE); computer.add(eject);
+      // drive activity lamp, unlit: a tiny dome of dark red lens
+      const led = mesh(new THREE.SphereGeometry(.0018, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshPhysicalMaterial({ color: lin(0x3a0a06), roughness: .2, clearcoat: 1 }), false);
+      led.rotation.x = Math.PI / 2 - Math.atan(SLOPE); led.position.set(SLOT.x - SLOT.hw - .01, SLOT.y, faceZ(SLOT.y)); computer.add(led);
+    }
     const slotZ = faceZ(SLOT.y);
     const sg = new THREE.ShapeGeometry(rrShape(SLOT.hw, SLOT.hh, SLOT.hh * .95), 6);
     const slot = mesh(sg, dark, false); slot.position.set(SLOT.x, SLOT.y, slotZ + .0004); slot.rotation.x = -Math.atan(SLOPE); computer.add(slot);
@@ -327,8 +357,12 @@ M.createScene = function createScene(container){
     const woodT = tex(woodC, true, ANISO), woodRT = tex(woodH, false, ANISO);
     const deskTop = new THREE.MeshStandardMaterial({ map: woodT, bumpMap: woodRT, bumpScale: .00015, roughness: .55, metalness: 0 });
     const deskSide = new THREE.MeshStandardMaterial({ color: lin(0x3a2416), roughness: .6 });
-    const top = mesh(roundedBox(DESK.w, DESK.t, DESK.d, .006, 2, [1, 1, 1]), [deskSide, deskSide, deskTop, deskSide, deskSide, deskSide]);
-    top.position.set(0, DESK_Y - DESK.t / 2, DESK.z); scene.add(top);
+    // the top: a rounded-corner slab with a soft, eased edge profile (bevelled in five steps) that catches the lamp
+    const BT = .009, BS = .007;
+    const tg = new THREE.ExtrudeGeometry(rrShape(DESK.w / 2 - BS, DESK.d / 2 - BS, .012), { depth: DESK.t - 2 * BT, bevelEnabled: true, bevelThickness: BT, bevelSize: BS, bevelSegments: 6, curveSegments: 6 });
+    tg.rotateX(-Math.PI / 2); tg.translate(0, -DESK.t + BT, 0);
+    { const P = tg.attributes.position, UV = tg.attributes.uv; for (let i = 0; i < P.count; i++) UV.setXY(i, (P.getX(i) + DESK.w / 2) / DESK.w, 1 - (P.getZ(i) + DESK.d / 2) / DESK.d); }
+    const top = mesh(tg, [deskTop, deskTop]); top.position.set(0, DESK_Y, DESK.z); scene.add(top);
     const legM = new THREE.MeshStandardMaterial({ color: lin(0x22160e), roughness: .7 });
     for (const sx of [-1, 1]) for (const sz of [-1, 1]){ const l = mesh(new THREE.BoxGeometry(.05, DESK_Y - DESK.t, .05), legM); l.position.set(sx * (DESK.w / 2 - .05), (DESK_Y - DESK.t) / 2, DESK.z + sz * (DESK.d / 2 - .05)); scene.add(l); }
     const apron = mesh(new THREE.BoxGeometry(DESK.w - .1, .07, .02), legM); apron.position.set(0, DESK_Y - DESK.t - .035, DESK.z + DESK.d / 2 - .06); scene.add(apron);
@@ -456,6 +490,8 @@ M.createScene = function createScene(container){
     const led = mesh(new THREE.BoxGeometry(.006, .0012, .003), new THREE.MeshBasicMaterial({ color: new THREE.Color(.3, 1.4, .5), toneMapped: false }), false);
     led.position.set(KB.w / 2 - .03, .0052, -KB.d / 2 + .015); kb.add(led);
 
+    // switch housings on the plate: they show through the gaps and as a cap sinks, so the travel reads as real
+    const housings = [];
     // caps
     ROWS.forEach((row, r) => {
       let col = 0;
@@ -477,9 +513,18 @@ M.createScene = function createScene(container){
         holder.rotation.x = ROW_ANGLE[r];
         holder.add(cap); kb.add(holder);
         keys.set(code, { holder, restY, row: r, off: 0, vel: 0, target: 0, world: null });
+        housings.push([holder.position.x, holder.position.z, w]);
         col += w;
       }
     });
+  }
+  {
+    const hg = roundedBox(.0138, .0036, .0138, .0008, 1), hm = new THREE.MeshStandardMaterial({ color: lin(0x2e2a25), roughness: .7 });
+    const stemG = new THREE.BoxGeometry(.0042, .003, .0042), stemM = new THREE.MeshStandardMaterial({ color: lin(0x7b5f38), roughness: .5 });
+    const im = new THREE.InstancedMesh(hg, hm, 120), is = new THREE.InstancedMesh(stemG, stemM, 120), mtx = new THREE.Matrix4(); let n = 0;
+    for (const [x, z, w] of housings){ const xs = w >= 2 ? [x - (w * U) / 2 + U * .6, x, x + (w * U) / 2 - U * .6] : [x];
+      for (const xx of xs){ if (n >= 120) break; mtx.makeTranslation(xx, .0018, z); im.setMatrixAt(n, mtx); mtx.makeTranslation(xx, .0045, z); is.setMatrixAt(n, mtx); n++; } }
+    im.count = is.count = n; im.receiveShadow = true; is.receiveShadow = true; kb.add(im, is);
   }
   // set the wedge on the desk: the front edge sits on the wood, the back rides on two feet
   kb.rotation.order = 'YXZ'; kb.rotation.set(KB.tilt, KB.yaw, 0);
@@ -760,6 +805,39 @@ M.createScene = function createScene(container){
       for (let i = 0; i < d.length; i += 4) s += .299 * d[i] + .587 * d[i + 1] + .114 * d[i + 2]; lumTarget = s / (d.length / 4) / 255; } catch (e){ /* tainted canvas: keep the default */ }
   }
 
+  /* ================= THE LAMP SWITCH ================= */
+  /* setLamp(true): the switch clicks, a beat later the filament catches, stutters twice, then swells in from a deep
+     orange to its full 2700K. setLamp(false): the filament glows down over ~150 ms. With the lamp off the eye
+     adapts (a slow exposure lift) and the tube and the window carry the room. */
+  const LAMP_COL = lin(0xffe2c2), LAMP_DIM = lin(0xff8a3c), BULB_HOT = new THREE.Color(1, .86, .62), BULB_DIM = new THREE.Color(1, .36, .08);
+  const FLICK = [0, .55, .08, .0, .8, .25, .9, .45, .7];   // 40 ms steps after the relay delay
+  const lampS = { on: true, t: 9, level: 1, adapt: 0 };
+  const _c = new THREE.Color();
+  function lampLevel(dt){
+    if (lampS.on){
+      lampS.t += dt; const t = lampS.t;
+      if (REDUCED){ lampS.level += (1 - lampS.level) * (1 - Math.exp(-dt * 5)); return; }
+      if (t < .16) lampS.level *= Math.exp(-dt * 20);
+      else if (t < .16 + FLICK.length * .04) lampS.level = FLICK[Math.floor((t - .16) / .04)];
+      else { const f = t - .16 - FLICK.length * .04; lampS.level = Math.max(lampS.level, .45 + .55 * (1 - Math.exp(-f * 3.2))); if (f > 3) lampS.level = 1; }
+    } else lampS.level *= Math.exp(-dt * (REDUCED ? 8 : 16));
+  }
+  function applyLamp(dt){
+    const L = lampS.level, warm = sstep(.2, 1, L), off = 1 - sstep(0, .8, L);
+    lamp.intensity = 5.6 * L; lamp.visible = L > .002;
+    lamp.color.copy(LAMP_DIM).lerp(LAMP_COL, warm);
+    bounce.intensity = .14 * L;
+    shadeInnerMat.emissiveIntensity = .12 * L;
+    _c.copy(BULB_DIM).lerp(BULB_HOT, warm).multiplyScalar(Math.min(1, L * 1.4));
+    bulbMat.color.setRGB(.07 + _c.r, .065 + _c.g, .06 + _c.b);
+    shaftAmt.value = Math.pow(L, 1.5);
+    screenU.uLampAmt.value = L;
+    // the eye opens up slowly in the dark, and snaps back when the light returns
+    lampS.adapt += (off - lampS.adapt) * (1 - Math.exp(-dt * (off > lampS.adapt ? .9 : 4)));
+    moon.intensity = .18 + .3 * lampS.adapt; hemi.intensity = .26 + .1 * lampS.adapt;
+    renderer.toneMappingExposure = 1.05 + .55 * lampS.adapt;
+  }
+
   /* ================= API ================= */
   let frames = 0, slowAcc = 0, perfT = 0;
   const api = {
@@ -784,9 +862,15 @@ M.createScene = function createScene(container){
     rig: { seat: SEAT.clone(), keyboardCenter, keyboardNormal, screenCenter: screenCenter.clone(), screenNormal: screenNormal.clone(), lampPosition: bulbPos.clone(), keySpacing: U,
       eye: eyeRest.clone(),          // where the camera (the typist's eyes) sits at rest, world space
       eyeLive: eyeNow,               // the camera's current position (updated in place every frame)
-      neck: pivot.clone() },         // the head turns about this point
+      neck: pivot.clone(),           // the head turns about this point
+      // for room dressing: put wall props on z = wallZ, keep them out of windowRect and off the desk footprint
+      floorY: 0, deskTop: DESK_Y, deskBounds: { minX: -DESK.w / 2, maxX: DESK.w / 2, minZ: DESK.z - DESK.d / 2, maxZ: DESK.z + DESK.d / 2 },
+      wallZ: WALL_Z, windowRect: { x: WIN.x - WIN.hw - .05, y: WIN.y - WIN.hh - .025, w: WIN.hw * 2 + .1, h: WIN.hh * 2 + .045 } }, // x, y = lower-left corner, includes the trim and sill
     add(o){ scene.add(o); added.push(o); o.traverse(m => { if (m.isMesh && !m.userData.noShadow) m.castShadow = true; }); },
     setView(){ /* v2: one view only; kept so old callers don't break */ },
+    /* the desk lamp: true/false; get lampOn for the current switch state */
+    setLamp(on){ on = !!on; if (on === lampS.on) return; lampS.on = on; lampS.t = 0; },
+    get lampOn(){ return lampS.on; },
     /* nx, ny in -1..1 from the pointer (0,0 = the screen). ny > 0 looks down toward the keyboard. */
     setLook(nx, ny){
       nx = clamp(+nx || 0, -1, 1); ny = clamp(+ny || 0, -1, 1);
@@ -816,7 +900,8 @@ M.createScene = function createScene(container){
       screenU.uFlicker.value = REDUCED ? 1 : 1 + .0045 * Math.sin(t * 2 * Math.PI * 7.7) + .003 * Math.sin(t * 2 * Math.PI * 1.3) + .002 * (Math.random() - .5);
       lumTimer -= dt; if (lumDirty && lumTimer <= 0){ lumDirty = false; lumTimer = .25; sampleLum(); }
       lum += (lumTarget - lum) * (1 - Math.exp(-dt * 4));
-      glow.intensity = (.2 + .6 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value;
+      lampLevel(dt); applyLamp(dt);
+      glow.intensity = (.2 + .6 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.2 * lampS.adapt);
       dustU.uTime.value = REDUCED ? 40 : t;
       // keep it smooth on modest GPUs: step the pixel ratio down if frames run long
       perfT += dt; frames++; if (dt > .026) slowAcc++;
