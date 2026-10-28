@@ -157,7 +157,7 @@ M.dressRoom = function (api){
   }
 
   /* ================= heavy linen curtains framing the window ================= */
-  { const WIN = rig.windowRect || { x: -.58, y: 1.42, w: .8, h: .84 };
+  { const R = rig.windowRect, WIN = R ? { x: R.x + R.w / 2, y: R.y + R.h / 2, w: R.w, h: R.h } : { x: -.58, y: 1.42, w: .8, h: .84 }; // rig gives the lower-left corner
     const cloth = canvasTex(256, 256, (c, W, H) => { noiseFill(c, W, H, '#3b4250', .12, 9000); c.strokeStyle = 'rgba(255,255,255,.04)'; for (let i = 0; i < W; i += 3){ c.beginPath(); c.moveTo(i, 0); c.lineTo(i, H); c.stroke(); } }, true);
     const cm = new THREE.MeshStandardMaterial({ map: cloth, roughness: .95, side: THREE.DoubleSide });
     for (const side of [-1, 1]){
