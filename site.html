@@ -390,6 +390,9 @@ function drawKoi(c, k, s, t, m, alpha){
   c.strokeStyle = k.base[0] > 100 ? 'rgba(255,250,240,.45)' : 'rgba(120,110,100,.35)'; c.lineWidth = Y.R * .03;
   c.beginPath(); for (let u = .03; u <= .8; u += .02){ const p = at(s, u); u === .03 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y); } c.stroke();
   c.restore(); c.globalAlpha = alpha;
+  // rim light: a thin pale edge so the dark fish never sinks into the pond
+  c.globalAlpha = alpha * (1 - m) * (k.base[0] > 100 ? .35 : .8); c.strokeStyle = k.base[0] > 100 ? 'rgba(255,255,250,1)' : 'rgba(214,200,178,1)';
+  c.lineWidth = Math.max(1, Y.R * .014); bodyPath(c, s); c.stroke(); c.globalAlpha = alpha;
   // barbels
   if (fade > .01){ const p = at(s, 0); c.strokeStyle = k.base[0] > 100 ? 'rgba(220,200,180,.8)' : 'rgba(80,70,60,.9)'; c.lineWidth = Math.max(.8, Y.R * .006);
     for (const side of [1, -1]){ c.beginPath(); c.moveTo(p.x + p.fx * p.w * .8 + p.nx * p.w * .3 * side, p.y + p.fy * p.w * .8 + p.ny * p.w * .3 * side);
@@ -632,7 +635,7 @@ function frame(now){
   }
   drawYin(sx, phi, smooth(.82, 1, m), T);
   // the two tails stay outside the finished symbol as a flourish
-  if (m > .86){ sx.globalAlpha = 1; for (let i = 0; i < 2; i++){ spine(KOI[i], SP[i], theta, 1, T); drawTail(sx, KOI[i], SP[i], T, 1); } }
+  if (m > .86){ sx.globalAlpha = 1; for (let i = 0; i < 2; i++){ spine(KOI[i], SP[i], theta, 1, T); drawTail(sx, SP[i], KOI[i], T, 1); } }
   if (!gl || !prog) return;
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texScene); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, scene);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texWater); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GW, GH, gl.LUMINANCE, gl.UNSIGNED_BYTE, waterBytes);
