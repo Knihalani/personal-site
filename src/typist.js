@@ -349,7 +349,7 @@ M.createTypist = function createTypist(api){
       fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][2] * .9 * .87 + .0004,
         mode: 'idle', code: null, vcode: null, real: false, pressed: false, upReq: false, t: 0, tC: 0, Td: .08, lift: .005, relT: 9,
         w: S(0), depth: S(0), act: 0, K: V3(), from: V3(), P: V3(), tip: V3(), restLocal: V3(), restHome: V3(), reach: V3(), start: 0,
-        fid: new VSpring(V3()), fidT: V3(), fidAt: 1 + Math.random() * 4, queue: null, vel: V3(), prevP: V3(), v0: V3() });
+        fid: new VSpring(V3()), fidT: V3(), fidAt: 1 + Math.random() * 4, queue: [], vel: V3(), prevP: V3(), v0: V3() });
     }
     hands.push({ h, side, ts, hand, upper, fore, fingers, homeW: V3(), homeQ: new THREE.Quaternion(), deskW: V3(), deskQ: new THREE.Quaternion(),
       W: null, hold: V3(), region: null, nudge: V3(), lastActive: -9, yaw: S(0), desk: S(0), deskT: 0, elbowOut: S(0) });
@@ -490,15 +490,15 @@ M.createTypist = function createTypist(api){
   }
   const handOf = code => { const m = FINGER[code]; return m ? m[0] : null; };
 
-  function strike(code, vcode, F, delay){
+  function strike(code, vcode, F, delay, fromQueue){
     let K = keyLocal(vcode);
     const real = !!K && has(vcode);
     if (vcode === 'Space' && K) K = thumbKey[F.h].clone();
     if (!K) K = F.restHome.clone().addScaledVector(n, -F.clear - HOVER);     // unknown: just bob the finger
     // the same finger is still on its way to (or has only just touched) another key: finish that stroke first,
     // so every key that goes down is visibly struck, then go straight on to this one
-    if (!F.queue && F.vcode && F.code !== code && ((F.mode === 'strike' && !F.pressed) || (F.mode === 'hold' && F.t - F.tC < .03))){
-      F.queue = { code, vcode, up: false }; owner.set(code, F); lastKey = T; return;
+    if (!fromQueue && F.vcode && (F.queue.length || (F.mode === 'strike' && !F.pressed) || (F.mode === 'hold' && F.t - F.tC < .03))){
+      F.queue.push({ code, vcode, up: false }); owner.set(code, F); lastKey = T; return;
     }
     if ((F.mode === 'strike' || F.mode === 'hold') && F.vcode){      // the finger leaves a key it was still on
       const old = F.vcode;
@@ -546,7 +546,7 @@ M.createTypist = function createTypist(api){
     if (pendShift && pendShift.code === code){ const F = startShift(code, null); pendShift = null; F.upReq = true; owner.delete(code); return; }
     const F = owner.get(code); owner.delete(code);
     if (!F) return;
-    if (F.queue && F.queue.code === code){ F.queue.up = true; return; }
+    const q = F.queue.find(e => e.code === code); if (q){ q.up = true; return; }
     if (F.code === code && (F.mode === 'strike' || F.mode === 'hold')){
       if (!F.pressed){ F.upReq = true; return; }      // tapped faster than the finger travels: release right after contact
       F.mode = 'release'; F.relT = 0; F.w.x = 1; F.w.v = 0;
@@ -663,7 +663,7 @@ M.createTypist = function createTypist(api){
           solveFinger(F, F.P);
           if (u >= 1){
             const err = F.tip.distanceTo(Kc);
-            if (err < .0015 || F.t > F.Td + .06){
+            if (err < .0015 || F.t > F.Td + .1){
               F.mode = 'hold'; F.pressed = true; F.tC = F.t; F.depth.x = 0; F.depth.v = .9;
               contacts.push({ code: F.vcode, err: F.tip.clone().sub(Kc), t: F.t, at: T.toFixed(2) + '/h' + F.h });
               if (contacts.length > 400) contacts.shift();
@@ -672,7 +672,7 @@ M.createTypist = function createTypist(api){
           }
           if (F === lead){           // what the finger cannot reach, the wrist makes up next frame
             const err = v1.copy(F.P).sub(F.tip);
-            if (err.length() > 2e-4){ err.multiplyScalar(.5); if (err.length() > .0006) err.setLength(.0006); H.nudge.add(err); }   // gently: never a visible kick
+            if (err.length() > 2e-4){ err.multiplyScalar(.5); if (err.length() > .001) err.setLength(.001); H.nudge.add(err); }   // gently: never a visible kick
             if (H.nudge.length() > .016) H.nudge.setLength(.016);
           }
         } else if (F.mode === 'hold'){
@@ -684,9 +684,9 @@ M.createTypist = function createTypist(api){
             const c = F.vcode; F.upReq = false; F.mode = 'release'; F.relT = 0; F.w.x = 1; F.w.v = 0;
             if (F.real) doRelease(c); else snd(c, false);
           }
-          if (F.queue && F.t - F.tC >= .03){      // a stroke queued behind this one: go now
-            const q = F.queue; F.queue = null;
-            strike(q.code, q.vcode, F, 0);
+          if (F.queue.length && F.t - F.tC >= .03){      // a stroke queued behind this one: go now
+            const q = F.queue.shift();
+            strike(q.code, q.vcode, F, 0, true);
             if (q.up){ F.upReq = true; }
             solveFinger(F, F.P);         // reachFor() posed this finger while probing: put it back for this frame
           }
