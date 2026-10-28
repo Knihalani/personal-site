@@ -324,7 +324,7 @@ M.createTypist = function createTypist(api){
   const elbowGeo = blob(.047, .047, .047, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
 
   /* ---------- hands ---------- */
-  const SKIN_H = .0022;     // surface-nets cell size (m)
+  const SKIN_H = .0026;     // surface-nets cell size (m)
   const FL = [[.036, .03, .026], [.041, .025, .019], [.045, .028, .02], [.042, .026, .019], [.032, .02, .0165]];
   const FR = [[.0098, .0088, .0078], [.0075, .0067, .0059], [.0077, .0069, .006], [.0072, .0064, .0056], [.0062, .0055, .0049]];
   const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));
@@ -740,31 +740,35 @@ M.createTypist = function createTypist(api){
       return smin(roundCone(r, hh, S.r0, S.rm, m), roundCone(r, hh - m, S.rm, S.r1, m), .002);
     };
     const chainD = (C, x, y, z, from) => { let d = segD(C.segs[from], x, y, z, C.flat); for (let j = from + 1; j < 3; j++) d = smin(d, segD(C.segs[j], x, y, z, C.flat), .003); return d; };
-    // implicit -> approximate distance (F / |grad F|)
-    const dImp = (fn, x, y, z) => { const e = .0005, v = fn(x, y, z);
-      const gx = fn(x + e, y, z) - fn(x - e, y, z), gy = fn(x, y + e, z) - fn(x, y - e, z), gz = fn(x, y, z + e) - fn(x, y, z - e);
-      return v / Math.max(1e-6, Math.hypot(gx, gy, gz) / (2 * e)); };
-    // palm: a rounded slab, longer than wide, back gently domed, front edge following the knuckle arc
-    const zK = H.KN[2].z;
-    const palmF = (x, y, z) => {
-      const xs = x * ts, ze = zK + 11 * (xs - .005) * (xs - .005) + .003, zb = .012;
-      const t = (z - ze) / (zb - ze), tc = clamp(t, 0, 1);
+    // palm: a rounded slab, longer than wide, back gently domed, front edge following the knuckle arc.
+    // Implicit F = r - 1, turned into a distance with its (analytic, shape-frozen) gradient: d = F / |grad F|.
+    const zK = H.KN[2].z, PE = 2.4;
+    const palmDist = (x, y, z) => {
+      const xs = x * ts, ze = zK + 11 * (xs - .005) * (xs - .005) + .003, zb = .012, zl = zb - ze;
+      const t = (z - ze) / zl, tc = clamp(t, 0, 1);
       const w = .0392 - .0105 * smooth(.3, 1, tc), u = (xs + .001 + .002 * tc) / w, v = 2 * t - 1;
-      const top = (.0108 + .0055 * smooth(.45, 1, tc)) * (1 - .3 * Math.min(1, u * u)), bot = (.0112 + .0068 * smooth(.3, 1, tc)) * (1 - .22 * Math.min(1, u * u));
-      const ym = Math.abs(y) / (y > 0 ? top : bot);
-      const s = Math.pow(u ** 4 + v ** 4, .25);
-      return Math.pow(s ** 2.4 + ym ** 2.4, 1 / 2.4) - 1;
+      const uu = Math.min(1, u * u);
+      const hy = y > 0 ? (.0108 + .0055 * smooth(.45, 1, tc)) * (1 - .3 * uu) : (.0112 + .0068 * smooth(.3, 1, tc)) * (1 - .22 * uu);
+      const au = Math.abs(u), av = Math.abs(v), ym = Math.abs(y) / hy;
+      const s4 = au ** 4 + av ** 4, sv = Math.pow(s4, .25) + 1e-9;
+      const r = Math.pow(sv ** PE + ym ** PE, 1 / PE) + 1e-9;
+      const dRs = (sv / r) ** (PE - 1), dRy = (ym / r) ** (PE - 1);
+      const gx = dRs * au ** 3 / sv ** 3 / w, gz = dRs * av ** 3 / sv ** 3 * 2 / zl, gy = dRy / hy;
+      return (r - 1) / Math.hypot(gx, gy, gz);
     };
     // wrist and forearm: an elliptical section (5.5 x 3.5 cm at the wrist) widening toward the elbow
     const Fe = inv(rel(H.fore));
-    const foreF = (x, y, z) => {
-      ap(Fe, x, y, z); const sb = L2 - q[1], k = smooth(-.01, .08, sb);
-      const e = Math.hypot(q[0] / (.0272 + .0038 * k), q[2] / (.0172 + .0048 * k));
-      const cap = Math.max(0, -sb / .014, (sb - .1) / .02);
-      return Math.pow(e ** 4 + cap ** 4, .25) - 1;
+    const foreDist = (x, y, z) => {
+      ap(Fe, x, y, z); const sb = L2 - q[1], k = smooth(-.01, .08, sb), a = .0272 + .0038 * k, b = .0172 + .0048 * k;
+      const e = Math.hypot(q[0] / a, q[2] / b) + 1e-9;
+      const c1 = -sb / .014, c2 = (sb - .085) / .02, cap = Math.max(0, c1, c2), cs = cap === c1 ? .014 : .02;
+      const r = Math.pow(e ** 4 + cap ** 4, .25) + 1e-9;
+      const de = (e / r) ** 3, dc = (cap / r) ** 3;
+      const gx = de * q[0] / (a * a * e), gz = de * q[2] / (b * b * e), gy = dc / cs;
+      return (r - 1) / Math.hypot(gx, gy, gz);
     };
     const palmD = (x, y, z) => {
-      let d = smin(dImp(palmF, x, y, z), dImp(foreF, x, y, z), .024);
+      let d = smin(palmDist(x, y, z), foreDist(x, y, z), .024);
       for (let f = 1; f < 5; f++){            // the knuckle heads
         const S = CH[f].segs[0]; ap(S.e, x, y, z);
         d = smin(d, Math.hypot(q[0], (q[1] - .36 * S.r0) * 1.1, q[2] - .001) - .9 * S.r0, .007);
@@ -784,7 +788,7 @@ M.createTypist = function createTypist(api){
     const lo = [1, 1, 1], hi = [-1, -1, -1], grow = p => { for (let i = 0; i < 3; i++){ lo[i] = Math.min(lo[i], p.getComponent(i) - .026); hi[i] = Math.max(hi[i], p.getComponent(i) + .026); } };
     for (const C of CH) C.pts.forEach(grow);
     const dF = V3(0, 1, 0).transformDirection(rel(H.fore));        // elbow -> wrist, in hand space
-    grow(V3()); grow(dF.clone().multiplyScalar(-.115)); grow(V3(0, 0, .02));
+    grow(V3()); grow(dF.clone().multiplyScalar(-.1)); grow(V3(0, 0, .02));
     for (let i = 0; i < 3; i++){ lo[i] -= .012; hi[i] += .012; }
     const SN = surfaceNets(sdf, lo, hi, SKIN_H);
     const nv = SN.pos.length / 3, P = new Float32Array(SN.pos), N = new Float32Array(nv * 3), SI = new Uint16Array(nv * 4), SW = new Float32Array(nv * 4);
