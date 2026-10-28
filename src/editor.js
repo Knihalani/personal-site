@@ -69,7 +69,9 @@ function start(api, argv, flavor){
   }
 
   /* ---- open ---- */
-  const arg = (argv || []).slice(1).find(a => a && a !== '--');
+  const args = (argv || []).slice(1), dd = args.indexOf('--');
+  const arg = args.find(a => a && a !== '--');
+  if (arg && arg[0] === '-' && (dd < 0 || args.indexOf(arg) < dd)){ api.print('usage: ' + flavor + ' [file]  (try: ' + flavor + ' notes/today.txt)'); api.exit(2); return {}; }
   if (arg){
     path = fs.resolve(arg, cwd);
     if (fs.isDir && fs.isDir(path)){ api.print(flavor + ': ' + arg + ': is a directory'); api.exit(1); return {}; }
@@ -350,7 +352,7 @@ function start(api, argv, flavor){
     const res = writeTo(abs);
     if (!res.ok){
       if (abs === path && !readOnly){ readOnly = true; }
-      openPrompt('saveas', (abs === path ? 'Read-only. ' : "Can't write there. ") + 'Save as: ', abs === path ? copyName(abs) : disp(abs), then);
+      openPrompt('saveas', (abs === path ? 'read-only. ' : "can't write there. ") + 'save as: ', abs === path ? copyName(abs) : disp(abs), then);
       say(res.err, 'bright', 6);
       return false;
     }
@@ -362,8 +364,8 @@ function start(api, argv, flavor){
     return true;
   }
   function saveCmd(then){
-    if (!path) return openPrompt('saveas', 'File name: ', '', then);
-    if (readOnly) return openPrompt('saveas', 'Save a copy as: ', copyName(path), then);
+    if (!path) return openPrompt('saveas', 'file name: ', '', then);
+    if (readOnly) return openPrompt('saveas', 'save a copy as: ', copyName(path), then);
     return save(path, then);
   }
   function finish(how){
@@ -376,8 +378,8 @@ function start(api, argv, flavor){
   }
   function quit(force){
     if (force || !modified()) return finish(force && modified() ? 'discard' : 'close');
-    const long = 'Save changes to ' + disp(path) + '? (y/n/esc) ';
-    openPrompt('quit', long.length < COLS ? long : 'Save changes? (y/n/esc) ', null);
+    const long = 'save changes to ' + disp(path) + '? (y/n/esc) ';
+    openPrompt('quit', long.length < COLS ? long : 'save changes? (y/n/esc) ', null);
   }
 
   /* ---- prompts on the message line ---- */
@@ -394,7 +396,7 @@ function start(api, argv, flavor){
       if (fs.isDir && fs.isDir(abs)){ say(v + ' is a directory', 'bright'); return; }
       if (abs !== path && fs.exists && fs.exists(abs) && !m.confirmed){
         if (lockedAt(abs)){ say(disp(abs) + ' is a built-in file; pick another name', 'bright'); return; }
-        mode = { type: 'overwrite', label: disp(abs) + ' exists. Overwrite? (y/n) ', input: null, abs, then: m.then }; return;
+        mode = { type: 'overwrite', label: disp(abs) + ' exists. overwrite? (y/n) ', input: null, abs, then: m.then }; return;
       }
       mode = null; save(abs, m.then);
     } else if (m.type === 'goto'){
@@ -422,7 +424,7 @@ function start(api, argv, flavor){
         if (c === 'n'){ mode = null; finish('discard'); return true; }
       } else {
         if (c === 'y'){ mode = null; save(m.abs, m.then); return true; }
-        if (c === 'n'){ mode = { type: 'saveas', label: 'Save as: ', input: disp(m.abs), cur: disp(m.abs).length, fresh: false, then: m.then }; return true; }
+        if (c === 'n'){ mode = { type: 'saveas', label: 'save as: ', input: disp(m.abs), cur: disp(m.abs).length, fresh: false, then: m.then }; return true; }
       }
       if (k === 'Escape' || (ctrl && (c === 'c' || c === 'q'))){ mode = null; say('cancelled'); }
       return true;
@@ -494,8 +496,8 @@ function start(api, argv, flavor){
       if (k === 'Backspace'){ backspace(true); return true; }
       if (k === 'Delete'){ del(true); return true; }
       switch (c){
-        case 's': if (shift) openPrompt('saveas', 'Save as: ', path ? disp(path) : '', null); else saveCmd(); return true;
-        case 'o': openPrompt('saveas', 'Save as: ', path ? disp(path) : '', null); return true;
+        case 's': if (shift) openPrompt('saveas', 'save as: ', path ? disp(path) : '', null); else saveCmd(); return true;
+        case 'o': openPrompt('saveas', 'save as: ', path ? disp(path) : '', null); return true;
         case 'q': quit(false); return true;
         case 'x': cut(); return true;
         case 'k': cutLine(); return true;
@@ -503,8 +505,8 @@ function start(api, argv, flavor){
         case 'v': paste(); return true;
         case 'z': if (shift) doRedo(); else doUndo(); return true;
         case 'y': doRedo(); return true;
-        case 'f': { const origin = { l: cy, c: cx }; find.on = true; openPrompt('find', 'Find: ', find.q, null); mode.origin = origin; return true; }
-        case 'g': openPrompt('goto', 'Go to line: ', '', null); return true;
+        case 'f': { const origin = { l: cy, c: cx }; find.on = true; openPrompt('find', 'find: ', find.q, null); mode.origin = origin; return true; }
+        case 'g': openPrompt('goto', 'go to line: ', '', null); return true;
         case 'l': gutter = !gutter; prefSet(gutter); say('line numbers ' + (gutter ? 'on' : 'off')); return true;
         case 'a': anchor = { l: 0, c: 0 }; cy = lines.length - 1; cx = lines[cy].length; return true;
         case 'e': move('End', false, false, false); return true;
@@ -564,19 +566,19 @@ function start(api, argv, flavor){
   /* ---- drawing ---- */
   const ev = (k, ctrl) => ({ key: k, ctrlKey: !!ctrl, altKey: false, shiftKey: false, metaKey: false, preventDefault(){} });
   const SHORTCUTS = [
-    [['^S', 'Save', ev('s', 1)], ['^Q', 'Quit', ev('q', 1)], ['^F', 'Find', ev('f', 1)], ['^G', 'Go to', ev('g', 1)], ['^L', 'Lines', ev('l', 1)]],
-    [['^X', 'Cut', ev('x', 1)], ['^C', 'Copy', ev('c', 1)], ['^V', 'Paste', ev('v', 1)], ['^Z', 'Undo', ev('z', 1)], ['^Y', 'Redo', ev('y', 1)]],
+    [['^S', 'save', ev('s', 1)], ['^Q', 'quit', ev('q', 1)], ['^F', 'find', ev('f', 1)], ['^G', 'go to', ev('g', 1)], ['^L', 'lines', ev('l', 1)]],
+    [['^X', 'cut', ev('x', 1)], ['^C', 'copy', ev('c', 1)], ['^V', 'paste', ev('v', 1)], ['^Z', 'undo', ev('z', 1)], ['^Y', 'redo', ev('y', 1)]],
   ];
   function barFor(){
     if (!mode) return SHORTCUTS;
-    const esc = ['Esc', 'Cancel', ev('Escape')];
+    const esc = ['esc', 'cancel', ev('Escape')];
     switch (mode.type){
-      case 'find': return [[['Enter', 'Next', ev('Enter')], ['Up', 'Previous', ev('ArrowUp')]], [['Esc', 'Done', ev('Escape')], ['^C', 'Back to start', ev('c', 1)]]];
-      case 'goto': return [[['Enter', 'Go', ev('Enter')], ['12:4', 'Line:col', null]], [esc]];
-      case 'saveas': return [[['Enter', 'Save', ev('Enter')]], [esc]];
-      case 'quit': return [[['Y', 'Save', ev('y')], ['N', "Don't save", ev('n')]], [esc]];
-      case 'ex': return [[['w', 'Save a copy', null], ['q', 'Quit', null]], [['Enter', 'Run', ev('Enter')], esc]];
-      case 'overwrite': return [[['Y', 'Overwrite', ev('y')], ['N', 'New name', ev('n')]], [esc]];
+      case 'find': return [[['enter', 'next', ev('Enter')], ['\u2191', 'previous', ev('ArrowUp')]], [['esc', 'done', ev('Escape')], ['^C', 'back to start', ev('c', 1)]]];
+      case 'goto': return [[['enter', 'go', ev('Enter')], ['12:4', 'line:col', null]], [esc]];
+      case 'saveas': return [[['enter', 'save', ev('Enter')]], [esc]];
+      case 'quit': return [[['y', 'save', ev('y')], ['n', "don't save", ev('n')]], [esc]];
+      case 'ex': return [[['w', 'save a copy', null], ['q', 'quit', null]], [['enter', 'run', ev('Enter')], esc]];
+      case 'overwrite': return [[['y', 'overwrite', ev('y')], ['n', 'new name', ev('n')]], [esc]];
     }
     return SHORTCUTS;
   }
@@ -601,7 +603,7 @@ function start(api, argv, flavor){
   function drawTitle(scr){
     scr.fill(0, 0, COLS, 1, ' ', 'inverse');
     const r = selRange();
-    let right = COLS >= 50 ? 'Ln ' + (cy + 1) + ', Col ' + (cx + 1) : (cy + 1) + ':' + (cx + 1);
+    let right = COLS >= 50 ? 'ln ' + (cy + 1) + ', col ' + (cx + 1) : (cy + 1) + ':' + (cx + 1);
     if (r && COLS >= 50){ const n = textOf(r[0], r[1]).length; right = n + ' sel  ' + right; }
     const left = flavor === 'edit' ? 'edit' : flavor;
     let name = disp(path) + (modified() ? ' \u2022' : '');
@@ -723,7 +725,8 @@ function start(api, argv, flavor){
 }
 
 /* one editor; nano, vi and vim are quiet aliases (they work, but help lists edit once) */
-const def = (name, desc, hidden) => ({ g: 'files', hidden: !!hidden, desc, usage: name + ' [file]', start(api, argv){ return start(api, argv, name); } });
+const MORE = 'a small nano-style editor. just type. ^S saves, esc quits (asking first if there are changes), ^F finds, ^G goes to a line, ^Z undoes. the two bottom lines list the rest. built-in files open read-only; ^S then saves a copy. on a phone, type :w, :q or :wq on a line of its own and press enter.';
+const def = (name, desc, hidden) => ({ g: 'files', hidden: !!hidden, desc, usage: name + ' [file]', more: MORE, ex: ['edit notes/today.txt', 'edit README.md'], start(api, argv){ return start(api, argv, name); } });
 T.apps.edit = def('edit', 'edit a text file (nano-style)');
 T.apps.nano = def('nano', 'edit a text file (same as edit)', true);
 T.apps.vi = def('vi', 'edit a text file (nano-style, same as edit)', true);

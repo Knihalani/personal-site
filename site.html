@@ -39,8 +39,22 @@ body.phone::before{ content: ""; position: fixed; top: 0; left: 0; right: 0; hei
 #loading.gone{ opacity: 0; pointer-events: none }
 noscript{ position: fixed; inset: 0; z-index: 4; display: grid; place-content: center; gap: 6px; background: var(--bg); font-size: 14px; text-align: center }
 noscript h1{ margin: 0; font: 500 18px var(--mono) } noscript p{ margin: 0; color: var(--dim) } noscript a{ color: #8dffb4 }
-@media (prefers-reduced-motion: reduce){ #hint, #loading{ transition: none } }
+/* the flat terminal on a desktop (no WebGL, or three.js did not load): one centred column, sized by main.js */
+body.flat #stage .phone-term{ right: 0; margin: 0 auto }
+@media (prefers-reduced-motion: reduce){ #hint, #loading, #stage .phone-term{ transition: none } }
+/* high contrast: the sound toggle's dot keeps showing its state in system colours */
+@media (forced-colors: active){ #mute::before{ forced-color-adjust: none; border-color: ButtonText } #mute[aria-pressed="true"]::before{ background: ButtonText; box-shadow: none } }
 </style>
+<script>
+/* storage that throws (blocked site data, some private modes): every module gets an in-memory stand-in for this visit */
+for (const n of ['localStorage', 'sessionStorage']){
+  let real = null;
+  try { real = window[n]; real.setItem('kaiav.probe', '1'); real.removeItem('kaiav.probe'); continue; } catch (e){}
+  const m = new Map(), k = x => String(x);
+  const get = x => { if (m.has(k(x))) return m.get(k(x)); try { return real ? real.getItem(x) : null; } catch (e){ return null; } };
+  try { Object.defineProperty(window, n, { configurable: true, value: { getItem: get, setItem: (x, v) => { m.set(k(x), String(v)); }, removeItem: x => { m.set(k(x), null); } } }); } catch (e){}
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 
 <div id="stage" aria-hidden="true"></div>
@@ -534,6 +548,7 @@ M.sound = sound;
 (() => {
 'use strict';
 const M = window.MAC = window.MAC || {};
+if (typeof THREE === 'undefined') return;   // three.js did not load: main.js shows the flat terminal instead
 
 /* Phosphor: soft green, a desaturated, slightly minty P1. Amber would melt into the room, because the only other
    light is a 2700K lamp. Green sits opposite it on the colour wheel, so the tube separates from the room and the
@@ -1889,13 +1904,6 @@ const PLAIN = [1, 1, 1];
 
 /* ---------------- the hand surface: a signed-distance field, polygonised once with surface nets ---------------- */
 const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * .25; };
-/* round cone along +h from radius r1 at h = 0 to r2 at h = L (r = radial distance) */
-function roundCone(r, h, r1, r2, L){
-  const b = (r1 - r2) / L, a = Math.sqrt(1 - b * b), k = -b * r + a * h;
-  if (k < 0) return Math.hypot(r, h) - r1;
-  if (k > a * L) return Math.hypot(r, h - L) - r2;
-  return a * r + b * h - r1;
-}
 /* Surface nets over [lo, hi] with cell size h: one vertex per surface cell, one quad per sign-changing edge.
    Far-field values come from a coarse pass so only the narrow band near the surface is evaluated finely. */
 function* surfaceNets(sdf, lo, hi, h){
@@ -1966,7 +1974,7 @@ function makeMat(kind, U){
     // two thin rims: cool where the edge turns to the tube, warm (2700K) where it turns to the lamp
     float cool = clamp(0.6 * max(nc, 0.0) + 0.12, 0.0, 1.0), warm = max(nl, 0.0) * uLampK;
     float fw = pow(1.0 - clamp(dot(sN, sV), 0.0, 1.0), 3.0);
-    outgoingLight = vec3(0.0015) + fr * cool * vec3(0.06, 0.085, 0.11) + fw * warm * vec3(0.2, 0.11, 0.045);
+    outgoingLight = vec3(0.0015) + fr * cool * vec3(0.085, 0.12, 0.155) + fw * warm * vec3(0.32, 0.175, 0.07);
   }
 #include <output_fragment>`);
   };
@@ -2142,12 +2150,45 @@ M.createTypist = function createTypist(api){
       const up = n.clone().addScaledVector(fwd, -n.dot(fwd)).normalize(), back = fwd.clone().negate();
       const right = up.clone().cross(back).normalize();
       H.homeQ.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, back))
-        .multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -H.side * .25));
+        .multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -H.side * .13));
       const kc = H.fingers.slice(1).reduce((a, F) => a.add(F.base.position), V3()).multiplyScalar(.25 * HS);
       // knuckles ~2.8 cm above the home-row caps and ~5 cm behind them: the fingers curl down onto the keys
-      // (PIP ~35 deg, DIP ~20 deg) with the tips resting on the caps, not hovering over them
       const target = C.clone().addScaledVector(n, KNUCKLE_UP).addScaledVector(kfw, -KNUCKLE_BACK);
       H.homeW.copy(target).sub(kc.clone().applyQuaternion(H.homeQ));
+      /* Even curl: a real typist's fingers all bend about the same (MCP ~25, PIP ~45, DIP ~25 deg), the long middle
+         finger landing a little further up its key and the pinky a little lower. So the relaxed pose is chosen first
+         and the knuckles are placed where that pose puts every tip on its home key (a few mm off the anatomical arc,
+         after the hand itself is shifted to fit). The finger IK then reproduces this pose exactly at rest. */
+      H.KN0 = H.KN.map(k => k.clone());
+      {
+        const tipOff = (F, mcp, pip, psi) => {
+          const sv = [F.base.position.clone(), F.g0.rotation.clone(), F.g1.rotation.x, F.g2.rotation.x];
+          F.base.position.set(0, 0, 0); F.g0.rotation.set(-mcp, psi, 0); F.g1.rotation.x = -pip; F.g2.rotation.x = -pip * .55;
+          for (const g of [F.base, F.g0, F.g1, F.g2]) g.updateMatrix();
+          const o = V3(0, 0, -F.L[2]).applyMatrix4(F.g2.matrix).applyMatrix4(F.g1.matrix).applyMatrix4(F.g0.matrix).applyMatrix4(F.base.matrix);
+          F.base.position.copy(sv[0]); F.g0.rotation.copy(sv[1]); F.g1.rotation.x = sv[2]; F.g2.rotation.x = sv[3];
+          for (const g of [F.base, F.g0, F.g1, F.g2]) g.updateMatrix();
+          return o;
+        };
+        // per finger: MCP, PIP (DIP follows at .55; the bend spread along the finger, not hooked at the PIP), splay (+ = away from the thumb), tip offset along the key (m, + = forward)
+        const POSE = [null, [.56, .6, -.1, .001], [.6, .64, -.01, .0035], [.6, .64, .07, .0015], [.5, .7, .17, -.002]];
+        const tipH = (inv, f) => homes[f - 1].clone().addScaledVector(n, H.fingers[f].clear + REST_GAP).addScaledVector(kfw, POSE[f][3]).applyMatrix4(inv);
+        const kn = [];
+        for (let it = 0; it < 3; it++){
+          const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(HS, HS, HS)).invert(), mean = V3();
+          for (let f = 1; f < 5; f++){
+            const F = H.fingers[f], P = POSE[f];
+            kn[f] = tipH(inv, f).sub(tipOff(F, P[0], P[1], H.ts * P[2]));
+            mean.add(kn[f].clone().sub(H.KN[f]));
+          }
+          H.homeW.addScaledVector(mean.multiplyScalar(.25).applyQuaternion(H.homeQ), HS);   // move the hand, not the knuckles
+        }
+        const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(HS, HS, HS)).invert();
+        for (let f = 1; f < 5; f++){
+          const F = H.fingers[f], P = POSE[f];
+          H.KN[f].copy(tipH(inv, f).sub(tipOff(F, P[0], P[1], H.ts * P[2]))); F.base.position.copy(H.KN[f]);
+        }
+      }
       H.W = new VSpring(H.homeW); H.hold.copy(H.homeW); H.region = new VSpring(H.homeW);
       const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(HS, HS, HS)).invert();
       const ixLat = homes[0].clone().sub(space || C).dot(lat);
@@ -2190,7 +2231,7 @@ M.createTypist = function createTypist(api){
   let T = 0, lastKey = -9, lastHand = 0, lamped = !!rig.lampPosition, lampScan = 0, pendShift = null, deskCheck = 6, strikeSeq = 0;
   const act = S(0), lean = S(lean0), sway = S(0), twist = S(0);
   let swayT = 0, swayAt = 6, lampRef = null, lampMax = 0, lampFind = 0;
-  const ZERO = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), Y = V3(0, 1, 0), qA = new THREE.Quaternion(), mB = new THREE.Matrix4();
+  const ZERO = V3(), vI = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), Y = V3(0, 1, 0), qA = new THREE.Quaternion(), mB = new THREE.Matrix4();
 
   const snd = (c, d) => { try { if (M.sound && M.sound.key) M.sound.key(c, d); } catch (e){} };
   const doPress = c => { if (!down.has(c)){ down.add(c); try { kb.press(c); } catch (e){} snd(c, true); } };
@@ -2429,8 +2470,11 @@ M.createTypist = function createTypist(api){
           else { F.fidT.set(0, .002 + Math.random() * .004, (Math.random() - .5) * .004); F.fidAt = .25 + Math.random() * .4; }
         }
         F.fid.step(F.mode === 'idle' && !wsum ? F.fidT : ZERO, 14, dt);
-        const idle = v2.copy(F.restLocal).add(F.fid.x); idle.y += .0005 * (1 + Math.sin(T * 1.7 + F.f * 1.3 + H.h * 2));   // resting on the cap: only ever lifts
-        idle.applyMatrix4(H.hand.matrix);
+        // resting on the cap: the pad stays planted while the hand breathes and drifts above it (the finger flexes
+        // instead), and only ever lifts off for a fidget or a neighbour's stroke
+        const idle = v2.copy(F.restLocal).applyMatrix4(H.hand.matrix);
+        idle.addScaledVector(n, (F.restHome.dot(n) - idle.dot(n)) * (1 - dk) * (1 - smooth(.003, .012, H.W.x.distanceTo(H.homeW))));
+        vI.copy(F.fid.x).applyQuaternion(H.hand.quaternion); idle.add(vI).addScaledVector(n, .0003 * (1 + Math.sin(T * 1.7 + F.f * 1.3 + H.h * 2)));
         let cp = 0; for (const G of H.fingers) if (G !== F) cp += COUPLE[G.f][F.f] * G.act * (G.mode === 'strike' ? Math.sin(PI * clamp(G.t / G.Td, 0, 1)) * .6 + .4 : 1);
         if (cp > 0) idle.addScaledVector(n, .0016 * Math.min(cp, 1.2));      // a neighbour's stroke lifts the coupled fingers a little
         if (dk > 0){ const hgt = idle.dot(n) - (deskLocalH + FR[F.f][2] * .9 * HS); idle.addScaledVector(n, -hgt * dk * (F.f ? .85 : .5)); }
@@ -2522,19 +2566,25 @@ M.createTypist = function createTypist(api){
       const f = F.f, th = f === 0, R = FR[f];
       // the last joint tapers into the tip: full at the DIP, still full across the pad, narrowing to a slim, flattened
       // tip (nail on top, pad below) instead of ending in a ball
-      const rj = th ? [.0135, R[1] * 1.1, R[2] * 1.12, R[2] * .8] : [R[0] * 1.06, R[1] * 1.06, R[2] * 1.04, R[2] * .7];
+      const rj = th ? [.0135, R[1] * 1.08, R[2] * 1.05, R[2] * .74] : [R[0] * 1.02, R[1] * 1.04, R[2] * 1.03, R[2] * .7];
       const gs = [F.g0, F.g1, F.g2];
-      const segs = gs.map((g, j) => ({ e: inv(rel(g)), L: F.L[j], r0: rj[j], r1: rj[j + 1], rm: j === 2 ? rj[2] * .97 : (rj[j] + rj[j + 1]) * .5 * (th && j === 0 ? 1 : .985),
-        flat: th ? (j === 2 ? 1.2 : 1.08) : [1.12, 1.16, 1.3][j] }));
+      // one cross-section along the whole finger (no change of flatness or waist at a joint, which reads as a bead):
+      // the shafts are as full as their ends and only the last segment flattens, gradually, into the pad and nail
+      const segs = gs.map((g, j) => ({ e: inv(rel(g)), L: F.L[j], r0: rj[j], r1: rj[j + 1],
+        flat: th ? 1.1 : 1.14, flat2: j === 2 ? (th ? 1.22 : 1.3) : 0 }));
       const pts = gs.map(g => V3().setFromMatrixPosition(rel(g))); pts.push(V3(0, 0, -F.L[2]).applyMatrix4(rel(F.g2)));
       const c = pts.reduce((a, p) => a.add(p), V3()).multiplyScalar(.25);
       return { f, th, segs, pts, c, rad: Math.max(...pts.map(p => p.distanceTo(c))) + .022, flat: th ? 1.08 : 1.15, joints: [0, F.L[0], F.L[0] + F.L[1]] };
     });
     const segD = (S, x, y, z, flat) => {
-      ap(S.e, x, y, z); const r = Math.hypot(q[0], q[1] * (S.flat || flat)), hh = -q[2], m = S.L * .5;
-      return smin(roundCone(r, hh, S.r0, S.rm, m), roundCone(r, hh - m, S.rm, S.r1, m), .002);
+      // a sphere-swept tube whose radius runs continuously along the bone: neighbouring segments meet with the same
+      // radius at the joint, so their union is seamless (a smooth-min between co-axial parts would add a bead there)
+      ap(S.e, x, y, z); const hh = -q[2], t = clamp(hh / S.L, 0, 1);
+      const fl = S.flat2 ? S.flat + (S.flat2 - S.flat) * smooth(0, 1, t) : (S.flat || flat);
+      const r = S.flat2 ? S.r0 + (S.r1 - S.r0) * smooth(.3, 1, t) * (.6 + .4 * t) : S.r0 + (S.r1 - S.r0) * t;
+      return Math.hypot(q[0], q[1] * fl, hh - t * S.L) - r;
     };
-    const chainD = (C, x, y, z, from) => { let d = segD(C.segs[from], x, y, z, C.flat); for (let j = from + 1; j < 3; j++) d = smin(d, segD(C.segs[j], x, y, z, C.flat), .003); return d; };
+    const chainD = (C, x, y, z, from) => { let d = segD(C.segs[from], x, y, z, C.flat); for (let j = from + 1; j < 3; j++) d = smin(d, segD(C.segs[j], x, y, z, C.flat), .0018); return d; };
     // palm: a rounded slab, longer than wide, back gently domed, front edge following the knuckle arc.
     // Implicit F = r - 1, turned into a distance with its (analytic, shape-frozen) gradient: d = F / |grad F|.
     const zK = H.KN[2].z, PE = 2.4;
@@ -2566,7 +2616,7 @@ M.createTypist = function createTypist(api){
       let d = smin(palmDist(x, y, z), foreDist(x, y, z), .015);
       for (let f = 1; f < 5; f++){            // the knuckle heads
         const S = CH[f].segs[0]; ap(S.e, x, y, z);
-        d = smin(d, Math.hypot(q[0], (q[1] - .36 * S.r0) * 1.1, q[2] - .001) - .9 * S.r0, .007);
+        d = smin(d, Math.hypot(q[0] * .85, (q[1] - .2 * S.r0) * 1.25, q[2] - .002) - .74 * S.r0, .014);
       }
       return d;
     };
@@ -2616,7 +2666,7 @@ M.createTypist = function createTypist(api){
           if (d < best){ best = d; sArc = acc + t * L; }
           acc += L;
         }
-        const s1 = C.joints[1], s2 = C.joints[2], b1 = C.th ? .008 : .0065, b2 = .005;
+        const s1 = C.joints[1], s2 = C.joints[2], b1 = C.th ? .009 : .0085, b2 = .0068;
         const w2 = smooth(s2 - b2, s2 + b2, sArc), w0 = 1 - smooth(s1 - b1, s1 + b1, sArc), w1 = Math.max(0, 1 - w0 - w2);
         w[2 + f * 3] += share * w0; w[3 + f * 3] += share * w1; w[4 + f * 3] += share * w2;
       });
@@ -2784,7 +2834,7 @@ function wrapLine(text, width, hang){
   if (line) out.push(line);
   return out.length ? out : [''];
 }
-const noLig = s => s.replace(/f(?=[il])/g, 'f\u200c');     // VT323 would draw fi / fl as one glyph
+const noLig = s => s.indexOf('f') < 0 ? s : s.replace(/f(?=[il])/g, 'f\u200c');     // VT323 would draw fi / fl as one glyph
 const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const pad = (s, n) => s + ' '.repeat(Math.max(0, n - s.length));
@@ -2832,14 +2882,14 @@ function createFS(getCwd, onWrite){
   function fail(m){ api.lastError = m; return false; }
   function put(abs, text, app){
     const { dir, name } = parent(abs);
-    if (!name) return fail('Is a directory');
-    if (badName(name)) return fail('Invalid name');
-    if (!isD(dir)) return fail('No such file or directory');
+    if (!name) return fail('is a directory');
+    if (badName(name)) return fail('invalid name');
+    if (!isD(dir)) return fail('no such file or directory');
     const ex = own(dir.c, name) ? dir.c[name] : null;
-    if (isD(ex)) return fail('Is a directory');
+    if (isD(ex)) return fail('is a directory');
     if (lockedNode(ex)) return readOnly(abs);
     const t = app && ex ? ex.t + text : text;
-    if (t.length > 262144) return fail('File too large');
+    if (t.length > 262144) return fail('file too large');
     dir.c[name] = { t, m: Date.now() }; dir.m = Date.now();
     changed(); return true;
   }
@@ -2847,14 +2897,14 @@ function createFS(getCwd, onWrite){
     const s = segs(abs); let n = root;
     for (let i = 0; i < s.length; i++){
       const last = i === s.length - 1;
-      if (badName(s[i])) return fail('Invalid name');
+      if (badName(s[i])) return fail('invalid name');
       if (own(n.c, s[i])){
         const x = n.c[s[i]];
-        if (!isD(x)) return fail(last ? 'File exists' : 'Not a directory');
-        if (last && !parents) return fail('File exists');
+        if (!isD(x)) return fail(last ? 'file exists' : 'not a directory');
+        if (last && !parents) return fail('file exists');
         n = x; continue;
       }
-      if (!last && !parents) return fail('No such file or directory');
+      if (!last && !parents) return fail('no such file or directory');
       n = n.c[s[i]] = mk();
     }
     changed(); return true;
@@ -2871,36 +2921,36 @@ function createFS(getCwd, onWrite){
     list(p){ const n = get(R(p == null ? '.' : p)); if (!isD(n)) return null; return Object.keys(n.c).sort().map(k => info(k, n.c[k])); },
     mkdir: (p, parents = true) => mkdir(R(p), parents),
     rm(p, recursive){
-      const a = R(p); if (a === '/') return fail('Permission denied');
-      const n = get(a); if (!n) return fail('No such file or directory');
-      if (isD(n) && Object.keys(n.c).length && !recursive) return fail('Directory not empty');
+      const a = R(p); if (a === '/') return fail('permission denied');
+      const n = get(a); if (!n) return fail('no such file or directory');
+      if (isD(n) && Object.keys(n.c).length && !recursive) return fail('directory not empty');
       const lk = lockedIn(a); if (lk) return readOnly(lk);
       const { dir, name } = parent(a); delete dir.c[name]; dir.m = Date.now(); changed(); return true;
     },
     mv(a, b){
       const A = R(a); let B = R(b); const n = get(A);
-      if (!n) return fail('No such file or directory');
-      if (A === '/') return fail('Permission denied');
+      if (!n) return fail('no such file or directory');
+      if (A === '/') return fail('permission denied');
       if (isD(get(B))) B = join(B, base(A));
       if (B === A) return true;
       if (B.startsWith(A + '/')) return fail('cannot move a directory into itself');
       const lk = lockedIn(A) || (lockedNode(get(B)) ? B : null); if (lk) return readOnly(lk);
       const { dir, name } = parent(B);
-      if (!isD(dir)) return fail('No such file or directory');
-      if (badName(name)) return fail('Invalid name');
-      if (own(dir.c, name) && isD(dir.c[name])) return fail('Is a directory');
+      if (!isD(dir)) return fail('no such file or directory');
+      if (badName(name)) return fail('invalid name');
+      if (own(dir.c, name) && isD(dir.c[name])) return fail('is a directory');
       const from = parent(A); delete from.dir.c[from.name];
       delete n.g; dir.c[name] = n; dir.m = from.dir.m = Date.now(); changed(); return true;
     },
     cp(a, b){
       const A = R(a); let B = R(b); const n = get(A);
-      if (!n) return fail('No such file or directory');
+      if (!n) return fail('no such file or directory');
       if (isD(get(B))) B = join(B, base(A));
       if (B === A || B.startsWith(A + '/')) return fail('cannot copy onto itself');
       const { dir, name } = parent(B);
-      if (!isD(dir)) return fail('No such file or directory');
-      if (badName(name)) return fail('Invalid name');
-      if (own(dir.c, name) && isD(dir.c[name]) !== isD(n)) return fail(isD(n) ? 'Not a directory' : 'Is a directory');
+      if (!isD(dir)) return fail('no such file or directory');
+      if (badName(name)) return fail('invalid name');
+      if (own(dir.c, name) && isD(dir.c[name]) !== isD(n)) return fail(isD(n) ? 'not a directory' : 'is a directory');
       if (own(dir.c, name)){ const lk = lockedIn(B); if (lk) return readOnly(lk); }
       const c = clone(n); c.m = Date.now(); dir.c[name] = c; changed(); return true;
     },
@@ -3026,24 +3076,6 @@ function getopts(args, valued = ''){
   return { o, a };
 }
 const linesOf = t => t ? t.replace(/\n$/, '').split('\n') : [];
-function expandSet(s){
-  s = s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\');
-  let out = '';
-  for (let i = 0; i < s.length; i++){
-    if (s[i + 1] === '-' && i + 2 < s.length){ const a = s.charCodeAt(i), b = s.charCodeAt(i + 2); for (let c = a; c <= b && c - a < 256; c++) out += String.fromCharCode(c); i += 2; }
-    else out += s[i];
-  }
-  return out;
-}
-function fieldList(spec){
-  const r = [];
-  for (const part of String(spec || '').split(',')){
-    const m = /^(\d*)-?(\d*)$/.exec(part); if (!m || part === '') continue;
-    const a = m[1] ? +m[1] : 1, b = part.includes('-') ? (m[2] ? +m[2] : 1e9) : a;
-    r.push([a, b]);
-  }
-  return n => r.some(([a, b]) => n >= a && n <= b);
-}
 
 M.createTerminal = function createTerminal(opts){
   const C = (opts && opts.content) || M.CONTENT || {};
@@ -3070,7 +3102,10 @@ M.createTerminal = function createTerminal(opts){
   const ROWS = Math.floor((H - 64) / ch);
   const PADY = Math.round((H - ROWS * ch) / 2);
   const font = (k = 1) => (fs * k).toFixed(2) + 'px ' + FONT;
-  const measureFont = () => { g.font = '100px ' + FONT; const r = g.measureText('M').width / 100; if (r > 0.2 && r < 0.8) fs = cw / r; dirty = true; };
+  /* g.font is only assigned when it changes: the strings are built once per size (a font set is parsed every time) */
+  let fontStr = {}, curFont = '';
+  const setFont = (k = 1) => { const f = fontStr[k] || (fontStr[k] = font(k)); if (f !== curFont){ g.font = f; curFont = f; } };
+  const measureFont = () => { g.font = '100px ' + FONT; curFont = ''; const r = g.measureText('M').width / 100; if (r > 0.2 && r < 0.8){ fs = cw / r; fontStr = {}; } dirty = true; };
   if (document.fonts && document.fonts.load){
     document.fonts.load('40px VT323').then(() => measureFont(), () => {});
     if (document.fonts.ready) document.fonts.ready.then(() => measureFont(), () => {});
@@ -3084,6 +3119,7 @@ M.createTerminal = function createTerminal(opts){
   let booting = (() => { try { return !sessionStorage.getItem(BOOT_KEY); } catch (e){ return false; } })(), bootT = 0, bootLastDraw = -1;
   let now = 0, blinkT0 = 0, blinkOn = true, dirty = true;
   let animFps = 0, lastAnim = 0;
+  let rate = RATE, rateRows = -1, rateShown = 0;   // the typing-out speed for what is pending (see update)
   let suggestion = '';                 // "did you mean" target, shown as ghost on an empty prompt
   let tabState = null;
   let ahead = '';           // keys typed while a command runs, waiting for the next prompt ('\n' = a queued Enter)
@@ -3334,12 +3370,12 @@ M.createTerminal = function createTerminal(opts){
     eden: () => [E.title || 'Eden', E.role, '', E.line, E.body ? '\n' + E.body : null].filter(x => x != null).join('\n') + '\n',
     j: () => [J.title || 'J', J.role, '', J.line, wrapT(J.body || ''), '', ...(J.facts || []).map(f => pad(f[0], 9) + f[1]), '', J.url].filter(x => x != null).join('\n') + '\n',
     links: () => LINKLIST().map(t => pad(t.name, 10) + t.url).join('\n') + '\n',
-    writing: () => posts().length ? posts().map(p => [p.date, p.title, p.summary && wrapT(p.summary), p.html ? 'read ' + slugOf(p) : p.url].filter(Boolean).join('\n')).join('\n\n') + '\n' : 'Nothing published yet.\n',
+    writing: () => posts().length ? posts().map(p => [p.date, p.title, p.summary && wrapT(p.summary), p.html ? 'read ' + slugOf(p) : p.url].filter(Boolean).join('\n')).join('\n\n') + '\n' : 'nothing published yet\n',
   };
   const README = [
     '# README', '',
-    'Welcome to the KN-84, the small computer on ' + (C.name ? C.name + "'s" : 'this') + ' desk.',
-    'It runs a little shell. Everything here is safe to poke at.', '',
+    'welcome to the KN-84, the small computer on ' + (C.name ? C.name + "'s" : 'this') + ' desk.',
+    'it runs a little shell. everything here is safe to poke at.', '',
     '## things to try', '',
     '  about       who ' + (C.name ? C.name.split(' ')[0] : 'Kaiav') + ' is',
     '  eden        ' + (E.line || E.title || 'Eden'),
@@ -3366,9 +3402,9 @@ M.createTerminal = function createTerminal(opts){
     '  cat README.md | grep try',
     '  echo hello > notes/hello.txt',
     '  ls -l ~/notes', '',
-    'Files you make stay in this browser.',
-    'Tab completes. Up and down recall',
-    'history. Ctrl+C stops a command.', '',
+    'files you make stay in this browser.',
+    'tab completes, \u2191\u2193 recall history,',
+    'ctrl+c stops a command.', '',
   ].join('\n');
   FS.seed([HOME, HOME + '/notes', HOME + '/writing', '/etc', '/tmp'], [
     { path: HOME + '/README.md', text: README },
@@ -3418,7 +3454,7 @@ M.createTerminal = function createTerminal(opts){
     writing(o){
       o.blank().head('writing', 'writing/').blank();
       const ps = posts();
-      if (!ps.length) return o.at(2, ['Nothing published yet.', 'n']).blank().line(['see also  ', 'f'], ...chips(['about', 'eden', 'j', 'contact'], 'n')).blank();
+      if (!ps.length) return o.at(2, ['nothing published yet', 'n']).blank().line(['see also  ', 'f'], ...chips(['about', 'eden', 'j', 'contact'], 'n')).blank();
       /* one row per post: date, title; narrow screens stack them and add the summary. A post with html opens
          the reader; one with only a url opens the link */
       o.card({ title: 'POSTS', note: ps.length + (ps.length === 1 ? ' post' : ' posts'), verb: 'read', items: ps.map(p => ({
@@ -3452,12 +3488,13 @@ M.createTerminal = function createTerminal(opts){
   const fsErr = (name, p) => name + ': ' + (/^read-only:/.test(FS.lastError) ? '' : p + ': ') + FS.lastError + '\n';
   /* read named files (or stdin) for a text utility */
   function sources(io, files, name){
+    if (!files.length && !io.piped){ io.err('usage: ' + ((M.TERM.cmds[name] || {}).usage || name + ' file') + '\n'); io.exit(2); return []; }   // nothing to read: say how
     if (!files.length) return [{ name: '(standard input)', text: io.stdin || '' }];
     const r = [];
     for (const f of files){
       if (f === '-'){ r.push({ name: '(standard input)', text: io.stdin || '' }); continue; }
       const t = FS.read(f);
-      if (t == null){ io.err(name + ': ' + f + ': ' + (FS.isDir(f) ? 'Is a directory' : 'No such file or directory') + '\n'); if (!FS.exists(f)) hintPath(name, f); io.exit(1); continue; }
+      if (t == null){ io.err(name + ': ' + f + ': ' + (FS.isDir(f) ? 'is a directory' : 'no such file or directory') + '\n'); if (!FS.exists(f)) hintPath(name, f); io.exit(1); continue; }
       r.push({ name: f, text: t });
     }
     return r;
@@ -3475,7 +3512,7 @@ M.createTerminal = function createTerminal(opts){
          opts and ex for the manual. Registered commands with the same name win. ---- */
   const B = {};
   const def = (name, d) => { B[name] = d; };
-  const doc = name => ({ g: 'read', desc: name === 'about' ? 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is' : name === 'eden' ? 'Eden. ' + (E.line || '') : name === 'j' ? J.title || 'J' : name === 'writing' ? 'posts' : 'LinkedIn and X',
+  const doc = name => ({ g: 'read', desc: name === 'about' ? 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is' : name === 'eden' ? 'Eden. ' + (E.line || '') : name === 'j' ? J.title || 'J' : name === 'writing' ? 'posts' : 'LinkedIn, X and GitHub',
     usage: name, run(argv, io){ if (io.tty){ const o = DOCS[name](out()); io.rich(o); if (o.lastCard && o.lastCard.acts.length) return io.pick(o.lastCard); } else io.write(TEXT[name]()); } });
   for (const n of ['about', 'eden', 'j', 'writing', 'links']) def(n, doc(n));
   def('open', { g: 'read', desc: 'open a link: a url, ' + OPEN.map(o => o.name).join(', '), usage: 'open <url | j | gh | linkedin | x>', ex: ['open j', 'open https://risingfounder.net'], run(argv, io){
@@ -3489,7 +3526,7 @@ M.createTerminal = function createTerminal(opts){
     if (/^(https?:\/\/|mailto:)\S+$/i.test(q)){ url = q; label = bare(q); }
     else if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(q)){ url = 'https://' + q; label = bare(q); }
     else { const f = fuzzy(q, OPEN); if (f){ url = f.item.url; label = f.item.label; } }
-    if (!url){ io.err('open: no link called ' + q + '. try ' + OPEN.map(x => x.name).join(', ') + ' or a url\n'); return 1; }
+    if (!url){ io.err('open: no link called ' + q + '  (try: ' + OPEN.map(x => x.name).join(', ') + ' or a url)\n'); return 1; }
     if (!io.tty){ io.write(url + '\n'); return; }
     if (/^mailto:/i.test(url)){                         // addresses are copied, never mailto'd
       const addr = url.replace(/^mailto:/i, '').split('?')[0];
@@ -3503,7 +3540,7 @@ M.createTerminal = function createTerminal(opts){
     const q = argv.slice(1).join(' ').trim();
     if (!q) return B.writing.run(['writing'], io);
     const p = findPost(q);
-    if (!p){ io.err('read: no post called ' + q + (posts().length ? '. try writing for the list' : '. no posts yet') + '\n'); return 1; }
+    if (!p){ io.err('read: ' + (posts().length ? 'no post called ' + q + '  (try: writing)' : 'nothing published yet') + '\n'); return 1; }
     if (!io.tty){ io.write(TEXT.writing().split('\n\n')[posts().indexOf(p)] + '\n'); return; }
     if (!p.html && p.url){
       const w = openTarget(p.url);
@@ -3536,7 +3573,7 @@ M.createTerminal = function createTerminal(opts){
     const { o, a } = getopts(argv.slice(1));
     const targets = a.length ? a : ['.'];
     const files = [], dirs = [];
-    for (const t of targets){ const s = FS.stat(t); if (!s){ io.err('ls: ' + t + ': No such file or directory\n'); hintPath('ls', t); io.exit(2); continue; } (s.dir ? dirs : files).push({ t, s }); }
+    for (const t of targets){ const s = FS.stat(t); if (!s){ io.err('ls: ' + t + ': no such file or directory\n'); hintPath('ls', t); io.exit(2); continue; } (s.dir ? dirs : files).push({ t, s }); }
     const show = ents => {
       if (!ents.length) return;
       if (o.l){
@@ -3600,8 +3637,8 @@ M.createTerminal = function createTerminal(opts){
     for (const p of a){
       const abs = FS.resolve(p, cwd);
       if (abs === '/' || abs === HOME){ io.err('rm: refusing to remove ' + tildify(abs) + '\n'); io.exit(1); continue; }
-      if (!FS.exists(p)){ if (!o.f){ io.err('rm: ' + p + ': No such file or directory\n'); io.exit(1); } continue; }
-      if (FS.isDir(p) && !r){ io.err('rm: ' + p + ': is a directory (use rm -r)\n'); io.exit(1); continue; }
+      if (!FS.exists(p)){ if (!o.f){ io.err('rm: ' + p + ': no such file or directory\n'); io.exit(1); } continue; }
+      if (FS.isDir(p) && !r){ io.err('rm: ' + p + ' is a directory  (try: rm -r ' + p + ')\n'); io.exit(1); continue; }
       if (!FS.rm(p, true)){ io.err(fsErr('rm', p)); io.exit(1); }
       else if (!FS.isDir(cwd)) setCwd(HOME);
     }
@@ -3620,11 +3657,11 @@ M.createTerminal = function createTerminal(opts){
     const to = a.pop();
     if (a.length > 1 && !FS.isDir(to)){ io.err('cp: ' + to + ': not a directory\n'); return 1; }
     for (const f of a){
-      if (FS.isDir(f) && !(o.r || o.R)){ io.err('cp: ' + f + ' is a directory (use cp -r)\n'); io.exit(1); continue; }
+      if (FS.isDir(f) && !(o.r || o.R)){ io.err('cp: ' + f + ' is a directory  (try: cp -r)\n'); io.exit(1); continue; }
       if (!FS.cp(f, to)){ io.err(fsErr('cp', f)); io.exit(1); }
     }
   } });
-  def('tree', { g: 'files', desc: 'draw a directory as a tree', usage: 'tree [-a] [dir]', run(argv, io){
+  def('tree', { g: 'files', desc: 'draw a directory as a tree', usage: 'tree [-a] [dir]', opts: [['-a', 'include hidden files']], run(argv, io){
     const { o, a } = getopts(argv.slice(1)); const top = a[0] || '.';
     if (!FS.isDir(top)){ io.err('tree: ' + top + ': not a directory\n'); return 1; }
     let nd = 0, nf = 0;
@@ -3660,7 +3697,7 @@ M.createTerminal = function createTerminal(opts){
   };
   def('head', { g: 'text', desc: 'the first lines', usage: 'head [-n N] [file...]', opts: [['-n N', 'how many lines (10)']], run: headTail(false) });
   def('tail', { g: 'text', desc: 'the last lines', usage: 'tail [-n N] [file...]', opts: [['-n N', 'how many lines (10)']], run: headTail(true) });
-  def('wc', { g: 'text', desc: 'count lines, words and characters', usage: 'wc [-l] [-w] [-c] [file...]', run(argv, io){
+  def('wc', { g: 'text', desc: 'count lines, words and characters', usage: 'wc [-l] [-w] [-c] [file...]', opts: [['-l', 'lines only'], ['-w', 'words only'], ['-c', 'characters only']], ex: ['wc README.md', 'ls | wc -l'], run(argv, io){
     const { o, a } = getopts(argv.slice(1)); const all = !o.l && !o.w && !o.c;
     const tot = [0, 0, 0]; const src = sources(io, a, 'wc');
     const row = (v, name) => io.write([all || o.l ? v[0] : null, all || o.w ? v[1] : null, all || o.c ? v[2] : null].filter(x => x != null).map(x => String(x).padStart(7)).join(' ') + (name && a.length ? ' ' + name : '') + '\n');
@@ -3742,21 +3779,22 @@ M.createTerminal = function createTerminal(opts){
   def('whoami', { g: 'system', desc: 'your user name', usage: 'whoami', run(argv, io){ io.write(ENV.USER + '\n'); } });
   def('which', { g: 'system', desc: 'what a command is', usage: 'which name...', run(argv, io){
     let miss = 0;
+    if (argv.length < 2){ io.err('usage: which name...  (try: which ls)\n'); return 1; }
     for (const n of argv.slice(1)){
       if (hasAlias(n)) io.write(n + ': aliased to ' + ALIASES[n] + '\n');
       else if (M.TERM.apps[n]) io.write('/usr/games/' + n + '\n');
       else if (SHELL_BUILTIN.includes(n) && M.TERM.cmds[n] === B[n]) io.write(n + ': shell built-in\n');
       else if (M.TERM.cmds[n]) io.write((M.TERM.cmds[n].g === 'read' ? '/usr/local/bin/' : '/bin/') + n + '\n');
-      else { io.err(n + ' not found\n'); miss++; }
+      else { io.err('which: ' + n + ' not found\n'); miss++; }
     }
     return miss ? 1 : 0;
   } });
   def('man', { g: 'system', desc: 'the manual page for a command', usage: 'man command', ex: ['man grep'], run(argv, io){
     const n = argv[1];
-    if (!n){ io.err('what manual page do you want? try man grep\n'); return 1; }
+    if (!n){ io.err('usage: man command  (try: man grep)\n'); return 1; }
     const name = hasAlias(n) && !M.TERM.cmds[n] && !M.TERM.apps[n] ? ALIASES[n].split(' ')[0] : n;
     const c = M.TERM.cmds[name] || M.TERM.apps[name];
-    if (!c){ io.err('no manual entry for ' + n + '\n'); return 1; }
+    if (!c){ io.err('man: no manual entry for ' + n + '  (try: help all)\n'); return 1; }
     const isApp = !!M.TERM.apps[name] && !M.TERM.cmds[name];
     const o = out(); const h = name.toUpperCase() + '(' + (isApp ? 6 : 1) + ')';
     o.at(0, [h, 'b'], [' '.repeat(Math.max(1, Math.floor((COLS - 12) / 2) - h.length)) + 'KN-84 manual', 'd'], [' '.repeat(Math.max(1, Math.ceil((COLS - 12) / 2) - h.length)) + h, 'b']).blank();
@@ -3775,7 +3813,11 @@ M.createTerminal = function createTerminal(opts){
   const HELP_ALSO = ['edit', 'todo', 'tetris', 'snake', 'weather'];
   const HELP_ALL = [['read', 'about'], ['net', 'net'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
   def('help', { g: 'system', desc: 'what you can type here', usage: 'help [all | command]', ex: ['help', 'help all', 'help weather'], run(argv, io){
-    if (argv[1] && argv[1] !== 'all' && argv[1] !== '-a') return B.man.run(['man', argv[1]], io);
+    if (argv[1] && argv[1] !== 'all' && argv[1] !== '-a'){
+      const n = argv[1];
+      if (M.TERM.cmds[n] || M.TERM.apps[n] || hasAlias(n)) return B.man.run(['man', n], io);
+      io.err('help: nothing called ' + n + '  (try: help all)\n'); return 1;
+    }
     const all = !!argv[1];
     const exists = n => (M.TERM.cmds[n] && !M.TERM.cmds[n].hidden && typeof M.TERM.cmds[n].run === 'function') || (M.TERM.apps[n] && typeof M.TERM.apps[n].start === 'function');
     if (!all){
@@ -3829,7 +3871,7 @@ M.createTerminal = function createTerminal(opts){
   def('clear', { g: 'system', desc: 'clear the screen', usage: 'clear', run(argv, io){ if (io.tty) clearScreen(); } });
 
   /* misc */
-  def('bc', { g: 'misc', desc: 'a calculator', usage: 'bc [expression]', opts: [], more: 'Arithmetic with + - * / % ^ and parentheses, plus sqrt, abs, floor, ceil, round and pi. Reads the expression from its arguments, or one per line from a pipe.', ex: ['bc 2^10', "echo '(1+2)*3' | bc"], run(argv, io){
+  def('bc', { g: 'misc', desc: 'a calculator', usage: 'bc [expression]', opts: [], more: 'arithmetic with + - * / % ^ and parentheses, plus sqrt, abs, floor, ceil, round and pi. reads the expression from its arguments, or one per line from a pipe.', ex: ['bc 2^10', "echo '(1+2)*3' | bc"], run(argv, io){
     const src = argv.length > 1 ? [argv.slice(1).join(' ')] : linesOf(io.stdin || '');
     if (!src.length){ io.err('usage: bc expression   (try: bc 2^10)\n'); return 1; }
     for (const l of src){
@@ -3837,7 +3879,7 @@ M.createTerminal = function createTerminal(opts){
       try { const v = calc(l); if (v != null) io.write(v + '\n'); } catch (e){ io.err('bc: ' + (e.message || 'syntax error') + '\n'); io.exit(1); }
     }
   } });
-  def('exit', { g: 'misc', desc: 'leave', usage: 'exit', run(argv, io){ io.write('to leave, close the tab.\n', 'dim'); } });
+  def('exit', { g: 'misc', desc: 'leave', usage: 'exit', run(argv, io){ io.write('to leave, close the tab\n', 'dim'); } });
   const SHELL_BUILTIN = ['cd', 'alias', 'history', 'exit', 'help', 'echo', 'pwd'];
   for (const [n, c] of Object.entries(B)) if (!M.TERM.cmds[n]) M.TERM.cmds[n] = c;
   const CONTENT_KW = { about: ['bio', 'kaiav', 'me'], eden: ['agents', 'context'], j: ['rising', 'rising founder', 'jose'], writing: ['blog', 'posts', 'essays'], links: ['linkedin', 'twitter', 'social', 'contact'] };
@@ -3992,7 +4034,7 @@ M.createTerminal = function createTerminal(opts){
       for (const r of c.redirs){
         const t = expandWord(r.w);
         if (t.length !== 1 || !t[0]){ errLine(tty, 'sh: ambiguous redirect\n'); bad = true; break; }
-        if (r.op === '<'){ inText = FS.read(t[0]); if (inText == null){ errLine(tty, 'sh: ' + t[0] + ': No such file or directory\n'); bad = true; break; } }
+        if (r.op === '<'){ inText = FS.read(t[0]); if (inText == null){ errLine(tty, 'sh: ' + t[0] + ': no such file or directory\n'); bad = true; break; } }
         else if (r.op[0] === '2') errF = { path: t[0], append: r.op === '2>>', sink: buffer() };
         else outF = { path: t[0], append: r.op === '>>', sink: buffer() };
       }
@@ -4000,7 +4042,7 @@ M.createTerminal = function createTerminal(opts){
       const isNull = f => f && FS.resolve(f.path, cwd) === '/dev/null';
       const sink = outF ? (isNull(outF) ? NULLSINK : outF.sink) : last ? tty : buffer();
       const errSink = errF ? (isNull(errF) ? NULLSINK : errF.sink) : tty;
-      st = argv.length ? await runCmd(argv, { stdin: inText != null ? inText : stdin, sink, errSink }, j) : 0;
+      st = argv.length ? await runCmd(argv, { stdin: inText != null ? inText : stdin, piped: i > 0 || inText != null, sink, errSink }, j) : 0;
       if (j.dead) return 130;
       for (const f of [outF, errF]){
         if (!f || isNull(f)) continue;
@@ -4016,6 +4058,7 @@ M.createTerminal = function createTerminal(opts){
     if (lc !== argv[0] && !M.TERM.apps[argv[0]] && !M.TERM.cmds[argv[0]] && (M.TERM.apps[lc] || M.TERM.cmds[lc])) argv[0] = lc;
     const name = argv[0];
     const appDef = M.TERM.apps[name], cmd = M.TERM.cmds[name];
+    if (argv[1] === '--help' && name !== 'echo' && (appDef || cmd) && M.TERM.cmds.man) return runCmd(['man', name], ctx, j);   // any command --help: its manual
     if (appDef && typeof appDef.start === 'function') return launchApp(name, argv, ctx, j);
     if (cmd && typeof cmd.run === 'function'){
       const io = makeIo(ctx, j);
@@ -4038,7 +4081,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function makeIo(ctx, j){
     const io = {
-      stdin: ctx.stdin, fs: FS, ui: out, env: ENV, cwd, cols: COLS, rows: ROWS, tty: ctx.sink.tty, code: null,
+      stdin: ctx.stdin, piped: !!ctx.piped, fs: FS, ui: out, env: ENV, cwd, cols: COLS, rows: ROWS, tty: ctx.sink.tty, code: null,
       out(t, style){ if (!j.dead && t != null) ctx.sink.write(String(t), style); },
       write(t, style){ io.out(t, style); },
       err(t){ if (!j.dead && t != null) errLine(ctx.errSink, t); },
@@ -4295,9 +4338,8 @@ M.createTerminal = function createTerminal(opts){
     if (app === st) app = null;
     gridCursor = null;
     const text = st.printed.map(t => t.endsWith('\n') ? t : t + '\n').join('');
-    if (text) st.ctx.sink.write(text);
+    if (text) st.ctx.sink.write(text);            // (the tty adds it to the screen-reader log itself)
     if (e) errLine(st.ctx.errSink, st.name + ': ' + ((e && e.message) || e) + '\n');
-    if (job && text) job.plain += text;
     if (e && typeof console !== 'undefined') console.warn(e);
     toBottom(); dirty = true;
     st.resolve(e ? 1 : code | 0);
@@ -4354,7 +4396,7 @@ M.createTerminal = function createTerminal(opts){
     if (cmdPos && !word.includes('/')) return { kind: 'cmd', q: word, from: i, items: cmdItems() };
     const segStart = Math.max(pre.lastIndexOf('|'), pre.lastIndexOf(';'), pre.lastIndexOf('&'));
     const cname = pre.slice(segStart + 1).trim().split(/\s+/)[0] || '';
-    if (/^(man|which|help)$/.test(cname)) return { kind: 'arg', q: word, from: i, items: cmdItems() };
+    if (/^(man|which|help)$/.test(cname)) return { kind: 'arg', q: word, from: i, items: cname === 'help' ? [{ name: 'all' }, ...cmdItems()] : cmdItems() };
     if (cname === 'read' || /^open\s+post$/.test(pre.slice(segStart + 1).trim())) return { kind: 'arg', q: word, from: i, items: POSTITEMS };
     if (cname === 'open') return { kind: 'arg', q: word, from: i, items: OPEN };
     const cdef = M.TERM.cmds[cname];                                   // a command can complete its own arguments
@@ -4661,7 +4703,7 @@ M.createTerminal = function createTerminal(opts){
   const X = col => PADX + col * cw;
   let promptY = 0;   // bottom of the prompt line, canvas px (phones keep it above the on-screen keyboard)
   function text(s, col, top, st, k = 1){
-    g.font = font(k); g.fillStyle = color(st);
+    setFont(k); g.fillStyle = color(st);
     if (k === 1 && SPAN_VEC.test(s)){ const c0 = color(st); fillT(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68); for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, c0); return; }
     fillT(s, X(col), top + fs * k * 0.68);
   }
@@ -4673,7 +4715,7 @@ M.createTerminal = function createTerminal(opts){
       const link = sp[2];
       const selected = sp[1] === 'i';
       if (selected){ g.fillStyle = P.normal; g.fillRect(X(col) - 3, top + 1, s.length * cw * k + 6, ch * k - 2); }
-      g.font = font(k); g.fillStyle = selected ? P.bg : color(sp[1]);
+      setFont(k); g.fillStyle = selected ? P.bg : color(sp[1]);
       if (k === 1 && SPAN_VEC.test(s)){                // arrows and the lock, drawn: VT323 has neither
         fillT(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
         for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : color(sp[1]));
@@ -4771,7 +4813,7 @@ M.createTerminal = function createTerminal(opts){
     if (blinkOn){
       g.fillStyle = P.normal; g.fillRect(cx, top + 3, cw, ch - 6);
       const under = input[cur] || (gh && gh.kind === 'prefix' ? gh.text[0] : '');
-      if (under){ g.font = font(); g.fillStyle = P.bg; fillT(under, cx, top + fs * 0.68); }
+      if (under){ setFont(); g.fillStyle = P.bg; fillT(under, cx, top + fs * 0.68); }
     }
   }
   let drawnCards = [], drawnHits = [];   // what is on screen and can be clicked or tapped
@@ -4800,7 +4842,7 @@ M.createTerminal = function createTerminal(opts){
     g.lineWidth = 3; g.strokeStyle = colr; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx - dx * a * 1.2, cy - dy * a * 1.2); g.stroke();
   }
   function drawGrid(){
-    g.font = font();
+    setFont();
     for (let y = 0; y < ROWS; y++){
       const top = PADY + y * ch, r = grid[y];
       let x = 0;
@@ -4855,7 +4897,7 @@ M.createTerminal = function createTerminal(opts){
           const age = now - r.t0;
           g.save(); g.beginPath(); g.rect(0, top, W, h * ch); g.clip();
           r.draw(X(2), top, X(COLS) - X(2), h * ch, age, now);
-          g.restore();
+          g.restore(); curFont = '';
           if (r.live && !REDUCED) animFps = Math.max(animFps, r.live(age) || 0);
         }
       }
@@ -4870,7 +4912,7 @@ M.createTerminal = function createTerminal(opts){
     } else if (job && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
       text(COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 0, PADY + (u - first) * ch, 'f');
     }
-    g.restore();
+    g.restore(); curFont = '';
     // scroll position: a thin rail on the right and a quiet note at the bottom
     if (scrollOff > 0){
       const railX = W - 22, railTop = PADY, railH = ROWS * ch;
@@ -4880,7 +4922,7 @@ M.createTerminal = function createTerminal(opts){
       const note = '  ' + scrollOff + ' more below' + (COLS >= 46 ? '  pgdn ' : ' ');
       const nx = COLS - note.length, top = PADY + (ROWS - 1) * ch;
       g.fillStyle = P.bg; g.fillRect(X(nx) - 8, top - 4, note.length * cw + 8, ch + 8);
-      g.font = font(); g.fillStyle = P.dim; fillT(note, X(nx), top + fs * 0.68);
+      setFont(); g.fillStyle = P.dim; fillT(note, X(nx), top + fs * 0.68);
     }
   }
   /* ---- boot screen ---- */
@@ -4929,7 +4971,13 @@ M.createTerminal = function createTerminal(opts){
       if (app === st && st.dirty){ st.dirty = false; appCall('render', scr); changed = true; }
     }
     if (!booting && !app && typing()){
-      carry += dt * RATE;
+      /* long output still finishes in under a second: the rate is set from what is left to show whenever
+         rows arrive (a 400-line cat types out in ~0.8 s instead of ~12 s of redraws) */
+      if (rateRows !== rows.length || rateShown > shown){
+        let pend = -partial; for (let i = shown; i < rows.length && i - shown < 5000; i++) pend += costOf(rows[i]);
+        rate = Math.max(RATE, pend / 0.8); rateRows = rows.length; rateShown = shown;
+      }
+      carry += dt * rate;
       while (carry > 0 && shown < rows.length){
         const r = rows[shown]; const c = costOf(r);
         if (r.k === 'viz' && r.t0 < 0) r.t0 = now;
@@ -5032,8 +5080,9 @@ const TETRIS_HI = 'kaiav.tetris.hi';
 
 T.apps.tetris = {
   g: 'fun',
-  desc: 'the falling blocks. arrows, space, c to hold',
+  desc: 'the falling blocks',
   usage: 'tetris',
+  more: 'arrows move, \u2191 or x turns, z turns back, \u2193 drops a row, space drops all the way, c holds, p pauses, q quits. on a phone, tap the sides to move, the top to turn and the bottom to drop.',
   start(api){
     const STACK = (api.cols || 72) < 47;                               // phones: the panel goes under the well
     const BH = Math.max(10, Math.min(20, (api.rows || 23) - (STACK ? 15 : 2)));   // well + floor + feet (+ panel) must fit
@@ -5128,7 +5177,7 @@ T.apps.tetris = {
           else if (isQuit(k)) api.exit(0);
           return true;
         }
-        if (isQuit(k)){ api.print(`tetris: score ${score}, ${lines} lines, level ${level}. high score ${Math.max(hi, score)}.`); if (score > hi) hiSet(TETRIS_HI, score); api.exit(0); return true; }
+        if (isQuit(k)){ api.print(`tetris: score ${score}, ${lines} lines, level ${level}. high score ${Math.max(hi, score)}`); if (score > hi) hiSet(TETRIS_HI, score); api.exit(0); return true; }
         if (k === 'p' || k === 'P'){ paused = !paused; return true; }
         if (paused || !cur || flash) return true;
         switch (k){
@@ -5194,10 +5243,10 @@ T.apps.tetris = {
           scr.put(rx + 10, ry, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx + 10, ry + 1, canHold ? 'normal' : 'faint');
           [['SCORE', score, 'bright'], ['HIGH', Math.max(hi, score), score > hi ? 'bright' : 'normal'], ['LEVEL', level, 'normal'], ['LINES', lines, 'normal']]
             .forEach(([a, v, st], i) => { scr.put(rx, ry + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, ry + 4 + i, String(v), st); });
-          const ks = [['<- ->', 'move'], ['up x', 'rotate'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
+          const ks = [['\u2190\u2192', 'move'], ['\u2191 x', 'turn'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           const ky = ry + 9, two = STACK || scr.rows - ky < ks.length;
           const short = TOUCH ? [['tap', 'sides move'], ['top', 'turn'], ['low', 'drop'], ['q', 'quit']]
-            : [['<->', 'move'], ['up', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
+            : [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           (two ? short : ks).forEach(([a, b], i) => {
             const x = rx + (two ? (i % 2) * (TOUCH ? 15 : 11) : 0), y = ky + (two ? i >> 1 : i);
             if (y >= scr.rows) return;
@@ -5218,7 +5267,7 @@ T.apps.tetris = {
         mini(queue[0], rx, oy + 2, 'bright');
         mini(queue[1], rx, oy + 6, 'dim');
         mini(queue[2], rx, oy + 9, 'faint');
-        const keys = [['<- ->', 'move'], ['up x', 'rotate'], ['z', 'rotate back'], ['down', 'soft drop'], ['space', 'hard drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
+        const keys = [['\u2190\u2192', 'move'], ['\u2191 x', 'turn'], ['z', 'turn back'], ['\u2193', 'soft drop'], ['space', 'hard drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
         keys.forEach(([a, b], i) => { scr.put(rx, oy + 13 + i, a.padEnd(7), 'normal'); scr.put(rx + 7, oy + 13 + i, b, 'faint'); });
         }
         // overlays
@@ -5226,7 +5275,7 @@ T.apps.tetris = {
         if (paused){
           box(scr, cardX, oy + 7, cardW, 5, 'dim');
           scr.put(cardX + ((cardW - 6) / 2 | 0), oy + 8, 'PAUSED', 'bright');
-          const go = TOUCH ? 'tap to go on' : 'p to carry on';
+          const go = TOUCH ? 'tap to resume' : 'p to resume';
           scr.put(cardX + ((cardW - go.length) / 2 | 0), oy + 10, go, 'dim');
         } else if (over){
           const top = Math.max(0, Math.min(5, BH - 10));
@@ -5236,8 +5285,8 @@ T.apps.tetris = {
           c(8, 'score ' + score, 'normal');
           c(9, lines + ' lines  lvl ' + level, 'dim');
           c(10, newHi ? '* new high score *' : 'best ' + hi, newHi ? 'accent' : 'dim');
-          if (REDUCED || Math.floor(t * 2) % 2 === 0) c(12, TOUCH ? 'tap: again' : 'enter: again', 'normal');
-          c(13, 'q: quit', 'faint');
+          if (REDUCED || Math.floor(t * 2) % 2 === 0) c(12, TOUCH ? 'tap again' : 'enter again', 'normal');
+          c(13, 'q quit', 'faint');
         } else if (help && score === 0){
           scr.put(bx + 3, oy + 3, TOUCH ? ' tap to play' : 'arrows to play', 'dim');
         }
@@ -5252,8 +5301,9 @@ T.apps.tetris = {
 const SNAKE_HI = 'kaiav.snake.hi';
 T.apps.snake = {
   g: 'fun',
-  desc: 'eat, grow, do not bite yourself. arrows or wasd',
+  desc: 'the snake game',
   usage: 'snake',
+  more: 'eat, grow, and stay off the walls and your own tail. arrows or wasd turn, p pauses, q quits. on a phone, tap beside the head to turn.',
   start(api){
     const cols = api.cols || 72, rows = api.rows || 23;
     const GW = Math.floor((cols - 2) / 2), GH = rows - 3;    // cells are 2 columns wide, so they look square
@@ -5321,7 +5371,7 @@ T.apps.snake = {
           else if (isQuit(k)) api.exit(0);
           return true;
         }
-        if (isQuit(k)){ api.print(`snake: ${score} points, length ${body.length}. high score ${Math.max(hi, score)}.`); if (score > hi) hiSet(SNAKE_HI, score); api.exit(0); return true; }
+        if (isQuit(k)){ api.print(`snake: ${score} points, length ${body.length}. high score ${Math.max(hi, score)}`); if (score > hi) hiSet(SNAKE_HI, score); api.exit(0); return true; }
         if (k === 'p' || k === 'P' || (k === ' ' && started)){ paused = !paused; return true; }
         const d = KEYMAP[k];
         if (d && !paused){ started = true; turn(d); }
@@ -5369,16 +5419,15 @@ T.apps.snake = {
           c(3, score + ' points', 'normal');
           c(4, 'length ' + n + '   apples ' + eaten, 'dim');
           c(6, newHi ? '* new high score *' : 'best ' + hi, newHi ? 'accent' : 'dim');
-          if (REDUCED || Math.floor(t * 2) % 2 === 0) c(8, (TOUCH ? 'tap: again' : 'enter: again') + '    q: quit', 'normal');
-          else c(8, '      again       quit', 'faint');
+          c(8, (TOUCH ? 'tap again' : 'enter again') + '  \u00b7  q quit', REDUCED || Math.floor(t * 2) % 2 === 0 ? 'normal' : 'dim');
         } else if (paused){
           box(scr, cx, cy + 2, cw, 5, 'dim');
-          c(3, 'PAUSED', 'bright'); c(5, TOUCH ? 'tap to go on' : 'p to carry on', 'dim');
+          c(3, 'PAUSED', 'bright'); c(5, TOUCH ? 'tap to resume' : 'p to resume', 'dim');
         } else if (!started){
           box(scr, cx, cy + 1, cw, 7, 'dim');
           c(2, 'S N A K E', 'bright');
           c(4, TOUCH ? 'tap beside the head to turn' : 'arrows or wasd to start', 'normal');
-          c(5, TOUCH ? 'tap to start   q quit' : 'p pause   q quit', 'faint');
+          c(5, TOUCH ? 'tap to start' : 'p pause  \u00b7  q quit', 'faint');
         }
       },
     };
@@ -5392,8 +5441,9 @@ const LUM = '.,-:;=+!*#$@';      // VT323 draws ~ as a squiggle, so it is left o
 const LUM_STYLE = ['faint', 'faint', 'faint', 'dim', 'dim', 'dim', 'normal', 'normal', 'normal', 'bright', 'bright', 'bright'];
 T.apps.donut = {
   g: 'fun',
-  desc: 'a spinning ascii donut (after a1k0n). hold the arrows to spin it',
+  desc: 'a spinning ascii donut, after a1k0n',
   usage: 'donut',
+  more: 'hold the arrows to spin it. space pauses, + and - change the idle speed, r resets, q quits.',
   start(api){
     const IDLE_A = REDUCED ? 0 : 1.0, IDLE_B = REDUCED ? 0 : 0.5, SPIN = 3.4;   // idle drift (none with reduced motion) and held-arrow spin (rad/s)
     let A = 1, B = 0, vA = IDLE_A, vB = IDLE_B;     // angles and spin speeds (rad/s)
@@ -5503,7 +5553,8 @@ const lamp = {
   desc: 'switch the desk lamp in the room',
   usage: 'lamp [on | off | status]',
   ex: ['lamp', 'lamp off', 'lamp status'],
-  more: 'The lamp on the desk in the 3D room. With no argument it flips: on goes off, off goes on.',
+  more: 'the lamp on the desk in the 3D room. with no argument it flips: on goes off, off goes on.',
+  complete: args => args.length ? null : ['on', 'off', 'status'],
   run(argv, io){
     const w = M.world;
     const arg = (argv[1] || '').toLowerCase();
@@ -5514,27 +5565,27 @@ const lamp = {
     }
     const state = !!w.lampOn;
     if (arg === 'status'){
-      io.out('the lamp is ' + (state ? 'on' : 'off') + '.\n');
+      io.out('the lamp is ' + (state ? 'on' : 'off') + '\n');
       return;
     }
     let want;
     if (['on', '1', 'yes', 'up'].includes(arg)) want = true;
     else if (['off', '0', 'no', 'down', 'out'].includes(arg)) want = false;
     else if (!arg || ['toggle', 'flip', 'switch'].includes(arg)) want = !state;
-    else { io.err('lamp: try lamp on or lamp off\n'); io.exit && io.exit(2); return; }
+    else { io.err('lamp: no ' + arg + ' setting  (try: lamp on, lamp off)\n'); io.exit && io.exit(2); return; }
     if (want === state){
-      io.out('the lamp is already ' + (state ? 'on' : 'off') + '.\n', 'dim');
+      io.out('the lamp is already ' + (state ? 'on' : 'off') + '\n', 'dim');
       return;
     }
     const now = w.lamp(want);
     const on = typeof now === 'boolean' ? now : want;
-    io.out('lamp ' + (on ? 'on' : 'off') + '.\n', on ? 'normal' : 'dim');
+    io.out('lamp ' + (on ? 'on' : 'off') + '\n', on ? 'normal' : 'dim');
   },
 };
 T.cmds.lamp = lamp;
 /* games: what there is to play, as words to click */
 T.cmds.games = { g: 'fun', hidden: true, desc: 'what you can play', usage: 'games', run(argv, io){
-  const list = [['tetris', 'blocks'], ['snake', 'eat, grow'], ['typing', 'how fast you type'], ['donut', 'a spinning torus']].filter(([n]) => T.apps[n] || T.cmds[n]);
+  const list = [['tetris', 'the falling blocks'], ['snake', 'eat and grow'], ['typing', 'how fast you type'], ['donut', 'a spinning torus']].filter(([n]) => T.apps[n] || T.cmds[n]);
   if (!io.tty){ io.out(list.map(x => x[0]).join('\n') + '\n'); return; }
   const o = io.ui(); o.blank();
   for (const [n, d] of list) o.at(2, [n, 'b', { cmd: n }], [' '.repeat(Math.max(2, 9 - n.length)) + d, 'f']);
@@ -5635,7 +5686,8 @@ const todoWrite = (fs, items) => fs.write(TODO, items.map(it => '[' + (it.done ?
 T.cmds.todo = { g: 'tools', desc: 'a to-do list, kept in ~/todo.txt', usage: 'todo [add text | done N | undo N | rm N | clear]',
   opts: [['add TEXT', 'add an item (todo TEXT works too)'], ['done N', 'tick off item N'], ['undo N', 'untick item N'], ['rm N', 'remove item N'], ['clear', 'remove the ticked items']],
   ex: ['todo add call jose', 'todo done 1', 'todo', 'grep -v x ~/todo.txt'],
-  more: 'A short list that stays in this browser. It lives in ~/todo.txt as plain lines, so cat, grep and the rest work on it too.',
+  complete: args => args.length ? null : ['add', 'done', 'undo', 'rm', 'clear'],
+  more: 'a short list that stays in this browser. it lives in ~/todo.txt as plain lines, so cat, grep and the rest work on it too.',
   run(argv, io){
     const fs = io.fs, sub = (argv[1] || '').toLowerCase();
     let items = todoRead(fs), note = null;
@@ -5646,9 +5698,10 @@ T.cmds.todo = { g: 'tools', desc: 'a to-do list, kept in ~/todo.txt', usage: 'to
       }
       return [...new Set(ns)].sort((a, b) => b - a);
     };
+    if (sub[0] === '-'){ io.err('todo: no ' + sub + ' option  (try: todo add text)\n'); return 2; }
     if (sub === 'add' || (sub && !['done', 'undo', 'rm', 'del', 'clear', 'ls', 'list'].includes(sub))){
       const text = (sub === 'add' ? argv.slice(2) : argv.slice(1)).join(' ').trim();
-      if (!text){ io.err('usage: todo add text\n'); return 1; }
+      if (!text){ io.err('usage: todo add text  (try: todo add call jose)\n'); return 1; }
       items.push({ done: false, text }); note = ['added', items.length];
     } else if (sub === 'done' || sub === 'undo'){
       const ns = num(); if (!ns) return 1;
@@ -5769,11 +5822,11 @@ M.net = net;
 T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usage: 'weather [-c | -f] [city]',
   opts: [['-c', 'Celsius'], ['-f', 'Fahrenheit']], ex: ['weather', 'weather tokyo', 'weather -f new york'],
   complete: () => ['london', 'tokyo', 'paris', 'mumbai', 'sydney', 'singapore', 'berlin', 'dubai', 'toronto', 'nairobi', 'seoul', 'reykjavik'],
-  more: 'Asks open-meteo.com for the weather now and the next three days. With no city it guesses yours from your time zone, then remembers the last city you named. Nothing about you leaves the browser except the city name.',
+  more: 'asks open-meteo.com for the weather now and the next three days. with no city it guesses yours from your time zone, then remembers the last city you named. nothing about you leaves the browser except the city name.',
   async run(argv, io){
     let a = argv.slice(1), unit = null;
     while (a[0] === '-c' || a[0] === '-f'){ unit = a[0] === '-f' ? 'F' : 'C'; a = a.slice(1); }
-    if (a[0] && /^-/.test(a[0])){ io.err('weather: unknown option ' + a[0] + '  (try: weather -f tokyo)\n'); return 2; }
+    if (a[0] && /^-/.test(a[0])){ io.err('weather: no ' + a[0] + ' option  (try: weather -f tokyo)\n'); return 2; }
     if (!unit) unit = 'C';   // Celsius unless -f is asked for
     let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e){}
     let q = a.join(' ').trim(), guessed = false;
@@ -5781,14 +5834,14 @@ T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usa
     else q = lsGet(WX_CITY, '');
     if (!q && /^[A-Za-z]+\/[A-Za-z_\-]+/.test(tz) && !/^Etc\//.test(tz)){ q = tz.split('/').pop().replace(/_/g, ' '); guessed = true; }
     if (!q && io.tty && io.ask){ q = String((await io.ask('which city?  ')) || '').trim(); if (q) lsSet(WX_CITY, q); }
-    if (!q){ io.err('weather: which city? try weather london\n'); return 1; }
-    if (io.tty){ io.out('asking the sky over ' + q + '...\n', 'faint'); }
+    if (!q){ io.err('weather: which city?  (try: weather london)\n'); return 1; }
+    if (io.tty){ io.out('checking the weather in ' + q + '...\n', 'faint'); }
     let place, wx;
     try {
       const g = await net.json('https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=' + encodeURIComponent(q), { timeout: 6000 });
       const rs = (g && g.results) || [];
       place = (guessed && rs.find(r => r.timezone === tz)) || rs[0];
-      if (!place){ lsSet(WX_CITY, ''); io.err('weather: no place called ' + q + '. try a city name, like weather london\n'); return 1; }
+      if (!place){ lsSet(WX_CITY, ''); io.err('weather: no place called ' + q + '  (try: weather london)\n'); return 1; }
       wx = await net.json('https://api.open-meteo.com/v1/forecast?latitude=' + place.latitude + '&longitude=' + place.longitude +
         '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day' +
         '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=4' +
@@ -5845,12 +5898,12 @@ const fmtHMS = (sec, tenths) => {
   return (h ? h + ':' + two(mm) : String(mm)) + ':' + two(ss) + (tenths ? '.' + Math.floor((sec - s) * 10) : '');
 };
 T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer duration', ex: ['timer 5m', 'timer 90s', 'timer 1:30', 'timer 1h 15m'],
-  more: 'Counts down in big digits and beeps when it reaches zero. A bare number is minutes. Space pauses, + and - add or take a minute, r starts over, q quits.',
+  more: 'counts down in big digits and beeps when it reaches zero. a bare number is minutes. space pauses, + and - add or take a minute, r starts over, q quits.',
   start(api, argv){
     const now = () => performance.now() / 1000;
     let dur = parseDur(argv.slice(1).join(' ')), t0 = now(), paused = false, pausedAt = 0, done = false, doneAt = 0, lastSec = -1, beeps = 0, beepT = 0;
-    if (!(dur > 0)){ api.print(argv[1] ? 'timer: cannot read ' + argv.slice(1).join(' ') + '. try timer 5m, timer 90s or timer 1:30' : 'usage: timer 5m   (also 90s, 1:30, 1h)'); api.exit(1); return {}; }
-    if (dur > 86400){ api.print('timer: up to 24 hours'); api.exit(1); return {}; }
+    if (!(dur > 0)){ api.print(argv[1] ? 'timer: cannot read ' + argv.slice(1).join(' ') + '  (try: timer 5m, 90s or 1:30)' : 'usage: timer duration  (try: timer 5m, 90s or 1:30)'); api.exit(2); return {}; }
+    if (dur > 86400){ api.print('timer: up to 24 hours'); api.exit(2); return {}; }
     const elapsed = () => (paused ? pausedAt : now()) - t0;
     const finish = () => { api.print('timer: ' + fmtHMS(dur) + (done ? ' done' : ', stopped with ' + fmtHMS(Math.ceil(dur - elapsed())) + ' left')); api.exit(0); };
     return {
@@ -5915,8 +5968,8 @@ const PASSAGES = [
   'Start before you feel ready. Ask for help early. Ship it on a Tuesday, fix it on a Wednesday, and keep going.',
 ];
 const TYPE_BEST = 'kaiav.typing.best';
-T.apps.typing = { g: 'fun', desc: 'a typing test: how fast are you?', usage: 'typing',
-  more: 'Type the passage as it appears. The clock starts on your first key. Mistakes light up; backspace fixes them. At the end you get words per minute (five characters to a word, correct ones only) and accuracy. Tab gives a new passage, esc quits.',
+T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
+  more: 'type the passage as it appears. the clock starts on your first key. mistakes light up; backspace fixes them. at the end you get words per minute (five characters to a word, correct ones only) and accuracy. tab gives a new passage, esc quits.',
   start(api){
     let best = lsGet(TYPE_BEST, 0) || 0, order = PASSAGES.map((_, i) => i).sort(() => Math.random() - 0.5), pi = 0;
     let text, typed, t0, t1, keys, errs, done, newBest, lastShow = -1;
@@ -5982,7 +6035,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test: how fast are you?', usage: 'ty
           const sx = bx + f.w + 8 <= x0 + w - 14 ? bx + f.w + 8 : x0, sy = sx === x0 ? by + f.h + 1 : by;
           scr.put(sx, sy, 'accuracy', 'dim'); scr.put(sx + 10, sy, acc() + '%', 'normal');
           scr.put(sx, sy + 1, 'time', 'dim'); scr.put(sx + 10, sy + 1, fmtHMS(secs()), 'normal');
-          scr.put(sx, sy + 2, 'best', 'dim'); scr.put(sx + 10, sy + 2, best ? best + ' wpm' + (newBest ? '  new!' : '') : '-', newBest ? 'bright' : 'normal');
+          scr.put(sx, sy + 2, 'best', 'dim'); scr.put(sx + 10, sy + 2, best ? best + ' wpm' + (newBest ? '  new best' : '') : '-', newBest ? 'bright' : 'normal');
           keysLine(scr, H - 1, [['enter', 'again'], ['q', 'quit']]);
         } else {
           keysLine(scr, H - 1, t0 ? [['tab', 'new passage'], ['esc', 'quit']] : [['start typing', ''], ['tab', 'new passage'], ['esc', 'quit']]);
@@ -6045,7 +6098,7 @@ function showJSON(o, v, cols, max = 1e9, i0 = 2){
 T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl [-i] [-s] [-m secs] [-X METHOD] [-H "k: v"] [-d data] url',
   opts: [['-i', 'show the response headers'], ['-s', 'just the body: no status or footer'], ['-X METHOD', 'GET, POST, PUT, DELETE...'], ['-H "k: v"', 'add a request header'], ['-d DATA', 'send a body (and POST)'], ['-m SECS', 'give up after this long (9)']],
   ex: ['curl api.github.com/zen', 'curl -i httpbin.org/get', 'curl wttr.in/?format=3', 'curl api.ipify.org > ip.txt'],
-  more: 'Makes a real request from your browser. JSON comes back pretty-printed and coloured; long answers are cut short on screen but whole in a pipe or a file. A bare domain means https. The server has to allow requests from web pages (CORS), and the claude.ai preview blocks the network entirely.',
+  more: 'makes a real request from your browser. JSON comes back pretty-printed and coloured; long answers are cut short on screen but whole in a pipe or a file. a bare domain means https. the server has to allow requests from web pages (CORS), and the claude.ai preview blocks the network entirely.',
   async run(argv, io){
     const a = argv.slice(1); let inc = false, silent = false, method = null, data = null, url = null, secs = 0; const headers = {};
     for (let i = 0; i < a.length; i++){
@@ -6057,10 +6110,10 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
       else if (x === '-H' || x === '--header'){ const h = String(a[++i] || ''), k = h.indexOf(':'); if (k > 0) headers[h.slice(0, k).trim()] = h.slice(k + 1).trim(); }
       else if (x === '-d' || x === '--data'){ data = a[++i] == null ? '' : a[i]; }
       else if (x === '-m' || x === '--max-time'){ secs = parseFloat(a[++i]); if (!(secs > 0)){ io.err('curl: -m wants seconds, like -m 5\n'); return 2; } }
-      else if (/^-/.test(x)){ io.err('curl: unknown option ' + x + '   (man curl)\n'); return 2; }
+      else if (/^-/.test(x)){ io.err('curl: no ' + x + ' option  (try: man curl)\n'); return 2; }
       else url = x;
     }
-    if (!url){ io.err('usage: curl url   (try: curl api.github.com/zen)\n'); return 2; }
+    if (!url){ io.err('usage: curl url  (try: curl api.github.com/zen)\n'); return 2; }
     if (!/^[a-z]+:\/\//i.test(url)) url = 'https://' + url;
     if (!/^https?:\/\//i.test(url)){ io.err('curl: only http and https\n'); return 2; }
     if (data != null && !method) method = 'POST';
@@ -6093,7 +6146,7 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
       }
       if (!text) o.at(0, ['(empty body)', 'f']);
     }
-    if (hidden) o.at(0, ['... ' + hidden + ' more lines', 'd'], ['   | less, or > file', 'f']);
+    if (hidden) o.at(0, ['... ' + hidden + ' more lines', 'd'], ['   > file for all of it', 'f']);
     if (!silent){
       o.blank();
       const bits = [String(r.status), kb(r.bytes), msStr(r.ms), r.type].filter(Boolean);
@@ -6107,10 +6160,10 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
    hn, wiki, define: live data, each one a small card
    ===================================================================================== */
 T.cmds.hn = { g: 'net', desc: 'Hacker News, the top stories', usage: 'hn [count]', ex: ['hn', 'hn 5', 'hn 20 | grep -i ai'],
-  more: 'The front page of Hacker News, from its public API. Arrows pick a story, enter opens it, 1 to 9 jump. Piped, it prints points, title and link, one story per line.',
+  more: 'the front page of Hacker News, from its public API. arrows pick a story, enter opens it, 1 to 9 jump. piped, it prints points, title and link, one story per line.',
   async run(argv, io){
     const n = Math.max(1, Math.min(30, parseInt(argv[1], 10) || (io.tty ? Math.max(5, Math.min(10, io.rows - 8)) : 10)));
-    if (argv[1] && !(parseInt(argv[1], 10) > 0)){ io.err('usage: hn [count]   (1 to 30)\n'); return 2; }
+    if (argv[1] && !(parseInt(argv[1], 10) > 0)){ io.err('usage: hn [count]  (try: hn 5, up to 30)\n'); return 2; }
     let items;
     try {
       const ids = await net.json('https://hacker-news.firebaseio.com/v0/topstories.json');
@@ -6128,10 +6181,10 @@ T.cmds.hn = { g: 'net', desc: 'Hacker News, the top stories', usage: 'hn [count]
   } };
 
 T.cmds.wiki = { g: 'net', desc: 'the opening of a Wikipedia article', usage: 'wiki topic...', ex: ['wiki alan turing', 'wiki vt100', 'wiki hypertext'],
-  more: 'Looks the topic up on English Wikipedia and prints the summary at the top of the article, with a link you can open.',
+  more: 'looks the topic up on English Wikipedia and prints the summary at the top of the article, with a link you can open.',
   async run(argv, io){
     const q = argv.slice(1).join(' ').trim();
-    if (!q){ io.err('usage: wiki topic   (try: wiki alan turing)\n'); return 2; }
+    if (!q){ io.err('usage: wiki topic  (try: wiki alan turing)\n'); return 2; }
     const sum = t => net.json('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(t.replace(/ /g, '_')) + '?redirect=true');
     let d;
     try {
@@ -6163,7 +6216,7 @@ T.cmds.define = { g: 'net', desc: 'what a word means', usage: 'define word', ex:
   more: 'English definitions from dictionaryapi.dev: the pronunciation, then up to three senses for each part of speech, with an example where there is one.',
   async run(argv, io){
     const w = argv.slice(1).join(' ').trim();
-    if (!w){ io.err('usage: define word   (try: define serendipity)\n'); return 2; }
+    if (!w){ io.err('usage: define word  (try: define serendipity)\n'); return 2; }
     let d;
     try { d = await net.json('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(w.toLowerCase())); }
     catch (e){ if (e.status === 404){ io.err('define: no entry for ' + w + '\n'); return 1; } return net.fail(io, 'define', e); }
@@ -6281,11 +6334,11 @@ const QR = (() => {
 M.qr = QR;
 T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] text...', opts: [['-l', 'low error correction: room for more text']],
   ex: ['qr risingfounder.net', 'qr kaiav.pages.dev', 'echo hello | qr'],
-  more: 'Draws a QR code your phone camera can read. Up to about 200 characters (270 with -l). Piped or redirected, it comes out as text blocks.',
+  more: 'draws a QR code your phone camera can read. up to about 200 characters (270 with -l). piped or redirected, it comes out as text blocks.',
   run(argv, io){
     let a = argv.slice(1), lo = false; if (a[0] === '-l'){ lo = true; a = a.slice(1); }
     const text = argText(io, a).replace(/\n$/, '');
-    if (!text){ io.err('usage: qr text   (try: qr risingfounder.net)\n'); return 2; }
+    if (!text){ io.err('usage: qr text  (try: qr risingfounder.net)\n'); return 2; }
     const q = QR.encode(text, lo ? 'L' : 'M');
     if (!q){ io.err('qr: too long for this little encoder (' + new TextEncoder().encode(text).length + ' bytes; ' + (lo ? 271 : 213) + ' max' + (lo ? '' : ', or 271 with -l') + ')\n'); return 1; }
     if (!io.tty){ const qz = 2, n = q.size + qz * 2; let s = ''; for (let y = -qz; y < q.size + qz; y++){ for (let x = -qz; x < q.size + qz; x++) s += (q.modules[y] && q.modules[y][x]) ? '##' : '  '; s += '\n'; } io.out(s); return; }
@@ -6298,13 +6351,13 @@ T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] 
    small offline tools: hash, base64, uuid, pass, json, convert, roll, countdown
    ===================================================================================== */
 const ALGOS = { sha1: 'SHA-1', 'sha-1': 'SHA-1', sha256: 'SHA-256', 'sha-256': 'SHA-256', sha384: 'SHA-384', 'sha-384': 'SHA-384', sha512: 'SHA-512', 'sha-512': 'SHA-512' };
-T.cmds.hash = { g: 'tools', desc: 'SHA hash of text', usage: 'hash [sha1 | sha256 | sha512] [text...]', ex: ['hash hello', 'hash sha1 hello', 'cat README.md | hash sha512'],
-  more: 'Prints the hex digest of its arguments, or of the standard input (byte for byte, newline included, like sha256sum). SHA-256 unless you name another.',
+T.cmds.hash = { g: 'tools', desc: 'SHA hash of text', usage: 'hash [sha1 | sha256 | sha384 | sha512] [text...]', ex: ['hash hello', 'hash sha1 hello', 'cat README.md | hash sha512'],
+  more: 'prints the hex digest of its arguments, or of the standard input (byte for byte, newline included, like sha256sum). SHA-256 unless you name another.',
   async run(argv, io){
     let a = argv.slice(1), algo = 'SHA-256';
     if (a[0] && ALGOS[a[0].toLowerCase()]){ algo = ALGOS[a[0].toLowerCase()]; a = a.slice(1); }
-    else if (a[0] && /^(md5|sha\d+|-)/i.test(a[0]) && a.length > 1){ io.err('hash: no ' + a[0] + ' here. sha1, sha256, sha384 or sha512\n'); return 2; }
-    if (!a.length && !io.stdin){ io.err('usage: hash [sha256] text   (or pipe something in)\n'); return 2; }
+    else if (a[0] && /^(md5|sha\d+|-)/i.test(a[0]) && a.length > 1){ io.err('hash: no ' + a[0] + ' here  (try: sha1, sha256, sha384 or sha512)\n'); return 2; }
+    if (!a.length && !io.stdin){ io.err('usage: hash [sha256] text  (or pipe something in)\n'); return 2; }
     if (!(crypto && crypto.subtle)){ io.err('hash: this page cannot reach the browser crypto (it needs https)\n'); return 1; }
     const buf = await crypto.subtle.digest(algo, new TextEncoder().encode(argText(io, a)));
     const hex = Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
@@ -6312,17 +6365,17 @@ T.cmds.hash = { g: 'tools', desc: 'SHA hash of text', usage: 'hash [sha1 | sha25
     else io.out(hex + '\n');
   } };
 T.cmds.base64 = { g: 'tools', desc: 'encode or decode base64', usage: 'base64 [-d] [text...]', opts: [['-d', 'decode']], ex: ['base64 hello', 'echo aGVsbG8= | base64 -d', 'cat about.txt | base64'],
-  more: 'Encodes its arguments or the standard input as base64 (UTF-8), or decodes with -d.',
+  more: 'encodes its arguments or the standard input as base64 (UTF-8), or decodes with -d.',
   run(argv, io){
     let a = argv.slice(1), dec = false; if (a[0] === '-d' || a[0] === '--decode'){ dec = true; a = a.slice(1); }
     const t = argText(io, a);
-    if (!t){ io.err('usage: base64 [-d] text   (or pipe something in)\n'); return 2; }
+    if (!t){ io.err('usage: base64 [-d] text  (or pipe something in)\n'); return 2; }
     if (dec){
       try { const bin = atob(t.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')); const txt = new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))); io.out(txt + (io.tty && !txt.endsWith('\n') ? '\n' : '')); }
       catch (e){ io.err('base64: that is not base64\n'); return 1; }
     } else { let bin = ''; for (const b of new TextEncoder().encode(t)) bin += String.fromCharCode(b); io.out(btoa(bin) + '\n'); }
   } };
-T.cmds.uuid = { g: 'tools', desc: 'random UUIDs', usage: 'uuid [count]', ex: ['uuid', 'uuid 5'], more: 'Version 4 UUIDs from the browser\'s secure random numbers.',
+T.cmds.uuid = { g: 'tools', desc: 'random UUIDs', usage: 'uuid [count]', ex: ['uuid', 'uuid 5'], more: 'version 4 UUIDs from the browser\'s secure random numbers.',
   run(argv, io){
     const n = Math.max(1, Math.min(100, parseInt(argv[1], 10) || 1));
     const one = () => {
@@ -6334,12 +6387,12 @@ T.cmds.uuid = { g: 'tools', desc: 'random UUIDs', usage: 'uuid [count]', ex: ['u
     io.out(Array.from({ length: n }, one).join('\n') + '\n');
   } };
 T.cmds.pass = { g: 'tools', desc: 'a strong random password', usage: 'pass [-n] [length]', opts: [['-n', 'letters and digits only']], ex: ['pass', 'pass 32', 'pass -n 16', 'vault'],
-  more: 'Made in your browser from secure random numbers; it never leaves the page. 20 characters unless you say (8 to 128). Then: c copies it, s saves it in your encrypted vault (see man vault), h hides it from the screen.',
+  more: 'made in your browser from secure random numbers; it never leaves the page. 20 characters unless you say (8 to 128). then: c copies it, s saves it in your encrypted vault (see man vault), h hides it from the screen.',
   async run(argv, io){
     let a = argv.slice(1), plain = false; if (a[0] === '-n'){ plain = true; a = a.slice(1); }
     if (a[0] && !/^\d+$/.test(a[0])){ io.err('pass: ' + a[0] + ' is not a length  (try: pass 24)\n'); return 2; }
     const len = a[0] ? parseInt(a[0], 10) : 20;
-    if (!(len >= 8 && len <= 128)){ io.err('pass: length from 8 to 128\n'); return 2; }
+    if (!(len >= 8 && len <= 128)){ io.err('pass: the length is 8 to 128  (try: pass 24)\n'); return 2; }
     const pw = genPass(len, plain);
     if (!io.tty || !io.ask){ io.out(pw + '\n'); return; }
     const o = io.ui(); o.blank().card({ title: 'PASSWORD', note: len + ' chars', items: [{ label: 'new', value: pw }] }).blank();
@@ -6358,12 +6411,12 @@ T.cmds.pass = { g: 'tools', desc: 'a strong random password', usage: 'pass [-n] 
     }
   } };
 T.cmds.json = { g: 'tools', desc: 'pretty-print JSON', usage: 'json [file]', ex: ["echo '{\"a\":[1,2]}' | json", 'curl api.github.com/users/torvalds | json'],
-  more: 'Reads JSON from a file or the standard input and prints it indented, in colour on the screen.',
+  more: 'reads JSON from a file or the standard input and prints it indented, in colour on the screen.',
   run(argv, io){
     let t;
-    if (argv[1]){ t = io.fs.read(argv[1]); if (t == null){ io.err('json: ' + argv[1] + ': No such file\n'); return 1; } } else t = io.stdin || '';
-    if (!t.trim()){ io.err('usage: json file   (or pipe JSON in)\n'); return 2; }
-    let v; try { v = JSON.parse(t); } catch (e){ io.err('json: not valid JSON: ' + String(e.message || e).replace(/^JSON\.parse: /, '') + '\n'); return 1; }
+    if (argv[1]){ t = io.fs.read(argv[1]); if (t == null){ io.err('json: ' + argv[1] + ': ' + (io.fs.isDir(argv[1]) ? 'is a directory' : 'no such file or directory') + '\n'); return 1; } } else t = io.stdin || '';
+    if (!t.trim()){ io.err('usage: json file  (or pipe JSON in)\n'); return 2; }
+    let v; try { v = JSON.parse(t); } catch (e){ io.err('json: that is not valid JSON\n'); return 1; }
     if (!io.tty){ io.out(JSON.stringify(v, null, 2) + '\n'); return; }
     const o = io.ui(); showJSON(o, v, io.cols, 1e9, 0); io.rich(o);
   } };
@@ -6388,14 +6441,14 @@ const fromK = (k, n) => n === 'C' ? k - 273.15 : n === 'F' ? (k - 273.15) * 9 / 
 const fmtNum = x => { if (!isFinite(x)) return String(x); const a = Math.abs(x); if (a !== 0 && (a >= 1e12 || a < 1e-6)) return x.toExponential(4); return String(a >= 1e-3 ? +(+x.toPrecision(7)).toFixed(4) : +x.toPrecision(7)); };
 const UNIT_SHOW = { length: ['mm', 'cm', 'm', 'km', 'in', 'ft', 'yd', 'mi'], mass: ['g', 'kg', 'oz', 'lb', 'st'], data: ['B', 'KB', 'MB', 'GB', 'KiB', 'MiB', 'GiB'], time: ['s', 'min', 'h', 'd', 'wk'], volume: ['ml', 'l', 'cup', 'gal'], temperature: ['C', 'F', 'K'] };
 T.cmds.convert = { g: 'tools', desc: 'convert units', usage: 'convert number unit [to unit]', ex: ['convert 5 km to mi', 'convert 72 f c', 'convert 3.5 GB MiB', 'convert 180 lb'],
-  more: 'Length, mass, temperature, data sizes, time and volume. Leave out the second unit to see the number in all the usual ones. KB, MB and GB are powers of 1000; KiB, MiB and GiB powers of 1024.',
+  more: 'length, mass, temperature, data sizes, time and volume. leave out the second unit to see the number in all the usual ones. KB, MB and GB are powers of 1000; KiB, MiB and GiB powers of 1024.',
   run(argv, io){
     const s = argText(io, argv.slice(1)).replace(/\s+/g, ' ').trim();
     const m = /^(-?\d*\.?\d+(?:e[+-]?\d+)?)\s*(°?[a-z]+)(?:\s+(?:to|in|as|into)?\s*(°?[a-z]+))?\s*$/i.exec(s);
-    if (!m){ io.err('usage: convert 5 km to mi   (man convert for the units)\n'); return 2; }
+    if (!m){ io.err('usage: convert number unit [to unit]  (try: convert 5 km to mi)\n'); return 2; }
     const v = parseFloat(m[1]), from = findUnit(m[2]), to = m[3] ? findUnit(m[3]) : null;
-    if (!from){ io.err('convert: no unit called ' + m[2] + '\n'); return 1; }
-    if (m[3] && !to){ io.err('convert: no unit called ' + m[3] + '\n'); return 1; }
+    if (!from){ io.err('convert: no unit called ' + m[2] + '  (try: man convert)\n'); return 1; }
+    if (m[3] && !to){ io.err('convert: no unit called ' + m[3] + '  (try: man convert)\n'); return 1; }
     if (to && to.kind !== from.kind){ io.err('convert: cannot turn ' + from.kind + ' into ' + to.kind + '\n'); return 1; }
     const conv = t => from.kind === 'temperature' ? fromK(toK(v, from.name), t.name) : v * from.f / t.f;
     const targets = to ? [to] : UNIT_SHOW[from.kind].map(n => UNITS[n]).filter(t => t.name !== from.name);
@@ -6407,16 +6460,16 @@ T.cmds.convert = { g: 'tools', desc: 'convert units', usage: 'convert number uni
   } };
 
 T.cmds.roll = { g: 'tools', desc: 'roll dice', usage: 'roll [NdS[+K]]...', ex: ['roll', 'roll d20', 'roll 2d6+3', 'roll 4d6 d8'],
-  more: 'Dice notation: 2d6+3 means two six-sided dice plus three. One six-sided die unless you say.',
+  more: 'dice notation: 2d6+3 means two six-sided dice plus three. one six-sided die unless you say.',
   run(argv, io){
     const sin = String(io.stdin || '').trim().split(/\s+/).filter(Boolean);
     const specs = argv.length > 1 ? argv.slice(1) : sin.length ? sin : ['1d6'];
     let total = 0; const groups = [];
     for (const sp of specs){
       const m = /^(\d*)d(\d+)([+-]\d+)?$/i.exec(sp);
-      if (!m){ io.err('roll: cannot read ' + sp + '. try 2d6+3\n'); return 2; }
+      if (!m){ io.err('roll: cannot read ' + sp + '  (try: roll 2d6+3)\n'); return 2; }
       const n = m[1] ? +m[1] : 1, sides = +m[2], k = m[3] ? +m[3] : 0;
-      if (!(n >= 1 && n <= 100 && sides >= 2 && sides <= 1000)){ io.err('roll: 1 to 100 dice, 2 to 1000 sides\n'); return 2; }
+      if (!(n >= 1 && n <= 100 && sides >= 2 && sides <= 1000)){ io.err('roll: 1 to 100 dice, 2 to 1000 sides  (try: roll 2d6)\n'); return 2; }
       const vals = Array.from(crypto.getRandomValues(new Uint32Array(n)), r => r % sides + 1);
       total += vals.reduce((x, y) => x + y, 0) + k; groups.push({ sp, vals, k });
     }
@@ -6430,15 +6483,16 @@ T.cmds.roll = { g: 'tools', desc: 'roll dice', usage: 'roll [NdS[+K]]...', ex: [
 
 const NAMED_DAYS = { 'new year': '01-01', 'new years': '01-01', christmas: '12-25', xmas: '12-25', halloween: '10-31', 'valentines': '02-14' };
 T.cmds.countdown = { g: 'tools', desc: 'how long until a date', usage: 'countdown date', ex: ['countdown 2027-01-01', 'countdown dec 25', 'countdown christmas', 'countdown 2026-11-03 09:00'],
-  more: 'Days, hours and minutes until a date (or since it, if it has passed). A date without a year means the next one.',
+  more: 'days, hours and minutes until a date (or since it, if it has passed). a date without a year means the next one.',
   run(argv, io){
-    const raw = argText(io, argv.slice(1)).replace(/\s+/g, ' ').trim(); if (!raw){ io.err('usage: countdown date   (try: countdown dec 25)\n'); return 2; }
+    const raw = argText(io, argv.slice(1)).replace(/\s+/g, ' ').trim(); if (!raw){ io.err('usage: countdown date  (try: countdown dec 25)\n'); return 2; }
     const now = new Date(); let s = raw.toLowerCase(), d;
     if (NAMED_DAYS[s]) s = now.getFullYear() + '-' + NAMED_DAYS[s];
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(s + 'T00:00:00');
     else if (/^\d{4}-\d{2}-\d{2}[ t]\d{1,2}:\d{2}$/.test(s)) d = new Date(s.replace(' ', 'T'));
-    else { d = new Date(/\b\d{4}\b/.test(s) ? s : s + ' ' + now.getFullYear()); }
-    if (isNaN(d)){ io.err('countdown: cannot read ' + raw + '. try 2027-01-01 or dec 25\n'); return 2; }
+    else if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\b/.test(s) || /^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(s)){ d = new Date(/\b\d{4}\b/.test(s) ? s : s + ' ' + now.getFullYear()); }
+    else d = new Date(NaN);                          // the browser would read almost anything as a date
+    if (isNaN(d)){ io.err('countdown: cannot read ' + raw + '  (try: countdown 2027-01-01 or dec 25)\n'); return 2; }
     if (!/\b\d{4}\b/.test(raw) && d < now && now - d > 864e5) d.setFullYear(d.getFullYear() + 1);
     let ms = d - now; const past = ms < 0; ms = Math.abs(ms);
     const days = Math.floor(ms / 864e5), hrs = Math.floor(ms / 36e5) % 24, mins = Math.floor(ms / 6e4) % 60;
@@ -6486,8 +6540,8 @@ async function vUnlock(io){
   const blob = vRead();
   if (!blob){
     const o = io.ui(); o.blank().head('new vault').blank()
-      .para('Pick a passphrase. It encrypts your saved passwords on this device, and only here.', 'n', io.cols - 6)
-      .para('There is no recovery: forget it and the vault cannot be opened, by anyone.', 'd', io.cols - 6).blank();
+      .para('pick a passphrase. it encrypts your saved passwords on this device, and only here.', 'n', io.cols - 6)
+      .para('there is no recovery: forget it and the vault cannot be opened, by anyone.', 'd', io.cols - 6).blank();
     io.rich(o);
     const p1 = await io.ask('passphrase  ', { secret: true }); if (!p1) return false;
     if (p1.length < 8){ io.err('vault: use at least 8 characters\n'); return false; }
@@ -6524,13 +6578,13 @@ async function vaultSave(io, pw, label){
 const VSUB = ['add', 'get', 'rm', 'rename', 'lock', 'export', 'import', 'reset'];
 T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this browser', usage: 'vault [add | get | rm | rename | lock | export | import | reset] [label]',
   ex: ['vault', 'vault add github', 'vault get github', 'vault rename github gh', 'vault lock', 'pass  then s to save'],
-  more: 'Passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. Nothing is sent anywhere. Clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. It locks after 5 idle minutes or when you leave the tab. Handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault so you can keep a copy; vault import takes it back.',
+  more: 'passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. nothing is sent anywhere. clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. it locks after 5 idle minutes or when you leave the tab. handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault so you can keep a copy; vault import takes it back.',
   complete(args){ if (!args.length) return VSUB; if (['get', 'rm', 'rename'].includes(args[0]) && args.length === 1 && V.items) return V.items.map(it => it.label); return null; },
   async run(argv, io){
     const sub = argv[1] || '', arg = argv[2];
     if (sub && !VSUB.includes(sub) && sub !== 'list' && sub !== 'ls'){
       const near = VSUB.find(x => x.startsWith(sub.slice(0, 2)));
-      io.err('vault: no ' + sub + ' here  (try: vault' + (near ? ' ' + near : '') + ')\n'); return 2;
+      io.err('vault: no ' + sub + ' here  (try: vault ' + (near || 'add') + ')\n'); return 2;
     }
     if (sub === 'lock'){ const was = !!V.key; vLock(); io.out(was ? 'vault locked\n' : 'vault was already locked\n', 'dim'); return; }
     if (sub === 'export'){
@@ -6581,7 +6635,7 @@ T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this brow
       const ok = await vaultSave(io, pw, label); if (ok && k === 'g' && await copy(pw)) io.out('  and copied to the clipboard\n', 'dim');
       pw = ''; return ok ? 0 : 1;
     }
-    const need = n => { if (!arg){ io.err('usage: vault ' + n + ' <label>\n'); return null; } const it = vFind(arg); if (!it){ const near = V.items.find(x => x.label.toLowerCase().startsWith(arg.toLowerCase().slice(0, 2))); io.err('vault: nothing saved as ' + arg + (near ? '  (did you mean ' + near.label + '?)' : '') + '\n'); } return it || null; };
+    const need = n => { if (!arg){ io.err('usage: vault ' + n + ' label  (try: vault ' + n + ' github)\n'); return null; } const it = vFind(arg); if (!it){ const near = V.items.find(x => x.label.toLowerCase().startsWith(arg.toLowerCase().slice(0, 2))); io.err('vault: nothing saved as ' + arg + (near ? '  (did you mean ' + near.label + '?)' : '') + '\n'); } return it || null; };
     if (sub === 'get'){
       const it = need('get'); if (!it) return 1;
       const ok = await copy(it.pw);
@@ -6614,7 +6668,7 @@ T.cmds.credits = { g: 'misc', desc: 'who made what', usage: 'credits', run(argv,
 
 /* a hello for people who type one */
 T.cmds.hello = { g: 'fun', hidden: true, desc: 'say hi', usage: 'hello', run(argv, io){
-  if (!io.tty){ io.out('hi. try about, or help.\n'); return; }
+  if (!io.tty){ io.out('hi. try about or help\n'); return; }
   const c = w => [w, 'b', { cmd: w }];
   const o = io.ui(); o.blank().para('hi, welcome to ' + (M.CONTENT && M.CONTENT.name ? M.CONTENT.name.split(' ')[0] + "'s" : 'this') + ' desk.', 'n', io.cols - 4)
     .flow([[['try', 'f']], [c('about')], [c('contact')], [['or', 'f']], [c('help')]], '  ').blank();
@@ -6695,7 +6749,9 @@ function start(api, argv, flavor){
   }
 
   /* ---- open ---- */
-  const arg = (argv || []).slice(1).find(a => a && a !== '--');
+  const args = (argv || []).slice(1), dd = args.indexOf('--');
+  const arg = args.find(a => a && a !== '--');
+  if (arg && arg[0] === '-' && (dd < 0 || args.indexOf(arg) < dd)){ api.print('usage: ' + flavor + ' [file]  (try: ' + flavor + ' notes/today.txt)'); api.exit(2); return {}; }
   if (arg){
     path = fs.resolve(arg, cwd);
     if (fs.isDir && fs.isDir(path)){ api.print(flavor + ': ' + arg + ': is a directory'); api.exit(1); return {}; }
@@ -6976,7 +7032,7 @@ function start(api, argv, flavor){
     const res = writeTo(abs);
     if (!res.ok){
       if (abs === path && !readOnly){ readOnly = true; }
-      openPrompt('saveas', (abs === path ? 'Read-only. ' : "Can't write there. ") + 'Save as: ', abs === path ? copyName(abs) : disp(abs), then);
+      openPrompt('saveas', (abs === path ? 'read-only. ' : "can't write there. ") + 'save as: ', abs === path ? copyName(abs) : disp(abs), then);
       say(res.err, 'bright', 6);
       return false;
     }
@@ -6988,8 +7044,8 @@ function start(api, argv, flavor){
     return true;
   }
   function saveCmd(then){
-    if (!path) return openPrompt('saveas', 'File name: ', '', then);
-    if (readOnly) return openPrompt('saveas', 'Save a copy as: ', copyName(path), then);
+    if (!path) return openPrompt('saveas', 'file name: ', '', then);
+    if (readOnly) return openPrompt('saveas', 'save a copy as: ', copyName(path), then);
     return save(path, then);
   }
   function finish(how){
@@ -7002,8 +7058,8 @@ function start(api, argv, flavor){
   }
   function quit(force){
     if (force || !modified()) return finish(force && modified() ? 'discard' : 'close');
-    const long = 'Save changes to ' + disp(path) + '? (y/n/esc) ';
-    openPrompt('quit', long.length < COLS ? long : 'Save changes? (y/n/esc) ', null);
+    const long = 'save changes to ' + disp(path) + '? (y/n/esc) ';
+    openPrompt('quit', long.length < COLS ? long : 'save changes? (y/n/esc) ', null);
   }
 
   /* ---- prompts on the message line ---- */
@@ -7020,7 +7076,7 @@ function start(api, argv, flavor){
       if (fs.isDir && fs.isDir(abs)){ say(v + ' is a directory', 'bright'); return; }
       if (abs !== path && fs.exists && fs.exists(abs) && !m.confirmed){
         if (lockedAt(abs)){ say(disp(abs) + ' is a built-in file; pick another name', 'bright'); return; }
-        mode = { type: 'overwrite', label: disp(abs) + ' exists. Overwrite? (y/n) ', input: null, abs, then: m.then }; return;
+        mode = { type: 'overwrite', label: disp(abs) + ' exists. overwrite? (y/n) ', input: null, abs, then: m.then }; return;
       }
       mode = null; save(abs, m.then);
     } else if (m.type === 'goto'){
@@ -7048,7 +7104,7 @@ function start(api, argv, flavor){
         if (c === 'n'){ mode = null; finish('discard'); return true; }
       } else {
         if (c === 'y'){ mode = null; save(m.abs, m.then); return true; }
-        if (c === 'n'){ mode = { type: 'saveas', label: 'Save as: ', input: disp(m.abs), cur: disp(m.abs).length, fresh: false, then: m.then }; return true; }
+        if (c === 'n'){ mode = { type: 'saveas', label: 'save as: ', input: disp(m.abs), cur: disp(m.abs).length, fresh: false, then: m.then }; return true; }
       }
       if (k === 'Escape' || (ctrl && (c === 'c' || c === 'q'))){ mode = null; say('cancelled'); }
       return true;
@@ -7120,8 +7176,8 @@ function start(api, argv, flavor){
       if (k === 'Backspace'){ backspace(true); return true; }
       if (k === 'Delete'){ del(true); return true; }
       switch (c){
-        case 's': if (shift) openPrompt('saveas', 'Save as: ', path ? disp(path) : '', null); else saveCmd(); return true;
-        case 'o': openPrompt('saveas', 'Save as: ', path ? disp(path) : '', null); return true;
+        case 's': if (shift) openPrompt('saveas', 'save as: ', path ? disp(path) : '', null); else saveCmd(); return true;
+        case 'o': openPrompt('saveas', 'save as: ', path ? disp(path) : '', null); return true;
         case 'q': quit(false); return true;
         case 'x': cut(); return true;
         case 'k': cutLine(); return true;
@@ -7129,8 +7185,8 @@ function start(api, argv, flavor){
         case 'v': paste(); return true;
         case 'z': if (shift) doRedo(); else doUndo(); return true;
         case 'y': doRedo(); return true;
-        case 'f': { const origin = { l: cy, c: cx }; find.on = true; openPrompt('find', 'Find: ', find.q, null); mode.origin = origin; return true; }
-        case 'g': openPrompt('goto', 'Go to line: ', '', null); return true;
+        case 'f': { const origin = { l: cy, c: cx }; find.on = true; openPrompt('find', 'find: ', find.q, null); mode.origin = origin; return true; }
+        case 'g': openPrompt('goto', 'go to line: ', '', null); return true;
         case 'l': gutter = !gutter; prefSet(gutter); say('line numbers ' + (gutter ? 'on' : 'off')); return true;
         case 'a': anchor = { l: 0, c: 0 }; cy = lines.length - 1; cx = lines[cy].length; return true;
         case 'e': move('End', false, false, false); return true;
@@ -7190,19 +7246,19 @@ function start(api, argv, flavor){
   /* ---- drawing ---- */
   const ev = (k, ctrl) => ({ key: k, ctrlKey: !!ctrl, altKey: false, shiftKey: false, metaKey: false, preventDefault(){} });
   const SHORTCUTS = [
-    [['^S', 'Save', ev('s', 1)], ['^Q', 'Quit', ev('q', 1)], ['^F', 'Find', ev('f', 1)], ['^G', 'Go to', ev('g', 1)], ['^L', 'Lines', ev('l', 1)]],
-    [['^X', 'Cut', ev('x', 1)], ['^C', 'Copy', ev('c', 1)], ['^V', 'Paste', ev('v', 1)], ['^Z', 'Undo', ev('z', 1)], ['^Y', 'Redo', ev('y', 1)]],
+    [['^S', 'save', ev('s', 1)], ['^Q', 'quit', ev('q', 1)], ['^F', 'find', ev('f', 1)], ['^G', 'go to', ev('g', 1)], ['^L', 'lines', ev('l', 1)]],
+    [['^X', 'cut', ev('x', 1)], ['^C', 'copy', ev('c', 1)], ['^V', 'paste', ev('v', 1)], ['^Z', 'undo', ev('z', 1)], ['^Y', 'redo', ev('y', 1)]],
   ];
   function barFor(){
     if (!mode) return SHORTCUTS;
-    const esc = ['Esc', 'Cancel', ev('Escape')];
+    const esc = ['esc', 'cancel', ev('Escape')];
     switch (mode.type){
-      case 'find': return [[['Enter', 'Next', ev('Enter')], ['Up', 'Previous', ev('ArrowUp')]], [['Esc', 'Done', ev('Escape')], ['^C', 'Back to start', ev('c', 1)]]];
-      case 'goto': return [[['Enter', 'Go', ev('Enter')], ['12:4', 'Line:col', null]], [esc]];
-      case 'saveas': return [[['Enter', 'Save', ev('Enter')]], [esc]];
-      case 'quit': return [[['Y', 'Save', ev('y')], ['N', "Don't save", ev('n')]], [esc]];
-      case 'ex': return [[['w', 'Save a copy', null], ['q', 'Quit', null]], [['Enter', 'Run', ev('Enter')], esc]];
-      case 'overwrite': return [[['Y', 'Overwrite', ev('y')], ['N', 'New name', ev('n')]], [esc]];
+      case 'find': return [[['enter', 'next', ev('Enter')], ['\u2191', 'previous', ev('ArrowUp')]], [['esc', 'done', ev('Escape')], ['^C', 'back to start', ev('c', 1)]]];
+      case 'goto': return [[['enter', 'go', ev('Enter')], ['12:4', 'line:col', null]], [esc]];
+      case 'saveas': return [[['enter', 'save', ev('Enter')]], [esc]];
+      case 'quit': return [[['y', 'save', ev('y')], ['n', "don't save", ev('n')]], [esc]];
+      case 'ex': return [[['w', 'save a copy', null], ['q', 'quit', null]], [['enter', 'run', ev('Enter')], esc]];
+      case 'overwrite': return [[['y', 'overwrite', ev('y')], ['n', 'new name', ev('n')]], [esc]];
     }
     return SHORTCUTS;
   }
@@ -7227,7 +7283,7 @@ function start(api, argv, flavor){
   function drawTitle(scr){
     scr.fill(0, 0, COLS, 1, ' ', 'inverse');
     const r = selRange();
-    let right = COLS >= 50 ? 'Ln ' + (cy + 1) + ', Col ' + (cx + 1) : (cy + 1) + ':' + (cx + 1);
+    let right = COLS >= 50 ? 'ln ' + (cy + 1) + ', col ' + (cx + 1) : (cy + 1) + ':' + (cx + 1);
     if (r && COLS >= 50){ const n = textOf(r[0], r[1]).length; right = n + ' sel  ' + right; }
     const left = flavor === 'edit' ? 'edit' : flavor;
     let name = disp(path) + (modified() ? ' \u2022' : '');
@@ -7349,7 +7405,8 @@ function start(api, argv, flavor){
 }
 
 /* one editor; nano, vi and vim are quiet aliases (they work, but help lists edit once) */
-const def = (name, desc, hidden) => ({ g: 'files', hidden: !!hidden, desc, usage: name + ' [file]', start(api, argv){ return start(api, argv, name); } });
+const MORE = 'a small nano-style editor. just type. ^S saves, esc quits (asking first if there are changes), ^F finds, ^G goes to a line, ^Z undoes. the two bottom lines list the rest. built-in files open read-only; ^S then saves a copy. on a phone, type :w, :q or :wq on a line of its own and press enter.';
+const def = (name, desc, hidden) => ({ g: 'files', hidden: !!hidden, desc, usage: name + ' [file]', more: MORE, ex: ['edit notes/today.txt', 'edit README.md'], start(api, argv){ return start(api, argv, name); } });
 T.apps.edit = def('edit', 'edit a text file (nano-style)');
 T.apps.nano = def('nano', 'edit a text file (same as edit)', true);
 T.apps.vi = def('vi', 'edit a text file (nano-style, same as edit)', true);
@@ -7775,24 +7832,28 @@ M.reader = {
 
 </script>
 <script>
-/* Glue: one first-person scene, one terminal, one typist, sound, one loop. Phones get the terminal alone. */
+/* Glue: one first-person scene, one terminal, one typist, sound, one loop. Phones, and any machine where the 3D
+   cannot run (no WebGL, three.js blocked, the GPU gives up), get the terminal alone. */
 (() => {
 'use strict';
 const M = window.MAC, D = document, $ = s => D.querySelector(s);
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TOUCH = matchMedia('(pointer: coarse)').matches;
-const stage = $('#stage'), kbd = $('#kbd'), muteBtn = $('#mute'), sound = M.sound;
+const small = () => TOUCH && Math.min(innerWidth, innerHeight) < 820;
+const stage = $('#stage'), kbd = $('#kbd'), muteBtn = $('#mute'), hint = $('#hint'), sound = M.sound;
 const reading = () => !!(M.reader && M.reader.isOpen);   // the reader owns the keyboard while it is open
+let errs = 0;
+const oops = e => { if (!errs++) console.error('kept going after:', e); };   // logged once; the loop carries on
 
 /* ---- shared by both layouts ---- */
 /* sound: unlocked by the first gesture */
 let unlocked = false;
 function unlock(){ if (unlocked || !sound) return; unlocked = true; try { sound.unlock(); } catch (e){} }
 /* the toggle keeps one label; aria-pressed (and the dot drawn from it) says whether sound is on. Remembered by sound.js */
-function setupMute(afterClick){
+function setupMute(afterClick, signal){
   if (!sound){ muteBtn.hidden = true; return; }
   const paint = () => muteBtn.setAttribute('aria-pressed', String(!sound.muted));
-  muteBtn.addEventListener('click', e => { unlock(); sound.setMuted(!sound.muted); paint(); if (e.detail && afterClick) afterClick(); });
+  muteBtn.addEventListener('click', e => { unlock(); sound.setMuted(!sound.muted); paint(); if (e.detail && afterClick) afterClick(); }, { signal });
   paint();
 }
 /* #post/<slug>: true when the hash is a post link (opened, or already open) */
@@ -7802,10 +7863,14 @@ function openPost(id){
   if (M.reader && !(M.reader.isOpen && M.reader.current === slug)) M.reader.open(slug);
   return true;
 }
-/* deep links: #eden, #j, #about, #writing run the matching command; #post/<slug> opens the reader */
-function deepLinks(term){
-  const fromHash = () => { const id = location.hash.slice(1); if (!openPost(id) && id && term.run) term.run(id); };
-  addEventListener('hashchange', fromHash);
+/* deep links: #about, #eden, #j, #writing, #contact, #links, #help run that command; #post/<slug> opens the reader.
+   Anything else in the hash is ignored (a link never runs an arbitrary command line) */
+function deepLinks(getTerm, signal){
+  const fromHash = () => {
+    const id = location.hash.slice(1), t = getTerm();
+    if (!openPost(id) && /^(about|eden|j|writing|contact|links|help)$/.test(id) && t.run) t.run(id);
+  };
+  addEventListener('hashchange', fromHash, { signal });
   return fromHash;
 }
 /* start once the fonts are in (or after 1.5 s, whichever comes first) */
@@ -7814,11 +7879,21 @@ function whenReady(go){
     .then(() => { $('#loading').classList.add('gone'); go(); });
 }
 
-/* phones and small tablets: just the terminal, full screen, no 3D */
-if (TOUCH && Math.min(innerWidth, innerHeight) < 820){ phone(); return; }
+/* phones and small tablets: just the terminal, full screen; and any desktop that cannot draw the room */
+if (small() || !window.THREE || !M.createScene){ if (!small()) console.warn('3D off: three.js did not load'); flat(); return; }
 
 let api;
-try { api = M.createScene(stage); } catch (e){ console.error(e); $('#loading').textContent = 'this needs WebGL'; return; }
+try { api = M.createScene(stage); } catch (e){ console.warn('3D off:', e && e.message); stage.textContent = ''; flat(); return; }
+/* everything the 3D layout listens to goes when it is torn down (toFlat) */
+const ac = new AbortController(), sig = { signal: ac.signal };
+const on = (t, type, f, o) => t.addEventListener(type, f, Object.assign({}, sig, o));
+let dead = false, raf = 0;
+function toFlat(why){
+  if (dead) return; dead = true; console.warn('3D off:', why);
+  ac.abort(); cancelAnimationFrame(raf); hint.hidden = true;
+  try { api.renderer.dispose(); } catch (e){}
+  stage.textContent = ''; flat();
+}
 if (M.dressRoom) { try { M.dressRoom(api); } catch (e){ console.error(e); } }
 M.world = {
   lamp: on => api.setLamp ? api.setLamp(on === undefined ? !api.lampOn : on) : null,
@@ -7826,11 +7901,13 @@ M.world = {
 };
 const term = M.createTerminal({ content: M.CONTENT, aspect: api.screenAspect });
 api.setScreenCanvas(term.canvas);
-const typist = M.createTypist(api); if (typist.object3d && !typist.object3d.parent) api.add(typist.object3d);
+let typist;
+try { typist = M.createTypist(api); if (typist.object3d && !typist.object3d.parent) api.add(typist.object3d); }
+catch (e){ oops(e); typist = { keyDown(){}, keyUp(){}, update(){} }; }   // no hands is better than no site
 const look = (x, y) => api.setLook && api.setLook(x, y);
 /* #kbd is the real text field (screen readers, IME, paste); keystrokes themselves are read from keydown */
 const focusInput = () => { if (!reading() && D.activeElement !== kbd) try { kbd.focus({ preventScroll: true }); } catch (e){} };
-setupMute(focusInput);
+setupMute(focusInput, ac.signal);
 
 /* ---- input: physical keyboards drive the terminal and the typist's hands ---- */
 const held = new Set();
@@ -7844,8 +7921,8 @@ function onDown(e){
   if (!held.has(code)){ held.add(code); typist.keyDown(code); if (api.nudge) api.nudge(); }
 }
 function onUp(e){ if (term.handleKeyUp) term.handleKeyUp(e); const code = e.code || 'KeyA'; if (held.has(code)){ held.delete(code); typist.keyUp(code); } }
-addEventListener('keydown', onDown); addEventListener('keyup', onUp);
-addEventListener('blur', () => { for (const c of held) typist.keyUp(c); held.clear(); });
+on(window, 'keydown', onDown); on(window, 'keyup', onUp);
+on(window, 'blur', () => { for (const c of held) typist.keyUp(c); held.clear(); });
 
 /* text that reaches #kbd without a handled keydown: touch keyboards, IME, paste */
 const codeFor = ch => /[a-z]/i.test(ch) ? 'Key' + ch.toUpperCase() : /\d/.test(ch) ? 'Digit' + ch : ch === ' ' ? 'Space' : ch === '.' ? 'Period' : ch === ',' ? 'Comma' : ch === '-' ? 'Minus' : ch === '/' ? 'Slash' : 'Quote';
@@ -7854,16 +7931,16 @@ function takeText(){
   if (v.length > 4){ term.insertText(v); return; }          // a paste: no finger show
   for (const ch of v){ term.insertText(ch); const code = codeFor(ch); typist.keyDown(code); setTimeout(() => typist.keyUp(code), 90); }
 }
-kbd.addEventListener('input', e => { if (!e.isComposing) takeText(); });
-kbd.addEventListener('compositionend', takeText);
-kbd.addEventListener('keydown', e => { if (reading()) return; if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ onDown(e); e.stopPropagation(); } });
-kbd.addEventListener('keyup', e => { onUp(e); e.stopPropagation(); });
+on(kbd, 'input', e => { if (!e.isComposing) takeText(); });
+on(kbd, 'compositionend', takeText);
+on(kbd, 'keydown', e => { if (reading()) return; if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ onDown(e); e.stopPropagation(); } });
+on(kbd, 'keyup', e => { onUp(e); e.stopPropagation(); });
 /* the wheel scrolls the terminal; the cursor looks around, and moving it down leans back to the whole desk */
-addEventListener('wheel', e => { if (reading()) return; if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
-addEventListener('keydown', e => { if (reading()) return; if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
-stage.addEventListener('pointerdown', () => unlock());
+on(window, 'wheel', e => { if (reading()) return; if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
+on(window, 'keydown', e => { if (reading()) return; if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
+on(stage, 'pointerdown', () => unlock());
 /* clicking the tube: command words and card rows on the terminal are clickable (the scene maps the click to the canvas) */
-stage.addEventListener('click', e => {
+on(stage, 'click', e => {
   if (reading()) return;
   const p = api.pickScreen && term.handleTap ? api.pickScreen(e.clientX, e.clientY) : null;
   if (p && term.handleTap(p.u, p.v)){ unlock(); if (api.markScreenDirty) api.markScreenDirty(); }
@@ -7871,50 +7948,96 @@ stage.addEventListener('click', e => {
 });
 
 /* the one hint: shown once, gone after the first lean or ~12 s. Without pointer look (reduced motion) there is none */
-const hint = $('#hint');
 let hintT = 0;
 const hideHint = () => { if (!hintT) return; clearTimeout(hintT); hintT = 0; hint.style.opacity = '0'; setTimeout(() => { hint.hidden = true; }, 1300); };
-addEventListener('pointermove', e => {
+on(window, 'pointermove', e => {
   if (e.pointerType !== 'mouse' || REDUCED || reading()) return;
   const ny = e.clientY / innerHeight * 2 - 1;
   look(e.clientX / innerWidth * 2 - 1, ny);
   if (ny > 0.5) hideHint();
 });
-D.documentElement.addEventListener('mouseleave', () => look(0, 0));
+on(D.documentElement, 'mouseleave', () => look(0, 0));
+
+/* the GPU dropped the context (driver reset, GPU switch, too many tabs). three.js r147's restore leaves this scene
+   black, so go straight to the flat terminal; a reload brings the room back */
+on(api.renderer.domElement, 'webglcontextlost', () => toFlat('the WebGL context was lost'));
 
 /* ---- loop ---- */
-function resize(){ api.resize(innerWidth, innerHeight); }
-addEventListener('resize', resize); resize();
-let last = performance.now(), T = 0, raf = 0;
+function resize(){
+  if (small()){ toFlat('the window became phone-sized'); return; }   // a tablet in split view
+  api.resize(innerWidth, innerHeight);
+}
+on(window, 'resize', resize); resize();
+/* a GPU that cannot keep up: when most of ~5 s goes to long frames, shadows go first, then pixels below 1x
+   (scene.js has already trimmed the pixel ratio down to 1 by then) */
+let slowT = 0, spanT = 0, runT = 0, bad = 0, last = performance.now(), T = 0;
+const gl = api.renderer.getContext();
+function degrade(){
+  const r = api.renderer;
+  if (r.shadowMap.enabled){ r.shadowMap.enabled = false; api.scene.traverse(o => { if (o.isLight) o.castShadow = false; }); }
+  else if (r.getPixelRatio() <= 1 && r.getPixelRatio() > .75) r.setPixelRatio(.75);
+}
 function frame(now){
   raf = requestAnimationFrame(frame);
-  const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt;
-  if (term.update(dt, T)) api.markScreenDirty();
+  const raw = (now - last) / 1000, dt = Math.min(.05, raw); last = now; T += dt;
+  try { if (term.update(dt, T)) api.markScreenDirty(); } catch (e){ oops(e); }
   if (reading()) return;   // the reader sheet covers the room: hold the last frame and save the GPU
-  typist.update(dt, T); api.update(dt, T); if (sound && sound.update) sound.update(dt); api.render();
+  try { typist.update(dt, T); } catch (e){ oops(e); }
+  try { if (sound && sound.update) sound.update(dt); } catch (e){ oops(e); }
+  if (gl.isContextLost()) return;   // the contextlost event is on its way (see above)
+  try { api.update(dt, T); api.render(); } catch (e){ oops(e); if (++bad > 9) toFlat('the 3D view kept failing'); }
+  if ((runT += raw) > 2){ spanT += raw; if (raw > .06) slowT += raw; if (spanT > 5){ if (slowT / spanT > .5) degrade(); spanT = slowT = bad = 0; } }
 }
-D.addEventListener('visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });
-const fromHash = deepLinks(term);
+on(D, 'visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });
+const fromHash = deepLinks(() => term, ac.signal);
 whenReady(() => {
+  if (dead) return;
   fromHash(); focusInput(); raf = requestAnimationFrame(frame);
   if (!REDUCED && !matchMedia('(hover: none)').matches){ hint.hidden = false; hintT = setTimeout(hideHint, 12000); }
 });
 
-function phone(){
-  D.body.classList.add('phone');
-  /* the terminal fills the screen below the header strip (and above the home indicator) */
-  const probe = D.createElement('div'); probe.className = 'phone-term'; probe.style.cssText = 'visibility:hidden;padding-bottom:env(safe-area-inset-bottom, 0px)';
-  stage.appendChild(probe);
-  const top = probe.offsetTop, inset = parseFloat(getComputedStyle(probe).paddingBottom) || 0; probe.remove();
-  const W = innerWidth, H = Math.max(200, innerHeight - top - inset);
-  const term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols: W < 420 ? 40 : W < 600 ? 46 : 54 });
-  const cv = term.canvas; cv.className = 'phone-term'; cv.style.height = H + 'px'; stage.appendChild(cv);
-  setupMute(null);
+/* the terminal alone, no 3D. Phones: full width under a header strip, text typed through #kbd. Desktops (a fallback):
+   one centred column of up to 54 columns, and the keyboard read from keydown like the 3D layout */
+function flat(){
+  D.body.classList.add('phone'); if (!TOUCH) D.body.classList.add('flat');
+  let term = null, cv = null, bw = 0, bh = 0, shift = 0;
+  /* sized to fill the screen below the header strip (and above the home indicator); built again when the size
+     really changes (a rotation, a desktop window resize). The on-screen keyboard only changes the height on
+     phones, so there it never rebuilds: place() lifts the prompt instead */
+  const build = () => {
+    const probe = D.createElement('div'); probe.className = 'phone-term'; probe.style.cssText = 'visibility:hidden;padding-bottom:env(safe-area-inset-bottom, 0px)';
+    stage.appendChild(probe);
+    const top = probe.offsetTop, inset = parseFloat(getComputedStyle(probe).paddingBottom) || 0; probe.remove();
+    const W = TOUCH ? innerWidth : Math.max(200, Math.min(innerWidth - 32, 760)), H = Math.max(200, innerHeight - top - inset - (TOUCH ? 0 : 16));
+    term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols: W < 420 ? 40 : W < 600 ? 46 : 54 });
+    if (cv) cv.remove();
+    cv = term.canvas; cv.className = 'phone-term'; cv.style.width = W + 'px'; cv.style.height = H + 'px'; stage.appendChild(cv);
+    bw = innerWidth; bh = innerHeight; shift = 0;
+  };
+  build();
+  let rt = 0;
+  addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => {
+    if (Math.abs(innerWidth - bw) > 40 || (!TOUCH && Math.abs(innerHeight - bh) > 40)){ build(); fromHash(); } else place();
+  }, 150); });
+  const focus = () => { if (!reading()) try { kbd.focus({ preventScroll: true }); } catch (e){} };
+  setupMute(TOUCH ? null : focus);
   const click = (c, d) => { if (sound) try { sound.key(c, d); } catch (e){} };
   const tap = c => { click(c, true); setTimeout(() => click(c, false), 70); };
-  kbd.addEventListener('input', () => { const v = kbd.value; kbd.value = ''; for (const ch of v){ term.insertText(ch); tap(ch === ' ' ? 'Space' : 'KeyA'); } });
-  kbd.addEventListener('keydown', e => { if (reading()) return; if (['Enter', 'Backspace', 'Tab', 'Escape', 'Home', 'End', 'PageUp', 'PageDown', 'Delete'].includes(e.key) || e.key.startsWith('Arrow') || ((e.ctrlKey || e.altKey) && e.key.length === 1)){ unlock(); if (term.handleKey(e)) e.preventDefault(); tap(e.key === 'Enter' ? 'Enter' : e.key === 'Backspace' ? 'Backspace' : 'KeyA'); } });
-  addEventListener('keydown', e => { if (e.target === kbd || e.metaKey || reading()) return; unlock(); if (term.handleKey(e)) e.preventDefault(); });
+  const special = e => ['Enter', 'Backspace', 'Tab', 'Escape', 'Home', 'End', 'PageUp', 'PageDown', 'Delete'].includes(e.key) || e.key.startsWith('Arrow') || ((e.ctrlKey || e.altKey) && e.key.length === 1);
+  /* text from #kbd: phones letter by letter (touch keyboards compose every word, so composition is not waited for);
+     desktops only see IME and paste here, and wait for the composition to end */
+  const take = () => { const v = kbd.value; kbd.value = ''; if (v.length > 4 && !TOUCH){ term.insertText(v); return; } for (const ch of v){ term.insertText(ch); tap(ch === ' ' ? 'Space' : 'KeyA'); } };
+  kbd.addEventListener('input', e => { if (TOUCH || !e.isComposing) take(); });
+  if (!TOUCH) kbd.addEventListener('compositionend', take);
+  addEventListener('keydown', e => {
+    if (e.metaKey || reading() || e.target === muteBtn) return;
+    if (TOUCH && e.target === kbd && !special(e)) return;   // phones: letters arrive through the input event
+    unlock();
+    if (term.handleKey(e)){ e.preventDefault(); tap(e.code || 'KeyA'); }
+    else if (e.target === kbd && e.key.length === 1 && !e.ctrlKey) e.preventDefault();
+  });
+  addEventListener('keyup', e => { if (!reading() && term.handleKeyUp) term.handleKeyUp(e); });
+  addEventListener('wheel', e => { if (reading() || !term.scroll) return; term.scroll(e.deltaY); e.preventDefault(); }, { passive: false });
   stage.addEventListener('pointerdown', () => { unlock(); });
   stage.addEventListener('click', e => {
     const r = cv.getBoundingClientRect();
@@ -7925,7 +8048,6 @@ function phone(){
   let ty = null; stage.addEventListener('touchstart', e => { ty = e.touches[0].clientY; }, { passive: true });
   stage.addEventListener('touchmove', e => { if (ty == null || !term.scroll) return; const y = e.touches[0].clientY; term.scroll((ty - y) * 2.5); ty = y; e.preventDefault(); }, { passive: false });
   // keep the prompt line above the on-screen keyboard: measured from the canvas's untransformed top
-  let shift = 0;
   const place = () => {
     const vv = window.visualViewport, bottom = vv ? vv.offsetTop + vv.height : innerHeight;
     const y = stage.getBoundingClientRect().top + cv.offsetTop + term.cursorY * cv.offsetHeight;
@@ -7933,10 +8055,13 @@ function phone(){
     if (s !== shift){ shift = s; cv.style.transform = s ? 'translateY(' + s + 'px)' : ''; }
   };
   if (window.visualViewport){ visualViewport.addEventListener('resize', place); visualViewport.addEventListener('scroll', place); }
-  const fromHash = deepLinks(term);
+  const fromHash = deepLinks(() => term);
   let last = performance.now(), T = 0;
-  const frame = now => { requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt; if (term.update(dt, T)) place(); };
-  whenReady(() => { fromHash(); place(); requestAnimationFrame(frame); });
+  const frame = now => {
+    requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt;
+    try { if (term.update(dt, T)) place(); } catch (e){ oops(e); }
+  };
+  whenReady(() => { fromHash(); place(); if (!TOUCH) focus(); requestAnimationFrame(frame); });
 }
 })();
 

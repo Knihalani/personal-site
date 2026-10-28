@@ -89,7 +89,8 @@ const todoWrite = (fs, items) => fs.write(TODO, items.map(it => '[' + (it.done ?
 T.cmds.todo = { g: 'tools', desc: 'a to-do list, kept in ~/todo.txt', usage: 'todo [add text | done N | undo N | rm N | clear]',
   opts: [['add TEXT', 'add an item (todo TEXT works too)'], ['done N', 'tick off item N'], ['undo N', 'untick item N'], ['rm N', 'remove item N'], ['clear', 'remove the ticked items']],
   ex: ['todo add call jose', 'todo done 1', 'todo', 'grep -v x ~/todo.txt'],
-  more: 'A short list that stays in this browser. It lives in ~/todo.txt as plain lines, so cat, grep and the rest work on it too.',
+  complete: args => args.length ? null : ['add', 'done', 'undo', 'rm', 'clear'],
+  more: 'a short list that stays in this browser. it lives in ~/todo.txt as plain lines, so cat, grep and the rest work on it too.',
   run(argv, io){
     const fs = io.fs, sub = (argv[1] || '').toLowerCase();
     let items = todoRead(fs), note = null;
@@ -100,9 +101,10 @@ T.cmds.todo = { g: 'tools', desc: 'a to-do list, kept in ~/todo.txt', usage: 'to
       }
       return [...new Set(ns)].sort((a, b) => b - a);
     };
+    if (sub[0] === '-'){ io.err('todo: no ' + sub + ' option  (try: todo add text)\n'); return 2; }
     if (sub === 'add' || (sub && !['done', 'undo', 'rm', 'del', 'clear', 'ls', 'list'].includes(sub))){
       const text = (sub === 'add' ? argv.slice(2) : argv.slice(1)).join(' ').trim();
-      if (!text){ io.err('usage: todo add text\n'); return 1; }
+      if (!text){ io.err('usage: todo add text  (try: todo add call jose)\n'); return 1; }
       items.push({ done: false, text }); note = ['added', items.length];
     } else if (sub === 'done' || sub === 'undo'){
       const ns = num(); if (!ns) return 1;
@@ -223,11 +225,11 @@ M.net = net;
 T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usage: 'weather [-c | -f] [city]',
   opts: [['-c', 'Celsius'], ['-f', 'Fahrenheit']], ex: ['weather', 'weather tokyo', 'weather -f new york'],
   complete: () => ['london', 'tokyo', 'paris', 'mumbai', 'sydney', 'singapore', 'berlin', 'dubai', 'toronto', 'nairobi', 'seoul', 'reykjavik'],
-  more: 'Asks open-meteo.com for the weather now and the next three days. With no city it guesses yours from your time zone, then remembers the last city you named. Nothing about you leaves the browser except the city name.',
+  more: 'asks open-meteo.com for the weather now and the next three days. with no city it guesses yours from your time zone, then remembers the last city you named. nothing about you leaves the browser except the city name.',
   async run(argv, io){
     let a = argv.slice(1), unit = null;
     while (a[0] === '-c' || a[0] === '-f'){ unit = a[0] === '-f' ? 'F' : 'C'; a = a.slice(1); }
-    if (a[0] && /^-/.test(a[0])){ io.err('weather: unknown option ' + a[0] + '  (try: weather -f tokyo)\n'); return 2; }
+    if (a[0] && /^-/.test(a[0])){ io.err('weather: no ' + a[0] + ' option  (try: weather -f tokyo)\n'); return 2; }
     if (!unit) unit = 'C';   // Celsius unless -f is asked for
     let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e){}
     let q = a.join(' ').trim(), guessed = false;
@@ -235,14 +237,14 @@ T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usa
     else q = lsGet(WX_CITY, '');
     if (!q && /^[A-Za-z]+\/[A-Za-z_\-]+/.test(tz) && !/^Etc\//.test(tz)){ q = tz.split('/').pop().replace(/_/g, ' '); guessed = true; }
     if (!q && io.tty && io.ask){ q = String((await io.ask('which city?  ')) || '').trim(); if (q) lsSet(WX_CITY, q); }
-    if (!q){ io.err('weather: which city? try weather london\n'); return 1; }
-    if (io.tty){ io.out('asking the sky over ' + q + '...\n', 'faint'); }
+    if (!q){ io.err('weather: which city?  (try: weather london)\n'); return 1; }
+    if (io.tty){ io.out('checking the weather in ' + q + '...\n', 'faint'); }
     let place, wx;
     try {
       const g = await net.json('https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=' + encodeURIComponent(q), { timeout: 6000 });
       const rs = (g && g.results) || [];
       place = (guessed && rs.find(r => r.timezone === tz)) || rs[0];
-      if (!place){ lsSet(WX_CITY, ''); io.err('weather: no place called ' + q + '. try a city name, like weather london\n'); return 1; }
+      if (!place){ lsSet(WX_CITY, ''); io.err('weather: no place called ' + q + '  (try: weather london)\n'); return 1; }
       wx = await net.json('https://api.open-meteo.com/v1/forecast?latitude=' + place.latitude + '&longitude=' + place.longitude +
         '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day' +
         '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=4' +
@@ -299,12 +301,12 @@ const fmtHMS = (sec, tenths) => {
   return (h ? h + ':' + two(mm) : String(mm)) + ':' + two(ss) + (tenths ? '.' + Math.floor((sec - s) * 10) : '');
 };
 T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer duration', ex: ['timer 5m', 'timer 90s', 'timer 1:30', 'timer 1h 15m'],
-  more: 'Counts down in big digits and beeps when it reaches zero. A bare number is minutes. Space pauses, + and - add or take a minute, r starts over, q quits.',
+  more: 'counts down in big digits and beeps when it reaches zero. a bare number is minutes. space pauses, + and - add or take a minute, r starts over, q quits.',
   start(api, argv){
     const now = () => performance.now() / 1000;
     let dur = parseDur(argv.slice(1).join(' ')), t0 = now(), paused = false, pausedAt = 0, done = false, doneAt = 0, lastSec = -1, beeps = 0, beepT = 0;
-    if (!(dur > 0)){ api.print(argv[1] ? 'timer: cannot read ' + argv.slice(1).join(' ') + '. try timer 5m, timer 90s or timer 1:30' : 'usage: timer 5m   (also 90s, 1:30, 1h)'); api.exit(1); return {}; }
-    if (dur > 86400){ api.print('timer: up to 24 hours'); api.exit(1); return {}; }
+    if (!(dur > 0)){ api.print(argv[1] ? 'timer: cannot read ' + argv.slice(1).join(' ') + '  (try: timer 5m, 90s or 1:30)' : 'usage: timer duration  (try: timer 5m, 90s or 1:30)'); api.exit(2); return {}; }
+    if (dur > 86400){ api.print('timer: up to 24 hours'); api.exit(2); return {}; }
     const elapsed = () => (paused ? pausedAt : now()) - t0;
     const finish = () => { api.print('timer: ' + fmtHMS(dur) + (done ? ' done' : ', stopped with ' + fmtHMS(Math.ceil(dur - elapsed())) + ' left')); api.exit(0); };
     return {
@@ -369,8 +371,8 @@ const PASSAGES = [
   'Start before you feel ready. Ask for help early. Ship it on a Tuesday, fix it on a Wednesday, and keep going.',
 ];
 const TYPE_BEST = 'kaiav.typing.best';
-T.apps.typing = { g: 'fun', desc: 'a typing test: how fast are you?', usage: 'typing',
-  more: 'Type the passage as it appears. The clock starts on your first key. Mistakes light up; backspace fixes them. At the end you get words per minute (five characters to a word, correct ones only) and accuracy. Tab gives a new passage, esc quits.',
+T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
+  more: 'type the passage as it appears. the clock starts on your first key. mistakes light up; backspace fixes them. at the end you get words per minute (five characters to a word, correct ones only) and accuracy. tab gives a new passage, esc quits.',
   start(api){
     let best = lsGet(TYPE_BEST, 0) || 0, order = PASSAGES.map((_, i) => i).sort(() => Math.random() - 0.5), pi = 0;
     let text, typed, t0, t1, keys, errs, done, newBest, lastShow = -1;
@@ -436,7 +438,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test: how fast are you?', usage: 'ty
           const sx = bx + f.w + 8 <= x0 + w - 14 ? bx + f.w + 8 : x0, sy = sx === x0 ? by + f.h + 1 : by;
           scr.put(sx, sy, 'accuracy', 'dim'); scr.put(sx + 10, sy, acc() + '%', 'normal');
           scr.put(sx, sy + 1, 'time', 'dim'); scr.put(sx + 10, sy + 1, fmtHMS(secs()), 'normal');
-          scr.put(sx, sy + 2, 'best', 'dim'); scr.put(sx + 10, sy + 2, best ? best + ' wpm' + (newBest ? '  new!' : '') : '-', newBest ? 'bright' : 'normal');
+          scr.put(sx, sy + 2, 'best', 'dim'); scr.put(sx + 10, sy + 2, best ? best + ' wpm' + (newBest ? '  new best' : '') : '-', newBest ? 'bright' : 'normal');
           keysLine(scr, H - 1, [['enter', 'again'], ['q', 'quit']]);
         } else {
           keysLine(scr, H - 1, t0 ? [['tab', 'new passage'], ['esc', 'quit']] : [['start typing', ''], ['tab', 'new passage'], ['esc', 'quit']]);
@@ -499,7 +501,7 @@ function showJSON(o, v, cols, max = 1e9, i0 = 2){
 T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl [-i] [-s] [-m secs] [-X METHOD] [-H "k: v"] [-d data] url',
   opts: [['-i', 'show the response headers'], ['-s', 'just the body: no status or footer'], ['-X METHOD', 'GET, POST, PUT, DELETE...'], ['-H "k: v"', 'add a request header'], ['-d DATA', 'send a body (and POST)'], ['-m SECS', 'give up after this long (9)']],
   ex: ['curl api.github.com/zen', 'curl -i httpbin.org/get', 'curl wttr.in/?format=3', 'curl api.ipify.org > ip.txt'],
-  more: 'Makes a real request from your browser. JSON comes back pretty-printed and coloured; long answers are cut short on screen but whole in a pipe or a file. A bare domain means https. The server has to allow requests from web pages (CORS), and the claude.ai preview blocks the network entirely.',
+  more: 'makes a real request from your browser. JSON comes back pretty-printed and coloured; long answers are cut short on screen but whole in a pipe or a file. a bare domain means https. the server has to allow requests from web pages (CORS), and the claude.ai preview blocks the network entirely.',
   async run(argv, io){
     const a = argv.slice(1); let inc = false, silent = false, method = null, data = null, url = null, secs = 0; const headers = {};
     for (let i = 0; i < a.length; i++){
@@ -511,10 +513,10 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
       else if (x === '-H' || x === '--header'){ const h = String(a[++i] || ''), k = h.indexOf(':'); if (k > 0) headers[h.slice(0, k).trim()] = h.slice(k + 1).trim(); }
       else if (x === '-d' || x === '--data'){ data = a[++i] == null ? '' : a[i]; }
       else if (x === '-m' || x === '--max-time'){ secs = parseFloat(a[++i]); if (!(secs > 0)){ io.err('curl: -m wants seconds, like -m 5\n'); return 2; } }
-      else if (/^-/.test(x)){ io.err('curl: unknown option ' + x + '   (man curl)\n'); return 2; }
+      else if (/^-/.test(x)){ io.err('curl: no ' + x + ' option  (try: man curl)\n'); return 2; }
       else url = x;
     }
-    if (!url){ io.err('usage: curl url   (try: curl api.github.com/zen)\n'); return 2; }
+    if (!url){ io.err('usage: curl url  (try: curl api.github.com/zen)\n'); return 2; }
     if (!/^[a-z]+:\/\//i.test(url)) url = 'https://' + url;
     if (!/^https?:\/\//i.test(url)){ io.err('curl: only http and https\n'); return 2; }
     if (data != null && !method) method = 'POST';
@@ -547,7 +549,7 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
       }
       if (!text) o.at(0, ['(empty body)', 'f']);
     }
-    if (hidden) o.at(0, ['... ' + hidden + ' more lines', 'd'], ['   | less, or > file', 'f']);
+    if (hidden) o.at(0, ['... ' + hidden + ' more lines', 'd'], ['   > file for all of it', 'f']);
     if (!silent){
       o.blank();
       const bits = [String(r.status), kb(r.bytes), msStr(r.ms), r.type].filter(Boolean);
@@ -561,10 +563,10 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
    hn, wiki, define: live data, each one a small card
    ===================================================================================== */
 T.cmds.hn = { g: 'net', desc: 'Hacker News, the top stories', usage: 'hn [count]', ex: ['hn', 'hn 5', 'hn 20 | grep -i ai'],
-  more: 'The front page of Hacker News, from its public API. Arrows pick a story, enter opens it, 1 to 9 jump. Piped, it prints points, title and link, one story per line.',
+  more: 'the front page of Hacker News, from its public API. arrows pick a story, enter opens it, 1 to 9 jump. piped, it prints points, title and link, one story per line.',
   async run(argv, io){
     const n = Math.max(1, Math.min(30, parseInt(argv[1], 10) || (io.tty ? Math.max(5, Math.min(10, io.rows - 8)) : 10)));
-    if (argv[1] && !(parseInt(argv[1], 10) > 0)){ io.err('usage: hn [count]   (1 to 30)\n'); return 2; }
+    if (argv[1] && !(parseInt(argv[1], 10) > 0)){ io.err('usage: hn [count]  (try: hn 5, up to 30)\n'); return 2; }
     let items;
     try {
       const ids = await net.json('https://hacker-news.firebaseio.com/v0/topstories.json');
@@ -582,10 +584,10 @@ T.cmds.hn = { g: 'net', desc: 'Hacker News, the top stories', usage: 'hn [count]
   } };
 
 T.cmds.wiki = { g: 'net', desc: 'the opening of a Wikipedia article', usage: 'wiki topic...', ex: ['wiki alan turing', 'wiki vt100', 'wiki hypertext'],
-  more: 'Looks the topic up on English Wikipedia and prints the summary at the top of the article, with a link you can open.',
+  more: 'looks the topic up on English Wikipedia and prints the summary at the top of the article, with a link you can open.',
   async run(argv, io){
     const q = argv.slice(1).join(' ').trim();
-    if (!q){ io.err('usage: wiki topic   (try: wiki alan turing)\n'); return 2; }
+    if (!q){ io.err('usage: wiki topic  (try: wiki alan turing)\n'); return 2; }
     const sum = t => net.json('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(t.replace(/ /g, '_')) + '?redirect=true');
     let d;
     try {
@@ -617,7 +619,7 @@ T.cmds.define = { g: 'net', desc: 'what a word means', usage: 'define word', ex:
   more: 'English definitions from dictionaryapi.dev: the pronunciation, then up to three senses for each part of speech, with an example where there is one.',
   async run(argv, io){
     const w = argv.slice(1).join(' ').trim();
-    if (!w){ io.err('usage: define word   (try: define serendipity)\n'); return 2; }
+    if (!w){ io.err('usage: define word  (try: define serendipity)\n'); return 2; }
     let d;
     try { d = await net.json('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(w.toLowerCase())); }
     catch (e){ if (e.status === 404){ io.err('define: no entry for ' + w + '\n'); return 1; } return net.fail(io, 'define', e); }
@@ -735,11 +737,11 @@ const QR = (() => {
 M.qr = QR;
 T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] text...', opts: [['-l', 'low error correction: room for more text']],
   ex: ['qr risingfounder.net', 'qr kaiav.pages.dev', 'echo hello | qr'],
-  more: 'Draws a QR code your phone camera can read. Up to about 200 characters (270 with -l). Piped or redirected, it comes out as text blocks.',
+  more: 'draws a QR code your phone camera can read. up to about 200 characters (270 with -l). piped or redirected, it comes out as text blocks.',
   run(argv, io){
     let a = argv.slice(1), lo = false; if (a[0] === '-l'){ lo = true; a = a.slice(1); }
     const text = argText(io, a).replace(/\n$/, '');
-    if (!text){ io.err('usage: qr text   (try: qr risingfounder.net)\n'); return 2; }
+    if (!text){ io.err('usage: qr text  (try: qr risingfounder.net)\n'); return 2; }
     const q = QR.encode(text, lo ? 'L' : 'M');
     if (!q){ io.err('qr: too long for this little encoder (' + new TextEncoder().encode(text).length + ' bytes; ' + (lo ? 271 : 213) + ' max' + (lo ? '' : ', or 271 with -l') + ')\n'); return 1; }
     if (!io.tty){ const qz = 2, n = q.size + qz * 2; let s = ''; for (let y = -qz; y < q.size + qz; y++){ for (let x = -qz; x < q.size + qz; x++) s += (q.modules[y] && q.modules[y][x]) ? '##' : '  '; s += '\n'; } io.out(s); return; }
@@ -752,13 +754,13 @@ T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] 
    small offline tools: hash, base64, uuid, pass, json, convert, roll, countdown
    ===================================================================================== */
 const ALGOS = { sha1: 'SHA-1', 'sha-1': 'SHA-1', sha256: 'SHA-256', 'sha-256': 'SHA-256', sha384: 'SHA-384', 'sha-384': 'SHA-384', sha512: 'SHA-512', 'sha-512': 'SHA-512' };
-T.cmds.hash = { g: 'tools', desc: 'SHA hash of text', usage: 'hash [sha1 | sha256 | sha512] [text...]', ex: ['hash hello', 'hash sha1 hello', 'cat README.md | hash sha512'],
-  more: 'Prints the hex digest of its arguments, or of the standard input (byte for byte, newline included, like sha256sum). SHA-256 unless you name another.',
+T.cmds.hash = { g: 'tools', desc: 'SHA hash of text', usage: 'hash [sha1 | sha256 | sha384 | sha512] [text...]', ex: ['hash hello', 'hash sha1 hello', 'cat README.md | hash sha512'],
+  more: 'prints the hex digest of its arguments, or of the standard input (byte for byte, newline included, like sha256sum). SHA-256 unless you name another.',
   async run(argv, io){
     let a = argv.slice(1), algo = 'SHA-256';
     if (a[0] && ALGOS[a[0].toLowerCase()]){ algo = ALGOS[a[0].toLowerCase()]; a = a.slice(1); }
-    else if (a[0] && /^(md5|sha\d+|-)/i.test(a[0]) && a.length > 1){ io.err('hash: no ' + a[0] + ' here. sha1, sha256, sha384 or sha512\n'); return 2; }
-    if (!a.length && !io.stdin){ io.err('usage: hash [sha256] text   (or pipe something in)\n'); return 2; }
+    else if (a[0] && /^(md5|sha\d+|-)/i.test(a[0]) && a.length > 1){ io.err('hash: no ' + a[0] + ' here  (try: sha1, sha256, sha384 or sha512)\n'); return 2; }
+    if (!a.length && !io.stdin){ io.err('usage: hash [sha256] text  (or pipe something in)\n'); return 2; }
     if (!(crypto && crypto.subtle)){ io.err('hash: this page cannot reach the browser crypto (it needs https)\n'); return 1; }
     const buf = await crypto.subtle.digest(algo, new TextEncoder().encode(argText(io, a)));
     const hex = Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
@@ -766,17 +768,17 @@ T.cmds.hash = { g: 'tools', desc: 'SHA hash of text', usage: 'hash [sha1 | sha25
     else io.out(hex + '\n');
   } };
 T.cmds.base64 = { g: 'tools', desc: 'encode or decode base64', usage: 'base64 [-d] [text...]', opts: [['-d', 'decode']], ex: ['base64 hello', 'echo aGVsbG8= | base64 -d', 'cat about.txt | base64'],
-  more: 'Encodes its arguments or the standard input as base64 (UTF-8), or decodes with -d.',
+  more: 'encodes its arguments or the standard input as base64 (UTF-8), or decodes with -d.',
   run(argv, io){
     let a = argv.slice(1), dec = false; if (a[0] === '-d' || a[0] === '--decode'){ dec = true; a = a.slice(1); }
     const t = argText(io, a);
-    if (!t){ io.err('usage: base64 [-d] text   (or pipe something in)\n'); return 2; }
+    if (!t){ io.err('usage: base64 [-d] text  (or pipe something in)\n'); return 2; }
     if (dec){
       try { const bin = atob(t.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')); const txt = new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))); io.out(txt + (io.tty && !txt.endsWith('\n') ? '\n' : '')); }
       catch (e){ io.err('base64: that is not base64\n'); return 1; }
     } else { let bin = ''; for (const b of new TextEncoder().encode(t)) bin += String.fromCharCode(b); io.out(btoa(bin) + '\n'); }
   } };
-T.cmds.uuid = { g: 'tools', desc: 'random UUIDs', usage: 'uuid [count]', ex: ['uuid', 'uuid 5'], more: 'Version 4 UUIDs from the browser\'s secure random numbers.',
+T.cmds.uuid = { g: 'tools', desc: 'random UUIDs', usage: 'uuid [count]', ex: ['uuid', 'uuid 5'], more: 'version 4 UUIDs from the browser\'s secure random numbers.',
   run(argv, io){
     const n = Math.max(1, Math.min(100, parseInt(argv[1], 10) || 1));
     const one = () => {
@@ -788,12 +790,12 @@ T.cmds.uuid = { g: 'tools', desc: 'random UUIDs', usage: 'uuid [count]', ex: ['u
     io.out(Array.from({ length: n }, one).join('\n') + '\n');
   } };
 T.cmds.pass = { g: 'tools', desc: 'a strong random password', usage: 'pass [-n] [length]', opts: [['-n', 'letters and digits only']], ex: ['pass', 'pass 32', 'pass -n 16', 'vault'],
-  more: 'Made in your browser from secure random numbers; it never leaves the page. 20 characters unless you say (8 to 128). Then: c copies it, s saves it in your encrypted vault (see man vault), h hides it from the screen.',
+  more: 'made in your browser from secure random numbers; it never leaves the page. 20 characters unless you say (8 to 128). then: c copies it, s saves it in your encrypted vault (see man vault), h hides it from the screen.',
   async run(argv, io){
     let a = argv.slice(1), plain = false; if (a[0] === '-n'){ plain = true; a = a.slice(1); }
     if (a[0] && !/^\d+$/.test(a[0])){ io.err('pass: ' + a[0] + ' is not a length  (try: pass 24)\n'); return 2; }
     const len = a[0] ? parseInt(a[0], 10) : 20;
-    if (!(len >= 8 && len <= 128)){ io.err('pass: length from 8 to 128\n'); return 2; }
+    if (!(len >= 8 && len <= 128)){ io.err('pass: the length is 8 to 128  (try: pass 24)\n'); return 2; }
     const pw = genPass(len, plain);
     if (!io.tty || !io.ask){ io.out(pw + '\n'); return; }
     const o = io.ui(); o.blank().card({ title: 'PASSWORD', note: len + ' chars', items: [{ label: 'new', value: pw }] }).blank();
@@ -812,12 +814,12 @@ T.cmds.pass = { g: 'tools', desc: 'a strong random password', usage: 'pass [-n] 
     }
   } };
 T.cmds.json = { g: 'tools', desc: 'pretty-print JSON', usage: 'json [file]', ex: ["echo '{\"a\":[1,2]}' | json", 'curl api.github.com/users/torvalds | json'],
-  more: 'Reads JSON from a file or the standard input and prints it indented, in colour on the screen.',
+  more: 'reads JSON from a file or the standard input and prints it indented, in colour on the screen.',
   run(argv, io){
     let t;
-    if (argv[1]){ t = io.fs.read(argv[1]); if (t == null){ io.err('json: ' + argv[1] + ': No such file\n'); return 1; } } else t = io.stdin || '';
-    if (!t.trim()){ io.err('usage: json file   (or pipe JSON in)\n'); return 2; }
-    let v; try { v = JSON.parse(t); } catch (e){ io.err('json: not valid JSON: ' + String(e.message || e).replace(/^JSON\.parse: /, '') + '\n'); return 1; }
+    if (argv[1]){ t = io.fs.read(argv[1]); if (t == null){ io.err('json: ' + argv[1] + ': ' + (io.fs.isDir(argv[1]) ? 'is a directory' : 'no such file or directory') + '\n'); return 1; } } else t = io.stdin || '';
+    if (!t.trim()){ io.err('usage: json file  (or pipe JSON in)\n'); return 2; }
+    let v; try { v = JSON.parse(t); } catch (e){ io.err('json: that is not valid JSON\n'); return 1; }
     if (!io.tty){ io.out(JSON.stringify(v, null, 2) + '\n'); return; }
     const o = io.ui(); showJSON(o, v, io.cols, 1e9, 0); io.rich(o);
   } };
@@ -842,14 +844,14 @@ const fromK = (k, n) => n === 'C' ? k - 273.15 : n === 'F' ? (k - 273.15) * 9 / 
 const fmtNum = x => { if (!isFinite(x)) return String(x); const a = Math.abs(x); if (a !== 0 && (a >= 1e12 || a < 1e-6)) return x.toExponential(4); return String(a >= 1e-3 ? +(+x.toPrecision(7)).toFixed(4) : +x.toPrecision(7)); };
 const UNIT_SHOW = { length: ['mm', 'cm', 'm', 'km', 'in', 'ft', 'yd', 'mi'], mass: ['g', 'kg', 'oz', 'lb', 'st'], data: ['B', 'KB', 'MB', 'GB', 'KiB', 'MiB', 'GiB'], time: ['s', 'min', 'h', 'd', 'wk'], volume: ['ml', 'l', 'cup', 'gal'], temperature: ['C', 'F', 'K'] };
 T.cmds.convert = { g: 'tools', desc: 'convert units', usage: 'convert number unit [to unit]', ex: ['convert 5 km to mi', 'convert 72 f c', 'convert 3.5 GB MiB', 'convert 180 lb'],
-  more: 'Length, mass, temperature, data sizes, time and volume. Leave out the second unit to see the number in all the usual ones. KB, MB and GB are powers of 1000; KiB, MiB and GiB powers of 1024.',
+  more: 'length, mass, temperature, data sizes, time and volume. leave out the second unit to see the number in all the usual ones. KB, MB and GB are powers of 1000; KiB, MiB and GiB powers of 1024.',
   run(argv, io){
     const s = argText(io, argv.slice(1)).replace(/\s+/g, ' ').trim();
     const m = /^(-?\d*\.?\d+(?:e[+-]?\d+)?)\s*(°?[a-z]+)(?:\s+(?:to|in|as|into)?\s*(°?[a-z]+))?\s*$/i.exec(s);
-    if (!m){ io.err('usage: convert 5 km to mi   (man convert for the units)\n'); return 2; }
+    if (!m){ io.err('usage: convert number unit [to unit]  (try: convert 5 km to mi)\n'); return 2; }
     const v = parseFloat(m[1]), from = findUnit(m[2]), to = m[3] ? findUnit(m[3]) : null;
-    if (!from){ io.err('convert: no unit called ' + m[2] + '\n'); return 1; }
-    if (m[3] && !to){ io.err('convert: no unit called ' + m[3] + '\n'); return 1; }
+    if (!from){ io.err('convert: no unit called ' + m[2] + '  (try: man convert)\n'); return 1; }
+    if (m[3] && !to){ io.err('convert: no unit called ' + m[3] + '  (try: man convert)\n'); return 1; }
     if (to && to.kind !== from.kind){ io.err('convert: cannot turn ' + from.kind + ' into ' + to.kind + '\n'); return 1; }
     const conv = t => from.kind === 'temperature' ? fromK(toK(v, from.name), t.name) : v * from.f / t.f;
     const targets = to ? [to] : UNIT_SHOW[from.kind].map(n => UNITS[n]).filter(t => t.name !== from.name);
@@ -861,16 +863,16 @@ T.cmds.convert = { g: 'tools', desc: 'convert units', usage: 'convert number uni
   } };
 
 T.cmds.roll = { g: 'tools', desc: 'roll dice', usage: 'roll [NdS[+K]]...', ex: ['roll', 'roll d20', 'roll 2d6+3', 'roll 4d6 d8'],
-  more: 'Dice notation: 2d6+3 means two six-sided dice plus three. One six-sided die unless you say.',
+  more: 'dice notation: 2d6+3 means two six-sided dice plus three. one six-sided die unless you say.',
   run(argv, io){
     const sin = String(io.stdin || '').trim().split(/\s+/).filter(Boolean);
     const specs = argv.length > 1 ? argv.slice(1) : sin.length ? sin : ['1d6'];
     let total = 0; const groups = [];
     for (const sp of specs){
       const m = /^(\d*)d(\d+)([+-]\d+)?$/i.exec(sp);
-      if (!m){ io.err('roll: cannot read ' + sp + '. try 2d6+3\n'); return 2; }
+      if (!m){ io.err('roll: cannot read ' + sp + '  (try: roll 2d6+3)\n'); return 2; }
       const n = m[1] ? +m[1] : 1, sides = +m[2], k = m[3] ? +m[3] : 0;
-      if (!(n >= 1 && n <= 100 && sides >= 2 && sides <= 1000)){ io.err('roll: 1 to 100 dice, 2 to 1000 sides\n'); return 2; }
+      if (!(n >= 1 && n <= 100 && sides >= 2 && sides <= 1000)){ io.err('roll: 1 to 100 dice, 2 to 1000 sides  (try: roll 2d6)\n'); return 2; }
       const vals = Array.from(crypto.getRandomValues(new Uint32Array(n)), r => r % sides + 1);
       total += vals.reduce((x, y) => x + y, 0) + k; groups.push({ sp, vals, k });
     }
@@ -884,15 +886,16 @@ T.cmds.roll = { g: 'tools', desc: 'roll dice', usage: 'roll [NdS[+K]]...', ex: [
 
 const NAMED_DAYS = { 'new year': '01-01', 'new years': '01-01', christmas: '12-25', xmas: '12-25', halloween: '10-31', 'valentines': '02-14' };
 T.cmds.countdown = { g: 'tools', desc: 'how long until a date', usage: 'countdown date', ex: ['countdown 2027-01-01', 'countdown dec 25', 'countdown christmas', 'countdown 2026-11-03 09:00'],
-  more: 'Days, hours and minutes until a date (or since it, if it has passed). A date without a year means the next one.',
+  more: 'days, hours and minutes until a date (or since it, if it has passed). a date without a year means the next one.',
   run(argv, io){
-    const raw = argText(io, argv.slice(1)).replace(/\s+/g, ' ').trim(); if (!raw){ io.err('usage: countdown date   (try: countdown dec 25)\n'); return 2; }
+    const raw = argText(io, argv.slice(1)).replace(/\s+/g, ' ').trim(); if (!raw){ io.err('usage: countdown date  (try: countdown dec 25)\n'); return 2; }
     const now = new Date(); let s = raw.toLowerCase(), d;
     if (NAMED_DAYS[s]) s = now.getFullYear() + '-' + NAMED_DAYS[s];
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(s + 'T00:00:00');
     else if (/^\d{4}-\d{2}-\d{2}[ t]\d{1,2}:\d{2}$/.test(s)) d = new Date(s.replace(' ', 'T'));
-    else { d = new Date(/\b\d{4}\b/.test(s) ? s : s + ' ' + now.getFullYear()); }
-    if (isNaN(d)){ io.err('countdown: cannot read ' + raw + '. try 2027-01-01 or dec 25\n'); return 2; }
+    else if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\b/.test(s) || /^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(s)){ d = new Date(/\b\d{4}\b/.test(s) ? s : s + ' ' + now.getFullYear()); }
+    else d = new Date(NaN);                          // the browser would read almost anything as a date
+    if (isNaN(d)){ io.err('countdown: cannot read ' + raw + '  (try: countdown 2027-01-01 or dec 25)\n'); return 2; }
     if (!/\b\d{4}\b/.test(raw) && d < now && now - d > 864e5) d.setFullYear(d.getFullYear() + 1);
     let ms = d - now; const past = ms < 0; ms = Math.abs(ms);
     const days = Math.floor(ms / 864e5), hrs = Math.floor(ms / 36e5) % 24, mins = Math.floor(ms / 6e4) % 60;
@@ -940,8 +943,8 @@ async function vUnlock(io){
   const blob = vRead();
   if (!blob){
     const o = io.ui(); o.blank().head('new vault').blank()
-      .para('Pick a passphrase. It encrypts your saved passwords on this device, and only here.', 'n', io.cols - 6)
-      .para('There is no recovery: forget it and the vault cannot be opened, by anyone.', 'd', io.cols - 6).blank();
+      .para('pick a passphrase. it encrypts your saved passwords on this device, and only here.', 'n', io.cols - 6)
+      .para('there is no recovery: forget it and the vault cannot be opened, by anyone.', 'd', io.cols - 6).blank();
     io.rich(o);
     const p1 = await io.ask('passphrase  ', { secret: true }); if (!p1) return false;
     if (p1.length < 8){ io.err('vault: use at least 8 characters\n'); return false; }
@@ -978,13 +981,13 @@ async function vaultSave(io, pw, label){
 const VSUB = ['add', 'get', 'rm', 'rename', 'lock', 'export', 'import', 'reset'];
 T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this browser', usage: 'vault [add | get | rm | rename | lock | export | import | reset] [label]',
   ex: ['vault', 'vault add github', 'vault get github', 'vault rename github gh', 'vault lock', 'pass  then s to save'],
-  more: 'Passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. Nothing is sent anywhere. Clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. It locks after 5 idle minutes or when you leave the tab. Handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault so you can keep a copy; vault import takes it back.',
+  more: 'passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. nothing is sent anywhere. clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. it locks after 5 idle minutes or when you leave the tab. handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault so you can keep a copy; vault import takes it back.',
   complete(args){ if (!args.length) return VSUB; if (['get', 'rm', 'rename'].includes(args[0]) && args.length === 1 && V.items) return V.items.map(it => it.label); return null; },
   async run(argv, io){
     const sub = argv[1] || '', arg = argv[2];
     if (sub && !VSUB.includes(sub) && sub !== 'list' && sub !== 'ls'){
       const near = VSUB.find(x => x.startsWith(sub.slice(0, 2)));
-      io.err('vault: no ' + sub + ' here  (try: vault' + (near ? ' ' + near : '') + ')\n'); return 2;
+      io.err('vault: no ' + sub + ' here  (try: vault ' + (near || 'add') + ')\n'); return 2;
     }
     if (sub === 'lock'){ const was = !!V.key; vLock(); io.out(was ? 'vault locked\n' : 'vault was already locked\n', 'dim'); return; }
     if (sub === 'export'){
@@ -1035,7 +1038,7 @@ T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this brow
       const ok = await vaultSave(io, pw, label); if (ok && k === 'g' && await copy(pw)) io.out('  and copied to the clipboard\n', 'dim');
       pw = ''; return ok ? 0 : 1;
     }
-    const need = n => { if (!arg){ io.err('usage: vault ' + n + ' <label>\n'); return null; } const it = vFind(arg); if (!it){ const near = V.items.find(x => x.label.toLowerCase().startsWith(arg.toLowerCase().slice(0, 2))); io.err('vault: nothing saved as ' + arg + (near ? '  (did you mean ' + near.label + '?)' : '') + '\n'); } return it || null; };
+    const need = n => { if (!arg){ io.err('usage: vault ' + n + ' label  (try: vault ' + n + ' github)\n'); return null; } const it = vFind(arg); if (!it){ const near = V.items.find(x => x.label.toLowerCase().startsWith(arg.toLowerCase().slice(0, 2))); io.err('vault: nothing saved as ' + arg + (near ? '  (did you mean ' + near.label + '?)' : '') + '\n'); } return it || null; };
     if (sub === 'get'){
       const it = need('get'); if (!it) return 1;
       const ok = await copy(it.pw);
@@ -1068,7 +1071,7 @@ T.cmds.credits = { g: 'misc', desc: 'who made what', usage: 'credits', run(argv,
 
 /* a hello for people who type one */
 T.cmds.hello = { g: 'fun', hidden: true, desc: 'say hi', usage: 'hello', run(argv, io){
-  if (!io.tty){ io.out('hi. try about, or help.\n'); return; }
+  if (!io.tty){ io.out('hi. try about or help\n'); return; }
   const c = w => [w, 'b', { cmd: w }];
   const o = io.ui(); o.blank().para('hi, welcome to ' + (M.CONTENT && M.CONTENT.name ? M.CONTENT.name.split(' ')[0] + "'s" : 'this') + ' desk.', 'n', io.cols - 4)
     .flow([[['try', 'f']], [c('about')], [c('contact')], [['or', 'f']], [c('help')]], '  ').blank();
