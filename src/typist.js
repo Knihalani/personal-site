@@ -328,7 +328,7 @@ M.createTypist = function createTypist(api){
   /* Hand scale: the hand is modelled at adult size, then drawn at HS. Seen from ~45 cm above, full-size black hands
      read as mittens over the board; at ~80% they sit on the keys like hands do in photos of someone typing. */
   const HS = .8;
-  const SKIN_H = .0028;     // surface-nets cell size (hand space; ~2.2 mm in the world)
+  const SKIN_H = .0031;     // surface-nets cell size (hand space; ~2.5 mm in the world, so meshing costs what it did at full size)
   const FL = [[.036, .03, .026], [.041, .025, .019], [.045, .028, .02], [.042, .026, .019], [.032, .02, .0165]];
   const FR = [[.0098, .0088, .0078], [.0075, .0067, .0059], [.0077, .0069, .006], [.0072, .0064, .0056], [.0062, .0055, .0049]];
   const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));

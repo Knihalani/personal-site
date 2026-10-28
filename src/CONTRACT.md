@@ -31,11 +31,14 @@ MAC.createScene(container: HTMLElement) -> {
     seat: THREE.Vector3,        // centre of the chair seat, world space
     keyboardCenter: THREE.Vector3,
     keyboardNormal: THREE.Vector3,   // up direction of the key surface
-    screenCenter: THREE.Vector3,
+    screenCenter, screenNormal, lampPosition, keySpacing,
+    eye, eyeLive, neck,         // camera rest position, live position (updated in place), head pivot
+    floorY, deskTop, deskBounds, wallZ, windowRect,   // for room.js (MAC.dressRoom(api))
   },
-  add(obj3d),
-  setView(name),                // 'scene' (cinematic over-the-shoulder) | 'screen' (dolly in so the terminal fills the view)
-  setPointer(nx, ny),           // -1..1, subtle camera parallax
+  add(obj3d),                    // also turns on castShadow for its meshes, unless mesh.userData.noShadow
+  setLook(nx, ny),              // pointer in -1..1 (0,0 = the screen); ny > 0 leans back toward the desk and hands
+  nudge(),                      // a keystroke happened: skips the intro reveal, wakes the renderer
+  setLamp(on), lampOn,          // the desk lamp switch (main.js exposes it as MAC.world.lamp)
   pickScreen(clientX, clientY) -> {u, v} | null,   // raycast to the CRT glass; u, v are 0..1 from the TOP-LEFT of the
                                 // terminal canvas (barrel bow and overscan inset accounted for); null off the image
   update(dt, t),
@@ -43,6 +46,8 @@ MAC.createScene(container: HTMLElement) -> {
   resize(w, h),
 }
 ```
+Test hook: with `?debug` in the URL the scene also exposes `api._dbg = { yawS, pitchS, intro, shot, LOOK, lampS }`
+(e.g. `pitchS.x = pitchS.t = -LOOK.down` forces the lean-back view). Not present otherwise.
 
 ## typist.js (typist agent)
 ```js
@@ -80,10 +85,9 @@ Build into your own scratch folder: `python3 build.py --out <dir>`. Missing modu
 
 ## View
 There is ONE view: the typist's own eyes (first person). At rest the CRT fills most of the frame and is fully
-legible. Moving the pointer looks around like a seated head would: down (up to ~35°) to watch the hands type
-on the keyboard, a little left/right/up. On touch, a drag looks around and springs back. `setView` is gone;
-`setLook(nx, ny)` replaces `setPointer` (nx, ny in -1..1, from the pointer position; 0,0 = looking at the screen).
-The typist's head/hair/torso must not intrude into the camera (hide head meshes or keep them behind the near plane).
+legible. Moving the pointer looks around like a seated head would: down (up to ~35°) leans back to the
+whole desk and the hands, a little left/right/up. `setLook(nx, ny)` is the only view control (`setView`/`setPointer`
+are gone). The typist has no head or torso meshes (the camera is the head); hips/legs never cast shadows.
 The visible parts are the forearms, sleeves and hands, so they must look great from above and behind.
 
 ## Sound: src/sound.js

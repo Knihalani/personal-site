@@ -43,7 +43,6 @@ if (TOUCH && Math.min(innerWidth, innerHeight) < 820){ phone(); return; }
 let api;
 try { api = M.createScene(stage); } catch (e){ console.error(e); $('#loading').textContent = 'this needs WebGL'; return; }
 if (M.dressRoom) { try { M.dressRoom(api); } catch (e){ console.error(e); } }
-for (const n of stage.querySelectorAll('[tabindex]')) n.removeAttribute('tabindex');   // #stage is decorative: focus lives on #kbd
 M.world = {
   lamp: on => api.setLamp ? api.setLamp(on === undefined ? !api.lampOn : on) : null,
   get lampOn(){ return !!api.lampOn; },
@@ -51,7 +50,7 @@ M.world = {
 const term = M.createTerminal({ content: M.CONTENT, aspect: api.screenAspect });
 api.setScreenCanvas(term.canvas);
 const typist = M.createTypist(api); if (typist.object3d && !typist.object3d.parent) api.add(typist.object3d);
-const look = (x, y) => (api.setLook || api.setPointer || (() => {}))(x, y);
+const look = (x, y) => api.setLook && api.setLook(x, y);
 /* #kbd is the real text field (screen readers, IME, paste); keystrokes themselves are read from keydown */
 const focusInput = () => { if (!reading() && D.activeElement !== kbd) try { kbd.focus({ preventScroll: true }); } catch (e){} };
 setupMute(focusInput);

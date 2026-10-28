@@ -11,7 +11,7 @@ if (!M.createScene) M.createScene = el => {
     setScreenCanvas(c){ tex.image = c; tex.needsUpdate = true; }, markScreenDirty(){ tex.needsUpdate = true; },
     keyboard: { hasKey: c => !!keys[c], keyWorldPos: c => keys[c] ? keys[c].getWorldPosition(new THREE.Vector3()) : null, keyRow: () => 1, press: c => keys[c] && (keys[c].position.y = -.004), release: c => keys[c] && (keys[c].position.y = 0) },
     rig: { seat: new THREE.Vector3(0, .45, .9), keyboardCenter: new THREE.Vector3(0, .78, .35), keyboardNormal: new THREE.Vector3(0, 1, 0), screenCenter: new THREE.Vector3(0, 1.15, 0) },
-    add: o => scene.add(o), setView(){}, setPointer(){}, update(){}, render(){ renderer.render(scene, camera); },
+    add: o => scene.add(o), setLook(){}, update(){}, render(){ renderer.render(scene, camera); },
     resize(w, h){ renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); } };
 };
 if (!M.createTypist) M.createTypist = api => ({ object3d: new THREE.Group(), keyDown(c){ api.keyboard.press(c); }, keyUp(c){ api.keyboard.release(c); }, update(){} });
