@@ -152,6 +152,20 @@ button.chip{pointer-events:auto}
 .dmgnum.crit{font-size:24px;line-height:32px;color:var(--ochre)}
 .dmgnum.dot{color:#ffb27a}
 .dmgnum.dodge,.dmgnum.heal{color:#9fe08a}
+.dmgnum.parry{font-size:20px;line-height:28px;color:var(--ochre)}
+.dmgnum.stag{color:#ffd27a}
+.dmgnum.block{color:#cfd8e0}
+#stam{position:fixed;left:50%;top:50%;width:40px;height:40px;margin:-20px 0 0 -20px;pointer-events:none;opacity:0;transition:opacity .25s}
+#stam.on{opacity:1}
+#stam svg{display:block;width:40px;height:40px;transform:rotate(-90deg)}
+#stam circle{fill:none;stroke-width:3}
+#stam .bg{stroke:rgba(10,9,12,.45)}
+#stam .fg{stroke:var(--sage);stroke-dasharray:100.5;transition:stroke .12s}
+#stam.low .fg{stroke:#e0735f}
+#stam.charge .fg{stroke:var(--bone)}
+#stam.guard .bg{stroke:rgba(240,230,210,.4)}
+#stam.full .fg,#stam.parry .fg{stroke:var(--ochre)}
+#stam.full svg,#stam.parry svg{filter:drop-shadow(0 0 3px var(--ochre))}
 #hurt{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(170,40,40,.75) 100%);z-index:3}
 #tip{position:fixed;left:0;top:0;z-index:26;width:280px;padding:10px 12px;pointer-events:none;color:var(--bone);font:400 14px/20px var(--tx)}
 #tip .tt{font:700 16px/22px var(--tx);margin-bottom:2px}
@@ -513,6 +527,7 @@ button.slot:active{transform:translateY(2px)}
   <div id="tut" class="f-panel" role="status" hidden><span class="lbl" id="tutStep">1/5</span><span id="tutText"></span><button class="x f-alt" id="tutClose" type="button" aria-label="Dismiss tip"><i class="ico" data-ico="close"></i></button></div>
   <div id="objective" aria-hidden="true" hidden><i class="ico" data-ico="pin"></i><span id="objDist"></span></div>
   <div id="cross" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div id="stam" aria-hidden="true"><svg viewBox="0 0 40 40"><circle class="bg" cx="20" cy="20" r="16"/><circle class="fg" cx="20" cy="20" r="16"/></svg></div>
   <div id="chips"></div>
   <div id="ringchip" class="ringchip" hidden>Ring 1/6  <b id="ringT">14.0</b></div>
   <div id="resume" class="chip f-panel" hidden><span class="kc f-key">Click</span>to resume</div>
@@ -682,6 +697,8 @@ button.slot:active{transform:translateY(2px)}
         <div id="jrGear"></div>
         <span class="sect lbl8">Moves</span>
         <div class="moves" id="jrMoves"></div>
+        <span class="sect lbl8">Combat</span>
+        <div class="moves" id="jrCombat"></div>
         <span class="sect lbl8">Islands visited</span>
         <div class="tags" id="jrIsles"></div>
         <span class="sect lbl8">Sky sail</span>
@@ -4872,11 +4889,11 @@ function drawWeapon(g2, f, r){ const S = itemArt(WEAPON, { f, r }), o = outlined
 /* ================= enemies of the Wilds: five silhouettes, readable telegraphs, leashed to their island ================= */
 const ET = { SLIME: 0, GOBLIN: 1, SENTINEL: 2, WISP: 3, ARCHER: 4 };
 const ESPEC = [
-  { name: 'Bramble slime', hp: 14, hw: .42, h: .8, walk: 1.5, dmg: 2, sight: 9, tele: .55, rec: .65, reach: 1.2, flee: .2 },
-  { name: 'Goblin', hp: 22, hw: .3, h: 1.35, walk: 1.8, run: 3.9, dmg: 3, sight: 11, tele: .5, rec: .55, reach: 1.9, flee: .25 },
-  { name: 'Crystal sentinel', hp: 46, hw: .5, h: 1.9, walk: 1.2, run: 9.5, dmg: 5, sight: 12, tele: .9, rec: 1.3, reach: 1.3, flee: .15 },
-  { name: 'Sky wisp', hp: 12, hw: .32, h: .7, walk: 2.6, run: 10, dmg: 2, sight: 14, tele: .6, rec: .85, reach: 1.1, fly: true, flee: .3 },
-  { name: 'Goblin archer', hp: 16, hw: .3, h: 1.3, walk: 1.8, run: 3.2, dmg: 2.5, sight: 17, tele: .75, rec: .6, reach: 12, flee: .3 }
+  { name: 'Bramble slime', hp: 14, hw: .42, h: .8, walk: 1.5, dmg: 2, sight: 9, tele: .55, rec: .65, reach: 1.2, flee: .2, poise: 5 },
+  { name: 'Goblin', hp: 22, hw: .3, h: 1.35, walk: 1.8, run: 3.9, dmg: 3, sight: 11, tele: .5, rec: .55, reach: 1.9, flee: .25, poise: 9 },
+  { name: 'Crystal sentinel', hp: 46, hw: .5, h: 1.9, walk: 1.2, run: 9.5, dmg: 5, sight: 12, tele: .9, rec: 1.3, reach: 1.3, flee: .15, poise: 26 },
+  { name: 'Sky wisp', hp: 12, hw: .32, h: .7, walk: 2.6, run: 10, dmg: 2, sight: 14, tele: .6, rec: .85, reach: 1.1, fly: true, flee: .3, poise: 4 },
+  { name: 'Goblin archer', hp: 16, hw: .3, h: 1.3, walk: 1.8, run: 3.2, dmg: 2.5, sight: 17, tele: .75, rec: .6, reach: 12, flee: .3, poise: 7 }
 ];
 const ES = { IDLE: 0, NOTICE: 1, CHASE: 2, TELE: 3, ATK: 4, REC: 5, FLEE: 6, RETURN: 7, DEAD: 8 };
 const ENEMIES = [];
@@ -4887,6 +4904,7 @@ function mkEnemy(I, s, j){
   return { t: s.type, I, isle: OUT_ISL0 + I.k, j, x: s.x, y: s.y + (S.fly ? 3 : 0), z: s.z, px: s.x, py: s.y, pz: s.z, vx: 0, vy: 0, vz: 0, hw: S.hw * k, h: S.h * k, onGround: false, sd: .5, md: .5, stepOff: 0,
     yaw: Math.random() * 6.28, pyaw: 0, hp: S.hp * (s.chief ? 5 : 1), maxhp: S.hp * (s.chief ? 5 : 1), st: ES.IDLE, timer: Math.random() * 2, home: { x: s.x, y: s.y, z: s.z }, guard: s.guard, chief: !!s.chief, sc: s.chief ? k : 0, mod: s.mod || '',
     path: new Int16Array(120), pathLen: 0, pathI: 0, goalErr: 0, replan: 0, stuck: 0, lastD: 0, atkX: 0, atkZ: 0, flash: 0, hitT: 0, burn: 0, burnT: 0, notice: 0, deadT: 0, hopT: 0, orbit: Math.random() * 6.28,
+    poise: S.poise * (s.chief ? 2.5 : 1), maxPoise: S.poise * (s.chief ? 2.5 : 1), poiseT: 0, stagT: 0, critT: 0, pat: 0, chain: 0, atkN: 0, leapCD: 2,
     A: { sq: Spr(1), lean: Spr(), arm: Spr(), glow: 0, gait: 0, blink: 1, blinkT: 1 + Math.random() * 3, mark: Spr() }, i: 0, active: false };
 }
 function enemyTargetOK(e){
@@ -4919,10 +4937,34 @@ function eSteer(e, speed){
   }
   return [ddx, ddz];
 }
-function eSet(e, st, t){ if (st === ES.TELE && e.st !== ES.TELE) SND.tele(e.t, e); e.st = st; e.timer = t; e.replan = 0; }
+// attack patterns: each type has a basic attack plus a variant, picked when the wind-up starts (and announced by it)
+//   slime: lunge hop | every third, a splash slam in place (ground ring)     goblin: club swing | two-swing combo | leap in from mid range
+//   sentinel: charge | close up, a ground pound (ground ring, jump it)       wisp: dive | a quick second dive      archer: arrow | every third, a three-arrow fan
+const PAT_TELE = [[1, 1.5], [1, 1, .5, 1.3], [1, 1.25], [1, 1, .55], [1, 1.35]];
+function ePattern(e){
+  const d = hyp2(PL.x - e.x, PL.z - e.z), n = e.atkN++, r = Math.random();
+  if (e.t === ET.SLIME) return d < 2.6 && n % 3 === 2 ? 1 : 0;
+  if (e.t === ET.GOBLIN) return d > 3 ? 3 : r < .4 ? 1 : 0;
+  if (e.t === ET.SENTINEL) return d < 3.2 ? 1 : 0;
+  if (e.t === ET.WISP) return r < .35 ? 1 : 0;
+  return n % 3 === 2 ? 1 : 0;
+}
+function eSet(e, st, t){
+  if (st === ES.TELE && e.st !== ES.TELE){ if (e.chain){ e.pat = e.chain; e.chain = 0; } else e.pat = ePattern(e); t *= PAT_TELE[e.t][e.pat] || 1; SND.tele(e.t, e); }
+  e.st = st; e.timer = t; e.replan = 0; }
+// poise: hits wear it down (heavies and finishers much faster); at zero the enemy staggers, drops its attack and takes more crits
+function eStagger(e, T){
+  e.stagT = T; e.poise = e.maxPoise; e.chain = 0; eSet(e, ES.REC, T); e.A.sq.v -= 5;
+  dmgNumber(e.x, e.y + e.h + .8, e.z, 'Stagger', 'stag'); SND.stagger(e);
+}
+// a ring of motes on the ground where an area attack will land
+function teleRing(e, R){ const c = TELE_COL[e.t]; for (let i = 0; i < 3; i++){ const a = Math.random() * 6.283; emit(e.x + Math.cos(a) * R, e.y + .12, e.z + Math.sin(a) * R, 0, .6, 0, c[0] * .6, c[1] * .6, c[2] * .6, .16, .35, 0, 0); } }
+function shockRing(x, y, z, R, c){ for (let i = 0; i < 24; i++){ const a = i / 24 * 6.283; emit(x + Math.cos(a) * .5, y + .15, z + Math.sin(a) * .5, Math.cos(a) * R * 2.4, .7 + Math.random(), Math.sin(a) * R * 2.4, c[0], c[1], c[2], .2, .42, 0, 6); } }
 function tickEnemy(e, dt){
   const S = ESPEC[e.t], dx = PL.x - e.x, dz = PL.z - e.z, dist = hyp2(dx, dz) || .001, dy = PL.y - e.y;
   e.timer -= dt; e.replan -= dt; e.flash = Math.max(0, e.flash - dt * 4); e.hitT = Math.max(0, e.hitT - dt);
+  e.critT = Math.max(0, e.critT - dt); e.poiseT -= dt; if (e.poiseT <= 0 && e.poise < e.maxPoise) e.poise = Math.min(e.maxPoise, e.poise + e.maxPoise * .5 * dt);
+  if (e.stagT > 0){ e.stagT -= dt; const a = tAcc * 9; emit(e.x + Math.cos(a) * .4, e.y + e.h + .25, e.z + Math.sin(a) * .4, 0, .3, 0, e.critT > 0 ? 1.6 : 1, e.critT > 0 ? 1.3 : .95, .45, .13, .3, 2, 0); }
   if (e.burn > 0){ e.burn -= dt; e.burnT -= dt; if (e.burnT <= 0){ e.burnT = 1; damageEnemy(e, 1, false, 0, 0, true); if (e.st === ES.DEAD) return; } }
   const canSee = enemyTargetOK(e), engaged = e.st >= ES.NOTICE && e.st <= ES.REC;
   if (e.st === ES.DEAD){ e.deadT += dt; return; }
@@ -4945,6 +4987,7 @@ function tickEnemy(e, dt){
         speed = want ? S.run : 0; if (!speed) eFace(e, PL.x, PL.z, 8, dt); break;
       }
       const reachT = e.t === ET.SENTINEL ? 8 : e.t === ET.SLIME ? 3.4 : S.reach;
+      if (e.t === ET.GOBLIN && dist > 3.4 && dist < 6.5 && Math.abs(dy) < 1.5 && e.timer <= 0 && e.onGround && (e.leapCD -= dt) <= 0){ e.leapCD = 3 + Math.random() * 2.5; eSet(e, ES.TELE, S.tele); e.atkX = dx / dist; e.atkZ = dz / dist; break; }
       if (dist < reachT && Math.abs(dy) < 2.2 && e.timer <= 0){ eSet(e, ES.TELE, S.tele); e.atkX = dx / dist; e.atkZ = dz / dist; break; }
       if (e.replan <= 0){ e.replan = .45; findPath(e, Math.floor(PL.x), Math.floor(PL.y + .01), Math.floor(PL.z), e.isle); }
       if (e.t === ET.SLIME){ // slimes travel in hops
@@ -4956,11 +4999,14 @@ function tickEnemy(e, dt){
     case ES.TELE: // the readable wind-up: everything the player needs to see comes from here
       eFace(e, PL.x, PL.z, e.t === ET.SENTINEL ? 3 : 10, dt);
       if (e.t !== ET.SENTINEL){ e.atkX = dx / dist; e.atkZ = dz / dist; }
+      if (e.pat === 1 && e.t === ET.SLIME) teleRing(e, 2.8); else if (e.pat === 1 && e.t === ET.SENTINEL) teleRing(e, 3.6);
       if (e.timer <= 0) startAttack(e, S, dx, dz, dist); break;
     case ES.ATK:
-      if (e.t === ET.SENTINEL){ ddx = e.atkX * S.run; ddz = e.atkZ * S.run; speed = -1; if (e.timer <= 0 || (Math.abs(e.vx) + Math.abs(e.vz) < 1 && e.timer < .9)) eSet(e, ES.REC, S.rec); if (dist < S.reach + .4 && Math.abs(dy) < 1.6) hurtPlayer(S.dmg, e.x, e.z, 13, e); }
-      else if (e.t === ET.SLIME){ ddx = e.vx; ddz = e.vz; speed = -1; if (dist < S.reach && Math.abs(dy) < 1.4) hurtPlayer(S.dmg, e.x, e.z, 7, e); if (e.onGround && e.timer < .3){ eSet(e, ES.REC, S.rec); e.A.sq.v -= 4; } }
-      else if (e.timer <= 0) eSet(e, ES.REC, S.rec);
+      if (e.t === ET.SENTINEL && e.pat === 1){ speed = -1; if (e.timer <= 0) eSet(e, ES.REC, S.rec * 1.2); }
+      else if (e.t === ET.SLIME && e.pat === 1){ speed = -1; if (e.onGround && e.timer < .85){ e.A.sq.v -= 6; shockRing(e.x, e.y, e.z, 2.8, [.7, .9, .5]); SND.enemyAtk(2, e); if (dist < 2.8 + e.hw && Math.abs(dy) < 1.2) hurtPlayer(S.dmg * 1.5, e.x, e.z, 10, e); eSet(e, ES.REC, S.rec * 1.3); } }
+      else if (e.t === ET.SENTINEL){ ddx = e.atkX * S.run; ddz = e.atkZ * S.run; speed = -1; if (e.timer <= 0 || (Math.abs(e.vx) + Math.abs(e.vz) < 1 && e.timer < .9)) eSet(e, ES.REC, S.rec); if (dist < S.reach + .4 && Math.abs(dy) < 1.6) hurtPlayer(S.dmg, e.x, e.z, 13, e); }
+      else if (e.t === ET.SLIME || (e.t === ET.GOBLIN && e.pat === 3)){ ddx = e.vx; ddz = e.vz; speed = -1; if (dist < S.reach && Math.abs(dy) < 1.4) hurtPlayer(S.dmg, e.x, e.z, e.t === ET.GOBLIN ? 9 : 7, e); if (e.onGround && e.timer < .3){ eSet(e, ES.REC, S.rec); e.A.sq.v -= 4; } }
+      else if (e.timer <= 0){ if (e.t === ET.GOBLIN && e.pat === 1){ e.chain = 2; eSet(e, ES.TELE, S.tele); } else eSet(e, ES.REC, S.rec); }
       break;
     case ES.REC: if (e.timer <= 0) eSet(e, ES.CHASE, .4 + Math.random() * .5); break;
     case ES.FLEE:
@@ -4981,11 +5027,15 @@ function tickEnemy(e, dt){
 }
 function startAttack(e, S, dx, dz, dist){
   e.st = ES.ATK;
-  if (e.t === ET.SLIME){ const fl = Math.min(dist, 3.6) / .62; e.vx = e.atkX * fl; e.vz = e.atkZ * fl; e.vy = 7.5; e.timer = .9; SND.enemyAtk(0, e); }
+  if (e.t === ET.SLIME && e.pat === 1){ e.vx = e.vz = 0; e.vy = 9; e.timer = 1.3; SND.enemyAtk(0, e); }
+  else if (e.t === ET.GOBLIN && e.pat === 3){ const fl = Math.min(dist, 6) / .55; e.vx = e.atkX * fl; e.vz = e.atkZ * fl; e.vy = 6.5; e.timer = .9; SND.enemyAtk(1, e); }
+  else if (e.t === ET.SENTINEL && e.pat === 1){ e.timer = .55; SND.enemyAtk(2, e); shockRing(e.x, e.y, e.z, 3.6, [.7, .85, 1.2]); camKick = Math.max(camKick, dist < 8 ? .06 : 0);
+    if (dist < 3.6 + e.hw && Math.abs(PL.y - e.y) < 1.2 && PL.onGround) hurtPlayer(S.dmg, e.x, e.z, 12, e); } // jump it
+  else if (e.t === ET.SLIME){ const fl = Math.min(dist, 3.6) / .62; e.vx = e.atkX * fl; e.vz = e.atkZ * fl; e.vy = 7.5; e.timer = .9; SND.enemyAtk(0, e); }
   else if (e.t === ET.GOBLIN){ e.timer = .22; SND.enemyAtk(1, e); const fx = -Math.sin(e.yaw), fz = -Math.cos(e.yaw); const ddx = PL.x - e.x, ddz = PL.z - e.z, d = hyp2(ddx, ddz) || 1;
     if (d < S.reach + .35 && (ddx * fx + ddz * fz) / d > .45 && Math.abs(PL.y - e.y) < 1.6) hurtPlayer(S.dmg, e.x, e.z, 8, e); else dodgeTell(e); }
   else if (e.t === ET.SENTINEL){ e.timer = 1.1; SND.enemyAtk(2, e); }
-  else if (e.t === ET.ARCHER){ e.timer = .25; fireArrow(e); SND.enemyAtk(4, e); }
+  else if (e.t === ET.ARCHER){ e.timer = .25; if (e.pat === 1){ fireArrow(e, -.2); fireArrow(e, 0); fireArrow(e, .2); } else fireArrow(e, 0); SND.enemyAtk(4, e); }
 }
 function dodgeTell(e){ /* a whiff: tiny dust where the club landed */ dust(e.x - Math.sin(e.yaw) * 1.2, e.y, e.z - Math.cos(e.yaw) * 1.2, 4, 1.2); }
 function tickWisp(e, dt, S, dx, dz, dist, dy, canSee){
@@ -4994,7 +5044,7 @@ function tickWisp(e, dt, S, dx, dz, dist, dy, canSee){
   if (e.st === ES.NOTICE){ if (e.timer <= 0) eSet(e, ES.CHASE, 1.5); tx = e.x; ty = e.y; tz = e.z; }
   else if (e.st === ES.CHASE){ e.orbit += dt * .8; tx = PL.x + Math.cos(e.orbit * 2.2) * 5; tz = PL.z + Math.sin(e.orbit * 2.2) * 5; ty = PL.y + 3.5; sp = 6; if (e.timer <= 0 && dist < 9){ eSet(e, ES.TELE, S.tele); } }
   else if (e.st === ES.TELE){ tx = e.x - dx / dist * .8; tz = e.z - dz / dist * .8; ty = e.y + .6; sp = 2; e.atkX = (PL.x - e.x); e.atkZ = (PL.z - e.z); e.atkY = (PL.y + 1 - e.y); if (e.timer <= 0){ e.st = ES.ATK; e.timer = .55; SND.enemyAtk(3, e); const l = hyp3(e.atkX, e.atkY, e.atkZ) || 1; e.vx = e.atkX / l * S.run; e.vy = e.atkY / l * S.run; e.vz = e.atkZ / l * S.run; } }
-  else if (e.st === ES.ATK){ if (hyp3(PL.x - e.x, PL.y + 1 - e.y, PL.z - e.z) < 1.2) hurtPlayer(S.dmg, e.x, e.z, 6, e); if (e.timer <= 0) eSet(e, ES.REC, S.rec); }
+  else if (e.st === ES.ATK){ if (hyp3(PL.x - e.x, PL.y + 1 - e.y, PL.z - e.z) < 1.2) hurtPlayer(S.dmg, e.x, e.z, 6, e); if (e.timer <= 0){ if (e.pat === 1){ e.chain = 2; eSet(e, ES.TELE, S.tele); } else eSet(e, ES.REC, S.rec); } }
   else if (e.st === ES.REC){ ty = e.y + 2; tx = e.x; tz = e.z; sp = 3; if (e.timer <= 0) eSet(e, ES.CHASE, 1.2); }
   else if (e.st === ES.FLEE){ ty = I.top + 12; tx = e.home.x; tz = e.home.z; sp = 5; if (e.timer <= 0) eSet(e, canSee ? ES.CHASE : ES.IDLE, 1); }
   else if (e.st === ES.RETURN){ sp = 4; e.hp = Math.min(e.maxhp, e.hp + dt * 4); if (hyp2(e.home.x - e.x, e.home.z - e.z) < 3 || e.timer <= 0) eSet(e, ES.IDLE, 1); }
@@ -5024,9 +5074,11 @@ const eAlpha = () => clamp(eAcc / E_DT, 0, 1);
 
 /* ---- arrows: visible, arcing, dodgeable ---- */
 const ARROWS = []; let arrowMesh = null;
-function fireArrow(e){
+function fireArrow(e, fan){
   const sx = e.x - Math.sin(e.yaw) * .4, sy = e.y + 1.05, sz = e.z - Math.cos(e.yaw) * .4;
-  const tx = PL.x + PL.vx * .35, ty = PL.y + 1.1, tz = PL.z + PL.vz * .35; const dh = hyp2(tx - sx, tz - sz), V = 17, tt = dh / V;
+  let tx = PL.x + PL.vx * .35, tz = PL.z + PL.vz * .35; const ty = PL.y + 1.1;
+  if (fan){ const ox = tx - sx, oz = tz - sz, c = Math.cos(fan), s = Math.sin(fan); tx = sx + ox * c - oz * s; tz = sz + ox * s + oz * c; }
+  const dh = hyp2(tx - sx, tz - sz), V = 17, tt = dh / V;
   let a = null; for (const q of ARROWS) if (!q.on){ a = q; break; } if (!a){ if (ARROWS.length >= 24) return; a = {}; ARROWS.push(a); }
   Object.assign(a, { on: true, x: sx, y: sy, z: sz, vx: (tx - sx) / dh * V, vz: (tz - sz) / dh * V, vy: (ty - sy) / Math.max(tt, .05) + 7 * tt, stuck: 0, age: 0, dmg: ESPEC[ET.ARCHER].dmg, src: e });
 }
@@ -5051,7 +5103,8 @@ const PMAXHP = 20; let php = PMAXHP, iFrames = 0, combatT = -99, regenAcc = 0, d
 function hurtPlayer(dmg, sx, sz, kb, src){
   if (dead || PL.catching || inSafe(PL.x, PL.z) || state !== 'play') return;
   if (iFrames > 0) return;
-  if (PL.dashCD > DASH_CD - .28){ dmgNumber(PL.x, PL.y + 2.1, PL.z, 'Dodge', 'dodge'); iFrames = .2; return; } // a dash through an attack is a dodge
+  const m = combatDefend(dmg, sx, sz, src); if (m <= 0) return; // dodge i-frames, a clean block or a parry
+  dmg = Math.max(1, Math.round(dmg * m)); kb *= m;
   php = Math.max(0, php - dmg); iFrames = .7; combatT = tAcc; hurtFlash = 1;
   const dx = PL.x - sx, dz = PL.z - sz, d = hyp2(dx, dz) || 1; PL.vx += dx / d * kb; PL.vz += dz / d * kb; PL.vy = Math.max(PL.vy, 4.5); PL.onGround = false;
   PL.punch = Math.max(PL.punch, .9); camKick = Math.max(camKick, .08); SND.hurt(); heartsChanged(true);
@@ -5085,34 +5138,14 @@ function enemyInSights(maxD){
   for (const e of ENEMIES){ if (e.st === ES.DEAD || !e.active) continue; const cx = e.x - EYE.x, cy = e.y + e.h * .5 - EYE.y, cz = e.z - EYE.z, d = hyp3(cx, cy, cz); if (d > bd + e.hw) continue; const t = cx * f.x + cy * f.y + cz * f.z; if (t < 0) continue; const px = cx - f.x * t, py = cy - f.y * t, pz = cz - f.z * t; if (px * px + py * py + pz * pz < (e.hw + .35) * (e.hw + .35) + e.h * .2){ bd = d; best = e; } }
   return best;
 }
-function playerAttack(){
-  if (atkCD > 0 || dead) return false;
-  const w0 = heldWeapon(), F = w0.f >= 0 ? FAM[w0.f] : null, ch = AS.charged && w0.f === 1; atkCD = 1 / w0.spd * (ch ? 1.3 : 1); combatT = Math.max(combatT, tAcc - 3);
-  const w = ch ? Object.assign({}, w0, { dmg: w0.dmg * 1.6, reach: w0.reach + 1 }) : w0;
-  animSwing(w0, ch); SND.swing(w0.f);
-  const f = fwd(), fl = hyp2(f.x, f.z) || 1, fx = f.x / fl, fz = f.z / fl, arc = F ? F.arc : .7;
-  let hits = 0, crits = 0;
-  for (const e of ENEMIES){
-    if (e.st === ES.DEAD || !e.active) continue;
-    const dx = e.x - PL.x, dz = e.z - PL.z, d = hyp2(dx, dz) || .01, dy = (e.y + e.h * .5) - (PL.y + 1.4);
-    if (d - e.hw > w.reach || Math.abs(dy) > w.reach * .8 + e.h * .5) continue;
-    const ang = Math.acos(clamp((dx * fx + dz * fz) / d, -1, 1)); if (ang > arc + Math.atan2(e.hw, d)) continue;
-    const crit = Math.random() < w.crit; let dmg = w.dmg * (crit ? 1.75 : 1); if (e.t === ET.SENTINEL && e.st === ES.REC) dmg *= 1.5;
-    const kbK = (F ? F.kb : 4) * (wHas(w, 'gust') ? 1.8 : 1) * (e.t === ET.SENTINEL ? .35 : 1);
-    damageEnemy(e, dmg, crit, dx / d * kbK, dz / d * kbK);
-    if (wHas(w, 'ember')){ e.burn = 3; e.burnT = 1; }
-    hits++; if (crit) crits++;
-  }
-  if (hits){ hitStop = Math.min(.09, .045 + hits * .015); camKick = Math.max(camKick, .05); if (crits) SND.crit(); else SND.hit('flesh'); animHitConfirm(); }
-  return true;
-}
-function damageEnemy(e, dmg, crit, kx, kz, dot){
+// the player's side of a fight (combos, heavies, guard, plunge, stamina) lives in cb.js
+function damageEnemy(e, dmg, crit, kx, kz, dot, poise){
   if (e.st === ES.DEAD) return;
   e.hp -= dmg; e.flash = 1; e.hitT = .25; combatT = tAcc;
+  if (!dot){ e.poise -= poise === undefined ? dmg : poise; e.poiseT = 2.2; if (e.poise <= 0 && e.hp > 0) eStagger(e, e.t === ET.SENTINEL ? 1.6 : e.chief ? 1.2 : 1); }
   dmgNumber(e.x, e.y + e.h + .35, e.z, (Math.round(dmg * 10) / 10).toString(), crit ? 'crit' : dot ? 'dot' : '');
   if (kx || kz){ e.vx = kx; e.vz = kz; if (!ESPEC[e.t].fly) e.vy = Math.max(e.vy, 3.2); e.kbT = .22; e.A.sq.v -= 3; }
   if (e.st === ES.IDLE || e.st === ES.RETURN){ eSet(e, ES.NOTICE, .25); e.notice = 1; }
-  if (e.st === ES.TELE && e.t !== ET.SENTINEL && !dot) eSet(e, ES.REC, .35); // a clean hit interrupts most wind-ups
   const c = [[.42, .62, .3], [.45, .6, .32], [.62, .75, .95], [.7, .85, 1], [.45, .6, .32]][e.t];
   for (let i = 0; i < (crit ? 10 : 6); i++){ const a = Math.random() * 6.283; emit(e.x, e.y + e.h * .6, e.z, Math.cos(a) * 2.5 + kx * .3, 1.5 + Math.random() * 2, Math.sin(a) * 2.5 + kz * .3, c[0], c[1], c[2], .14, .5, 0, 9); }
   if (e.hp <= 0){ e.st = ES.DEAD; e.deadT = 0; wildStats.kills++; SND.enemyDie(e.t, e); sparkle(e.x, e.y + .4, e.z, 10, c[0], c[1], c[2]); for (let i = 0; i < 14; i++){ const a = Math.random() * 6.283; emit(e.x, e.y + e.h * .5, e.z, Math.cos(a) * 3, 2 + Math.random() * 3, Math.sin(a) * 3, c[0], c[1], c[2], .2, .8, 0, 9); }
@@ -5188,7 +5221,7 @@ function renderEnemies(t, dt){
     if (!e.active && e.st !== ES.DEAD) continue;
     if (Math.abs(e.x - camera.position.x) > renderDist + 8 || Math.abs(e.z - camera.position.z) > renderDist + 8) continue;
     const A = e.A, dying = e.st === ES.DEAD ? Math.min(1, e.deadT / .35) : 0; if (dying >= 1) continue;
-    const x = e.px + (e.x - e.px) * a, y = e.py + (e.y - e.py) * a - e.stepOff, z = e.pz + (e.z - e.pz) * a, yaw = e.pyaw + angDiff(e.yaw, e.pyaw) * a;
+    const x = e.px + (e.x - e.px) * a, y = e.py + (e.y - e.py) * a - e.stepOff, z = e.pz + (e.z - e.pz) * a, yaw = e.pyaw + angDiff(e.yaw, e.pyaw) * a + (e.stagT > 0 && !REDUCED ? Math.sin(t * 16) * .22 * Math.min(1, e.stagT * 2) : 0);
     const camYaw = Math.atan2(camera.position.x - x, camera.position.z - z), crx = Math.cos(camYaw), crz = -Math.sin(camYaw);
     const tele = e.st === ES.TELE ? 1 - Math.max(0, e.timer) / ESPEC[e.t].tele : 0, rec = e.st === ES.REC ? 1 : 0, atk = e.st === ES.ATK ? 1 : 0;
     // the flash is white on a hit; the telegraph pulses hot (orange for goblins, blue-white for crystal and wisps)
@@ -6398,8 +6431,8 @@ function cineReplay(){
    Families: empty, block, tool, food, sword, spear, axe, dagger, and the grappling hook (drawn while in use).
    Every family has: equip (raise with a flourish), idle sway + breathing, walk/sprint bob by WEIGHT class
    (light hands pump quick and high, heavy ones swing slow and low and lag), use clips with anticipation ->
-   strike (with a smear) -> follow-through -> settle, a combo second swing for weapons (attack again inside
-   the window), a charged thrust for the spear (hold), block-place push, eat/feed, the grapple's fire recoil,
+   strike (with a smear) -> follow-through -> settle, combo swings 1-3 and per-family heavies, guard, parry and
+   plunge (clips and held poses in cb.js, played through HR.swClip and CBP), block-place push, eat/feed, the grapple's fire recoil,
    reel crank and retract, an idle inspect after ~8 s (a different one per family), and a hit-confirm kick.
    Reduced motion keeps the poses but drops spins, smears and most bob.
    ===================================================================== */
@@ -6448,7 +6481,7 @@ const AS = { fam: 'empty', combo: 0, lastSwingEnd: -9, lastSwingF: -1, charging:
 const _sp = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, gy: 0, gz: 0 };
 function sampleClip(S, t, out){ out.x = out.y = out.z = out.rx = out.ry = out.rz = out.gy = out.gz = 0; if (!S || t >= S.d) return out; for (const k of ['x', 'y', 'z', 'rx', 'ry', 'rz', 'gy', 'gz']) if (S[k]) out[k] = clipAt(S[k], t); return out; }
 function swingPose(t, f){
-  const S = HR.swCharged ? CLIP_SPEAR_CHARGED : (SWING2[f < 0 || f === undefined ? 4 : f] || SWING2[4])[HR.swB || 0];
+  const S = HR.swClip || (HR.swCharged ? CLIP_SPEAR_CHARGED : (SWING2[f < 0 || f === undefined ? 4 : f] || SWING2[4])[HR.swB || 0]);
   sampleClip(S, t, _swp);
   if (smear){ const on = S.sm[1] > 0 && t >= S.sm[0] - .02 && t < S.sm[1] + .12 && !REDUCED; smear.visible = on;
     if (on){ smear.material.uniforms.uP.value = clamp((t - S.sm[0] + .02) / (S.sm[1] - S.sm[0]), 0, 1.4); smear.material.uniforms.uA.value = t < S.sm[1] ? .9 : Math.max(0, 1 - (t - S.sm[1]) / .12) * .9; } }
@@ -6458,18 +6491,15 @@ function animSwing(w, charged){
   const f = w.f >= 0 ? w.f : 4, now = tAcc;
   // combo: a second swing inside the window after the first one's strike becomes the backhand / follow-up
   HR.swB = (f === AS.lastSwingF && now - AS.lastSwingEnd < .55 && HR.swB === 0) ? 1 : 0; if (charged) HR.swB = 0;
-  HR.swCharged = !!charged; HR.swT = 0; HR.swF = f; AS.lastSwingF = f;
+  HR.swCharged = !!charged; HR.swClip = null; HR.swT = 0; HR.swF = f; AS.lastSwingF = f;
   const S = charged ? CLIP_SPEAR_CHARGED : SWING2[f][HR.swB]; AS.lastSwingEnd = now + S.d * .6;
   if (smear){ setSmearShape(S.sm[2]); const c = w.f >= 0 && RARITY[w.r] ? RARITY[w.r].k : [1, 1, 1]; smear.material.uniforms.uC.value.setRGB(.55 + c[0] * .45, .55 + c[1] * .45, .55 + c[2] * .45); }
   HR.inspT = 9; HR.idleT = 0;
 }
 function animHitConfirm(){ AS.hitT = 0; }
-// spear charge: hold attack with a spear to draw back; release to lunge (more damage, a step forward)
-function spearChargeStart(){ if (heldFamily() !== 'spear' || atkCD > 0) return false; AS.charging = 1; AS.chargeT = 0; return true; }
-function spearChargeRelease(){ if (!AS.charging) return false; const full = AS.chargeT > .45; AS.charging = 0; if (full){ AS.charged = true; playerAttack(); AS.charged = false; const f = fwd(), l = hyp2(f.x, f.z) || 1; if (PL.onGround){ PL.vx += f.x / l * 7; PL.vz += f.z / l * 7; } } else playerAttack(); return true; }
 function updateHandRig(dt, hs, sliding, bobX, bobY){
   const P = PL, RM = REDUCED ? .3 : 1;
-  HR.mineT += dt; HR.placeT += dt; HR.eqT += dt; HR.feedT += dt; AS.hitT += dt; GR.fireT += dt; if (AS.charging) AS.chargeT += dt;
+  HR.mineT += dt; HR.placeT += dt; HR.eqT += dt; HR.feedT += dt; AS.hitT += dt; GR.fireT += dt;
   // equip: lower, swap at the bottom, raise with the new family's flourish
   const fam = heldFamily(), F = FAMS[fam];
   const id = heldId() * 1000 + (inv[sel] && inv[sel].w ? inv[sel].w.f * 10 + inv[sel].w.r + 1 : 0) + (fam === 'grapple' ? 999999 : 0);
@@ -6488,7 +6518,7 @@ function updateHandRig(dt, hs, sliding, bobX, bobY){
   if (dash){ tz += .14; trz -= .25; }
   if (P.gliding){ ty -= .18; trx += .4; }
   if (GR.st === 2){ ty += .05; trx += .25; tz -= .04; } // hanging on the rope: the launcher is raised toward the anchor
-  if (AS.charging){ const c = Math.min(1, AS.chargeT / .45); tz += .16 * c; ty -= .03 * c; trx -= .12 * c; tx += Math.sin(tAcc * 40) * .003 * c * RM; }
+  combatPose(dt); // charge wind-up, guard and plunge poses (cb.js)
   const bobK = F.bob * RM, idle = noise1(tAcc * .6, 3) * .012 * RM, breathe = Math.sin(tAcc * 1.6) * .006 * (1 + (1 - Math.min(1, hs)) * .5);
   const so = 12 / Math.sqrt(F.w);
   spring(HR.x, tx + bobX * 1.4 * bobK + idle, so, dt); spring(HR.y, ty + bobY * 1.2 * bobK - P.landKick * .7 * F.w + breathe, so, dt); spring(HR.z, tz, so, dt); spring(HR.rx, trx, so * .85, dt); spring(HR.rz, trz, so * .85, dt);
@@ -6502,15 +6532,262 @@ function updateHandRig(dt, hs, sliding, bobX, bobY){
   const bx = .4 + HR.x.x + HR.lagX.x - fd * .34, by = -.33 + HR.y.x + HR.lagY.x + eY + fd * .14 + gFire * .08, bz = -.7 + HR.z.x + mZ + pZ + fd * .2 + gFire * .2 + hk * .04 + retract * .05;
   HR.swT += dt; const sw = swingPose(HR.swT, HR.swF);
   // inspect idle after 8 s still, one clip per family
-  HR.idleT = (hs < .1 && P.onGround && !mineHeld && !atkHeld && !GR.st && Math.abs(yawRate) < .05 && Math.abs(pr) < .05) ? HR.idleT + dt : 0;
+  HR.idleT = (hs < .1 && P.onGround && !mineHeld && !atkHeld && !CB.guard && !CB.charging && !GR.st && Math.abs(yawRate) < .05 && Math.abs(pr) < .05) ? HR.idleT + dt : 0;
   const IN = INSPECT[AS.fam] || INSPECT.empty;
   if (HR.idleT > 8 && HR.inspT > IN.d + 1) HR.inspT = 0; if (HR.idleT === 0 && HR.inspT < IN.d) HR.inspT = 9; HR.inspT += dt;
   const ins = sampleClip(REDUCED ? null : IN, HR.inspT, _sp);
   const shake = hk * Math.sin(tAcc * 70) * .012 * RM + reel * Math.sin(tAcc * 55) * .006 * RM;
-  hand.position.set(bx - .1 + sw.x + ins.x + shake, by + .06 + sw.y + ins.y, bz + .08 + sw.z + ins.z);
-  hand.rotation.set(-.08 + HR.rx.x + mRx * .9 + fd * .3 + sw.rx + ins.rx - gFire * .5 + hk * .06 + (AS.fam === 'spear' ? eqR : 0), .08 - fd * .5 + sw.ry + ins.ry, HR.rz.x + sw.rz + ins.rz + gFire * .14 + (AS.fam === 'sword' ? eqR * .4 : 0));
+  hand.position.set(bx - .1 + sw.x + ins.x + shake + CBP.x.x, by + .06 + sw.y + ins.y + CBP.y.x, bz + .08 + sw.z + ins.z + CBP.z.x);
+  hand.rotation.set(-.08 + HR.rx.x + mRx * .9 + fd * .3 + sw.rx + ins.rx - gFire * .5 + hk * .06 + (AS.fam === 'spear' ? eqR : 0) + CBP.rx.x, .08 - fd * .5 + sw.ry + ins.ry + CBP.ry.x, HR.rz.x + CBP.rz.x + sw.rz + ins.rz + gFire * .14 + (AS.fam === 'sword' ? eqR * .4 : 0));
   if (handGrip){ AS.gripRZ += (reel ? 14 : 0) * dt; handGrip.rotation.set((AS.fam === 'dagger' ? eqR : 0) + (AS.fam === 'axe' ? -eqR * .3 : 0), ins.gy, ins.gz + (AS.fam === 'grapple' ? Math.sin(AS.gripRZ) * .05 * reel : 0)); }
 }
+
+/* ================= combat (cb): the player's side of a fight =================
+   Light attack: up to three hits (A, B, then a finisher with knockback). Attacking again once the last swing is
+   halfway through keeps the combo going; clicking before that queues a slow reset swing, so rhythm beats mashing.
+   Hold to charge a heavy, one per family: sword wide sweep, spear lunge, axe overhead cleave (area), dagger flurry.
+   Right mouse with a weapon guards (frontal, costs stamina per blow); raising it just as a blow lands parries:
+   the attacker staggers and takes guaranteed crits for a moment. The dash (Q) is a dodge with i-frames.
+   Attacking while falling or sailing plunges: a slam that hits everything around the landing.
+   Stamina (ring round the crosshair) gates heavies, guard and dodge, and is deliberately lenient.
+   Juice: hit-stop by weapon weight, camera kick, crit sparks, damage numbers, soft aim assist in a forward cone. */
+const CB = { combo: 0, lastT: -9, lastInt: .5, queued: 0, queueAt: 0, down: false, downT: 0, charging: false, chargeT: 0, full: false, tired: false,
+  guard: false, guardT: 0, guardOff: -9, guardBreak: 0, parryT: 9, stam: 100, stamT: 0, dodgeIF: 0, prevDash: 0, plunge: false, plungeY: 0,
+  aim: 0, pend: [], tickAt: 0, ringEl: null, ringFg: null, ringK: '', movesDone: false };
+const STAM_MAX = 100, ST_HEAVY = 22, ST_DODGE = 16, ST_BLOCK = 5, PARRY_WIN = .22;
+const CHARGE_T = [.55, .5, .7, .4]; // seconds to a full charge: sword, spear, axe, dagger
+const WEIGHT = [1, 1.35, 1.6, .55, .6]; // matches the hand rig's family weights (fists last): scales hit-stop and kick
+const famIdx = w => w.f >= 0 ? w.f : 4;
+const CBP = { x: Spr(), y: Spr(), z: Spr(), rx: Spr(), ry: Spr(), rz: Spr() }; // held combat poses (charge, guard, plunge), sprung
+
+/* ---- hand-rig clips: finisher per family, heavy releases, parry flash, plunge slam ---- */
+const FIN = [
+  { d: .56, ry: K_([[0, 0], [.1, .75, EZ.outQuad], [.2, -1.45, EZ.inCubic], [.34, -1.55, EZ.outQuad], [.56, 0, EZ.inOutSine]]), rx: K_([[0, 0], [.1, .55, EZ.outQuad], [.2, -.7, EZ.inCubic], [.56, 0]]), x: K_([[0, 0], [.1, .08], [.2, -.3, EZ.inCubic], [.56, 0]]), y: K_([[0, 0], [.1, .08], [.2, -.06], [.56, 0]]), rz: K_([[0, 0], [.2, .6, EZ.inCubic], [.56, 0]]), sm: [.1, .26, 6] },
+  { d: .5, z: K_([[0, 0], [.1, .22, EZ.outQuad], [.17, -.72, EZ.inCubic], [.3, -.62], [.5, 0, EZ.inOutSine]]), rz: K_([[0, 0], [.1, -.35], [.17, .45, EZ.inCubic], [.5, 0]]), rx: K_([[0, 0], [.17, .15], [.5, 0]]), y: K_([[0, 0], [.1, .04], [.17, -.04], [.5, 0]]), sm: [.1, .22, 1] },
+  { d: .78, rx: K_([[0, 0], [.22, 1.25, EZ.outQuad], [.33, -1.6, EZ.inCubic], [.5, -1.7, EZ.outQuad], [.78, 0, EZ.inOutSine]]), y: K_([[0, 0], [.22, .12], [.33, -.12, EZ.inCubic], [.78, 0]]), z: K_([[0, 0], [.22, .1], [.33, -.25, EZ.inCubic], [.78, 0]]), sm: [.22, .38, 2] },
+  { d: .36, rx: K_([[0, 0], [.06, .7, EZ.outQuad], [.12, -1, EZ.inCubic], [.2, -1.05], [.36, 0, EZ.inOutSine]]), z: K_([[0, 0], [.06, .06], [.12, -.32, EZ.inCubic], [.36, 0]]), y: K_([[0, 0], [.06, .08], [.12, -.05], [.36, 0]]), sm: [.06, .16, 2] },
+  { d: .38, y: K_([[0, 0], [.06, -.08, EZ.outQuad], [.13, .16, EZ.inCubic], [.38, 0, EZ.inOutSine]]), z: K_([[0, 0], [.06, .08], [.13, -.42, EZ.inCubic], [.38, 0]]), rx: K_([[0, 0], [.13, .35], [.38, 0]]), sm: [0, 0, 0] }
+];
+const HEAVY = [
+  { d: .66, ry: K_([[0, 0], [.06, 1.5, EZ.outQuad], [.24, -2, EZ.inCubic], [.4, -2.1, EZ.outQuad], [.66, 0, EZ.inOutSine]]), x: K_([[0, 0], [.06, .14], [.24, -.36, EZ.inCubic], [.66, 0]]), rz: K_([[0, 0], [.06, -.3], [.24, .55, EZ.inCubic], [.66, 0]]), y: K_([[0, 0], [.24, -.04], [.66, 0]]), sm: [.06, .26, 6] },
+  CLIP_SPEAR_CHARGED,
+  { d: .82, rx: K_([[0, 0], [.12, 1.3, EZ.outQuad], [.3, -1.75, EZ.inCubic], [.52, -1.8], [.82, 0, EZ.inOutSine]]), y: K_([[0, 0], [.12, .14], [.3, -.18, EZ.inCubic], [.6, -.15], [.82, 0]]), z: K_([[0, 0], [.3, -.3, EZ.inCubic], [.82, 0]]), sm: [.14, .32, 2] },
+  { d: .52, z: K_([[0, 0], [.05, -.42, EZ.inCubic], [.1, -.05], [.15, -.44, EZ.inCubic], [.2, -.05], [.25, -.42, EZ.inCubic], [.3, -.05], [.36, -.5, EZ.inCubic], [.52, 0]]), x: K_([[0, 0], [.05, -.06], [.15, .06], [.25, -.04], [.36, .02], [.52, 0]]), ry: K_([[0, 0], [.05, .15], [.15, -.15], [.25, .12], [.36, 0], [.52, 0]]), sm: [.03, .4, 1] }
+];
+const CLIP_PARRY = { d: .32, z: K_([[0, 0], [.04, -.2, EZ.outQuad], [.32, 0]]), rz: K_([[0, 0], [.04, -.7, EZ.outQuad], [.32, 0]]), x: K_([[0, 0], [.04, .12], [.32, 0]]), y: K_([[0, 0], [.04, .05], [.32, 0]]), sm: [0, .1, 5] };
+const CLIP_PLUNGE = { d: .5, rx: K_([[0, 0], [.06, -2.2, EZ.inCubic], [.25, -1.6], [.5, 0, EZ.inOutSine]]), y: K_([[0, 0], [.06, -.2, EZ.inCubic], [.3, -.12], [.5, 0]]), z: K_([[0, 0], [.06, -.15], [.5, 0]]), sm: [0, .1, 2] };
+function animClip(S, w){
+  HR.swClip = S; HR.swCharged = false; HR.swT = 0; HR.swF = famIdx(w); HR.swB = 0; HR.inspT = 9; HR.idleT = 0;
+  if (smear && S.sm){ setSmearShape(S.sm[2]); const c = w.f >= 0 && RARITY[w.r] ? RARITY[w.r].k : [1, 1, 1]; smear.material.uniforms.uC.value.setRGB(.55 + c[0] * .45, .55 + c[1] * .45, .55 + c[2] * .45); }
+}
+// held poses, called from updateHandRig each frame; added on top of the rig's springs
+function combatPose(dt){
+  let x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0; const f = heldWeapon().f;
+  if (CB.plunge){ y = .14; z = .04; rx = 1.1; }
+  else if (CB.guard){ if (f >= 0){ x = -.2; y = .1; z = .05; rx = .1; ry = .3; rz = 1.2; } else { x = -.1; y = .1; rz = .3; } }
+  else if (CB.charging && f >= 0){
+    const c = Math.min(1, CB.chargeT / CHARGE_T[f]), sh = REDUCED ? 0 : Math.sin(tAcc * 40) * .004 * c * (CB.full ? 1.6 : 1);
+    if (f === 0){ x = .1 * c + sh; z = .1 * c; ry = 1 * c; rz = -.25 * c; }
+    else if (f === 1){ z = .18 * c; y = -.03 * c; rx = -.12 * c; x = sh; }
+    else if (f === 2){ y = .16 * c + sh; z = .06 * c; rx = 1 * c; }
+    else { x = -.05 * c + sh; y = -.07 * c; z = .08 * c; rz = -.5 * c; ry = .3 * c; }
+  }
+  const om = 16; spring(CBP.x, x, om, dt); spring(CBP.y, y, om, dt); spring(CBP.z, z, om, dt); spring(CBP.rx, rx, om, dt); spring(CBP.ry, ry, om, dt); spring(CBP.rz, rz, om, dt);
+}
+
+/* ---- input: press / release / guard (called from the input section) ---- */
+function combatPress(){
+  if (state !== 'play' || dead || PL.catching) return;
+  const w = heldWeapon(); if (CB.guard) combatGuard(false);
+  if (w.f >= 0 && tryPlunge()) return;
+  CB.down = true; CB.downT = tAcc; CB.charging = false; CB.chargeT = 0; CB.full = false; CB.tired = false;
+  if (w.f < 0){ CB.down = false; lightAttack(); } // fists and the pickaxe swing at once (nothing to charge)
+}
+function combatRelease(){
+  if (!CB.down) return; CB.down = false;
+  const w = heldWeapon(), ch = CB.charging, full = CB.full; CB.charging = false; CB.full = false;
+  if (state !== 'play' || dead || w.f < 0) return;
+  if (ch && full) heavyAttack(w); else lightAttack();
+}
+function combatGuard(on){
+  if (!on){ if (CB.guard){ CB.guard = false; CB.guardOff = tAcc; } return false; }
+  if (state !== 'play' || dead || !holdingWeapon() || CB.guardBreak > 0 || MOBHIT.m || nearChestC || nearEngine) return false;
+  CB.guard = true; CB.down = false; CB.charging = false;
+  CB.guardT = tAcc - CB.guardOff < .35 ? PARRY_WIN : 0; // re-raising the guard straight away does not re-open the parry window
+  SND.guardUp(); return true;
+}
+// called by hurtPlayer: returns the share of the blow that gets through (0 = none)
+function combatDefend(dmg, sx, sz, src){
+  if (CB.dodgeIF > 0){ dmgNumber(PL.x, PL.y + 2.1, PL.z, 'Dodge', 'dodge'); iFrames = .2; SND.dodged(); return 0; }
+  if (!CB.guard) return 1;
+  const f = fwd(), fl = hyp2(f.x, f.z) || 1, dx = sx - PL.x, dz = sz - PL.z, d = hyp2(dx, dz) || 1;
+  if ((dx * f.x + dz * f.z) / (d * fl) < .1) return 1; // from behind or the side: the guard does not help
+  const gx = PL.x + f.x / fl * .7, gz = PL.z + f.z / fl * .7;
+  if (CB.guardT < PARRY_WIN){ // parry
+    CB.parryT = 0; iFrames = .45; CB.stam = Math.min(STAM_MAX, CB.stam + 15); hitStop = Math.max(hitStop, .13); camKick = Math.max(camKick, .09);
+    animClip(CLIP_PARRY, heldWeapon()); SND.parry(); dmgNumber(PL.x + f.x / fl * 1.2, PL.y + 2, PL.z + f.z / fl * 1.2, 'Parry', 'parry');
+    sparks(gx, PL.y + 1.3, gz, 14, 1.8, 1.5, .8);
+    if (src && src.st !== undefined && src.st !== ES.DEAD && hyp2(src.x - PL.x, src.z - PL.z) < 5){ eStagger(src, src.t === ET.SENTINEL ? 1.8 : 1.4); src.critT = 2; src.flash = 1; }
+    return 0;
+  }
+  CB.stam -= dmg * ST_BLOCK; CB.stamT = .7; iFrames = .3; camKick = Math.max(camKick, .05); PL.punch = Math.max(PL.punch, .5);
+  const kx = -dx / d, kz = -dz / d; PL.vx += kx * 3; PL.vz += kz * 3; // a shove backwards, no damage
+  sparks(gx, PL.y + 1.3, gz, 6, 1.2, 1.1, 1);
+  if (CB.stam < 0){ CB.stam = 0; CB.guard = false; CB.guardBreak = .9; SND.guardBreak(); dmgNumber(PL.x, PL.y + 2.1, PL.z, 'Guard broken', 'dot'); return .5; }
+  SND.block(); dmgNumber(PL.x + f.x / fl * 1.2, PL.y + 1.9, PL.z + f.z / fl * 1.2, 'Block', 'block'); return 0;
+}
+
+/* ---- attacks ---- */
+function later(t, fn){ CB.pend.push({ t, fn }); }
+function lightAttack(){
+  const w = heldWeapon(), since = tAcc - CB.lastT, open = CB.lastInt * .5, close = open + .5;
+  if (since < open){ if (!CB.queued){ CB.queued = 1; CB.queueAt = CB.lastT + CB.lastInt * 1.25; } return; } // mashing: waits out the swing and drops the combo
+  doLight(w, since <= close && CB.combo < 3 ? CB.combo + 1 : 1);
+}
+function doLight(w, step){
+  const fi = famIdx(w), int = 1 / w.spd, S = step === 3 ? FIN[fi] : SWING2[fi][step - 1], F = w.f >= 0 ? FAM[w.f] : null, fin = step === 3;
+  CB.combo = step; CB.lastT = tAcc; CB.lastInt = int * (fin ? 1.4 : 1); atkCD = int * .5; combatT = Math.max(combatT, tAcc - 3);
+  animClip(S, w); SND.swing(w.f); if (fin) SND.heavy(.5);
+  const dir = aimAssist(w.reach + 1.2);
+  const o = { w, dir, reach: w.reach + (fin ? .3 : 0), arc: (F ? F.arc : .7) * (fin ? 1.25 : 1), mult: [1, 1.1, 1.5][step - 1], kb: fin ? 2.4 : .7, poise: fin ? 2 : 1, stop: fin ? 1.35 : 1, fin };
+  later(Math.max(.03, S.sm[0] || .06), () => strike(o));
+}
+function heavyAttack(w){
+  const fi = w.f; CB.stam = Math.max(0, CB.stam - ST_HEAVY); CB.stamT = 1; CB.queued = 0;
+  CB.combo = 0; CB.lastT = tAcc; CB.lastInt = 1 / w.spd * 1.3; atkCD = CB.lastInt; combatT = Math.max(combatT, tAcc - 3);
+  const f = fwd(), l = hyp2(f.x, f.z) || 1, dir = aimAssist(w.reach + 2) || [f.x / l, f.z / l];
+  const H = (o) => Object.assign({ w, dir, reach: w.reach, arc: 1, mult: 2, kb: 1.6, poise: 2.4, stop: 1.6, fin: true }, o);
+  animClip(HEAVY[fi], w); SND.heavy(1);
+  if (fi === 0) later(.12, () => strike(H({ reach: w.reach + .7, arc: 2.15, mult: 1.9 }))); // wide sweep
+  else if (fi === 1){ const k = PL.onGround ? 9 : 5; PL.vx += dir[0] * k; PL.vz += dir[1] * k; later(.07, () => strike(H({ reach: w.reach + 1.8, arc: .32, mult: 2.2, kb: 1.5, poise: 2.6 }))); } // lunge
+  else if (fi === 2) later(.3, () => { const cx = PL.x + dir[0] * 1.8, cz = PL.z + dir[1] * 1.8; shockRing(cx, PL.y, cz, 2.7, [.85, .8, .7]); dust(cx, PL.y, cz, 8, 2.5); camKick = Math.max(camKick, .1); SND.slam(.6);
+    strike(H({ area: [cx, cz, 2.7], mult: 2.4, kb: 2, poise: 3, stop: 1.8 })); }); // overhead cleave: everything round the impact
+  else for (let i = 0; i < 4; i++) later(.05 + i * .1, () => { if (i) SND.swing(3); strike(H({ reach: w.reach + .3, arc: .75, mult: .75, kb: i === 3 ? 1.4 : .25, poise: .8, stop: .6, fin: i === 3 })); }); // flurry
+}
+// soft aim assist: the nearest enemy in a forward cone pulls the swing (and nudges the view) toward it
+function aimAssist(range){
+  const f = fwd(), l = hyp2(f.x, f.z) || 1, fx = f.x / l, fz = f.z / l, cone = TOUCH ? .8 : .55; let best = null, bs = 1e9;
+  for (const e of ENEMIES){ if (e.st === ES.DEAD || !e.active) continue; const dx = e.x - PL.x, dz = e.z - PL.z, d = hyp2(dx, dz);
+    if (d > range + e.hw || d < .2 || Math.abs(e.y + e.h * .5 - PL.y - 1) > 3) continue; const a = Math.acos(clamp((dx * fx + dz * fz) / d, -1, 1)); if (a > cone) continue;
+    const s = d + a * 4; if (s < bs){ bs = s; best = e; } }
+  if (!best) return null;
+  const dx = best.x - PL.x, dz = best.z - PL.z, d = hyp2(dx, dz) || 1;
+  CB.aim = angDiff(Math.atan2(-dx, -dz), PL.yaw) * (TOUCH ? .7 : .4);
+  return [dx / d, dz / d];
+}
+function strike(o){
+  if (dead) return 0;
+  const w = o.w, F = w.f >= 0 ? FAM[w.f] : null, W = WEIGHT[famIdx(w)];
+  let fx, fz; if (o.dir){ fx = o.dir[0]; fz = o.dir[1]; } else { const f = fwd(), l = hyp2(f.x, f.z) || 1; fx = f.x / l; fz = f.z / l; }
+  let hits = 0, crits = 0;
+  for (const e of ENEMIES){
+    if (e.st === ES.DEAD || !e.active) continue;
+    let dx, dz, d;
+    if (o.area){ dx = e.x - o.area[0]; dz = e.z - o.area[1]; d = hyp2(dx, dz) || .01; if (d - e.hw > o.area[2] || Math.abs(e.y + e.h * .5 - PL.y - .6) > 2.2 + e.h * .5) continue; }
+    else { dx = e.x - PL.x; dz = e.z - PL.z; d = hyp2(dx, dz) || .01; const dy = (e.y + e.h * .5) - (PL.y + 1.4);
+      if (d - e.hw > o.reach || Math.abs(dy) > o.reach * .8 + e.h * .5) continue;
+      if (Math.acos(clamp((dx * fx + dz * fz) / d, -1, 1)) > o.arc + Math.atan2(e.hw, d)) continue; }
+    const crit = e.critT > 0 || Math.random() < w.crit + (e.stagT > 0 ? .25 : 0);
+    let dmg = w.dmg * o.mult * (crit ? 1.75 : 1); if (e.t === ET.SENTINEL && e.st === ES.REC) dmg *= 1.5;
+    const kbK = (F ? F.kb : 4) * o.kb * (wHas(w, 'gust') ? 1.8 : 1) * (e.t === ET.SENTINEL ? .35 : 1) * (e.chief ? .6 : 1);
+    damageEnemy(e, dmg, crit, dx / d * kbK, dz / d * kbK, false, w.dmg * o.mult * o.poise);
+    if (wHas(w, 'ember')){ e.burn = 3; e.burnT = 1; }
+    hits++; if (crit){ crits++; sparks(e.x - dx / d * e.hw, e.y + e.h * .6, e.z - dz / d * e.hw, 10, 1.9, 1.6, .7); }
+  }
+  if (hits){
+    hitStop = Math.max(hitStop, Math.min(.18, (.03 + .028 * W) * o.stop + hits * .006));
+    camKick = Math.max(camKick, (.035 + .025 * W) * o.stop); PL.punch = Math.max(PL.punch, .2 * o.stop);
+    if (crits) SND.crit(); else SND.hit('flesh'); if (o.fin) SND.finisher(); animHitConfirm();
+  }
+  return hits;
+}
+function sparks(x, y, z, n, r, g, b){ n = LOW ? Math.ceil(n / 2) : n; for (let i = 0; i < n; i++){ const a = Math.random() * 6.283, v = 3 + Math.random() * 4; emit(x, y, z, Math.cos(a) * v, 1 + Math.random() * 3.5, Math.sin(a) * v, r, g, b, .08 + Math.random() * .05, .25 + Math.random() * .15, 0, 10); } }
+
+/* ---- plunge: attack while falling or sailing to slam down ---- */
+function groundGap(){ for (let i = 0; i < 32; i++) if (solidAt(Math.floor(PL.x), Math.floor(PL.y - i - .01), Math.floor(PL.z))) return i; return 99; }
+function tryPlunge(){
+  if (PL.onGround || PL.inWater || PL.catching || GR.st) return false;
+  const gap = groundGap(); if (gap < (PL.gliding ? 1.5 : 2.2) || gap > 30) return false; // never over open sky
+  CB.plunge = true; CB.plungeY = PL.y; PL.gliding = false; PL.sailOpen = false; PL.vy = Math.min(PL.vy, -18); PL.vx *= .35; PL.vz *= .35;
+  CB.down = false; CB.charging = false; SND.heavy(.8); return true;
+}
+function plungeSlam(){
+  const w = heldWeapon(), drop = Math.max(0, CB.plungeY - PL.y), R = 2.6 + Math.min(1.8, drop * .08);
+  animClip(CLIP_PLUNGE, w); SND.slam(1); shockRing(PL.x, PL.y, PL.z, R, [.9, .85, .75]); dust(PL.x, PL.y, PL.z, 14, 3.2);
+  camKick = Math.max(camKick, .16); PL.punch = Math.max(PL.punch, 1); CB.dodgeIF = Math.max(CB.dodgeIF, .2); combatT = Math.max(combatT, tAcc - 3);
+  CB.lastT = tAcc; CB.lastInt = .6; CB.combo = 0;
+  strike({ w, area: [PL.x, PL.z, R], mult: 1.5 + Math.min(1.5, drop * .07), kb: 1.8, poise: 2.5, stop: 1.6, fin: true });
+}
+
+/* ---- per frame (play): dodge, guard, charge, queued swings, pending strikes, plunge, aim, stamina, ring ---- */
+function combatTick(dt, sdt){
+  const gap = tAcc - CB.tickAt; CB.tickAt = tAcc;
+  if (gap > .3){ CB.down = false; CB.charging = false; CB.guard = false; } // coming back from a pause: drop held inputs
+  if (!CB.movesDone) renderCombatMoves();
+  if (dead){ CB.down = CB.charging = CB.guard = CB.plunge = false; CB.pend.length = 0; CB.queued = 0; CB.stam = STAM_MAX; updateStamRing(); return; }
+  // the dash is the dodge: i-frames while stamina allows, a sliver without
+  if (PL.dashCD > CB.prevDash + .2){ const ok = CB.stam >= ST_DODGE * .5; CB.dodgeIF = ok ? .32 : .12; if (ok){ CB.stam = Math.max(0, CB.stam - ST_DODGE); CB.stamT = .5; } }
+  CB.prevDash = PL.dashCD; CB.dodgeIF = Math.max(0, CB.dodgeIF - sdt);
+  const w = heldWeapon();
+  if (CB.guard){ CB.guardT += sdt; if (!holdingWeapon()) combatGuard(false); }
+  CB.guardBreak = Math.max(0, CB.guardBreak - dt); CB.parryT += dt;
+  if (CB.down && w.f >= 0){
+    if (!CB.charging && tAcc - CB.downT > .2){ CB.charging = true; CB.chargeT = 0; }
+    if (CB.charging){ CB.chargeT += sdt;
+      if (!CB.full && CB.chargeT >= CHARGE_T[w.f]){ if (CB.stam >= ST_HEAVY * .5){ CB.full = true; SND.chargeFull(); } else if (!CB.tired){ CB.tired = true; dmgNumber(PL.x, PL.y + 2.1, PL.z, 'Tired', 'dot'); } } }
+  } else if (CB.charging && w.f < 0){ CB.charging = false; CB.down = false; }
+  if (CB.queued && tAcc >= CB.queueAt){ CB.queued = 0; doLight(heldWeapon(), 1); }
+  for (let i = CB.pend.length - 1; i >= 0; i--){ const p = CB.pend[i]; p.t -= sdt; if (p.t <= 0){ CB.pend.splice(i, 1); p.fn(); } }
+  if (CB.plunge){
+    if (PL.inWater || PL.catching || GR.st) CB.plunge = false;
+    else if (PL.onGround){ CB.plunge = false; plungeSlam(); }
+    else { PL.vy = Math.min(PL.vy, -18); PL.gliding = false; PL.sailOpen = false; PL.glideLock = Math.max(PL.glideLock || 0, .1); }
+  }
+  if (CB.aim){ const d = CB.aim * Math.min(1, dt * 22); PL.yaw += d; CB.aim -= d; if (Math.abs(CB.aim) < .002) CB.aim = 0; }
+  if (CB.stamT > 0) CB.stamT -= dt; else CB.stam = Math.min(STAM_MAX, CB.stam + (CB.guard ? 16 : 36) * dt);
+  if (CB.guard || CB.charging) HR.idleT = 0;
+  updateStamRing();
+}
+function updateStamRing(){
+  const el = CB.ringEl || (CB.ringEl = $('#stam')); if (!el) return; if (!CB.ringFg) CB.ringFg = el.querySelector('.fg');
+  const f = heldWeapon().f, ch = CB.charging && f >= 0 ? Math.min(1, CB.chargeT / CHARGE_T[f]) : -1;
+  const k = ch >= 0 ? ch : CB.stam / STAM_MAX, show = state === 'play' && !dead && (ch >= 0 || CB.stam < STAM_MAX - .5 || CB.guard || CB.parryT < .3);
+  const mode = CB.parryT < .3 ? 'parry' : ch >= 0 ? (CB.full ? 'full' : 'charge') : CB.guard ? 'guard' : CB.stam < ST_HEAVY ? 'low' : '';
+  const key = (show ? 1 : 0) + mode + Math.round(k * 60);
+  if (key === CB.ringK) return; CB.ringK = key;
+  el.className = (show ? 'on ' : '') + mode; CB.ringFg.style.strokeDashoffset = ((1 - k) * 100.5).toFixed(1);
+}
+
+/* ---- journal: the Combat moves ---- */
+function renderCombatMoves(){
+  const el = $('#jrCombat'); CB.movesDone = true; if (!el) return;
+  const K = s => s.split(' ').map(k => KC(k)).join(''), T = TOUCH;
+  const MV = [['Attack', T ? K('Mine') : K('LMB'), 'Up to three hits; keep a rhythm, mashing is slower. The third knocks foes back'],
+    ['Heavy', T ? K('Mine') + ' hold' : K('LMB') + ' hold', 'Sword sweeps wide, spear lunges, axe cleaves an area, dagger flurries. Uses stamina'],
+    ['Block', T ? K('Use') : K('RMB'), 'With a weapon: stops blows from the front for stamina'],
+    ['Parry', T ? K('Use') : K('RMB'), 'Raise the guard just as a blow lands: the foe staggers and takes crits'],
+    ['Dodge', T ? K('Dash') : K('Q'), 'Dash through an attack untouched'],
+    ['Plunge', T ? K('Mine') : K('LMB'), 'While falling or sailing: slam down and hit all around'],
+    ['Stagger', '', 'Hits wear down poise; heavies and finishers break it fastest']];
+  el.innerHTML = MV.map(m => '<span class="kk">' + m[1] + '</span><span class="mv"><b>' + m[0] + '</b> · ' + m[2] + '</span>').join('');
+}
+
+/* ---- sounds: guard, parry, block, charge, heavy, slam, stagger ---- */
+SD('parry', { len: .7, n: 2, pri: 4, pk: db(-8), h: .25 }, (c, o, t, r) => { N(c, o, t, .02, 'bandpass', 3800, 2, 1); O(c, o, t, 'sine', 1760 + r() * 30, 1750, .55, .5); O(c, o, t, 'sine', 2637, 2630, .4, .3); O(c, o, t, 'triangle', 880, 875, .3, .25); O(c, o, t, 'sine', 140, 60, .1, .6); });
+SD('block', { len: .3, n: 3, pri: 3, pk: db(-12) }, (c, o, t, r) => { N(c, o, t, .06, 'lowpass', 900 + r() * 200, .9, 1); O(c, o, t, 'triangle', 420 + r() * 40, 300, .09, .6); N(c, o, t, .03, 'bandpass', 2400, 2, .4); });
+SD('guardUp', { len: .12, n: 2, pri: 2, pk: db(-21) }, (c, o, t, r) => { N(c, o, t, .03, 'bandpass', 2600 + r() * 300, 2, 1); O(c, o, t, 'sine', 1100, 1000, .05, .3); });
+SD('guardBreak', { len: .5, n: 1, pri: 4, pk: db(-9) }, (c, o, t, r) => { N(c, o, t, .2, 'lowpass', 700, .8, 1); const f = BQ(c, o, 'lowpass', 900, 1); O(c, f, t, 'sawtooth', 200, 80, .3, .6); N(c, o, t, .02, 'highpass', 4000, .7, .4); });
+SD('chargeFull', { len: .35, n: 1, pri: 3, pk: db(-16), h: .15 }, (c, o, t, r) => { O(c, o, t, 'sine', 880, 1320, .1, .5); O(c, o, t + .08, 'sine', 1760, 1758, .22, .6); O(c, o, t + .08, 'sine', 2640, 2636, .16, .2); });
+SD('heavy', { len: .5, n: 2, pri: 3, pk: db(-10) }, (c, o, t, r) => { W(c, o, t, .4, 'bandpass', 200, 1800, 400, .9, 1, .45); O(c, o, t + .08, 'sine', 70, 40, .25, .5); });
+SD('finisher', { len: .3, n: 2, pri: 3, pk: db(-10) }, (c, o, t, r) => { O(c, o, t, 'sine', 150 + r() * 20, 50, .2, 1); N(c, o, t, .1, 'lowpass', 600, .8, .6); });
+SD('slam', { len: .9, n: 2, pri: 4, pk: db(-7), dk: -3, dh: .3 }, (c, o, t, r) => { O(c, o, t, 'sine', 120, 35, .5, 1); N(c, o, t, .4, 'lowpass', 300, .8, .8); N(c, o, t, .05, 'bandpass', 1500, 1.2, .4); for (let i = 0; i < 6; i++) N(c, o, t + .05 + r() * .3, .04, 'bandpass', 700 + r() * 1800, 3, .12); });
+SD('stagger', { len: .45, n: 2, pri: 3, pk: db(-15) }, (c, o, t, r) => { for (let i = 0; i < 3; i++) O(c, o, t + i * .07, 'sine', 980 - i * 140, 760 - i * 140, .1, .7); });
+SD('dodged', { len: .25, n: 1, pri: 3, pk: db(-17) }, (c, o, t, r) => { O(c, o, t, 'sine', 1600, 2400, .15, .6); W(c, o, t, .18, 'highpass', 2500, 5000, 3000, .7, .4, .3); });
+Object.assign(SND, {
+  parry(){ fire('parry'); }, block(){ fire('block'); }, guardUp(){ fire('guardUp'); }, guardBreak(){ fire('guardBreak'); }, chargeFull(){ fire('chargeFull'); },
+  heavy(g){ fire('heavy', { gain: g || 1 }); }, finisher(){ fire('finisher'); }, slam(g){ fire('slam', { gain: g || 1 }); }, dodged(){ fire('dodged'); },
+  stagger(e){ fire('stagger', { pos: e ? { x: e.x, y: e.y + 1, z: e.z } : null }); }
+});
 
 /* ================= site copy, Markdown, the Writings reader and books (x1) =================
    Copy and writings come from content/copy.md and content/writings/*.md, baked by site/build.py into
@@ -7106,10 +7383,10 @@ canvas.addEventListener('pointerdown', e => {
   if (lookMode === 'lock' && !locked){ requestLock(); return; }
   if (e.button === 0){
     if (MOBHIT.m){ pokeMob(MOBHIT.m); animMine(); return; }
-    if (holdingWeapon() || enemyInSights(3)){ if (spearChargeStart()) return; atkHeld = true; playerAttack(); return; }
+    if (holdingWeapon() || enemyInSights(3)){ combatPress(); return; }
     if (lookMode === 'lock') mineHeld = true;
     else { drag.on = true; drag.x = drag.sx = e.clientX; drag.y = drag.sy = e.clientY; drag.moved = false; drag.t0 = performance.now(); }
-  } else if (e.button === 2){ useHeld = true; useAction(true); }
+  } else if (e.button === 2){ if (combatGuard(true)) return; useHeld = true; useAction(true); }
 });
 canvas.addEventListener('pointermove', e => {
   if (e.pointerType !== 'touch' || state !== 'play') return;
@@ -7122,16 +7399,16 @@ function endPtr(e){
     if (e.pointerId === lookPtr.id){ lookPtr.id = -1; if (performance.now() - lookPtr.t0 < 260 && hyp2(e.clientX - lookPtr.sx, e.clientY - lookPtr.sy) < 12) tapAction(); }
     return;
   }
-  if (e.button === 0){ mineHeld = false; drag.on = false; atkHeld = false; spearChargeRelease(); }
-  if (e.button === 2) useHeld = false;
+  if (e.button === 0){ mineHeld = false; drag.on = false; atkHeld = false; combatRelease(); }
+  if (e.button === 2){ useHeld = false; combatGuard(false); }
 }
 canvas.addEventListener('pointerup', endPtr); canvas.addEventListener('pointercancel', endPtr);
-Wn.addEventListener('pointerup', e => { if (e.pointerType !== 'touch'){ if (e.button === 0){ mineHeld = false; drag.on = false; atkHeld = false; if (state === 'play') spearChargeRelease(); } if (e.button === 2) useHeld = false; } });
+Wn.addEventListener('pointerup', e => { if (e.pointerType !== 'touch'){ if (e.button === 0){ mineHeld = false; drag.on = false; atkHeld = false; if (state === 'play') combatRelease(); } if (e.button === 2){ useHeld = false; combatGuard(false); } } });
 canvas.addEventListener('wheel', e => { if (state !== 'play') return; e.preventDefault(); selectSlot((sel + (e.deltaY > 0 ? 1 : 8)) % 9); }, { passive: false });
 const holdBtn = (q, on, off) => { const b = $(q); b.addEventListener('pointerdown', e => { e.preventDefault(); audioStart(); b.classList.add('on'); on(); try { b.setPointerCapture(e.pointerId); } catch (x){} }); const up = () => { b.classList.remove('on'); off && off(); }; b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('contextmenu', e => e.preventDefault()); };
-holdBtn('#tMine', () => { if (MOBHIT.m){ pokeMob(MOBHIT.m); return; } if (holdingWeapon() || enemyInSights(3)){ if (spearChargeStart()) return; atkHeld = true; playerAttack(); return; } mineHeld = true; }, () => { mineHeld = false; atkHeld = false; spearChargeRelease(); });
+holdBtn('#tMine', () => { if (MOBHIT.m){ pokeMob(MOBHIT.m); return; } if (holdingWeapon() || enemyInSights(3)){ combatPress(); return; } mineHeld = true; }, () => { mineHeld = false; atkHeld = false; combatRelease(); });
 holdBtn('#tJump', () => { INP.jumpEdge = true; INP.jump = true; }, () => { INP.jump = false; });
-holdBtn('#tPlace', () => { useHeld = true; useAction(true); }, () => { useHeld = false; });
+holdBtn('#tPlace', () => { if (combatGuard(true)) return; useHeld = true; useAction(true); }, () => { useHeld = false; combatGuard(false); });
 holdBtn('#tBag', () => { openInv(); }, null);
 holdBtn('#tDash', () => { dashDir(null); }, null);
 holdBtn('#tHook', () => { grappleAction(); }, null);
@@ -7453,7 +7730,7 @@ function frame(now){
     if (n >= 12) physAcc = 0;
     renderAlpha = physAcc / STEP_DT;
     useCD -= dt; if (useHeld && useCD <= 0 && isBlockItem(heldId())) useAction(false);
-    atkCD = Math.max(0, atkCD - sdt); if (atkHeld && atkCD <= 0) playerAttack();
+    atkCD = Math.max(0, atkCD - sdt); combatTick(dt, sdt);
     stepEnemies(sdt); stepArrows(sdt); tickHealth(dt);
   }
   if (CINE.on) stepCine(dt);

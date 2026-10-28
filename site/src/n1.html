@@ -151,6 +151,20 @@ button.chip{pointer-events:auto}
 .dmgnum.crit{font-size:24px;line-height:32px;color:var(--ochre)}
 .dmgnum.dot{color:#ffb27a}
 .dmgnum.dodge,.dmgnum.heal{color:#9fe08a}
+.dmgnum.parry{font-size:20px;line-height:28px;color:var(--ochre)}
+.dmgnum.stag{color:#ffd27a}
+.dmgnum.block{color:#cfd8e0}
+#stam{position:fixed;left:50%;top:50%;width:40px;height:40px;margin:-20px 0 0 -20px;pointer-events:none;opacity:0;transition:opacity .25s}
+#stam.on{opacity:1}
+#stam svg{display:block;width:40px;height:40px;transform:rotate(-90deg)}
+#stam circle{fill:none;stroke-width:3}
+#stam .bg{stroke:rgba(10,9,12,.45)}
+#stam .fg{stroke:var(--sage);stroke-dasharray:100.5;transition:stroke .12s}
+#stam.low .fg{stroke:#e0735f}
+#stam.charge .fg{stroke:var(--bone)}
+#stam.guard .bg{stroke:rgba(240,230,210,.4)}
+#stam.full .fg,#stam.parry .fg{stroke:var(--ochre)}
+#stam.full svg,#stam.parry svg{filter:drop-shadow(0 0 3px var(--ochre))}
 #hurt{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(170,40,40,.75) 100%);z-index:3}
 #tip{position:fixed;left:0;top:0;z-index:26;width:280px;padding:10px 12px;pointer-events:none;color:var(--bone);font:400 14px/20px var(--tx)}
 #tip .tt{font:700 16px/22px var(--tx);margin-bottom:2px}
@@ -512,6 +526,7 @@ button.slot:active{transform:translateY(2px)}
   <div id="tut" class="f-panel" role="status" hidden><span class="lbl" id="tutStep">1/5</span><span id="tutText"></span><button class="x f-alt" id="tutClose" type="button" aria-label="Dismiss tip"><i class="ico" data-ico="close"></i></button></div>
   <div id="objective" aria-hidden="true" hidden><i class="ico" data-ico="pin"></i><span id="objDist"></span></div>
   <div id="cross" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div id="stam" aria-hidden="true"><svg viewBox="0 0 40 40"><circle class="bg" cx="20" cy="20" r="16"/><circle class="fg" cx="20" cy="20" r="16"/></svg></div>
   <div id="chips"></div>
   <div id="ringchip" class="ringchip" hidden>Ring 1/6  <b id="ringT">14.0</b></div>
   <div id="resume" class="chip f-panel" hidden><span class="kc f-key">Click</span>to resume</div>
@@ -681,6 +696,8 @@ button.slot:active{transform:translateY(2px)}
         <div id="jrGear"></div>
         <span class="sect lbl8">Moves</span>
         <div class="moves" id="jrMoves"></div>
+        <span class="sect lbl8">Combat</span>
+        <div class="moves" id="jrCombat"></div>
         <span class="sect lbl8">Islands visited</span>
         <div class="tags" id="jrIsles"></div>
         <span class="sect lbl8">Sky sail</span>
