@@ -220,7 +220,7 @@ M.createScene = function createScene(container){
     // floppy slot: a raised mouth with real depth, a dark throat, the spring door set back inside, and the eject button
     const dark = new THREE.MeshStandardMaterial({ color: lin(0x0b0a09), roughness: .9 });
     {
-      const mouth = mesh(frameGeo(SLOT.hw + .0042, SLOT.hh + .0034, SLOT.hh + .0034, SLOT.hw + .0004, SLOT.hh + .0004, SLOT.hh * .95, .0018, .0011, .0012, 3), lipM);
+      const mouth = mesh(frameGeo(SLOT.hw + .0042, SLOT.hh + .0034, (SLOT.hh + .0034) * .9, SLOT.hw + .0004, SLOT.hh + .0004, SLOT.hh * .95, .0018, .0011, .0012, 3), lipM);
       mouth.position.set(SLOT.x, SLOT.y, faceZ(SLOT.y) - .0004); mouth.rotation.x = -Math.atan(SLOPE); computer.add(mouth);
       // throat walls in shadow, so the opening reads as a slot rather than a sticker
       const throat = mesh(new THREE.BoxGeometry(SLOT.hw * 2 + .0006, SLOT.hh * 2 + .0006, .0042), new THREE.MeshStandardMaterial({ color: lin(0x15130f), roughness: .95, side: THREE.BackSide }), false);
@@ -449,6 +449,7 @@ M.createScene = function createScene(container){
   const ALIAS = { Escape: 'Backquote', Delete: 'Backspace', NumpadEnter: 'Enter', MetaRight: 'MetaLeft', ControlRight: 'AltRight', OSLeft: 'MetaLeft', OSRight: 'MetaLeft', IntlBackslash: 'ShiftLeft', ContextMenu: 'AltRight' };
   const keys = new Map(), activeKeys = new Set();
   const kb = new THREE.Group();
+  const housings = []; // switch housings on the plate: they show through the gaps and as a cap sinks, so the travel reads as real
   {
     // legend atlas: one canvas, one cell per key, cap colour baked in
     const AW = 2048, AH = 1024, CPX = 128; // 2x: legends stay sharp when the typist looks down at the board
@@ -490,8 +491,6 @@ M.createScene = function createScene(container){
     const led = mesh(new THREE.BoxGeometry(.006, .0012, .003), new THREE.MeshBasicMaterial({ color: new THREE.Color(.3, 1.4, .5), toneMapped: false }), false);
     led.position.set(KB.w / 2 - .03, .0052, -KB.d / 2 + .015); kb.add(led);
 
-    // switch housings on the plate: they show through the gaps and as a cap sinks, so the travel reads as real
-    const housings = [];
     // caps
     ROWS.forEach((row, r) => {
       let col = 0;
