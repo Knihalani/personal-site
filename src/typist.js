@@ -149,8 +149,8 @@ function palmGeo(ts, KX){
     if (uy > 0){
       for (const kx of KX){
         const b = gauss(x - kx, .0072) * gauss(z + .085, .0085);
-        y += .0032 * b * uy; red = Math.max(red, b);
-        y += .0006 * gauss(x - kx * (1 - .35 * t), .0028) * smooth(.15, .45, t) * (1 - smooth(.6, .95, t)) * uy;   // extensor tendons
+        y += .0042 * b * uy; red = Math.max(red, b);
+        y += .0011 * gauss(x - kx * (1 - .35 * t), .0026) * smooth(.15, .45, t) * (1 - smooth(.6, .95, t)) * uy;   // extensor tendons
       }
     }
     P.setXYZ(i, x, y, z);
@@ -316,7 +316,7 @@ M.createTypist = function createTypist(api){
       + smooth(.15, .168, y) * (1 - smooth(.188, .2, y)) * .045 * Math.sin(a * 4 + y * 50 + 1)                                        // slack piling onto the cuff
       + smooth(.204, .21, y) * (1 - smooth(.232, .238, y)) * .03 * Math.sin(a * 24),                                                 // rib knit
     v => { v.x *= 1.1; v.z *= .86; });
-  const wristGeo = tint(capsule(.0225, .0215, .05, 28, null, v => { v.x *= 1.22; v.z *= .78; v.z += .002 * smooth(.02, .05, v.y); }, 6), () => PLAIN);
+  const wristGeo = tint(capsule(.0205, .0205, .05, 28, null, v => { v.x *= 1.3; v.z *= .74; v.z += .002 * smooth(.02, .05, v.y); }, 6), () => PLAIN);
   const elbowGeo = blob(.056, .056, .056, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
 
   /* ---------- hands ---------- */
@@ -367,7 +367,7 @@ M.createTypist = function createTypist(api){
       H.homeQ.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, back))
         .multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -H.side * .2));
       const kc = H.fingers.slice(1).reduce((a, F) => a.add(F.base.position), V3()).multiplyScalar(.25);
-      const target = C.clone().addScaledVector(n, .054).addScaledVector(kfw, -.05);
+      const target = C.clone().addScaledVector(n, .045).addScaledVector(kfw, -.052);
       H.homeW.copy(target).sub(kc.clone().applyQuaternion(H.homeQ));
       H.W = new VSpring(H.homeW); H.hold.copy(H.homeW); H.region = new VSpring(H.homeW);
       const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(1, 1, 1)).invert();
@@ -546,8 +546,10 @@ M.createTypist = function createTypist(api){
     if (pendShift && pendShift.code === code){ const F = startShift(code, null); pendShift = null; F.upReq = true; owner.delete(code); return; }
     const F = owner.get(code); owner.delete(code);
     if (!F) return;
-    const q = F.queue.find(e => e.code === code); if (q){ q.up = true; return; }
-    if (F.code === code && (F.mode === 'strike' || F.mode === 'hold')){
+    // at most one stroke of a key is still 'down': the one in flight, or else the one waiting in this finger's queue
+    const live = F.code === code && (F.mode === 'strike' || F.mode === 'hold') && !F.upReq;
+    if (!live){ const q = F.queue.find(e => e.code === code && !e.up); if (q){ q.up = true; return; } }
+    if (live){
       if (!F.pressed){ F.upReq = true; return; }      // tapped faster than the finger travels: release right after contact
       F.mode = 'release'; F.relT = 0; F.w.x = 1; F.w.v = 0;
       doRelease(F.vcode);
@@ -687,7 +689,7 @@ M.createTypist = function createTypist(api){
           if (F.queue.length && F.t - F.tC >= .03){      // a stroke queued behind this one: go now
             const q = F.queue.shift();
             strike(q.code, q.vcode, F, 0, true);
-            if (q.up){ F.upReq = true; }
+            if (q.up){ F.upReq = true; if (owner.get(q.code) === F && !F.queue.some(e => e.code === q.code && !e.up)) owner.delete(q.code); }   // its key is already up
             solveFinger(F, F.P);         // reachFor() posed this finger while probing: put it back for this frame
           }
         } else {

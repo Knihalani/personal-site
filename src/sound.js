@@ -88,6 +88,13 @@ const KEY_CLASSES = {
   heavy:  { fs: 0.86, ds: 1.15, knock: [160, 230, 0.7], tact: 0.3,  stab: 3, len: 0.14, down: 0.62, up: 0.30 },
   space:  { fs: 0.72, ds: 1.3,  knock: [140, 200, 0.85], tact: 0.25, stab: 5, len: 0.18, down: 0.52, up: 0.32 },
 };
+/* playback for the recorded keys (keysamples.js): levels and pitch per class */
+const SAMPLED = {
+  normal: { down: 0.46, up: 0.13, rate: 1.0 },
+  soft:   { down: 0.34, up: 0.09, rate: 0.97 },
+  heavy:  { down: 0.6, up: 0.18, rate: 0.9 },
+  space:  { down: 0.6, up: 0.19, rate: 0.84 },
+};
 /* plate / cap / case modes: [lo Hz, hi Hz, decay s, rel amp] */
 const PLATE_MODES = [[950, 1300, 0.032, 0.7], [1500, 1950, 0.024, 1.0], [2150, 2700, 0.018, 0.9],
   [2900, 3500, 0.014, 0.75], [3700, 4400, 0.011, 0.55], [4700, 5600, 0.008, 0.4], [6000, 7200, 0.006, 0.18]];
@@ -373,8 +380,29 @@ function Engine(ctx){
   const addVariant = cls => { const k = E.keys[cls], seed = hash(cls) + k.d.length * 7919;
     k.d.push(mk(synthKeyDown(cls, sr, seed))); k.u.push(mk(synthKeyUp(cls, sr, seed + 104729))); };
   /* 3 variants per class right away (first keystroke must sound), the rest a few at a time in later tasks */
+  const S = (window.MAC || {}).KEY_SAMPLES;
+  if (S && S.hits && S.hits.length){
+    /* real recordings: decode the PCM once; heavy keys and space lean on the darkest hits */
+    const pcm = S.hits.map(b64 => { const bin = atob(b64), n = bin.length >> 1, f = new Float32Array(n);
+      for (let i = 0; i < n; i++){ const v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); f[i] = (v > 32767 ? v - 65536 : v) / 32768; }
+      return f; });
+    const mkRate = (f, from) => { if (from === sr) return mk(f);
+      const n = Math.round(f.length * sr / from), o = new Float32Array(n), r = from / sr;
+      for (let i = 0; i < n; i++){ const x = i * r, j = x | 0, t = x - j; o[i] = (f[j] || 0) * (1 - t) + (f[j + 1] || 0) * t; } return mk(o); };
+    /* release: the first ~28 ms of a hit, faded fast, played quieter and a touch higher */
+    const upOf = f => { const n = Math.min(f.length, Math.round(0.028 * S.sr)), o = f.slice(0, n);
+      for (let i = 0; i < n; i++) o[i] *= Math.pow(1 - i / n, 2); return o; };
+    const downs = pcm.map(f => mkRate(f, S.sr)), ups = pcm.map(f => mkRate(upOf(f), S.sr));
+    const dark = Math.max(3, Math.ceil(pcm.length * 0.35));
+    for (const cls in POOL){
+      const lo = cls === 'heavy' || cls === 'space';
+      E.keys[cls] = { d: lo ? downs.slice(0, dark) : downs, u: lo ? ups.slice(0, dark) : ups, sampled: true };
+    }
+    E.sampled = true;
+    E.fillKeys = done => { if (done) done(); };
+  } else
   for (const cls in POOL){ E.keys[cls] = { d: [], u: [] }; for (let i = 0; i < 3; i++) addVariant(cls); }
-  E.fillKeys = (done) => {
+  if (!E.sampled) E.fillKeys = (done) => {
     const todo = []; for (const cls in POOL) for (let i = E.keys[cls].d.length; i < POOL[cls]; i++) todo.push(cls);
     const step = () => { for (let j = 0; j < 4 && todo.length; j++) addVariant(todo.shift()); if (todo.length) setTimeout(step, 16); else if (done) done(); };
     if (E.offline){ while (todo.length) addVariant(todo.shift()); } else setTimeout(step, 16);
@@ -416,8 +444,9 @@ Engine.prototype.key = function (code, down, when){
     if (idx !== (down ? k.last : k.lastU)) break;
   }
   if (down) k.last = idx; else k.lastU = idx;
-  const level = (down ? c.down : c.up) * k.gain * (0.88 + Math.random() * 0.24);
-  const rate = k.rate * (0.985 + Math.random() * 0.03);
+  const sm = this.sampled ? SAMPLED[k.cls] : null;
+  const level = (sm ? (down ? sm.down : sm.up) : (down ? c.down : c.up)) * k.gain * (0.88 + Math.random() * 0.24);
+  const rate = k.rate * (sm ? sm.rate * (down ? 1 : 1.12) : 1) * (0.985 + Math.random() * 0.03);
   this.play(list[idx], this.keyBus, when, level, rate, k.pan + (Math.random() - 0.5) * 0.04, k.bright * (0.92 + Math.random() * 0.16));
 };
 Engine.prototype.event = function (name, when){
