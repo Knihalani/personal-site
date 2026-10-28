@@ -13,7 +13,7 @@ const typist = M.createTypist(api); if (typist.object3d && !typist.object3d.pare
 /* ---- input: physical keyboards drive both the terminal and the typist's hands ---- */
 const held = new Set();
 function onDown(e){
-  if (e.metaKey || e.ctrlKey && e.key !== 'c' && e.key !== 'l') return;
+  if (e.metaKey) return;   // Ctrl combos go to the terminal; it only consumes the ones it handles
   if (e.target === $('#view')) return;
   if (term.handleKey(e)) e.preventDefault();
   const code = e.code || 'KeyA';
