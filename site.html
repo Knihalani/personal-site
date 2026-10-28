@@ -11,6 +11,10 @@
 html, body{ margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden; font: 12px/1.4 var(--mono) }
 #stage{ position: fixed; inset: 0 }
 #stage canvas{ display: block; width: 100%; height: 100%; outline: none }
+body.phone{ background: #0a0f0a }
+body.phone #mute{ top: max(10px, env(safe-area-inset-top, 0px)); bottom: auto; padding: 4px 8px; font-size: 11px; opacity: .7 }
+body.phone #stage{ overflow: hidden; touch-action: none }
+#stage canvas.phone-term{ position: absolute; top: 0; left: 0; width: 100%; height: auto; transition: transform .25s cubic-bezier(.2,.8,.2,1) }
 .ui{ position: fixed; z-index: 2; font: 500 11px var(--mono); letter-spacing: .08em; color: var(--dim) }
 #hint{ left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom, 0px)); transition: opacity .8s; pointer-events: none; text-align: center }
 #mute{ right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); background: none; border: 1px solid rgba(233,226,208,.18); color: var(--dim); font: inherit; letter-spacing: inherit; padding: 6px 10px; cursor: pointer }
@@ -26,7 +30,7 @@ html, body{ margin: 0; height: 100%; background: var(--bg); color: var(--fg); ov
 
 <div id="stage" aria-hidden="true"></div>
 <div id="loading">warming up the tube</div>
-<div id="hint" class="ui">start typing · try <b>help</b> · move the mouse to look around · scroll to step back</div>
+<div id="hint" class="ui">start typing · try <b>help</b> · move the cursor down to lean back</div>
 <button id="mute" class="ui" type="button" aria-pressed="false">sound on</button>
 <textarea id="kbd" aria-label="Terminal input" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
 <main class="sr" aria-live="polite" id="mirror"><h1>Kaiav Nihalani</h1></main>
@@ -1502,7 +1506,7 @@ M.createScene = function createScene(container){
   function applyCamera(){
     // the pointer looks around: down leans back toward the full view (the hands), sideways/up turn the head a little
     const down = clamp(-pitchS.x / LOOK.down, 0, 1);
-    const k = sstep(0, 1, Math.max(clamp(viewS.x, 0, 1), down));
+    const k = sstep(0, 1, 1 - (1 - clamp(viewS.x, 0, 1)) * (1 - down));
     const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * (1 - .45 * k);
     camera.position.lerpVectors(shot.screen.pos, shot.full.pos, k);
     // the head travels a slight arc (up and back first) rather than a straight dolly
@@ -1613,7 +1617,7 @@ M.createScene = function createScene(container){
     nudge(amount = 1){ if (false) leanS.v += 7 * clamp(amount, 0, 2); },
     update(dt, t){
       breathT += dt;
-      crit(yawS, 6.5, dt); crit(pitchS, 6, dt); crit(viewS, 4.2, dt);
+      crit(yawS, 3.4, dt); crit(pitchS, 3.1, dt); crit(viewS, 3.2, dt);   // slow, critically damped: glides, never overshoots
       { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h; leanS.v += (-110 * leanS.x - 2 * .75 * 10.5 * leanS.v) * h; leanS.x += leanS.v * h; } }
       leanS.x = clamp(leanS.x, -.3, 1);
       applyCamera(t);
@@ -1953,63 +1957,66 @@ function tint(g, fn){
   for (let i = 0; i < P.count; i++){ const c = fn(P.getX(i), P.getY(i), P.getZ(i)); C[i * 3] = c[0]; C[i * 3 + 1] = c[1]; C[i * 3 + 2] = c[2]; }
   g.setAttribute('color', new THREE.BufferAttribute(C, 3)); return g;
 }
-const KNUCKLE = [1, .8, .76], PLAIN = [1, 1, 1];
-const mix3 = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+const PLAIN = [1, 1, 1];
 
-/* One finger segment along -Z (dorsal = +Y): tapered, slightly flattened palm-to-back, flushed at the knuckle. */
-function fingerSeg(r0, r1, len, distal){
-  const g = capsule(r0, r1, len, 24, null, v => {
-    const t = clamp(v.y / len, 0, 1), rr = Math.hypot(v.x, v.z) || 1;
-    const waist = 1 - .055 * Math.sin(PI * clamp(t, 0, 1)) * (distal ? .5 : 1);     // segments slim between the joints
-    v.x *= waist; v.z *= waist;
-    if (v.z > 0) v.z += r0 * .16 * gauss(v.y / len + .02, .16) * (v.z / rr);        // the joint knob on the back
-    v.z *= .87 - (distal ? .05 * t : 0);                 // flatter toward the pad
-    v.x *= 1 + (distal ? .05 * smooth(.4, 1, t) : 0);     // fingertips spread a touch
-    if (distal && v.z < 0) v.z -= .0012 * gauss(t - .62, .3);   // the fleshy pad
-  }, 7);
-  g.rotateX(-PI / 2);
-  return tint(g, (x, y, z) => {
-    const back = smooth(-.2 * r0, .6 * r0, y);
-    let k = back * gauss(z / r0, .9) * .9;                                       // knuckle at the proximal joint
-    if (distal) k = Math.max(k, .6 * smooth(-len * .6, -len - r1, z));       // warm fingertip
-    let c = mix3(PLAIN, KNUCKLE, clamp(k, 0, 1));
-    // dorsal wrinkle lines over the joint, palmar crease under it
-    const cr = back * (gauss(z / r0 + .25, .07) + .7 * gauss(z / r0 + .5, .06)) + (1 - back) * gauss(z / r0 + .05, .1) * .8;
-    c = mix3(c, [.72, .55, .5], clamp(cr * .5, 0, .5));
-    return c;
-  });
+/* ---------------- the hand surface: a signed-distance field, polygonised once with surface nets ---------------- */
+const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * .25; };
+/* round cone along +h from radius r1 at h = 0 to r2 at h = L (r = radial distance) */
+function roundCone(r, h, r1, r2, L){
+  const b = (r1 - r2) / L, a = Math.sqrt(1 - b * b), k = -b * r + a * h;
+  if (k < 0) return Math.hypot(r, h) - r1;
+  if (k > a * L) return Math.hypot(r, h - L) - r2;
+  return a * r + b * h - r1;
 }
-
-/* The palm: a superellipsoid with a dorsal arch, knuckle heads, faint extensor tendons and a thenar pad. */
-function palmGeo(ts, KX){
-  const g = new THREE.SphereGeometry(1, 64, 40), P = g.attributes.position, C = new Float32Array(P.count * 3);
-  for (let i = 0; i < P.count; i++){
-    const ux = P.getX(i), uy = P.getY(i), uz0 = P.getZ(i);
-    const uz = Math.sign(uz0) * Math.pow(Math.abs(uz0), .55);
-    const t = (uz + 1) / 2;                                    // 0 = knuckle end, 1 = wrist end
-    const z = -.093 + t * .097;
-    const w = .0405 - .0135 * smooth(.3, 1, t) + .002 * (ux * ts > 0 ? smooth(.2, .7, t) * (1 - smooth(.7, 1, t)) : 0);
-    const x = Math.sign(ux) * Math.pow(Math.abs(ux), .7) * w, xn = x / .0415;
-    const top = .0108 * (1 - .45 * xn * xn) * (1 - .25 * smooth(.6, 1, t)) + .0014;
-    const bot = .0102 * (1 - .35 * xn * xn) + .0065 * gauss(x - ts * .02, .014) * gauss(z + .035, .03) + .003 * gauss(x + ts * .022, .012) * gauss(z + .04, .035);
-    let y = uy > 0 ? Math.pow(uy, .75) * top : -Math.pow(-uy, .75) * bot;
-    let red = 0;
-    if (uy > 0){
-      for (const kx of KX){
-        const b = gauss(x - kx, .0062) * gauss(z + .086, .008);
-        y += .0052 * b * uy; red = Math.max(red, b);
-        y += .0011 * gauss(x - kx * (1 - .35 * t), .0026) * smooth(.15, .45, t) * (1 - smooth(.6, .95, t)) * uy;   // extensor tendons
-      }
-    }
-    P.setXYZ(i, x, y, z);
-    let c = mix3(PLAIN, KNUCKLE, clamp(red * .85, 0, 1));
-    if (uy > 0) c = mix3(c, [1.02, .97, .9], .5 * smooth(.2, .7, t));                      // the back of the hand: a touch paler, less red
-    const mot = 1 + .035 * Math.sin(x * 310 + z * 90) * Math.sin(z * 260 - x * 70);       // faint mottling
-    c = [c[0] * mot, c[1] * mot, c[2] * mot];
-    C[i * 3] = c[0]; C[i * 3 + 1] = c[1]; C[i * 3 + 2] = c[2];
+/* Surface nets over [lo, hi] with cell size h: one vertex per surface cell, one quad per sign-changing edge.
+   Far-field values come from a coarse pass so only the narrow band near the surface is evaluated finely. */
+function surfaceNets(sdf, lo, hi, h){
+  const nx = Math.ceil((hi[0] - lo[0]) / h) + 1, ny = Math.ceil((hi[1] - lo[1]) / h) + 1, nz = Math.ceil((hi[2] - lo[2]) / h) + 1;
+  const C = 3, cx = Math.ceil((nx - 1) / C) + 1, cy = Math.ceil((ny - 1) / C) + 1, cz = Math.ceil((nz - 1) / C) + 1;
+  const G = new Float32Array(cx * cy * cz);
+  for (let k = 0; k < cz; k++) for (let j = 0; j < cy; j++) for (let i = 0; i < cx; i++)
+    G[i + cx * (j + cy * k)] = sdf(lo[0] + i * C * h, lo[1] + j * C * h, lo[2] + k * C * h);
+  const F = new Float32Array(nx * ny * nz), band = 5 * h;
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
+    const g = G[Math.round(i / C) + cx * (Math.round(j / C) + cy * Math.round(k / C))];
+    const edge = i === 0 || j === 0 || k === 0 || i === nx - 1 || j === ny - 1 || k === nz - 1;
+    F[i + nx * (j + ny * k)] = edge ? Math.max(h, Math.abs(g)) : Math.abs(g) > band ? g : sdf(lo[0] + i * h, lo[1] + j * h, lo[2] + k * h);
   }
-  g.setAttribute('color', new THREE.BufferAttribute(C, 3));
-  return weldNormals(g);
+  const id = (i, j, k) => i + nx * (j + ny * k), cid = (i, j, k) => i + (nx - 1) * (j + (ny - 1) * k);
+  const cell = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1), pos = [];
+  const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+  const cv = new Float32Array(8);
+  for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++){
+    let m = 0;
+    for (let c = 0; c < 8; c++){ cv[c] = F[id(i + (c & 1), j + (c >> 1 & 1), k + (c >> 2))]; if (cv[c] < 0) m |= 1 << c; }
+    if (m === 0 || m === 255) continue;
+    let sx = 0, sy = 0, sz = 0, n = 0;
+    for (const [a, b] of E){
+      if ((cv[a] < 0) === (cv[b] < 0)) continue;
+      const t = cv[a] / (cv[a] - cv[b]);
+      sx += (a & 1) + ((b & 1) - (a & 1)) * t; sy += (a >> 1 & 1) + ((b >> 1 & 1) - (a >> 1 & 1)) * t; sz += (a >> 2) + ((b >> 2) - (a >> 2)) * t; n++;
+    }
+    cell[cid(i, j, k)] = pos.length / 3;
+    pos.push(lo[0] + (i + sx / n) * h, lo[1] + (j + sy / n) * h, lo[2] + (k + sz / n) * h);
+  }
+  const idx = [];
+  const quad = (a, b, c, d, flip) => {
+    if (a < 0 || b < 0 || c < 0 || d < 0) return;
+    if (flip){ const t = b; b = d; d = t; }
+    const d1 = (pos[a * 3] - pos[c * 3]) ** 2 + (pos[a * 3 + 1] - pos[c * 3 + 1]) ** 2 + (pos[a * 3 + 2] - pos[c * 3 + 2]) ** 2;
+    const d2 = (pos[b * 3] - pos[d * 3]) ** 2 + (pos[b * 3 + 1] - pos[d * 3 + 1]) ** 2 + (pos[b * 3 + 2] - pos[d * 3 + 2]) ** 2;
+    if (d1 < d2) idx.push(a, b, c, a, c, d); else idx.push(a, b, d, b, c, d);
+  };
+  for (let k = 1; k < nz - 1; k++) for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++){
+    const f0 = F[id(i, j, k)] < 0;
+    if (i < nx - 1 && f0 !== (F[id(i + 1, j, k)] < 0))
+      quad(cell[cid(i, j - 1, k - 1)], cell[cid(i, j, k - 1)], cell[cid(i, j, k)], cell[cid(i, j - 1, k)], !f0);
+    if (j < ny - 1 && f0 !== (F[id(i, j + 1, k)] < 0))
+      quad(cell[cid(i - 1, j, k - 1)], cell[cid(i - 1, j, k)], cell[cid(i, j, k)], cell[cid(i, j, k - 1)], !f0);
+    if (k < nz - 1 && f0 !== (F[id(i, j, k + 1)] < 0))
+      quad(cell[cid(i - 1, j - 1, k)], cell[cid(i, j - 1, k)], cell[cid(i, j, k)], cell[cid(i - 1, j, k)], !f0);
+  }
+  return { pos, idx };
 }
 
 /* ---------------- materials: skin with wrap-diffuse subsurface + rim; cloth with a soft fresnel sheen ---------------- */
@@ -2115,7 +2122,7 @@ M.createTypist = function createTypist(api){
     uCrtC: { value: new THREE.Color(.36, 1, .62).multiplyScalar(.075) }, uLampC: { value: new THREE.Color(1, .7, .46).multiplyScalar(.2) },
     uAmbC: { value: new THREE.Color(.11, .13, .2).multiplyScalar(.12) },
   };
-  const cloth = makeMat('cloth', U), cuffM = makeMat('cuff', U), skin = makeMat('skin', U), nailM = makeMat('nail', U);
+  const cloth = makeMat('cloth', U), cuffM = makeMat('cuff', U), skin = makeMat('skin', U);
   const ghost = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });   // casts the body's shadow, never seen
   const mesh = (geo, mat, parent, pos, rot) => {
     const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = mat !== ghost;
@@ -2149,41 +2156,31 @@ M.createTypist = function createTypist(api){
   const upperGeo = capsule(.046, .041, L1, 40,
     (a, y) => .05 * Math.sin(y * 70 + 1.8 * Math.sin(a * 2 + .5)) * smooth(.17, .27, y) + .025 * Math.sin(a * 4 + y * 22) + .02 * Math.sin(a * 3 - y * 30) * (1 - smooth(.04, .12, y)),
     v => { v.x *= 1.04; v.z *= .94; });
+  // the forearm sleeve: drapes from the elbow and ends in a ribbed cuff mid-forearm, so a slim wrist shows
   const sleeveFold = (a, y) => (1 - smooth(.0, .1, y)) * (.075 * Math.sin(y * 92 + 1.6 * Math.sin(a * 2 + 1)) + .03 * Math.sin(a * 5 + y * 40))            // bunching at the elbow
-      + smooth(.05, .1, y) * (1 - smooth(.15, .18, y)) * (.028 * Math.sin(a * 3 + y * 28) + .014 * Math.sin(a * 7 - y * 22))          // drape along the forearm
-      + smooth(.15, .168, y) * (1 - smooth(.188, .2, y)) * .045 * Math.sin(a * 4 + y * 50 + 1);                                       // slack piling onto the cuff
-  const RIBS = 30, ribBand = y => smooth(.203, .209, y) * (1 - smooth(.233, .239, y));
-  const foreGeo = lathe([[.0001, -.05], [.028, -.046], [.044, -.034], [.052, -.012], [.054, .018], [.051, .05], [.048, .09], [.0455, .13], [.0445, .158], [.0465, .177], [.045, .192],
-    [.039, .2], [.0345, .205], [.034, .209], [.0338, .214], [.0338, .22], [.0338, .226], [.0336, .232], [.031, .2385], [.0255, .2415], [.0001, .242]].map(([r, y]) => [r * (y > .19 ? .84 : .8), y]), 150,
+      + smooth(.05, .1, y) * (1 - smooth(.13, .155, y)) * (.028 * Math.sin(a * 3 + y * 28) + .014 * Math.sin(a * 7 - y * 22))          // drape along the forearm
+      + smooth(.13, .15, y) * (1 - smooth(.158, .166, y)) * .045 * Math.sin(a * 4 + y * 50 + 1);                                       // slack piling onto the cuff
+  const RIBS = 30, ribBand = y => smooth(.168, .173, y) * (1 - smooth(.192, .197, y));
+  const foreGeo = lathe([[.0001, -.05], [.028, -.046], [.044, -.034], [.052, -.012], [.054, .018], [.051, .05], [.048, .09], [.046, .12], [.0452, .145], [.0456, .158],
+    [.0425, .166], [.039, .171], [.038, .18], [.038, .19], [.0372, .197], [.0345, .2012], [.0315, .2022], [.0292, .199]], 150,
     (a, y) => sleeveFold(a, y) + ribBand(y) * .05 * Math.max(-.6, Math.cos(a * RIBS)),                        // + rib knit on the cuff
     v => { v.x *= 1.1; v.z *= .86; });
-  // the fabric's own shading: fold valleys darker, the knit cuff darker still with shadowed rib grooves
-  tint(foreGeo, (x, y, z) => {
-    const a = Math.atan2(z / .86, x / 1.1), rb = ribBand(y);
-    let k = 1 + clamp(sleeveFold(a, y) * 3.2, -.3, .12);
-    k *= 1 - .2 * rb; k *= 1 - .3 * rb * clamp(.5 - .5 * Math.cos(a * RIBS), 0, 1);
-    return [k, k, k];
-  });
-  const wristGeo = tint(capsule(.0185, .0185, .05, 28, null, v => { v.x *= 1.25; v.z *= .72; v.z += .002 * smooth(.02, .05, v.y); }, 6), () => PLAIN);
+  tint(foreGeo, () => PLAIN);
   const elbowGeo = blob(.047, .047, .047, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
 
   /* ---------- hands ---------- */
+  const SKIN_H = .0022;     // surface-nets cell size (m)
   const FL = [[.036, .03, .026], [.041, .025, .019], [.045, .028, .02], [.042, .026, .019], [.032, .02, .0165]];
   const FR = [[.0098, .0088, .0078], [.0075, .0067, .0059], [.0077, .0069, .006], [.0072, .0064, .0056], [.0062, .0055, .0049]];
   const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));
-  const segGeo = FL.map((L, f) => L.map((l, j) => fingerSeg(FR[f][j], j < 2 ? FR[f][j + 1] : FR[f][j] * .9, l, j === 2)));
-  const nailGeo = FL.map((L, f) => { const r = FR[f][2]; const g = blob(r * .8, r * .22, L[2] * .5, (x, y, z) => -.15 * Math.max(0, -y), 20, 12);
-    const P = g.attributes.position; for (let i = 0; i < P.count; i++){ const x = P.getX(i); P.setY(i, P.getY(i) - x * x / (r * 2.2)); } return weldNormals(g); });
 
   const hands = [];
   for (let h = 0; h < 2; h++){
     const side = h ? 1 : -1, ts = -side;            // ts: which local x side the thumb is on
     const hand = new THREE.Group(); root.add(hand);
     const KN = [V3(ts * .031, -.007, -.03), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.08)];
-    mesh(palmGeo(ts, KN.slice(1).map(k => k.x)), skin, hand);
-    mesh(tint(blob(.015, .0115, .028, null, 24, 16), () => PLAIN), skin, hand, V3(ts * .022, -.005, -.032), [0, -ts * .25, 0]);   // thenar
     const upper = new THREE.Group(); root.add(upper); mesh(upperGeo, cloth, upper); mesh(elbowGeo, cloth, upper, V3(0, L1, 0));
-    const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, cuffM, fore); mesh(wristGeo, skin, fore, V3(0, .21, 0));
+    const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, cuffM, fore);
     const fingers = [];
     for (let f = 0; f < 5; f++){
       const base = new THREE.Group(); base.position.copy(KN[f]); hand.add(base);
@@ -2191,15 +2188,12 @@ M.createTypist = function createTypist(api){
       const g0 = new THREE.Group(); g0.rotation.order = 'YXZ'; base.add(g0);
       const g1 = new THREE.Group(); g1.position.z = -FL[f][0]; g0.add(g1);
       const g2 = new THREE.Group(); g2.position.z = -FL[f][1]; g1.add(g2);
-      mesh(segGeo[f][0], skin, g0); mesh(segGeo[f][1], skin, g1); mesh(segGeo[f][2], skin, g2);
-      const nl = mesh(nailGeo[f], nailM, g2, V3(0, FR[f][2] * .8, -FL[f][2] * .6), [-.06, 0, 0]);
-      if (f === 0) nl.rotation.z = ts * .25;
       fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][2] * .9 * .87 + .0004,
         mode: 'idle', code: null, vcode: null, real: false, pressed: false, upReq: false, t: 0, tC: 0, Td: .08, lift: .005, relT: 9,
         w: S(0), depth: S(0), act: 0, K: V3(), from: V3(), P: V3(), tip: V3(), restLocal: V3(), restHome: V3(), reach: V3(), start: 0,
         fid: new VSpring(V3()), fidT: V3(), fidAt: 1 + Math.random() * 4, queue: [], vel: V3(), prevP: V3(), v0: V3() });
     }
-    hands.push({ h, side, ts, hand, upper, fore, fingers, homeW: V3(), homeQ: new THREE.Quaternion(), deskW: V3(), deskQ: new THREE.Quaternion(),
+    hands.push({ h, side, ts, KN, hand, upper, fore, fingers, homeW: V3(), homeQ: new THREE.Quaternion(), deskW: V3(), deskQ: new THREE.Quaternion(),
       W: null, hold: V3(), region: null, nudge: V3(), lastActive: -9, yaw: S(0), desk: S(0), deskT: 0, elbowOut: S(0) });
   }
 
@@ -2564,7 +2558,130 @@ M.createTypist = function createTypist(api){
   T = 0; lastKey = -9;
   for (const H of hands) H.lastActive = -9;
 
-  root.userData.dbg = { hands, s, contacts, spineOff, lean0 };
+  /* ---------- the skin: one continuous surface per hand (palm, knuckles, fingers, thumb, wrist and forearm), modelled
+     as a signed-distance field in the settled home pose, polygonised once, and skinned to the wrist, forearm and
+     finger joints. Idle hands show the sculpted shape exactly; strikes bend it at the joints. ---------- */
+  root.updateMatrixWorld(true);
+  const skinStats = [];
+  for (const H of hands){
+    const t0 = (typeof performance !== 'undefined' ? performance : Date).now();
+    const ts = H.ts, q = [0, 0, 0];
+    const handInv = H.hand.matrixWorld.clone().invert();
+    const rel = o => handInv.clone().multiply(o.matrixWorld);           // a bone's rest frame in hand space
+    const inv = m => m.clone().invert().elements;
+    const ap = (e, x, y, z) => { q[0] = e[0] * x + e[4] * y + e[8] * z + e[12]; q[1] = e[1] * x + e[5] * y + e[9] * z + e[13]; q[2] = e[2] * x + e[6] * y + e[10] * z + e[14]; return q; };
+    // per finger: hand->bone transforms, lengths and radii (lateral; the dorsal-ventral axis is flattened)
+    const CH = H.fingers.map(F => {
+      const f = F.f, th = f === 0, R = FR[f];
+      const rj = th ? [.0158, R[1] * 1.1, R[2] * 1.12, R[2] * 1.02] : [R[0] * 1.13, R[1] * 1.12, R[2] * 1.1, R[2] * .98];
+      const gs = [F.g0, F.g1, F.g2];
+      const segs = gs.map((g, j) => ({ e: inv(rel(g)), L: F.L[j], r0: rj[j], r1: rj[j + 1], rm: (rj[j] + rj[j + 1]) * .5 * (th && j === 0 ? 1 : .93) }));
+      const pts = gs.map(g => V3().setFromMatrixPosition(rel(g))); pts.push(V3(0, 0, -F.L[2]).applyMatrix4(rel(F.g2)));
+      const c = pts.reduce((a, p) => a.add(p), V3()).multiplyScalar(.25);
+      return { f, th, segs, pts, c, rad: Math.max(...pts.map(p => p.distanceTo(c))) + .022, flat: th ? 1.08 : 1.15, joints: [0, F.L[0], F.L[0] + F.L[1]] };
+    });
+    const segD = (S, x, y, z, flat) => {
+      ap(S.e, x, y, z); const r = Math.hypot(q[0], q[1] * flat), hh = -q[2], m = S.L * .5;
+      return smin(roundCone(r, hh, S.r0, S.rm, m), roundCone(r, hh - m, S.rm, S.r1, m), .002);
+    };
+    const chainD = (C, x, y, z, from) => { let d = segD(C.segs[from], x, y, z, C.flat); for (let j = from + 1; j < 3; j++) d = smin(d, segD(C.segs[j], x, y, z, C.flat), .003); return d; };
+    // implicit -> approximate distance (F / |grad F|)
+    const dImp = (fn, x, y, z) => { const e = .0005, v = fn(x, y, z);
+      const gx = fn(x + e, y, z) - fn(x - e, y, z), gy = fn(x, y + e, z) - fn(x, y - e, z), gz = fn(x, y, z + e) - fn(x, y, z - e);
+      return v / Math.max(1e-6, Math.hypot(gx, gy, gz) / (2 * e)); };
+    // palm: a rounded slab, longer than wide, back gently domed, front edge following the knuckle arc
+    const zK = H.KN[2].z;
+    const palmF = (x, y, z) => {
+      const xs = x * ts, ze = zK + 11 * (xs - .005) * (xs - .005) + .003, zb = .012;
+      const t = (z - ze) / (zb - ze), tc = clamp(t, 0, 1);
+      const w = .0392 - .0105 * smooth(.3, 1, tc), u = (xs + .001 + .002 * tc) / w, v = 2 * t - 1;
+      const top = (.0108 + .0055 * smooth(.45, 1, tc)) * (1 - .3 * Math.min(1, u * u)), bot = (.0112 + .0068 * smooth(.3, 1, tc)) * (1 - .22 * Math.min(1, u * u));
+      const ym = Math.abs(y) / (y > 0 ? top : bot);
+      const s = Math.pow(u ** 4 + v ** 4, .25);
+      return Math.pow(s ** 2.4 + ym ** 2.4, 1 / 2.4) - 1;
+    };
+    // wrist and forearm: an elliptical section (5.5 x 3.5 cm at the wrist) widening toward the elbow
+    const Fe = inv(rel(H.fore));
+    const foreF = (x, y, z) => {
+      ap(Fe, x, y, z); const sb = L2 - q[1], k = smooth(-.01, .08, sb);
+      const e = Math.hypot(q[0] / (.0272 + .0038 * k), q[2] / (.0172 + .0048 * k));
+      const cap = Math.max(0, -sb / .014, (sb - .1) / .02);
+      return Math.pow(e ** 4 + cap ** 4, .25) - 1;
+    };
+    const palmD = (x, y, z) => {
+      let d = smin(dImp(palmF, x, y, z), dImp(foreF, x, y, z), .024);
+      for (let f = 1; f < 5; f++){            // the knuckle heads
+        const S = CH[f].segs[0]; ap(S.e, x, y, z);
+        d = smin(d, Math.hypot(q[0], (q[1] - .36 * S.r0) * 1.1, q[2] - .001) - .9 * S.r0, .007);
+      }
+      return d;
+    };
+    const sdf = (x, y, z) => {
+      const pg = smin(palmD(x, y, z), segD(CH[0].segs[0], x, y, z, 1.25), .014);        // + the thumb's fleshy metacarpal (thenar)
+      let d = pg;
+      for (const C of CH){
+        if (Math.hypot(x - C.c.x, y - C.c.y, z - C.c.z) - C.rad > pg + .01) continue;
+        d = Math.min(d, smin(pg, chainD(C, x, y, z, C.th ? 1 : 0), C.th ? .006 : .0075));   // fingers blend into the palm, never into each other
+      }
+      return d;
+    };
+    // bounds: the chains plus the forearm stub
+    const lo = [1, 1, 1], hi = [-1, -1, -1], grow = p => { for (let i = 0; i < 3; i++){ lo[i] = Math.min(lo[i], p.getComponent(i) - .026); hi[i] = Math.max(hi[i], p.getComponent(i) + .026); } };
+    for (const C of CH) C.pts.forEach(grow);
+    const dF = V3(0, 1, 0).transformDirection(rel(H.fore));        // elbow -> wrist, in hand space
+    grow(V3()); grow(dF.clone().multiplyScalar(-.115)); grow(V3(0, 0, .02));
+    for (let i = 0; i < 3; i++){ lo[i] -= .012; hi[i] += .012; }
+    const SN = surfaceNets(sdf, lo, hi, SKIN_H);
+    const nv = SN.pos.length / 3, P = new Float32Array(SN.pos), N = new Float32Array(nv * 3), SI = new Uint16Array(nv * 4), SW = new Float32Array(nv * 4);
+    const grad = (x, y, z, o) => { const e = .0003; o[0] = sdf(x + e, y, z) - sdf(x - e, y, z); o[1] = sdf(x, y + e, z) - sdf(x, y - e, z); o[2] = sdf(x, y, z + e) - sdf(x, y, z - e);
+      const l = Math.hypot(o[0], o[1], o[2]) || 1; o[0] /= l; o[1] /= l; o[2] /= l; return l / (2 * e); };
+    const g = [0, 0, 0], w = new Float32Array(17), pp = V3(), ab = V3(), ap2 = V3();
+    for (let i = 0; i < nv; i++){
+      let x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2];
+      for (let it = 0; it < 2; it++){ const d = sdf(x, y, z); grad(x, y, z, g); x -= d * g[0]; y -= d * g[1]; z -= d * g[2]; }   // onto the surface
+      grad(x, y, z, g);
+      P[i * 3] = x; P[i * 3 + 1] = y; P[i * 3 + 2] = z; N[i * 3] = g[0]; N[i * 3 + 1] = g[1]; N[i * 3 + 2] = g[2];
+      // weights: palm vs each finger by a soft nearest-part rule, then along the finger by smooth steps at the joints
+      w.fill(0);
+      const dp = palmD(x, y, z), dc = CH.map(C => chainD(C, x, y, z, 0));
+      const m = Math.min(dp, ...dc), TAU = .0021;
+      const ep = Math.exp(-(dp - m) / TAU), ec = dc.map(d => Math.exp(-(d - m) / TAU)), sum = ep + ec.reduce((a, b) => a + b, 0);
+      ap(Fe, x, y, z); const wf = smooth(-.004, .04, L2 - q[1]);
+      w[0] += ep / sum * (1 - wf); w[1] += ep / sum * wf;
+      pp.set(x, y, z);
+      CH.forEach((C, f) => {
+        const share = ec[f] / sum; if (share < 1e-4) return;
+        let best = 1e9, sArc = 0, acc = 0;
+        for (let j = 0; j < 3; j++){
+          ab.copy(C.pts[j + 1]).sub(C.pts[j]); const L = ab.length();
+          const t = clamp(ap2.copy(pp).sub(C.pts[j]).dot(ab) / (L * L), j ? 0 : -1e9, j < 2 ? 1 : 1e9);
+          const d = ap2.copy(C.pts[j]).addScaledVector(ab, t).distanceTo(pp);
+          if (d < best){ best = d; sArc = acc + t * L; }
+          acc += L;
+        }
+        const s1 = C.joints[1], s2 = C.joints[2], b1 = C.th ? .008 : .0065, b2 = .005;
+        const w2 = smooth(s2 - b2, s2 + b2, sArc), w0 = 1 - smooth(s1 - b1, s1 + b1, sArc), w1 = Math.max(0, 1 - w0 - w2);
+        w[2 + f * 3] += share * w0; w[3 + f * 3] += share * w1; w[4 + f * 3] += share * w2;
+      });
+      const order = [...w.keys()].sort((a, b) => w[b] - w[a]).slice(0, 4);
+      const tot = order.reduce((a, k) => a + w[k], 0) || 1;
+      order.forEach((k, j) => { SI[i * 4 + j] = k; SW[i * 4 + j] = w[k] / tot; });
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
+    geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
+    geo.setIndex(SN.idx);
+    const bones = [H.hand, H.fore]; H.fingers.forEach(F => bones.push(F.g0, F.g1, F.g2));
+    const sm = new THREE.SkinnedMesh(geo, skin);
+    sm.bind(new THREE.Skeleton(bones), H.hand.matrixWorld.clone());     // inverses taken from the current (home) pose
+    sm.frustumCulled = false; sm.castShadow = true; sm.receiveShadow = true; sm.name = 'hand-skin';
+    root.add(sm); H.skin = sm;
+    skinStats.push({ verts: nv, tris: SN.idx.length / 3, ms: Math.round((typeof performance !== 'undefined' ? performance : Date).now() - t0) });
+  }
+
+  root.userData.dbg = { hands, s, skinStats, contacts, spineOff, lean0 };
   return { object3d: root, keyDown, keyUp, update };
 };
 })();
@@ -2598,7 +2715,7 @@ const PALETTE = {             // one phosphor, four intensities. Retune here to 
   accent: '#8dffb4',          // matches, highlights: the same phosphor, driven harder
 };
 const FONT = 'VT323, "IBM Plex Mono", ui-monospace, monospace';
-const COLS = 54;               // grid width; ~23 rows at 4:3
+let COLS = 54;                 // grid width (opts.cols on phones); ~18 rows at 4:3
 const WIDTH = 1280;            // canvas px
 const LINE = 0.9;              // line height in em (VT323 has generous built-in leading)
 const RATE = 1500;             // typing-out speed, characters per second
@@ -2901,7 +3018,8 @@ function fieldList(spec){
 
 M.createTerminal = function createTerminal(opts){
   const C = (opts && opts.content) || M.CONTENT || {};
-  const aspect = opts && opts.aspect > 0.5 && opts.aspect < 3 ? opts.aspect : 4 / 3;
+  if (opts && opts.cols >= 32) COLS = opts.cols | 0;
+  const aspect = opts && opts.aspect > 0.3 && opts.aspect < 3 ? opts.aspect : 4 / 3;
   const W = WIDTH, H = Math.round(WIDTH / aspect);
   const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d', { alpha: false });
@@ -2971,6 +3089,18 @@ M.createTerminal = function createTerminal(opts){
       /* a boxed panel: title in the top border, label/value rows, selectable rows (url or copy) with
          number shortcuts, and a footer line of keys while it is waiting for a choice */
       card(spec){ const c = makeCard(spec); r.push(c); o.lastCard = c; return o; },
+      /* groups of spans laid out left to right with a gap, wrapping at the grid width */
+      flow(groups, gap = '  ', i = 2){
+        let line = [], w = 0;
+        for (const gr of groups){
+          const gw = gr.reduce((a, x) => a + x[0].length, 0);
+          if (line.length && w + gap.length + gw > COLS - i){ o.at(i, ...line); line = []; w = 0; }
+          if (line.length){ line.push([gap, 'f']); w += gap.length; }
+          line.push(...gr); w += gw;
+        }
+        if (line.length) o.at(i, ...line);
+        return o;
+      },
       link(label, url, i = 2, labelW = 0, shown){
         const sp = []; if (label) sp.push([pad(label, labelW), 'd']);
         sp.push([shown || url, 'n', { url }]); r.push({ k: 't', i, s: sp }); return o;
@@ -2992,9 +3122,20 @@ M.createTerminal = function createTerminal(opts){
     const acts = items.filter(it => it.ai >= 0);
     const room = it => (COLS - 3) - (5 + lw) - (it.hint ? it.hint.length + 2 : 0);
     if (items.some(it => it.value.length > room(it))) for (const it of items) it.hint = '';   // values win over hints
-    for (const it of items) if (it.value.length > room(it)) it.value = it.value.slice(0, Math.max(1, room(it) - 3)) + '...';
-    return { k: 'card', title: spec.title, note: spec.note || '', items, acts, lw, sel: -1, verb: spec.verb || 'open',
-      foot: null, h: items.length + (acts.length ? 3 : 2) };
+    /* narrow screens: the label goes above the value, and a long value wraps at / . @ rather than being cut */
+    const stacked = COLS < 46 || items.some(it => it.value.length > room(it));
+    const vroom = COLS - 8;
+    let y = 0;
+    for (const it of items){
+      it.y = y;
+      if (!stacked){ it.lines = [it.value]; it.n = 1; y++; continue; }
+      const parts = []; let v = it.value;
+      while (v.length > vroom){ let cut = Math.max(v.lastIndexOf('/', vroom - 1), v.lastIndexOf('.', vroom - 1), v.lastIndexOf('@', vroom - 1), v.lastIndexOf(' ', vroom)); if (cut < vroom / 2) cut = vroom - 1; parts.push(v.slice(0, cut + 1).trimEnd()); v = v.slice(cut + 1).trimStart(); }
+      parts.push(v); it.lines = parts; it.n = 1 + parts.length; y += it.n;
+    }
+    const note = spec.note && spec.title.length + spec.note.length + 10 <= COLS ? spec.note : '';
+    return { k: 'card', title: spec.title, note, items, acts, lw, stacked, body: y, sel: -1, verb: spec.verb || 'open',
+      foot: null, h: y + (acts.length ? 3 : 2) };
   }
 
   function pushRow(r){ openRow = null; rows.push(r); dirty = true; }
@@ -3147,7 +3288,7 @@ M.createTerminal = function createTerminal(opts){
   function welcome(o){
     o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line(['type ', 'f'], ['help', 'n'], [' to begin, or try', 'f'])
-      .line(['about', 'n'], ['  ', 'f'], ['eden', 'n'], ['  ', 'f'], ['j', 'n'], ['  ', 'f'], ['writing', 'n'], ['  ', 'f'], ['links', 'n'], ['  ', 'f'], ['contact', 'n'], ['  ', 'f'], ['tetris', 'n'])
+.flow(['about', 'eden', 'j', 'writing', 'links', 'contact', 'tetris'].map(w => [[w, 'n']]), '  ')
       .line(['new here? ', 'f'], ['cat README.md', 'd'])
       .blank();
     return o;
@@ -3167,7 +3308,7 @@ M.createTerminal = function createTerminal(opts){
     },
     j(o){
       o.blank().big(J.title || 'J').line([J.role || '', 'd']).blank()
-        .line([J.line || '', 'b']).para(J.body || '', 'n').blank()
+        .para(J.line || '', 'b').para(J.body || '', 'n').blank()
         .card({ title: 'J', note: 'j.txt', items: [...(J.facts || []).map(f => ({ label: f[0], value: f[1] })),
           { label: 'site', value: bare(URLS.j), full: URLS.j, url: URLS.j, hint: 'open' }] }).blank();
       return o;
@@ -3601,8 +3742,8 @@ M.createTerminal = function createTerminal(opts){
     for (const [gk, label] of groups) if (by[gk]) line(label, by[gk], gk === 'read' ? 'b' : 'n');
     if (apps.length) line('apps', apps, 'b');
     if (by.more) line('extras', by.more, 'n');
-    o.blank().at(2, ['man <cmd>', 'n'], [' for details   ', 'f'], ['tab', 'n'], [' completes   ', 'f'], ['ctrl+c', 'n'], [' stops', 'f'])
-      .at(2, ['open <name>', 'n'], [' opens a link   ', 'f'], ['cat README.md', 'n'], [' a guide', 'f']).blank();
+    o.blank().flow([[['man <cmd>', 'n'], [' details', 'f']], [['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']],
+      [['open <name>', 'n'], [' opens a link', 'f']], [['cat README.md', 'n'], [' a guide', 'f']]], '   ').blank();
     if (io.tty) io.rich(o); else io.write(o.rows.map(textOf).join('\n') + '\n');
   } });
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
@@ -3899,9 +4040,52 @@ M.createTerminal = function createTerminal(opts){
   function setFoot(card){
     const n = card.acts.length, dot = [' \u00b7 ', 'f'];
     const verb = card.acts.every(a => a.copy) ? 'copy' : card.acts.every(a => !a.copy) ? 'open' : 'open/copy';
-    card.foot = n > 1
-      ? [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['1-' + n, 'n'], [' jump', 'f'], dot, ['esc', 'n'], [' back', 'f']]
-      : [['enter', 'n'], [' ' + verb, 'f'], dot, ['any other key', 'n'], [' back', 'f']];
+    const len = f => f.reduce((a, x) => a + x[0].length, 0);
+    const opts = n > 1 ? [
+      [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['1-' + n, 'n'], [' jump', 'f'], dot, ['esc', 'n'], [' back', 'f']],
+      [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['esc', 'n'], [' back', 'f']],
+      [['  ', 'n', null, 'arrows'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['esc', 'n']],
+    ] : [
+      [['enter', 'n'], [' ' + verb, 'f'], dot, ['any other key', 'n'], [' back', 'f']],
+      [['enter', 'n'], [' ' + verb, 'f'], dot, ['esc', 'n'], [' back', 'f']],
+    ];
+    card.foot = opts.find(f => len(f) <= COLS - 3) || opts[opts.length - 1];
+  }
+  /* copy or open one card row; synchronous, so it must run inside the key or tap that asked */
+  function actOn(card, it){
+    card.sel = it.ai; card.done = true; card.flash = now;
+    let said;
+    if (it.copy){
+      const ok = copyText(it.copy); sfx('beep');
+      card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [it.copy, 'b']] : [['select and copy: ', 'd'], [it.copy, 'b']];
+      said = (ok ? 'Copied ' : 'Copy ') + it.copy + '.';
+    } else {
+      const ok = openTarget(it.url);
+      let shown = it.full ? bare(it.full) : it.value;
+      if (shown.length + 12 > COLS) shown = it.value.length + 12 <= COLS ? it.value : it.label;
+      card.foot = [['  ', 'b', null, 'out'], ['opening ', 'd'], [shown, 'b']].concat(ok || COLS < 50 ? [] : [['  blocked? try open ' + bare(it.url), 'f']]);
+      said = 'Opening ' + (it.full || it.value) + '.';
+    }
+    if (job) job.plain += said + ' '; else mirror(said);
+    dirty = true;
+  }
+  /* a tap on the canvas (x, y as 0..1 fractions): a card row acts as if chosen with enter */
+  function handleTap(fx, fy){
+    if (booting || app) return false;
+    const px = fx * W, py = fy * H;
+    if (px < X(1) || px > X(COLS - 1)) return false;
+    for (const r of drawnCards){
+      for (const it of r.items){
+        if (it.ai < 0) continue;
+        const rt = r._top + ch * (it.y + 1);
+        if (py < rt || py >= rt + ch * it.n) continue;
+        if (job && job.choice && job.choice.card === r){ const ch2 = job.choice; job.choice = null; actOn(r, it); ch2.res(it); }
+        else actOn(r, it);
+        touched();
+        return true;
+      }
+    }
+    return false;
   }
   /* a key while a choice is waiting; returns true when consumed */
   function choiceKey(e){
@@ -3914,18 +4098,8 @@ M.createTerminal = function createTerminal(opts){
     else if (/^[1-9]$/.test(k) && +k <= n) pick = +k - 1;
     job.choice = null;
     let it = null;
-    if (pick >= 0){
-      it = card.acts[pick]; card.sel = pick; card.done = true;
-      if (it.copy){                                        // synchronous, inside the keydown
-        const ok = copyText(it.copy); sfx('beep');
-        card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [it.copy, 'b']] : [['select and copy: ', 'd'], [it.copy, 'b']];
-        if (job) job.plain += (ok ? 'Copied ' : 'Copy ') + it.copy + '. ';
-      } else {
-        const ok = openTarget(it.url);
-        card.foot = [['  ', 'b', null, 'out'], ['opening ', 'd'], [it.full ? bare(it.full) : it.value, 'b']].concat(ok ? [] : [['  blocked? try open ' + bare(it.url), 'f']]);
-        if (job) job.plain += 'Opening ' + (it.full || it.value) + '. ';
-      }
-    } else { card.sel = -1; card.foot = [['back', 'f']]; }
+    if (pick >= 0){ it = card.acts[pick]; actOn(card, it); }
+    else { card.sel = -1; card.foot = [['back', 'f']]; }
     dirty = true;
     ch.res(it);
     return true;
@@ -4216,6 +4390,13 @@ M.createTerminal = function createTerminal(opts){
     if (k.length === 1 && !ctrl){ insert(k); touched(); return true; }
     return false;
   }
+  /* key releases: only full-screen apps care (app.keyUp, optional) */
+  function handleKeyUp(e){
+    if (!app || !app.inst || typeof app.inst.keyUp !== 'function') return false;
+    const st = app;
+    if (appCall('keyUp', e) && app === st) st.dirty = true;
+    return true;
+  }
   function insertText(str){
     if (booting){ skipBoot(); }
     if (app){ for (const ch of String(str)){ const st = app; if (!st) break; if (appCall('key', { key: ch === '\n' ? 'Enter' : ch, code: '', ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, preventDefault(){} })) st.dirty = true; } return; }
@@ -4251,7 +4432,7 @@ M.createTerminal = function createTerminal(opts){
   const color = st => st === 'f' ? P.faint : st === 'd' ? P.dim : st === 'b' ? P.bright : st === 'a' ? P.accent : st === 'z' ? P.bg : P.normal;
   /* a card: vector rules in the phosphor (VT323 has no box glyphs), cells on the text grid */
   function drawCard(r, top){
-    const n = r.items.length, active = r.sel >= 0 && !r.done;
+    const n = r.body, active = r.sel >= 0 && !r.done;
     const x0 = X(1) + cw * 0.5, x1 = X(COLS - 1) - cw * 0.5;
     const yT = top + ch * 0.48, yB = top + ch * (n + 1.48);
     g.fillStyle = active ? P.dim : P.faint;
@@ -4261,15 +4442,18 @@ M.createTerminal = function createTerminal(opts){
     g.fillRect(x0, yT, 2, yB - yT); g.fillRect(x1, yT, 2, yB - yT + 2); g.fillRect(x0, yB, x1 - x0 + 2, 2);
     text(r.title, 3, top, 'b');
     if (r.note) text(r.note, COLS - 3 - r.note.length, top, 'f');
-    r.items.forEach((it, i) => {
-      const rt = top + ch * (i + 1);
-      const on = active && it.ai === r.sel, chosen = r.done && it.ai === r.sel;
-      if (on){ g.fillStyle = P.normal; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch - 6); }
+    r.items.forEach(it => {
+      const rt = top + ch * (it.y + 1);
+      const flashing = r.done && it.ai === r.sel && r.flash != null && now - r.flash < 0.35;
+      const on = (active && it.ai === r.sel) || flashing, chosen = r.done && it.ai === r.sel;
+      if (flashing){ g.fillStyle = P.bright; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
+      if (on && !flashing){ g.fillStyle = P.normal; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
       const st = s => on ? 'z' : s;
       if (it.ai >= 0) text(String(it.ai + 1), 3, rt, st(chosen ? 'b' : 'f'));
       text(it.label, 5, rt, st('d'));
-      text(it.value, 5 + r.lw, rt, st(it.ai >= 0 ? 'b' : 'n'));
-      if (it.hint) text(it.hint, COLS - 3 - it.hint.length, rt, st(on ? 'z' : 'f'));
+      if (r.stacked) it.lines.forEach((l, k) => text(l, 5, rt + ch * (k + 1), st(it.ai >= 0 ? 'b' : 'n')));
+      else text(it.value, 5 + r.lw, rt, st(it.ai >= 0 ? 'b' : 'n'));
+      if (it.hint) text(it.hint, COLS - 3 - it.hint.length, rt, st('f'));
     });
     if (r.foot){
       const ft = top + ch * (n + 2), mark = r.foot[0][3], cx = X(2), cy = ft + ch * 0.5, a = cw * 0.38;
@@ -4286,6 +4470,7 @@ M.createTerminal = function createTerminal(opts){
     }
   }
   const X = col => PADX + col * cw;
+  let promptY = 0;   // bottom of the prompt line, canvas px (phones keep it above the on-screen keyboard)
   function text(s, col, top, st, k = 1){
     g.font = font(k); g.fillStyle = color(st); g.fillText(s, X(col), top + fs * k * 0.68);
   }
@@ -4326,6 +4511,7 @@ M.createTerminal = function createTerminal(opts){
     if (cur > room) off = cur - room;
     const vis = input.slice(off, off + room);
     drawSpans({ i: 0, s: [...promptSpans(), [vis, 'n']] }, top, 999);
+    promptY = top + ch;
     const cx = X(PL + cur - off);
     if (gh){
       const gcol = PL + input.length - off;
@@ -4345,6 +4531,21 @@ M.createTerminal = function createTerminal(opts){
       if (under){ g.font = font(); g.fillStyle = P.bg; g.fillText(under, cx, top + fs * 0.68); }
     }
   }
+  let drawnCards = [];
+  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7]/g;
+  function vecGlyph(c, col, top, colr){
+    const cx = X(col) + cw / 2, cy = top + ch * 0.5, a = cw * 0.36;
+    g.fillStyle = colr;
+    if (c === '\u00b7'){ g.fillRect(cx - 2, cy - 2, 4, 4); return; }
+    const d = { '\u2190': [-1, 0], '\u2192': [1, 0], '\u2191': [0, -1], '\u2193': [0, 1] }[c];
+    const [dx, dy] = d, px = -dy, py = dx;                 // tip direction and its perpendicular
+    g.beginPath();
+    g.moveTo(cx + dx * a * 1.2, cy + dy * a * 1.2);
+    g.lineTo(cx + px * a * 0.8, cy + py * a * 0.8);
+    g.lineTo(cx - px * a * 0.8, cy - py * a * 0.8);
+    g.closePath(); g.fill();
+    g.lineWidth = 3; g.strokeStyle = colr; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx - dx * a * 1.2, cy - dy * a * 1.2); g.stroke();
+  }
   function drawGrid(){
     g.font = font();
     for (let y = 0; y < ROWS; y++){
@@ -4353,8 +4554,11 @@ M.createTerminal = function createTerminal(opts){
       while (x < COLS){
         const s = r[x][1]; let x1 = x, str = '';
         while (x1 < COLS && r[x1][1] === s){ str += r[x1][0]; x1++; }
-        if (s.inv){ g.fillStyle = s.fg; g.fillRect(X(x), top, (x1 - x) * cw + 0.5, ch); if (str.trim()){ g.fillStyle = P.bg; g.fillText(str, X(x), top + fs * 0.68); } }
-        else if (str.trim()){ g.fillStyle = s.fg; g.fillText(str, X(x), top + fs * 0.68); }
+        const plain = str.replace(VEC_RE, ' ');
+        if (s.inv){ g.fillStyle = s.fg; g.fillRect(X(x), top, (x1 - x) * cw + 0.5, ch); if (plain.trim()){ g.fillStyle = P.bg; g.fillText(plain, X(x), top + fs * 0.68); } }
+        else if (plain.trim()){ g.fillStyle = s.fg; g.fillText(plain, X(x), top + fs * 0.68); }
+        if (plain !== str) for (let k = 0; k < str.length; k++) if (VEC_RE.test(str[k])){ VEC_RE.lastIndex = 0; vecGlyph(str[k], x + k, top, s.inv ? P.bg : s.fg); }
+        VEC_RE.lastIndex = 0;
         x = x1;
       }
     }
@@ -4373,6 +4577,7 @@ M.createTerminal = function createTerminal(opts){
     g.textBaseline = 'alphabetic';
     animFps = 0;
     if (booting){ drawBoot(); return; }
+    drawnCards = [];
     if (app){ drawGrid(); return; }
     // lay out units bottom-anchored
     const total = totalUnits();
@@ -4391,7 +4596,7 @@ M.createTerminal = function createTerminal(opts){
         if (r.k === 't') drawSpans(r, top, lim);
         else if (r.k === 'big') drawSpans(r, top, isPartial ? Math.floor(partial / 2) : 1e9, 2);
         else if (r.k === 'head') drawHead(r, top, isPartial ? partial / costOf(r) : 1);
-        else if (r.k === 'card') drawCard(r, top);
+        else if (r.k === 'card'){ r._top = top; drawnCards.push(r); drawCard(r, top); }
         else if (r.k === 'viz'){
           if (r.t0 < 0) r.t0 = now;
           const age = now - r.t0;
@@ -4430,11 +4635,11 @@ M.createTerminal = function createTerminal(opts){
     // memory check: a bar of 32 cells filling, the count rolling up
     const mp = clamp((t - 0.28) / 0.62, 0, 1);
     text('MEMORY', 0, top(2), 'd');
-    const cells = 32, filled = Math.floor(cells * mp);
+    const cells = Math.max(8, Math.min(32, Math.floor((COLS - 20) / 0.75))), filled = Math.floor(cells * mp), bEnd = Math.ceil(10 + cells * 0.75);
     for (let i = 0; i < cells; i++){ g.fillStyle = i < filled ? P.normal : P.faint; g.fillRect(X(10 + i * 0.75), top(2) + 9, cw * 0.75 - 3, ch - 18); }
     const kb = Math.floor(640 * mp / 16) * 16;
-    text(String(kb).padStart(3, ' ') + 'K', 36, top(2), mp < 1 ? 'n' : 'b');
-    if (mp >= 1) text('OK', 42, top(2), 'b');
+    text(String(kb).padStart(3, ' ') + 'K', bEnd + 1, top(2), mp < 1 ? 'n' : 'b');
+    if (mp >= 1) text('OK', bEnd + 6, top(2), 'b');
     if (t < 0.95) return;
     // disk: a platter spinning up, then ready
     const dp = clamp((t - 0.95) / 0.5, 0, 1);
@@ -4447,7 +4652,7 @@ M.createTerminal = function createTerminal(opts){
     text(dp < 1 ? 'spinning up' + '.'.repeat(1 + Math.floor(t * 8) % 3) : 'ready', 12, top(3), dp < 1 ? 'n' : 'b');
     if (t < 1.45) return;
     text('TERM', 0, top(4), 'd'); text('vt  ' + COLS + ' x ' + ROWS, 10, top(4), 'n');
-    if (t > 1.6) text('OK', 42, top(4), 'b');
+    if (t > 1.6) text('OK', bEnd + 6, top(4), 'b');
   }
 
   /* ---- inline visualisations, drawn in phosphor ---- */
@@ -4521,7 +4726,14 @@ M.createTerminal = function createTerminal(opts){
     });
   }
   function drawEmpty(x, y, w, h, age, t){
-    // an empty sheet with a folded corner and a waiting caret
+    // an empty sheet with a folded corner and a waiting caret (narrow screens: just the words)
+    if (COLS < 50){
+      text('No posts yet.', 2, y + ch * 0.9, 'b');
+      text('New ones will appear here.', 2, y + ch * 2.0, 'd');
+      text('Meanwhile:', 2, y + ch * 3.0, 'd');
+      text('about   eden   j   links', 2, y + ch * 4.0, 'n');
+      return;
+    }
     const pw = cw * 10, ph = h - ch * 0.6, px = x, py = y + ch * 0.3, fold = cw * 2;
     g.strokeStyle = P.dim; g.lineWidth = 2; g.setLineDash([8, 6]);
     g.beginPath(); g.moveTo(px, py); g.lineTo(px + pw - fold, py); g.lineTo(px + pw, py + fold); g.lineTo(px + pw, py + ph); g.lineTo(px, py + ph); g.closePath(); g.stroke();
@@ -4536,11 +4748,11 @@ M.createTerminal = function createTerminal(opts){
   function drawFetch(x, y, w, h, age, t){
     // the KN-84 itself, in outline: a compact all-in-one with its screen lit, and a keyboard
     const ap = REDUCED ? 1 : ease(age / 0.5);
-    const col = Math.max(14, COLS - 31);
+    const col = COLS < 50 ? 0 : Math.max(14, COLS - 31);
     const bx = x, by = y + ch * 0.2, bw = cw * Math.min(18, col - 6), bh = ch * 7.6;
     g.strokeStyle = P.normal; g.lineWidth = 2;
-    g.strokeRect(bx, by, bw, bh * ap);
-    if (ap >= 1){
+    if (col) g.strokeRect(bx, by, bw, bh * ap);
+    if (col && ap >= 1){
       const sx = bx + cw * 2, sy = by + ch * 0.7, sw = bw - cw * 4, sh = ch * 4.4;
       g.strokeStyle = P.dim; g.strokeRect(sx, sy, sw, sh);
       g.fillStyle = P.faint; g.fillRect(sx + 6, sy + 6, sw - 12, sh - 12);
@@ -4608,12 +4820,13 @@ M.createTerminal = function createTerminal(opts){
     const on = ((t - blinkT0) % 1.06) < 0.53;
     if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (app && gridCursor)) changed = true; }
     if (!app && animFps > 0 && t - lastAnim >= 1 / animFps - 1e-3) changed = true;
+    if (!app) for (const r of drawnCards) if (r.flash != null && t - r.flash < 0.45) changed = true;   // tap / pick flash
     if (changed){ draw(); lastAnim = t; dirty = false; }
     return changed;
   }
 
   draw();
-  return { canvas, handleKey, insertText, update, run, scroll };
+  return { canvas, handleKey, handleKeyUp, handleTap, insertText, update, run, scroll, get cursorY(){ return promptY / H; } };
 };
 })();
 
@@ -4691,7 +4904,8 @@ T.apps.tetris = {
   desc: 'the falling blocks. arrows, space, c to hold',
   usage: 'tetris',
   start(api){
-    const BH = Math.max(10, Math.min(20, (api.rows || 23) - 2));   // well + floor + feet must fit the grid
+    const STACK = (api.cols || 72) < 47;                               // phones: the panel goes under the well
+    const BH = Math.max(10, Math.min(20, (api.rows || 23) - (STACK ? 15 : 2)));   // well + floor + feet (+ panel) must fit
     const board = Array.from({ length: BH }, () => Array(BW).fill(null));
     let bag = [], queue = [], cur = null, hold = null, canHold = true;
     let score = 0, lines = 0, level = 1, hi = hiGet(TETRIS_HI), newHi = false;
@@ -4802,9 +5016,9 @@ T.apps.tetris = {
       render(scr){
         scr.clear(); scr.cursor(0, 0, null);
         const W = BW * 2 + 4;
-        const compact = scr.cols < 64 || scr.rows < 22;      // one stacked panel to the right of the well
-        const ox = compact ? Math.max(0, ((scr.cols - (W + 3 + 20)) / 2) | 0) : ((scr.cols - W) / 2) | 0;
-        const oy = Math.max(0, ((scr.rows - BH - 2) / 2) | 0);
+        const compact = STACK || scr.cols < 64 || scr.rows < 22;      // one panel, beside the well or under it
+        const ox = STACK ? Math.max(0, ((scr.cols - W) / 2) | 0) : compact ? Math.max(0, ((scr.cols - (W + 3 + 20)) / 2) | 0) : ((scr.cols - W) / 2) | 0;
+        const oy = Math.max(0, ((scr.rows - BH - 2 - (STACK ? 13 : 0)) / 2) | 0);
         const bx = ox + 2;  // first board column
         // well: classic "<!" ... "!>" sides
         for (let y = 0; y < BH; y++){
@@ -4829,13 +5043,13 @@ T.apps.tetris = {
         const mini = (p, x, y, level) => { if (!p) return; const n = SHAPES[p].length; const off = n === 4 ? 0 : 1;
           for (const [cx, cy] of STATES[p][0]) scr.put(x + (cx + off) * 2, y + cy - (p === 'I' ? 1 : 0), '  ', blk(level)); };
         if (compact){
-          const rx = ox + W + 3;
-          scr.put(rx, oy, 'NEXT', 'dim'); mini(queue[0], rx, oy + 1, 'bright');
-          scr.put(rx + 10, oy, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx + 10, oy + 1, canHold ? 'normal' : 'faint');
+          const rx = STACK ? ox + 2 : ox + W + 3, ry = STACK ? oy + BH + 3 : oy;
+          scr.put(rx, ry, 'NEXT', 'dim'); mini(queue[0], rx, ry + 1, 'bright');
+          scr.put(rx + 10, ry, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx + 10, ry + 1, canHold ? 'normal' : 'faint');
           [['SCORE', score, 'bright'], ['HIGH', Math.max(hi, score), score > hi ? 'bright' : 'normal'], ['LEVEL', level, 'normal'], ['LINES', lines, 'normal']]
-            .forEach(([a, v, st], i) => { scr.put(rx, oy + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, oy + 4 + i, String(v), st); });
+            .forEach(([a, v, st], i) => { scr.put(rx, ry + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, ry + 4 + i, String(v), st); });
           const ks = [['<- ->', 'move'], ['up x', 'rotate'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
-          const ky = oy + 9, two = scr.rows - ky < ks.length;
+          const ky = ry + 9, two = STACK || scr.rows - ky < ks.length;
           const short = [['<->', 'move'], ['up', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           (two ? short : ks).forEach(([a, b], i) => {
             const x = rx + (two ? (i % 2) * 11 : 0), y = ky + (two ? i >> 1 : i);
@@ -5014,10 +5228,17 @@ T.apps.snake = {
 const LUM = '.,-:;=+!*#$@';      // VT323 draws ~ as a squiggle, so it is left out
 const LUM_STYLE = ['faint', 'faint', 'faint', 'dim', 'dim', 'dim', 'normal', 'normal', 'normal', 'bright', 'bright', 'bright'];
 T.apps.donut = {
-  desc: 'a spinning ascii donut (after a1k0n). arrows steer, any key quits',
+  desc: 'a spinning ascii donut (after a1k0n). hold the arrows to spin it',
   usage: 'donut',
   start(api){
-    let A = 1, B = 0, vA = 1.0, vB = 0.5;     // angles and spin speeds (rad/s)
+    const IDLE_A = 1.0, IDLE_B = 0.5, SPIN = 3.4;   // idle drift and held-arrow spin (rad/s)
+    let A = 1, B = 0, vA = IDLE_A, vB = IDLE_B;     // angles and spin speeds (rad/s)
+    let idle = 1, paused = false, t = 0, gotUp = false, note = '', noteT = 0;
+    const held = { up: 0, down: 0, left: 0, right: 0 };   // time of the last keydown, 0 when released
+    const DIR = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right' };
+    // without keyup events, a held key is assumed released ~150 ms after its last auto-repeat
+    const isHeld = d => held[d] > 0 && (gotUp || t - held[d] < 0.15);
+    const say = s => { note = s; noteT = t; };
     let cols = api.cols || 72, rows = api.rows || 23;
     let chars = [], styles = [], acc = 0;
     function frame(){
@@ -5027,8 +5248,9 @@ T.apps.donut = {
       const R1 = 1, R2 = 2, K2 = 5;
       // scale so the donut fills the grid height; character cells are ~2x taller than wide
       const h = rows - 1;                                   // bottom row holds the hint
-      const K1y = h * K2 * 3 / (8 * (R1 + R2)) * 1.02;
+      let K1y = h * K2 * 3 / (8 * (R1 + R2)) * 1.02;
       const K1x = Math.min(K1y * 2.05, cols * K2 * 3 / (8 * (R1 + R2)) * 1.02);
+      K1y = Math.min(K1y, K1x / 2.05);                      // keep it round on tall, narrow (phone) grids
       for (let th = 0; th < 6.283; th += 0.05){
         const ct = Math.cos(th), st = Math.sin(th);
         for (let ph = 0; ph < 6.283; ph += 0.015){
@@ -5056,19 +5278,32 @@ T.apps.donut = {
     return {
       key(e){
         const k = e.key;
-        if (k === 'ArrowLeft'){ vB -= 0.35; return true; }
-        if (k === 'ArrowRight'){ vB += 0.35; return true; }
-        if (k === 'ArrowUp'){ vA += 0.35; return true; }
-        if (k === 'ArrowDown'){ vA -= 0.35; return true; }
-        if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(k)) return true;
-        api.exit(0);
-        return true;
+        if (DIR[k]){ held[DIR[k]] = t || 1e-6; return true; }
+        if (isQuit(k)){ api.exit(0); return true; }
+        if (k === ' '){ paused = !paused; say(paused ? 'paused' : ''); return true; }
+        if (k === '+' || k === '='){ idle = Math.min(4, idle * 1.4); say('idle speed x' + idle.toFixed(1)); return true; }
+        if (k === '-' || k === '_'){ idle = Math.max(0.15, idle / 1.4); say('idle speed x' + idle.toFixed(1)); return true; }
+        if (k === 'r' || k === 'R'){ A = 1; B = 0; vA = IDLE_A; vB = IDLE_B; idle = 1; paused = false; say('reset'); frame(); return true; }
+        return true;                         // everything else is ignored, not a way out
+      },
+      keyUp(e){
+        gotUp = true;
+        const d = DIR[e.key]; if (d) held[d] = 0;
+        return false;
       },
       tick(dt){
-        dt = Math.min(secs(dt), 0.1);
+        dt = Math.min(secs(dt), 0.1); t += dt;
+        const ay = (isHeld('up') ? 1 : 0) - (isHeld('down') ? 1 : 0);
+        const bx = (isHeld('right') ? 1 : 0) - (isHeld('left') ? 1 : 0);
+        const restA = paused ? 0 : IDLE_A * idle, restB = paused ? 0 : IDLE_B * idle;
+        // held: snap quickly to a firm spin; released: coast, easing back to the idle drift
+        vA += ((ay ? ay * SPIN : restA) - vA) * Math.min(1, dt * (ay ? 10 : 1.1));
+        vB += ((bx ? bx * SPIN : restB) - vB) * Math.min(1, dt * (bx ? 10 : 1.1));
         A += vA * dt; B += vB * dt;
         acc += dt;
-        if (acc < 1 / 40) return false;     // ~40 fps is plenty for a phosphor tube
+        const noteDirty = note && note !== 'paused' && t - noteT > 1.6 ? (note = '', true) : false;
+        if (Math.abs(vA) + Math.abs(vB) < 1e-3 && !noteDirty) return false;
+        if (acc < 1 / 40 && !noteDirty) return false;     // ~40 fps is plenty for a phosphor tube
         acc = 0; frame();
         return true;
       },
@@ -5087,7 +5322,10 @@ T.apps.donut = {
             scr.put(x - s.length, y, s, st);
           }
         }
-        center(scr, rows - 1, 'arrows steer the spin  .  any other key leaves', 'faint');
+        const hint = note ? note + '  \u00b7  ' + (paused ? 'space resumes' : 'q quit')
+          : cols >= 46 ? '\u2190\u2191\u2193\u2192 spin \u00b7 space pause \u00b7 +/- speed \u00b7 q quit'
+          : '\u2190\u2191\u2193\u2192 spin \u00b7 space \u00b7 +/- \u00b7 q';
+        center(scr, rows - 1, hint, note ? 'dim' : 'faint');
       },
     };
   },
@@ -5168,6 +5406,8 @@ const M = window.MAC, D = document, $ = s => D.querySelector(s);
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TOUCH = matchMedia('(pointer: coarse)').matches;
 const stage = $('#stage');
+/* phones and small tablets: just the terminal, full screen, no 3D */
+if (TOUCH && Math.min(innerWidth, innerHeight) < 820){ phone(); return; }
 let api;
 try { api = M.createScene(stage); } catch (e){ console.error(e); $('#loading').textContent = 'this needs WebGL'; return; }
 if (M.dressRoom) { try { M.dressRoom(api); } catch (e){ console.error(e); } }
@@ -5201,7 +5441,7 @@ function onDown(e){
   if (!held.has(code)){ held.add(code); typist.keyDown(code); if (api.nudge) api.nudge(); }
   firstKey();
 }
-function onUp(e){ const code = e.code || 'KeyA'; if (held.has(code)){ held.delete(code); typist.keyUp(code); } }
+function onUp(e){ if (term.handleKeyUp) term.handleKeyUp(e); const code = e.code || 'KeyA'; if (held.has(code)){ held.delete(code); typist.keyUp(code); } }
 addEventListener('keydown', onDown); addEventListener('keyup', onUp);
 addEventListener('blur', () => { for (const c of held) typist.keyUp(c); held.clear(); });
 
@@ -5215,28 +5455,10 @@ kbd.addEventListener('input', () => {
 });
 kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ onDown(e); e.stopPropagation(); } });
 kbd.addEventListener('keyup', e => { onUp(e); e.stopPropagation(); });
-/* two views: scroll (or swipe on touch) steps back to the whole desk or in to the screen; shift+scroll scrolls the terminal */
-const setView = v => { if (api.setView) api.setView(v); };
-let wheelAcc = 0, wheelLock = 0;
-addEventListener('wheel', e => {
-  e.preventDefault();
-  if (e.shiftKey && term.scroll){ term.scroll(e.deltaY || e.deltaX); return; }
-  const now = performance.now(); if (now < wheelLock) return;
-  wheelAcc += e.deltaY; if (Math.abs(wheelAcc) < 30) return;
-  setView(wheelAcc > 0 ? 'full' : 'screen'); wheelAcc = 0; wheelLock = now + 450;
-}, { passive: false });
+/* the wheel scrolls the terminal; the cursor looks around, and moving it down leans back to the whole desk */
+addEventListener('wheel', e => { if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
 addEventListener('keydown', e => { if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
-let drag = null;
-stage.addEventListener('pointerdown', e => {
-  unlock();
-  if (e.pointerType !== 'mouse'){ drag = { y: e.clientY, moved: false }; stage.setPointerCapture(e.pointerId); }
-});
-stage.addEventListener('pointermove', e => {
-  if (!drag) return; const dy = e.clientY - drag.y;
-  if (Math.abs(dy) > 50 && !drag.moved){ drag.moved = true; setView(dy < 0 ? 'full' : 'screen'); }
-});
-stage.addEventListener('pointerup', () => { if (drag && !drag.moved) kbd.focus(); drag = null; });
-stage.addEventListener('pointercancel', () => { drag = null; });
+stage.addEventListener('pointerdown', () => unlock());
 addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && !REDUCED) look(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1); });
 D.documentElement.addEventListener('mouseleave', () => look(0, 0));
 
@@ -5258,8 +5480,47 @@ function frame(now){
   typist.update(dt, T); api.update(dt, T); if (sound && sound.update) sound.update(dt); api.render();
 }
 D.addEventListener('visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });
-const go = () => { $('#loading').classList.add('gone'); fromHash(); raf = requestAnimationFrame(frame); if (TOUCH) $('#hint').innerHTML = 'tap the screen to type · swipe up to step back'; };
+const go = () => { $('#loading').classList.add('gone'); fromHash(); raf = requestAnimationFrame(frame); };
 (D.fonts ? Promise.race([D.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve()).then(go);
+
+function phone(){
+  D.body.classList.add('phone');
+  const W = innerWidth, H = (window.visualViewport ? visualViewport.height : innerHeight);
+  const term = M.createTerminal({ content: M.CONTENT, aspect: W / innerHeight, cols: W < 420 ? 40 : W < 600 ? 46 : 54 });
+  const cv = term.canvas; cv.className = 'phone-term'; stage.appendChild(cv);
+  const sound = M.sound, kbd = $('#kbd'), muteBtn = $('#mute');
+  let unlocked = false; const unlock = () => { if (unlocked || !sound) return; unlocked = true; try { sound.unlock(); } catch (e){} };
+  const paint = () => { const m = sound ? !!sound.muted : true; muteBtn.textContent = m ? 'sound off' : 'sound on'; };
+  if (!sound) muteBtn.hidden = true; else { muteBtn.addEventListener('click', () => { unlock(); sound.setMuted(!sound.muted); paint(); }); paint(); }
+  $('#hint').innerHTML = 'tap to type · try <b>help</b>';
+  const click = (c, d) => { if (sound) try { sound.key(c, d); } catch (e){} };
+  const tap = c => { click(c, true); setTimeout(() => click(c, false), 70); };
+  kbd.addEventListener('input', () => { const v = kbd.value; kbd.value = ''; for (const ch of v){ term.insertText(ch); tap(ch === ' ' ? 'Space' : 'KeyA'); } $('#hint').style.opacity = '0'; });
+  kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ unlock(); if (term.handleKey(e)) e.preventDefault(); tap(e.key === 'Enter' ? 'Enter' : e.key === 'Backspace' ? 'Backspace' : 'KeyA'); } });
+  addEventListener('keydown', e => { if (e.target === kbd || e.metaKey) return; unlock(); if (term.handleKey(e)) e.preventDefault(); });
+  stage.addEventListener('pointerdown', () => { unlock(); });
+  stage.addEventListener('click', e => {
+    const r = cv.getBoundingClientRect();
+    if (term.handleTap && term.handleTap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)){ unlock(); return; }   // a card row: copy / open
+    kbd.focus();
+  });
+  // touch drag scrolls the terminal's history
+  let ty = null; stage.addEventListener('touchstart', e => { ty = e.touches[0].clientY; }, { passive: true });
+  stage.addEventListener('touchmove', e => { if (ty == null || !term.scroll) return; const y = e.touches[0].clientY; term.scroll((ty - y) * 2.5); ty = y; e.preventDefault(); }, { passive: false });
+  // keep the prompt line above the on-screen keyboard
+  const place = () => {
+    const vh = window.visualViewport ? visualViewport.height : innerHeight, ch = cv.getBoundingClientRect().height || innerHeight;
+    const y = term.cursorY * ch, shift = Math.min(0, vh - 18 - y);
+    cv.style.transform = 'translateY(' + shift.toFixed(1) + 'px)';
+  };
+  if (window.visualViewport) visualViewport.addEventListener('resize', place);
+  function fromHash(){ const id = location.hash.slice(1); if (id && term.run) term.run(id); }
+  addEventListener('hashchange', fromHash);
+  let last = performance.now(), T = 0;
+  const frame = now => { requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt; if (term.update(dt, T)) place(); };
+  const go = () => { $('#loading').classList.add('gone'); fromHash(); requestAnimationFrame(frame); };
+  (D.fonts ? Promise.race([D.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve()).then(go);
+}
 })();
 
 </script>
