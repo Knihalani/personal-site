@@ -9,6 +9,7 @@ const ICON_ART = {
   play: ['............', '..#.........', '..##........', '..###.......', '..####......', '..#####.....', '..#####.....', '..####......', '..###.......', '..##........', '..#.........', '............'],
   book: ['............', '.####..####.', '.#..#..#..#.', '.#.##..##.#.', '.#..#..#..#.', '.#.##..##.#.', '.#..#..#..#.', '.#.##..##.#.', '.#..#..#..#.', '.####..####.', '.....##.....', '............'],
   pin: ['....####....', '...######...', '..########..', '..###..###..', '..###..###..', '..########..', '...######...', '....####....', '.....##.....', '.....##.....', '............', '............'],
+  down: ['............', '.##......##.', '.###....###.', '..###..###..', '...######...', '....####....', '.....##.....', '............', '.##########.', '.##########.', '............', '............'],
   up: ['............', '.....##.....', '....####....', '...######...', '..###..###..', '.###....###.', '.##.....###.', '.....##.....', '....####....', '...######...', '..###..###..', '.##......##.'],
   pick: ['............', '...######...', '..##....##..', '.##..##..##.', '.#...##...#.', '.....##.....', '.....##.....', '.....##.....', '.....##.....', '.....##.....', '.....##.....', '............'],
   hand: ['............', '....#.#.#...', '....#.#.#.#.', '....#.#.#.#.', '..#.#######.', '..#.#######.', '..##.######.', '...########.', '....######..', '....######..', '....######..', '............'],
@@ -216,7 +217,7 @@ const keys = Object.create(null);
 let mineHeld = false, useHeld = false, useCD = 0;
 const SCREENS = { title: $('#title'), pause: $('#pause'), inv: invEl, panel: $('#panel'), journal: $('#journal') };
 const hudEl = $('#hud'), touchEl = $('#touch'), resumeEl = $('#resume');
-function clearInput(){ for (const k in keys) keys[k] = false; mineHeld = false; useHeld = false; INP.jump = false; INP.jumpEdge = false; joy.on = false; joy.x = joy.y = 0; $('#stick').classList.remove('on'); }
+function clearInput(){ for (const k in keys) keys[k] = false; mineHeld = false; useHeld = false; INP.jump = false; INP.jumpEdge = false; sprintLatch = false; joy.on = false; joy.x = joy.y = 0; $('#stick').classList.remove('on'); }
 function showScreen(el, on){
   if (on){ if (el.hidden){ el.hidden = false; el.classList.remove('out'); el.classList.remove('in'); void el.offsetWidth; el.classList.add('in'); } }
   else if (!el.hidden && !el.classList.contains('out')){ el.classList.remove('in'); el.classList.add('out'); setTimeout(() => { if (el.classList.contains('out')){ el.hidden = true; el.classList.remove('out'); } }, 130); }
@@ -324,8 +325,8 @@ $('#invClose').addEventListener('click', () => closeInv(true));
 for (const k of ['panel', 'inv', 'journal', 'pause']) SCREENS[k].addEventListener('click', e => { if (e.target !== SCREENS[k]) return; if (k === 'panel') closePanel(true); else if (k === 'inv') closeInv(true); else if (k === 'journal') closeJournal(true); else resumePlay(true); });
 panelEl.addEventListener('click', e => { const a = e.target.closest && e.target.closest('.idx-head nav a'); if (a){ e.preventDefault(); const t = D.querySelector(a.getAttribute('href')); if (t) t.scrollIntoView({ behavior: REDUCED ? 'auto' : 'smooth', block: 'start' }); } });
 const KC = k => '<span class="kc f-key">' + k + '</span>';
-const CTL_DESK = [['Move', KC('W') + KC('A') + KC('S') + KC('D')], ['Look', KC('Mouse')], ['Jump; in the air, open or close the sail', KC('Space')], ['Sprint', KC('Shift')], ['Sneak, slide when sprinting', KC('C')], ['Dash', KC('Q')], ['Interact', KC('E')], ['Mine (hold)', KC('LMB')], ['Use / place', KC('RMB')], ['Satchel', KC('I')], ['Journal', KC('J')], ['Camera', KC('V')], ['Pause', KC('Esc')]];
-const CTL_TOUCH = [['Move', 'left thumb'], ['Look', 'drag right side'], ['Jump / sail', 'tap Jump in the air'], ['Dash', 'Dash'], ['Read, pet', 'tap'], ['Mine', 'hold Mine'], ['Use / place', 'Use']];
+const CTL_DESK = [['Move', KC('W') + KC('A') + KC('S') + KC('D')], ['Look', KC('Mouse')], ['Jump; in the air, open or close the sail', KC('Space')], ['Sprint (hold)', KC('Ctrl') + ' or ' + KC('W') + KC('W')], ['Crouch (hold); slide while sprinting', KC('Shift')], ['Dash', KC('Q')], ['Interact / read', KC('E')], ['Grapple', KC('F')], ['Mine (hold)', KC('LMB')], ['Use / place', KC('RMB')], ['Satchel', KC('I')], ['Journal', KC('J')], ['Camera', KC('V')], ['Pause', KC('Esc')]];
+const CTL_TOUCH = [['Move', 'left thumb'], ['Sprint', 'push stick far'], ['Look', 'drag right side'], ['Jump / sail', 'tap Jump in the air'], ['Crouch', 'Crouch'], ['Dash', 'Dash'], ['Read, pet', 'tap'], ['Mine', 'hold Mine'], ['Use / place', 'Use']];
 const ctlHTML = (TOUCH ? CTL_TOUCH.map(k => '<span>' + KC(k[1]) + '</span><span>' + k[0] + '</span>') : CTL_DESK.map(k => '<span>' + k[1] + '</span><span>' + k[0] + '</span>')).join('');
 ['#ctlTitle', '#ctlPause', '#ctlSign'].forEach(s => { $(s).innerHTML = ctlHTML; });
 
@@ -342,7 +343,7 @@ function renderJournal(){
   { const vault = OUT.find(I => I.forceVault);
     $('#jrGear').innerHTML = '<div class="gearbox">' + [['sail', 'Sky sail', GEAR.sail, storySeen ? 'Gifted by the Memory Engine' : 'Wake the Memory Engine to receive it'], ['grapple', 'Grappling hook', GEAR.grapple, 'Locked. It rests in the Sky Vault' + (vault ? ' on ' + vault.name + (vault.seen ? ' (found)' : ', far out in the Wilds') : ', deep in the Wilds') + '. Guarded.']].map(([k, nm, on, lock]) => '<div class="gear' + (on ? ' on' : '') + '"><span class="gi f-slot" style="background-image:url(' + gearIconURL(k, on) + ')"></span><span class="gt"><b>' + nm + '</b><em>' + (on ? 'Equipped' : esc(lock)) + '</em></span></div>').join('') + '</div>';
     const K = s => s.split(' ').map(k => KC(k)).join(''), T = TOUCH;
-    const MV = [['Sprint', T ? K('Push') + ' stick far' : K('Shift') + ' or ' + K('W') + K('W') + ' hold', 'Faster, wider FOV'], ['Sprint jump', T ? K('Jump') : K('Space'), 'Carries sprint speed'], ['Slide', T ? '' : K('C'), 'Crouch while sprinting'], ['Slide jump', T ? K('Jump') : K('Space'), 'Jump out of a slide; keeps its speed'], ['Dash', T ? K('Dash') : K('Q') + ' or ' + K('A') + K('A'), 'Once in the air too'], ['Mantle', T ? K('Jump') : K('Space'), 'Jump at a ledge and you pull up'], ['Wall kick', T ? K('Jump') : K('Space'), 'In the air against a wall, twice'], ['Sail', T ? K('Jump') : K('Space'), 'In the air: open or close'], ['Flap', T ? K('Jump') : K('Space'), 'While gliding, after 6 relics'], ['Grapple', T ? K('Hook') : K('F') + ' or ' + K('RMB'), GEAR.grapple ? 'Fire at rock; again to let go' : 'Needs the grappling hook'], ['Reel', T ? K('Jump') : K('Space') + ' hold', 'Shorten the rope'], ['Fling to sail', T ? K('Hook') + K('Jump') : K('F') + ' ' + K('Space'), 'Release at the top, open the sail']];
+    const MV = [['Sprint', T ? K('Push') + ' stick far' : K('Ctrl') + ' or ' + K('W') + K('W') + ' hold', 'Faster, wider FOV'], ['Crouch', T ? K('Crouch') : K('Shift') + ' hold', 'Slow and steady; you will not walk off edges'], ['Sprint jump', T ? K('Jump') : K('Space'), 'Carries sprint speed'], ['Slide', T ? K('Crouch') : K('Shift'), 'Crouch while sprinting'], ['Slide jump', T ? K('Jump') : K('Space'), 'Jump out of a slide; keeps its speed'], ['Dash', T ? K('Dash') : K('Q'), 'Once in the air too'], ['Mantle', T ? K('Jump') : K('Space'), 'Jump at a ledge and you pull up'], ['Wall kick', T ? K('Jump') : K('Space'), 'In the air against a wall, twice'], ['Sail', T ? K('Jump') : K('Space'), 'In the air: open or close; keeps your speed'], ['Steer', T ? K('Look') : K('Mouse') + ' or ' + K('A') + K('D'), 'The wing turns toward where you look'], ['Dive', T ? K('Look') + ' down' : K('Mouse') + ' down', 'Trade height for speed; level out to swoop up'], ['Flap', T ? K('Jump') : K('Space'), 'While gliding, after 6 relics'], ['Grapple', T ? K('Hook') : K('F') + ' or ' + K('RMB'), GEAR.grapple ? 'Fire at rock; again to let go' : 'Needs the grappling hook'], ['Reel', T ? K('Jump') : K('Space') + ' hold', 'Shorten the rope'], ['Fling to sail', T ? K('Hook') + K('Jump') : K('F') + ' ' + K('Space'), 'Release at the top, open the sail']];
     $('#jrMoves').innerHTML = MV.map(m => '<span class="kk">' + (m[1] || '') + '</span><span class="mv"><b>' + m[0] + '</b> · ' + m[2] + '</span>').join(''); }
   $('#jrIsles').innerHTML = DISC.map(i => '<span class="' + (visited.has(i) ? 'on' : '') + '">' + (visited.has(i) || i === 0 ? ISL[i].name : '? ? ?') + '</span>').join('');
   $('#jrSail').innerHTML = ['Glide', 'Long glide', 'Boost flap'].map((n, i) => '<span class="' + (i <= sailLevel && hasSail ? 'on' : '') + '">' + n + (i ? ' <em>' + (i * 3) + ' shards</em>' : '') + '</span>').join('');
@@ -381,9 +382,9 @@ function stepTravel(dt){
 
 /* ================= tutorial (one thing at a time, dismissable, remembered) ================= */
 const TUT = [
-  { k: 'move', d: () => (TOUCH ? 'Drag on the right to look. Use the left thumb to walk.' : 'Look with the mouse and walk with ' + KC('W') + KC('A') + KC('S') + KC('D') + '.'), at: null },
+  { k: 'move', d: () => (TOUCH ? 'Drag on the right to look. Use the left thumb to walk; push it far to sprint.' : 'Look with the mouse and walk with ' + KC('W') + KC('A') + KC('S') + KC('D') + '. Hold ' + KC('Ctrl') + ' to sprint, ' + KC('Shift') + ' to crouch.'), at: null },
   { k: 'story', d: () => 'Walk to the Memory Engine at the heart of the island and ' + (TOUCH ? 'tap ' + KC('Tap') : 'press ' + KC('E')) + ' at its console to watch the story.', at: () => ENGINE && [ENGINE.console.x, ENGINE.console.y + 2.6, ENGINE.console.z] },
-  { k: 'glide', d: () => 'Step into the shimmering updraft off the east rim, then press ' + (TOUCH ? KC('Jump') : KC('Space')) + ' in the air to open the sail and ride it to an islet.', at: () => UPDRAFTS[0] && [UPDRAFTS[0].x, UPDRAFTS[0].top - 11, UPDRAFTS[0].z] },
+  { k: 'glide', d: () => 'Step into the shimmering updraft off the east rim, then press ' + (TOUCH ? KC('Jump') : KC('Space')) + ' in the air to open the sail. Look where you want to fly, and down to dive.', at: () => UPDRAFTS[0] && [UPDRAFTS[0].x, UPDRAFTS[0].top - 11, UPDRAFTS[0].z] },
   { k: 'gather', d: () => 'Your satchel is empty. ' + (TOUCH ? 'Hold ' + KC('Mine') : 'Hold ' + KC('LMB')) + ' on a tree to chop a log, or on leaves.', at: () => { const t = nearestTree(); return t && [t[0] + .5, t[1] + 2.5, t[2] + .5]; } },
   { k: 'craft', d: () => 'Open the satchel with ' + (TOUCH ? KC('Bag') : KC('I')) + ' and craft Vineseed from 2 leaves and a flower.', at: null }
 ];
@@ -435,17 +436,18 @@ Wn.addEventListener('keydown', e => {
     return;
   }
   if (state === 'play'){
+    if (e.ctrlKey) e.preventDefault(); // Ctrl is the sprint key: keep Ctrl+D, Ctrl+S, Ctrl+A and friends from reaching the browser
     if (c === 'F5' || c === 'KeyV'){ e.preventDefault(); setThird(!third); return; }
     if (c === 'Space'){ e.preventDefault(); if (!e.repeat) INP.jumpEdge = true; INP.jump = true; }
     if (!e.repeat){
       const nowT = performance.now(), last = tapT[c] || 0; tapT[c] = nowT;
       if (c === 'KeyW' && nowT - last < 250) sprintLatch = true; // double-tap W and hold to sprint
+      if ((c === 'ControlLeft' || c === 'ControlRight') && (keys.KeyW || keys.ArrowUp)) sprintLatch = true; // tapping Ctrl while walking keeps the sprint until you stop
       if (c === 'KeyF') grappleAction();
-      if ((c === 'KeyA' || c === 'KeyD' || c === 'KeyS') && nowT - last < 240) dashDir(c === 'KeyA' ? -1 : c === 'KeyD' ? 1 : 0, c === 'KeyS' ? -1 : 0);
       if (c === 'KeyQ') dashDir(null);
-      if (c === 'KeyC' || c === 'ControlLeft') INP.sneakEdge = true;
+      if (c === 'ShiftLeft' || c === 'ShiftRight' || c === 'KeyC') INP.sneakEdge = true;
     }
-    if (c.startsWith('Arrow') || c === 'ControlLeft') e.preventDefault();
+    if (c.startsWith('Arrow') || c === 'ControlLeft' || c === 'ControlRight' || c === 'ShiftLeft' || c === 'ShiftRight') e.preventDefault();
     keys[c] = true;
     if (c === 'KeyE'){ if (nearEngine) startCine(); else if (nearSign) openPanel('sign', nearSign.id); else if (nearChestC) openChest(nearChestC); else openInv(); }
     else if (c === 'KeyI') openInv();
@@ -458,7 +460,9 @@ Wn.addEventListener('keydown', e => {
   else if (state === 'pause'){ if (c === 'Escape'){ e.preventDefault(); resumePlay(false); } else if (c === 'KeyJ') openJournal(); }
   else if (state === 'title'){ if (c === 'Enter' && tg === D.body){ startPlay(); } }
 }, true);
-Wn.addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Space') INP.jump = false; if (e.code === 'KeyW') sprintLatch = false; });
+Wn.addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Space') INP.jump = false; if (e.code === 'KeyW' || e.code === 'ArrowUp') sprintLatch = false; });
+// Ctrl+W cannot be blocked by a page: while Ctrl (sprint) is held in play, ask before the tab closes
+Wn.addEventListener('beforeunload', e => { if (state === 'play' && (keys.ControlLeft || keys.ControlRight)){ e.preventDefault(); e.returnValue = ''; } });
 const tapT = Object.create(null); let sprintLatch = false;
 function dashDir(x, z){ if (x === null){ const l = hyp2(INP.x, INP.z); INP.dashX = l > .1 ? INP.x : 0; INP.dashZ = l > .1 ? INP.z : 1; } else { INP.dashX = x; INP.dashZ = z; } INP.dashEdge = true; }
 Wn.addEventListener('blur', () => { clearInput(); });
@@ -513,6 +517,9 @@ holdBtn('#tJump', () => { INP.jumpEdge = true; INP.jump = true; }, () => { INP.j
 holdBtn('#tPlace', () => { useHeld = true; useAction(true); }, () => { useHeld = false; });
 holdBtn('#tBag', () => { openInv(); }, null);
 holdBtn('#tDash', () => { dashDir(null); }, null);
+// crouch on touch is a toggle; in the air it just closes the sail
+let touchCrouch = false;
+holdBtn('#tCrouch', () => { INP.sneakEdge = true; if (PL.onGround) touchCrouch = !touchCrouch; }, () => { $('#tCrouch').classList.toggle('on', touchCrouch); });
 holdBtn('#tHook', () => { grappleAction(); }, null);
 let atkHeld = false, nearChestC = null, nearEngine = false;
 function tapAction(){ if (nearEngine){ startCine(); return; } if (nearSign){ openPanel('sign', nearSign.id); return; } if (nearChestC){ openChest(nearChestC); return; } if (MOBHIT.m){ interactMob(MOBHIT.m); } }
@@ -523,8 +530,8 @@ function sampleInput(dt){
   const l = hyp2(ix, iz); if (l > 1){ ix /= l; iz /= l; }
   INP.x = ix; INP.z = iz;
   if (INP.sprintBreak){ INP.sprintBreak = false; sprintLatch = false; }
-  INP.sprint = !!(keys.ShiftLeft || keys.ShiftRight) || sprintLatch || (joy.on && hyp2(joy.x, joy.y) > .9);
-  INP.sneak = !!(keys.KeyC || keys.ControlLeft);
+  INP.sprint = !!(keys.ControlLeft || keys.ControlRight) || sprintLatch || (joy.on && hyp2(joy.x, joy.y) > .9);
+  INP.sneak = !!(keys.ShiftLeft || keys.ShiftRight || keys.KeyC) || touchCrouch;
   // smoothed touch look
   if (lookPtr.ax || lookPtr.ay){ const k = 1 - Math.exp(-34 * dt); const dx = lookPtr.ax * k, dy = lookPtr.ay * k; lookPtr.ax -= dx; lookPtr.ay -= dy; look(dx, dy, .0095); if (Math.abs(lookPtr.ax) < .05) lookPtr.ax = 0; if (Math.abs(lookPtr.ay) < .05) lookPtr.ay = 0; }
 }
@@ -633,7 +640,7 @@ function updateCamera(dt){
   // head bob: tiny, speed-scaled, optional
   const bobOn = headBob && P.onGround && hs > .6 && !sliding ? Math.min(1, hs / 6) : 0;
   const ph = P.stepPh * 6.2832, bobY = -Math.cos(ph) * .03 * bobOn, bobX = Math.sin(ph * .5) * .02 * bobOn; // trough on each footfall
-  spring(HR.eye, sliding ? -.62 : 0, 14, dt);
+  spring(HR.eye, sliding ? -.62 : P.sneak ? -.3 : 0, 14, dt);
   EYE.x = ix; EYE.y = iy + 1.62 + HR.eye.x - P.stepOff - P.landKick + bobY; EYE.z = iz;
   catchBlend += ((P.catching ? 1 : 0) - catchBlend) * Math.min(1, dt * (P.catching ? 5 : 3));
   const f = fwd();
@@ -645,15 +652,14 @@ function updateCamera(dt){
   } else camera.position.set(EYE.x + Math.cos(P.yaw) * bobX, EYE.y, EYE.z - Math.sin(P.yaw) * bobX);
   // roll: lean into strafes, bank on glider turns, tilt during slides
   const yawRate = angDiff(P.yaw, HR.lastYaw) / Math.max(dt, 1e-3), pitchRate = (P.pitch - HR.lastPitch) / Math.max(dt, 1e-3); HR.lastYaw = P.yaw; HR.lastPitch = P.pitch;
-  const rollT = RM * (P.gliding ? clamp(-yawRate * .09, -.32, .32) : (-INP.x * .03 * Math.min(1, hs / 5) + (sliding ? .07 : 0) - (P.dashCD > DASH_CD - .2 ? INP.dashX * .06 : 0)));
+  const rollT = RM * (P.gliding ? P.bank * .45 + (P.stall > .2 ? Math.sin(tAcc * 7) * .03 * P.stall : 0) : (-INP.x * .03 * Math.min(1, hs / 5) + (sliding ? .07 : 0) - (P.dashCD > DASH_CD - .2 ? INP.dashX * .06 : 0)));
   spring(HR.roll, rollT, 8, dt);
   const vaultDip = Math.sin(Math.PI * P.vault) * .14 * RM;
-  // the camera leads a touch into turns while moving; mantles dip then lift
-  spring(HR.lead, RM * clamp(yawRate * .012, -.045, .045) * Math.min(1, hs / 4), 6, dt);
+  // mantles dip then lift (no yaw lead: the view turns exactly with the mouse)
   HR.mantleT += dt; if (P.vault > .95 && HR.mantleT > .3) HR.mantleT = 0;
   const mant = HR.mantleT < CLIP_MANTLE.d ? clipAt(CLIP_MANTLE, HR.mantleT) * RM : 0;
   camera.position.y += mant;
-  camera.rotation.set(P.pitch - catchBlend * .25 - vaultDip * .5 + mant * .6 + Math.sin(tAcc * 60) * camKick * .02 + (P.stall > .2 ? Math.sin(tAcc * 31) * .004 * P.stall : 0), P.yaw + HR.lead.x, HR.roll.x);
+  camera.rotation.set(P.pitch - catchBlend * .25 - vaultDip * .5 + mant * .6 + Math.sin(tAcc * 60) * camKick * .02 + (P.stall > .2 ? Math.sin(tAcc * 31) * .004 * P.stall * RM : 0), P.yaw, HR.roll.x);
   // FOV responds to speed: sprint, slide, dash, glider speed, punches
   const gs = P.gliding ? P.gs : 0;
   const ft = 72 + RM * (clamp((hs - 6) * 1.3, 0, 9) + clamp((gs - 9) * 1.1, 0, 15)) + P.punch * 9 * RM;
@@ -662,23 +668,41 @@ function updateCamera(dt){
   // speed lines + wind
   speedLines(dt, P.gliding ? clamp((gs - 12) / 10, 0, 1) : clamp((hs - 9) / 6, 0, 1));
   if (AU.glideG){ const sp = P.gliding ? gs : (P.onGround ? 0 : hs); const g = clamp((sp - 5) / 18, 0, 1) * .13; if (Math.abs(g - (AU._g || 0)) > .004){ AU._g = g; AU.glideG.gain.setTargetAtTime(g, AU.ctx.currentTime, .1); AU.glideF.frequency.setTargetAtTime(400 + sp * 60, AU.ctx.currentTime, .1); } }
+  // the wing flies along its heading; the pilot hangs under it. hdg: where the wing points (look yaw when on foot)
+  const sailT = HR.sailO || 0, hdg = P.gliding || sailT > .01 ? P.hd : P.yaw;
   // avatar (third person / catch)
   if (avatar){
     const show = third || catchBlend > .1; avatar.visible = show;
-    if (show){ avatar.position.set(ix, iy + HR.eye.x * .5, iz); avatar.rotation.set(sliding ? -.5 : 0, P.yaw, 0); const u = avatar.userData, sw = Math.sin(P.walk * 2.4) * .8 * Math.min(1, hs / 5), up = P.catching ? -2.6 : (P.gliding ? -2.9 : 0);
-      u.legL.rotation.x = P.onGround ? sw : -.6; u.legR.rotation.x = P.onGround ? -sw : .3; u.armL.rotation.x = up || -sw * .8; u.armR.rotation.x = up || (sw * .8 - (HR.mineT < .34 ? -clipAt(CLIP_MINE_RX, HR.mineT) * 1.4 : 0)); u.head.rotation.x = P.pitch * .5; }
+    if (show){ const u = avatar.userData, sw = Math.sin(P.walk * 2.4) * .8 * Math.min(1, hs / 5), crouch = P.sneak ? 1 : 0;
+      avatar.position.set(ix, iy + HR.eye.x * .5, iz);
+      if (P.gliding && !P.catching){
+        // seated pilot: thighs forward, hands up on the brake lines; the inside hand pulls down in a turn and the body leans in
+        const dang = RM * Math.sin(tAcc * 2.1) * .06, bk = P.bank, lr = bk * .55 + (P.stall > .2 ? Math.sin(tAcc * 6) * .06 * P.stall * RM : 0), sl = Math.sin(lr) * 1.48;
+        avatar.rotation.set(.15, hdg, lr); avatar.position.set(ix + sl * Math.cos(hdg), iy + 1.48 * (1 - Math.cos(lr)), iz - sl * Math.sin(hdg)); // swings about the harness
+        u.legL.rotation.set(1.35 + dang, 0, .06); u.legR.rotation.set(1.3 - dang, 0, -.06);
+        u.armL.rotation.set(2.45 - Math.max(0, bk) * 1.1, 0, -.38); u.armR.rotation.set(2.45 - Math.max(0, -bk) * 1.1, 0, .38);
+        u.head.rotation.x = P.pitch * .4;
+      } else {
+        const up = P.catching ? -2.6 : 0;
+        avatar.rotation.set(sliding ? -.5 : crouch * .28, P.yaw, 0);
+        u.legL.rotation.set(P.onGround ? sw - crouch * .5 : -.6, 0, 0); u.legR.rotation.set(P.onGround ? -sw - crouch * .5 : .3, 0, 0);
+        u.armL.rotation.set(up || -sw * .8, 0, 0); u.armR.rotation.set(up || (sw * .8 - (HR.mineT < .34 ? -clipAt(CLIP_MINE_RX, HR.mineT) * 1.4 : 0)), 0, 0); u.head.rotation.x = P.pitch * .5 - crouch * .2;
+      }
+    }
   }
-  // glider: opens with an overshooting spring, flexes with speed and banks with turns
+  // glider: cells inflate centre-out with a little overshoot, flex with speed, bank and surge with the flight, flutter at the tips
   if (sailRig){
-    // unfurl: the span spreads, then cells inflate from the centre outward; folding runs it backwards, faster
-    const want = P.gliding ? 1 : 0; HR.sailO = clamp((HR.sailO || 0) + (want ? dt * 2.1 : -dt * 3.4), 0, 1);
+    const want = P.gliding ? 1 : 0; HR.sailO = clamp(sailT + (want ? dt * (RM ? 2 : 3) : -dt * 3.2), 0, 1);
     const o = HR.sailO; sailRig.grp.visible = o > .01;
-    if (o > .01){ const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw), flex = clamp((gs - 9) / 14, -.3, 1), ease = want ? EZ.outCubic(o) : EZ.inOutSine(o);
-      poseSail(sailRig, ease, flex, tAcc, !third);
-      const fwdD = third ? .1 : .75, up = third ? 3.62 : 1.06 + 1.62;
-      sailRig.grp.position.set(ix - sy * fwdD, iy + up - (1 - ease) * .5, iz - cy * fwdD);
-      sailRig.grp.rotation.set(third ? -P.pitch * .15 : -P.pitch * .35 - .08, P.yaw, HR.roll.x * 1.4 + Math.sin(tAcc * 2.3) * .025);
-      const sc = .3 + .7 * Math.min(1, ease * 1.6); sailRig.grp.scale.setScalar(sc); if (sailRig.bar) sailRig.bar.visible = third; }
+    if (o > .01){
+      const flex = clamp((gs - 9) / 11, -.3, 1), g0 = -Math.atan2(sailLevel >= 1 ? GL_SINK1 : GL_SINK, GLIDE_BASE);
+      // surge: the wing swings ahead of the pilot in a dive and lags behind on a pull-up
+      spring(HR.canopy, P.gliding ? clamp((P.gam - g0) * .3, -.28, .22) * RM : 0, 4, dt);
+      poseSail(sailRig, o, flex, tAcc, !third, { bank: P.bank, stall: P.stall, RM });
+      const hx = ix, hy = third ? iy + 1.48 + HR.eye.x * .5 : EYE.y - HR.eye.x, hz = iz;
+      sailRig.grp.position.set(hx, hy, hz);
+      sailRig.grp.rotation.set(HR.canopy.x - (third ? .04 : .1), hdg, P.bank + (P.stall > .2 ? Math.sin(tAcc * 5.3) * .07 * P.stall * RM : 0));
+      if (sailRig.bar) sailRig.bar.visible = third; }
   }
   if (hand) updateHandRig(dt, hs, sliding, bobX, bobY);
 }

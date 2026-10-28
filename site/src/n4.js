@@ -179,12 +179,14 @@ function raycast(ox, oy, oz, dx, dy, dz, maxD, out, solidOnly){
 
 /* ================= player ================= */
 // tuning (see design doc). Fast and fluid but controllable.
-const STEP_DT = 1 / 120, WALK = 5.5, SPRINT = 8.5, SNEAK = 2.2, G_ACCEL = 6.5, AIR_ACCEL = 3.4, FRICTION = 11, STOP_SPEED = 2.5;
+const STEP_DT = 1 / 120, WALK = 5.5, SPRINT = 8.5, SNEAK = 2.2, G_ACCEL = 10, AIR_ACCEL = 3.4, FRICTION = 15, STOP_SPEED = 3.2; // crisp starts (~.1 s) and stops (~.15 s), no drift
 const GRAV = 32, FALL_MULT = 1.55, HANG_MULT = .5, TERMINAL = 50, JUMP_V = 10.2, COYOTE = .11, JUMP_BUF = .13, SPRINT_JUMP_BOOST = 1.08;
 const SLIDE_T = .7, SLIDE_V = 11, DASH_V = 15, DASH_CD = .85;
-const GLIDE_BASE = 9.5, GLIDE_MAX = 24, GLIDE_MIN = 5.5, LIFT = 14, BOUNCE_V = 21, CATCH_Y = 12, CATCH_T = 1.1;
+const GLIDE_BASE = 9, GLIDE_MAX = 23, GLIDE_MIN = 5.5, LIFT = 12, BOUNCE_V = 21, CATCH_Y = 12, CATCH_T = 1.1;
+// paraglider: trim airspeed, still-air sink at trim, max turn rate (rad/s), energy gravity going down / up
+const GL_SINK = 1.4, GL_SINK1 = 1.0, GL_TURN = 1.85, GL_GDN = 9.8, GL_GUP = 14;
 const PL = { x: 160.5, y: 70, z: 190, px: 160.5, py: 70, pz: 190, vx: 0, vy: 0, vz: 0, hw: .3, h: 1.8, onGround: false, wasGround: false, inWater: false, yaw: 0, pitch: 0,
-  stepOff: 0, sd: 0.5, md: 0.5, coyote: 0, jumpBuf: 0, air: 0, gliding: false, gs: 9.5, flaps: 0, sneak: false, slideT: 0, dashCD: 0, airDash: true, vault: 0, eyeOff: 0, mantleCD: 0, glideLock: 0, autoJT: 0, sailOpen: false,
+  stepOff: 0, sd: 0.5, md: 0.5, coyote: 0, jumpBuf: 0, air: 0, gliding: false, gs: 9.5, flaps: 0, sneak: false, slideT: 0, dashCD: 0, airDash: true, vault: 0, eyeOff: 0, mantleCD: 0, glideLock: 0, autoJT: 0, sailOpen: false, turn: 0, bank: 0, udv: 0, gam: 0, hd: 0, steer: 0,
   stable: 0, walk: 0, stepAcc: 0, stepPh: 0, stall: 0, landKick: 0, punch: 0, trailT: 0, safe: null, catching: false, wallT: 0, wallNx: 0, wallNz: 0 };
 const INP = { x: 0, z: 0, jump: false, jumpEdge: false, sprint: false, sneak: false, sneakEdge: false, dashEdge: false, dashX: 0, dashZ: 0, use: false };
 let tAccNoSail = 0, hasSail = false, inUpdraft = 0, festival = 0, goldSail = false, sailLevel = 0;
@@ -210,48 +212,42 @@ function stepPlayer(dt){
   const wl = hyp2(wx, wz), mag = Math.min(1, wl); if (wl > 1e-4){ wx /= wl; wz /= wl; }
   let hs = hyp2(P.vx, P.vz);
   const sprint = INP.sprint && INP.z > .3 && !INP.sneak;
-  // slide: crouch while sprinting
+  // slide: crouch while sprinting. A crouch press in the air closes the sail.
+  const crouchEdge = INP.sneakEdge;
   if (INP.sneakEdge && P.onGround && hs > 6.5 && P.slideT <= 0){ const k = Math.max(hs, SLIDE_V) / hs; P.vx *= k; P.vz *= k; P.slideT = SLIDE_T; SND.slide(); dust(P.x, P.y, P.z, 8, 2.5); P.punch = Math.max(P.punch, .3); }
   INP.sneakEdge = false;
   if (P.slideT > 0){ P.slideT -= dt; if (!P.onGround || hs < 3.2) P.slideT = Math.min(P.slideT, 0); }
   P.sneak = INP.sneak && P.onGround && P.slideT <= 0;
-  // dash: Q or a double-tapped direction
+  // dash: Q (in the air too, once; with the sail open it adds to the glide instead of replacing it)
   if (INP.dashEdge){ INP.dashEdge = false; if (P.dashCD <= 0 && (P.onGround || P.airDash) && !P.inWater){
     let dx = -sy * INP.dashZ + cy * INP.dashX, dz = -cy * INP.dashZ - sy * INP.dashX; const dl = hyp2(dx, dz); if (dl < .1){ dx = -sy; dz = -cy; } else { dx /= dl; dz /= dl; }
-    P.vx = dx * DASH_V; P.vz = dz * DASH_V; if (!P.onGround){ P.vy = Math.max(P.vy, 2.5); P.airDash = false; P.gliding = false; }
+    if (P.gliding){ const s0 = Math.max(DASH_V, hs + 4); P.vx = dx * s0; P.vz = dz * s0; P.vy = Math.max(P.vy, P.udv); P.airDash = false; }
+    else { P.vx = dx * DASH_V; P.vz = dz * DASH_V; if (!P.onGround){ P.vy = Math.max(P.vy, 2.5); P.airDash = false; } }
     P.dashCD = DASH_CD; P.punch = Math.max(P.punch, .9); SND.dash(); dashBurst(P.x, P.y + .9, P.z, dx, dz); hs = DASH_V; } }
   let wishSpeed = (P.sneak ? SNEAK : sprint ? SPRINT : WALK) * mag * (P.inWater ? .6 : 1);
   // glide? hold Space in the air
   const was = P.gliding;
   P.glideLock = Math.max(0, P.glideLock - dt);
-  // sail: press Space in mid-air to open it (stays open), press again (or C) to close; holding Space through a jump also opens it at the apex
+  // sail: press Space in mid-air to open it (stays open), press again (or crouch) to close; holding Space through a jump also opens it at the apex
   if (jumpEdge && !P.onGround && P.coyote <= 0 && !hooked && P.wallT > 0 && tryWallKick(P)){ /* kicked off the wall */ }
   else if (jumpEdge && !P.onGround && P.coyote <= 0 && !P.inWater && P.air > .08 && !hooked){
     if (!hasSail){ if (tAccNoSail <= 0){ toast(storySeen ? 'You need a sky sail to glide' : 'Wake the Memory Engine first: it has a gift for you'); tAccNoSail = 3; } }
     else if (P.gliding){ if (!(sailLevel >= 2 && P.flaps > 0)){ P.sailOpen = false; P.glideLock = .25; P.jumpBuf = 0; } }
-    else { P.sailOpen = true; P.glideLock = 0; P.jumpBuf = 0; if (P.vy > 1) P.vy = 1; }
+    else { P.sailOpen = true; P.glideLock = 0; P.jumpBuf = 0; } // velocity is kept as it is: the wing takes the momentum it is given
   }
-  if (INP.sneak && P.sailOpen){ P.sailOpen = false; P.glideLock = .25; }
+  if (crouchEdge && P.sailOpen && !P.onGround){ P.sailOpen = false; P.glideLock = .25; }
   if (P.onGround || P.inWater || !hasSail || hooked) P.sailOpen = false;
   P.gliding = hasSail && !hooked && !P.onGround && !P.inWater && P.glideLock <= 0 && (P.sailOpen || (INP.jump && (P.vy < .5 || P.gliding) && P.air > .14));
-  if (P.gliding && !was){ P.gs = Math.max(hs, GLIDE_BASE * .9); SND.sail(); }
+  if (P.gliding && !was){ P.udv = 0; P.turn = 0; P.steer = 0; P.gs = hyp3(P.vx, P.vy, P.vz); SND.sail(); }
+  if (!P.gliding){ P.bank *= Math.exp(-6 * dt); P.turn = 0; }
   inUpdraft = updraftAt(P.x, P.y, P.z);
   if (P.gliding){
     if (inUpdraft > .2 && sailLevel >= 2) P.flaps = 3;
-    if (jumpEdge && sailLevel >= 2 && P.flaps > 0){ P.flaps--; P.vy = Math.max(P.vy, 0) + 7; P.gs = Math.min(GLIDE_MAX, P.gs + 3); P.punch = Math.max(P.punch, .8); SND.flap(); sparkle(P.x, P.y + 2, P.z, 8, 1, .95, .8); }
-    // energy model, paraglider-style: diving trades height for speed, pulling up trades speed for height,
-    // and a slow wing stalls gently: lift fades, the nose drops and speed rebuilds (no endless climbing)
-    P.stall += ((P.gs < GLIDE_MIN + 1.6 && P.pitch > .05 ? 1 : 0) - P.stall) * (1 - Math.exp(-4 * dt));
-    if (P.stall > .3 && P.pitch > -.25) P.pitch -= P.stall * .9 * dt;
-    const p = clamp(P.pitch, -1.1, .7) - P.stall * .55, sp = Math.sin(p);
-    P.gs += (-sp * (sp < 0 ? 18 : 15) - (P.gs - GLIDE_BASE) * (sailLevel >= 1 ? .16 : .24)) * dt;
-    P.gs = clamp(P.gs, GLIDE_MIN, GLIDE_MAX);
-    const sink = (sailLevel >= 1 ? .75 : 1.25) * (1 + P.stall * 1.6);
-    const ty = P.gs * sp * .85 * (sp > 0 ? clamp((P.gs - GLIDE_MIN) / 3, 0, 1) : 1) - sink + inUpdraft * LIFT;
-    P.vy += (ty - P.vy) * (1 - Math.exp(-(inUpdraft > 0 ? 6 : 5) * dt));
-    const fh = P.gs * Math.cos(p) * (wHas(heldWeapon(), 'feather') ? 1.15 : 1), tx = -sy * fh + cy * INP.x * 3, tz = -cy * fh - sy * INP.x * 3;
-    const kh = 1 - Math.exp(-3.2 * dt); P.vx += (tx - P.vx) * kh; P.vz += (tz - P.vz) * kh;
-    P.trailT -= dt; if (P.trailT <= 0){ P.trailT = .045; glideTrail(P.x, P.y + 2.4, P.z, sy, cy, P.gs); }
+    // rising air is a separate, smoothed layer: it lifts the wing without touching its airspeed or heading
+    { const du = (inUpdraft * LIFT - P.udv) * (1 - Math.exp(-2.4 * dt)); P.udv += du; P.vy += du; }
+    if (jumpEdge && sailLevel >= 2 && P.flaps > 0){ P.flaps--; P.vy = P.udv + Math.max(P.vy - P.udv, 0) + 6.5; glideBoost(2); P.punch = Math.max(P.punch, .8); SND.flap(); sparkle(P.x, P.y + 2, P.z, 8, 1, .95, .8); }
+    stepGlide(P, dt);
+    P.trailT -= dt; if (P.trailT <= 0){ P.trailT = .045; glideTrail(P.x, P.y + 2.95, P.z, Math.sin(P.hd), Math.cos(P.hd), P.gs); }
   } else {
     if (P.onGround){
       const fr = P.slideT > 0 ? .7 : FRICTION, sp = hyp2(P.vx, P.vz);
@@ -339,6 +335,43 @@ function stepPlayer(dt){
   // the jelly catches real falls into the void (not drops into a cave or a swing on the rope)
   if (!P.catching && GR.st !== 2 && (P.y < CATCH_Y || (P.safe && P.vy < -4 && !P.gliding && P.y < P.safe.y - 14 && voidBelow(P)))) startCatch();
 }
+/* paraglider flight model. The velocity vector is the state: each step it is read (relative to any rising air) as
+   airspeed V, flight-path angle gam and heading hd, steered, and written back, so dashes, flings, rings and walls carry through.
+   - steering: the heading turns toward where you look at a limited rate (~106 deg/s) and the wing banks with the turn rate
+   - pitch: looking level holds a best-glide attitude (auto-level); looking down dives (up to ~20 m/s); looking up trades speed for height
+   - extra speed lifts the nose by itself, so a dive ends in a smooth pull-up arc; a slow wing lowers its nose (soft stall) */
+function stepGlide(P, dt){
+  const ax = P.vx, ay = P.vy - P.udv, az = P.vz, hsA = hyp2(ax, az);
+  let V = hyp3(ax, ay, az), hd = hsA > .4 ? Math.atan2(-ax, -az) : P.yaw, gam = Math.atan2(ay, Math.max(hsA, 1e-3));
+  // keyboard/stick: A/D swing the view (and so the heading target) gently, on top of mouse look
+  P.steer += (INP.x - P.steer) * (1 - Math.exp(-5 * dt)); if (Math.abs(P.steer) > .01) P.yaw -= P.steer * 1.25 * dt;
+  const err = angDiff(P.yaw, hd), rate = clamp(err * 3.2, -GL_TURN, GL_TURN);
+  P.turn += (rate - P.turn) * (1 - Math.exp(-7 * dt)); hd += P.turn * dt;
+  P.bank += (clamp(P.turn / GL_TURN, -1, 1) * .5 - P.bank) * (1 - Math.exp(-5 * dt));
+  const trim = GLIDE_BASE + (sailLevel >= 1 ? .5 : 0), sink = sailLevel >= 1 ? GL_SINK1 : GL_SINK, g0 = -Math.atan2(sink, trim);
+  const drag = GL_GDN * Math.sin(-g0) / (trim * trim) * (wHas(heldWeapon(), 'feather') ? .8 : 1);
+  const pt = clamp(P.pitch, -1.3, 1.2);
+  let cmd = g0;
+  if (pt < -.2) cmd += (pt + .2) * .95; // look down: dive
+  else if (pt > .22) cmd += (pt - .22) * .5; // look up: climb on spare speed
+  cmd += clamp((V - trim) * .045, -.08, .45) * (pt < -.2 ? .5 : 1); // spare speed lifts the nose: dives end in an arc
+  const stallV = GLIDE_MIN + 1.2; if (V < stallV) cmd = Math.min(cmd, g0 - (stallV - V) * .16); // soft stall recovery
+  cmd = clamp(cmd, -1.15, .55);
+  gam += clamp((cmd - gam) * 3, -2.4, 2.4) * dt;
+  const sg = Math.sin(gam);
+  V += (-(sg > 0 ? GL_GUP : GL_GDN) * sg - drag * V * V) * dt;
+  V = clamp(V, 0, GLIDE_MAX);
+  P.stall += (clamp((stallV + .3 - V) / 1.2, 0, 1) - P.stall) * (1 - Math.exp(-4 * dt));
+  const ch = Math.cos(gam) * V;
+  P.vx = -Math.sin(hd) * ch; P.vz = -Math.cos(hd) * ch; P.vy = sg * V + P.udv;
+  P.gs = V; P.hd = hd; P.gam = gam;
+}
+// a push along the glide (rings, flaps): scales the air-relative velocity, never redirects it
+function glideBoost(dv){
+  const P = PL, ay = P.vy - P.udv, v = hyp3(P.vx, ay, P.vz);
+  if (v < .5){ P.vx -= Math.sin(P.yaw) * dv; P.vz -= Math.cos(P.yaw) * dv; return; }
+  const k = Math.min(GLIDE_MAX, v + dv) / v; P.vx *= k; P.vz *= k; P.vy = P.udv + ay * k;
+}
 function voidBelow(P){ const x = Math.floor(P.x), z = Math.floor(P.z); for (let y = Math.floor(P.y); y > Math.max(0, P.y - 30); y--) if (B_SOLID[getB(x, y, z)]) return false; return true; }
 /* small feel helpers: dust, landing rings, dash bursts, glider trails */
 const _dc = [.6, .55, .5];
@@ -348,7 +381,7 @@ function dust(x, y, z, n, sp, id){
 }
 function landRing(x, y, z, k){ const id = getB(Math.floor(x), Math.floor(y - .5), Math.floor(z)); dust(x, y, z, 6 + Math.round(k * 10), 2 + k * 3, id); }
 function dashBurst(x, y, z, dx, dz){ for (let i = 0; i < (LOW ? 6 : 12); i++) emit(x - dx * .6 + (Math.random() - .5) * .6, y + (Math.random() - .5) * 1.2, z - dz * .6 + (Math.random() - .5) * .6, -dx * (2 + Math.random() * 3), (Math.random() - .5), -dz * (2 + Math.random() * 3), .95, .93, .86, .3, .35 + Math.random() * .2, 2, 0); }
-function glideTrail(x, y, z, sy, cy, gs){ if (LOW && Math.random() < .5) return; const g = goldSail ? [1, .85, .45] : [.95, .95, .92]; for (const s of [-1.3, 1.3]) emit(x + cy * s + sy * .8, y, z - sy * s + cy * .8, 0, 0, 0, g[0], g[1], g[2], .18 + gs * .006, .6, 2, 0); }
+function glideTrail(x, y, z, sy, cy, gs){ if (LOW && Math.random() < .5) return; const g = goldSail ? [1, .85, .45] : [.95, .95, .92]; for (const s of [-1.85, 1.85]) emit(x + cy * s + sy * .5, y, z - sy * s + cy * .8, 0, 0, 0, g[0], g[1], g[2], .18 + gs * .006, .6, 2, 0); }
 /* ---- the catch: a sky jelly scoops you up and sets you back on your last safe spot ---- */
 const CATCH = { t: 0, fx: 0, fy: 0, fz: 0, tx: 0, ty: 0, tz: 0, yaw: 0 };
 function validSafe(){
@@ -870,7 +903,7 @@ function updateShards(t){
   updateStandSail(t);
   if (SAIL_STAND && !SAIL_STAND.taken && state === 'play' && hyp2(PL.x - SAIL_STAND.x, PL.z - SAIL_STAND.z) < 1.4 && Math.abs(PL.y + 1 - SAIL_STAND.y) < 2.2) takeSail();
 }
-function takeSail(){ SAIL_STAND.taken = true; if (!hasItem(SAIL)) invAdd(SAIL, 1); hasSail = true; SND.sail(); sparkle(SAIL_STAND.x, SAIL_STAND.y, SAIL_STAND.z, 12, 1, .85, .5); toastCard('Sky sail', 'Jump, then press Space again in mid-air to open it. Press Space or C to close. Updrafts lift you.'); tut('sail'); saveDirty = true; }
+function takeSail(){ SAIL_STAND.taken = true; if (!hasItem(SAIL)) invAdd(SAIL, 1); hasSail = true; SND.sail(); sparkle(SAIL_STAND.x, SAIL_STAND.y, SAIL_STAND.z, 12, 1, .85, .5); toastCard('Sky sail', TOUCH ? 'Jump, then tap Jump again in mid-air to open it. Tap Jump again to close. Updrafts lift you.' : 'Jump, then press Space again in mid-air to open it. Steer with the mouse, look down to dive. Space or Shift closes it. Updrafts lift you.'); tut('sail'); saveDirty = true; }
 function collectShard(s){
   found.add(s.i); SND.shard(); sparkle(s.x, s.y, s.z, 16, .8, .9, 1); PL.punch = Math.max(PL.punch, .4);
   toastCard('Sky relic ' + found.size + ' of ' + SHARDS.length, s.text, 6000);
@@ -903,7 +936,7 @@ function stepRings(dt){
   const r = RINGS[k], dx = PL.x - r.x, dy = PL.y + .9 - r.y, dz = PL.z - r.z, along = dx * r.nx + dz * r.nz;
   const pxp = (RC.lx - r.x) * r.nx + (RC.lz - r.z) * r.nz; RC.lx = PL.x; RC.lz = PL.z;
   if (pxp < 0 && along >= 0){ const lat = -dx * r.nz + dz * r.nx; if (lat * lat + dy * dy < r.r * r.r){
-    RC.flash[k] = 1; RC.next++; SND.ring(RC.next); sparkle(r.x, r.y, r.z, 10, 1, .86, .45); PL.gs = Math.min(GLIDE_MAX, PL.gs + 1.5);
+    RC.flash[k] = 1; RC.next++; SND.ring(RC.next); sparkle(r.x, r.y, r.z, 10, 1, .86, .45); if (PL.gliding) glideBoost(1.5);
     if (RC.next >= RINGS.length){ const first = !RC.done; RC.done = true; RC.best = RC.best ? Math.min(RC.best, RC.t) : RC.t; SND.reward(); toastCard('Ring course clear', (first ? 'A relic has appeared on Basin Isle. ' : '') + 'Time ' + RC.t.toFixed(1) + 's, best ' + RC.best.toFixed(1) + 's.', 6000); RC.next = 0; RC.t = 0; saveDirty = true; renderJournalSoon(); }
     chipRing();
   } }
@@ -1105,6 +1138,7 @@ function buildAvatar(){
   armL.position.set(-.36, 1.38, 0); armR.position.set(.36, 1.38, 0);
   const legL = new THREE.Mesh(limb(pants, shoe, .23), mat), legR = new THREE.Mesh(limb(pants, shoe, .23), mat);
   legL.position.set(-.13, .7, 0); legR.position.set(.13, .7, 0);
+  avatar.rotation.order = 'YXZ'; // yaw, then lean/pitch about the body's own axes
   avatar.add(head, body, armL, armR, legL, legR); avatar.userData = { head, armL, armR, legL, legR };
   avatar.visible = false; scene.add(avatar);
 }
