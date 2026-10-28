@@ -52,19 +52,30 @@ kbd.addEventListener('input', () => {
 });
 kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ onDown(e); e.stopPropagation(); } });
 kbd.addEventListener('keyup', e => { onUp(e); e.stopPropagation(); });
+/* two views: scroll (or swipe on touch) steps back to the whole desk or in to the screen; shift+scroll scrolls the terminal */
+const setView = v => { if (api.setView) api.setView(v); };
+let wheelAcc = 0, wheelLock = 0;
+addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.shiftKey && term.scroll){ term.scroll(e.deltaY || e.deltaX); return; }
+  const now = performance.now(); if (now < wheelLock) return;
+  wheelAcc += e.deltaY; if (Math.abs(wheelAcc) < 30) return;
+  setView(wheelAcc > 0 ? 'full' : 'screen'); wheelAcc = 0; wheelLock = now + 450;
+}, { passive: false });
+addEventListener('keydown', e => { if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
 let drag = null;
 stage.addEventListener('pointerdown', e => {
   unlock();
-  if (e.pointerType !== 'mouse'){ drag = { x: e.clientX, y: e.clientY, moved: false }; stage.setPointerCapture(e.pointerId); }
+  if (e.pointerType !== 'mouse'){ drag = { y: e.clientY, moved: false }; stage.setPointerCapture(e.pointerId); }
 });
 stage.addEventListener('pointermove', e => {
-  if (drag){ const dx = (e.clientX - drag.x) / innerWidth * 2.2, dy = (e.clientY - drag.y) / innerHeight * 2.2; if (Math.hypot(dx, dy) > .03) drag.moved = true; look(Math.max(-1, Math.min(1, dx)), Math.max(-1, Math.min(1, dy))); }
+  if (!drag) return; const dy = e.clientY - drag.y;
+  if (Math.abs(dy) > 50 && !drag.moved){ drag.moved = true; setView(dy < 0 ? 'full' : 'screen'); }
 });
-stage.addEventListener('pointerup', e => { if (drag && !drag.moved) kbd.focus(); drag = null; look(0, 0); });
-stage.addEventListener('pointercancel', () => { drag = null; look(0, 0); });
+stage.addEventListener('pointerup', () => { if (drag && !drag.moved) kbd.focus(); drag = null; });
+stage.addEventListener('pointercancel', () => { drag = null; });
 addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && !REDUCED) look(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1); });
 D.documentElement.addEventListener('mouseleave', () => look(0, 0));
-addEventListener('wheel', e => { if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
 
 let typed = false;
 function firstKey(){ if (typed) return; typed = true; $('#hint').style.opacity = '0'; }
@@ -84,6 +95,6 @@ function frame(now){
   typist.update(dt, T); api.update(dt, T); if (sound && sound.update) sound.update(dt); api.render();
 }
 D.addEventListener('visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });
-const go = () => { $('#loading').classList.add('gone'); fromHash(); raf = requestAnimationFrame(frame); if (TOUCH) $('#hint').innerHTML = 'tap the screen to type · drag to look around'; };
+const go = () => { $('#loading').classList.add('gone'); fromHash(); raf = requestAnimationFrame(frame); if (TOUCH) $('#hint').innerHTML = 'tap the screen to type · swipe up to step back'; };
 (D.fonts ? Promise.race([D.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve()).then(go);
 })();

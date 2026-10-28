@@ -741,7 +741,7 @@ M.createScene = function createScene(container){
      The head turns about a neck pivot below and behind the eyes: looking down carries the eyes forward and
      down a little, the way a real head does, and the lens widens as it goes so the whole keyboard fits. */
   const D2R = Math.PI / 180;
-  const LOOK = { yaw: 15 * D2R, down: 35 * D2R, up: 7 * D2R };
+  const LOOK = { yaw: 12 * D2R, down: 35 * D2R, up: 6 * D2R };
   const flatN = new V3(screenNormal.x, 0, screenNormal.z).normalize();
   const EYE_D = .6, EYE_UP = .125;
   const eyeRest = screenCenter.clone().addScaledVector(flatN, EYE_D); eyeRest.y = screenCenter.y + EYE_UP;
@@ -770,34 +770,59 @@ M.createScene = function createScene(container){
   const qLook = new THREE.Quaternion(), qDelta = new THREE.Quaternion(), eLook = new THREE.Euler(0, 0, 0, 'YXZ');
   const eyeNow = eyeRest.clone(), fwdNow = new V3();
   let breathT = 0;
-  /* v3: ONE fixed shot, square-on to the tube. The camera looks straight down the screen's normal (so the glass is
-     a true rectangle, no keystone), from far enough back that the near keyboard isn't blown up by perspective.
-     The keyboard and hands below are brought into frame with a shifted lens (off-axis frustum), not by tilting. */
-  const SHOT = { dist: 1.7, up: .27, kbFront: -.005, margin: .012 };
+  /* v4: TWO fixed shots, switched by scrolling (setView), with a smooth dolly between them. Neither follows the pointer.
+     'screen': square-on to the tube, close, the glass filling the frame (the reading view).
+     'full'  : sat back and above, looking down: the whole machine, the whole keyboard and both hands. */
   const camN = screenNormal.clone().normalize();
-  const camQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new V3(), camN.clone().negate(), new V3(0, 1, 0)));
-  const camUp = new V3(0, 1, 0).applyQuaternion(camQ), camRight = new V3(1, 0, 0).applyQuaternion(camQ);
-  const eyeShot = screenCenter.clone().addScaledVector(camN, SHOT.dist).addScaledVector(camUp, SHOT.up);
-  const shotPts = (() => {
-    const ps = [], m = SHOT.margin;
-    for (const sx of [-1, 1]) for (const sy of [-1, 1]) ps.push(screenCenter.clone().addScaledVector(camRight, sx * (GW / 2 + m)).addScaledVector(camUp, sy * (GH / 2 + m)));
+  const camQS = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new V3(), camN.clone().negate(), new V3(0, 1, 0)));
+  const camUpS = new V3(0, 1, 0).applyQuaternion(camQS);
+  const FULL = { back: .62, up: .42, kbFront: .05 };
+  const eyeFull = eyeRest.clone().addScaledVector(flatN, FULL.back); eyeFull.y += FULL.up;
+  eyeFull.x = (screenCenter.x + keyboardCenter.x) / 2;
+  const fullPts = (() => {
+    const ps = [], gx = new V3().crossVectors(new V3(0, 1, 0), flatN).normalize();
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) ps.push(screenCenter.clone().addScaledVector(gx, sx * (GW / 2 + .035)).add(new V3(0, sy * (GH / 2 + .035), 0)));
     const kx = new V3(Math.cos(KB.yaw), 0, -Math.sin(KB.yaw)), kz = new V3(Math.sin(KB.yaw), 0, Math.cos(KB.yaw));
-    for (const sx of [-1, 1]) ps.push(keyboardCenter.clone().addScaledVector(kx, sx * (KB.w / 2 + .008)).addScaledVector(kz, SHOT.kbFront));
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) ps.push(keyboardCenter.clone().addScaledVector(kx, sx * (KB.w / 2 + .02)).addScaledVector(kz, sz > 0 ? KB.d / 2 + FULL.kbFront : -KB.d / 2));
     return ps;
   })();
-  const shotInv = new THREE.Matrix4();
+  const shot = { screen: { pos: new V3(), q: new THREE.Quaternion(), fov: 30 }, full: { pos: eyeFull.clone(), q: new THREE.Quaternion(), fov: 40 } };
+  const viewS = { x: 0, v: 0, t: 0 };   // 0 = screen, 1 = full
+  function solveShots(){
+    // screen: the glass fills ~86% of the height (or ~92% of the width on portrait screens), dead centre, square-on
+    const fovS = 30, tv = Math.tan(fovS / 2 * D2R);
+    const need = Math.max((GH / 2) / .86, (GW / 2) / (.92 * aspect));
+    shot.screen.pos.copy(screenCenter).addScaledVector(camN, need / tv).addScaledVector(camUpS, .0);
+    shot.screen.q.copy(camQS); shot.screen.fov = fovS;
+    // full: aim and fov solved so the machine, keyboard and hands sit centred with a small margin
+    const inv = new THREE.Matrix4(), m = new THREE.Matrix4(), e = new THREE.Euler(0, 0, 0, 'YXZ');
+    let yaw = YAW0, pitch = PITCH0 - .3, tvv = .3, th = .3;
+    for (let it = 0; it < 8; it++){
+      e.set(pitch, yaw, 0); shot.full.q.setFromEuler(e);
+      m.compose(eyeFull, shot.full.q, new V3(1, 1, 1)); inv.copy(m).invert();
+      let vmin = 9, vmax = -9, hmin = 9, hmax = -9;
+      for (const p of fullPts){ const c = p.clone().applyMatrix4(inv), d = -c.z, av = Math.atan2(c.y, d), ah = Math.atan2(c.x, d);
+        vmin = Math.min(vmin, av); vmax = Math.max(vmax, av); hmin = Math.min(hmin, ah); hmax = Math.max(hmax, ah); }
+      pitch += (vmin + vmax) / 2; yaw -= (hmin + hmax) / 2;
+      tvv = Math.tan((vmax - vmin) / 2); th = Math.tan((hmax - hmin) / 2);
+    }
+    shot.full.fov = Math.min(85, 2 * Math.atan(Math.max(tvv, th / aspect) * 1.02) / D2R);
+  }
+  const _q = new THREE.Quaternion();
+  const _qy = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _Y = new V3(0, 1, 0), _X = new V3(1, 0, 0);
   function applyCamera(){
-    camera.position.copy(eyeShot); camera.quaternion.copy(camQ); camera.updateMatrixWorld();
-    shotInv.copy(camera.matrixWorld).invert();
-    let l = 9, r = -9, b = 9, t = -9, sTop = -9;
-    shotPts.forEach((p, i) => { const c = p.clone().applyMatrix4(shotInv), d = -c.z, x = c.x / d, y = c.y / d;
-      l = Math.min(l, x); r = Math.max(r, x); b = Math.min(b, y); t = Math.max(t, y); if (i < 4) sTop = Math.max(sTop, y); });
-    // fit the content box into the frame's aspect; spare room goes evenly to both sides, or (portrait) below the keys
-    let w = r - l, h = t - b; const cx = (l + r) / 2;
-    if (w / h < aspect){ w = h * aspect; } else { const h2 = w / aspect, cy = (t + b) / 2; t = cy + h2 / 2; b = cy - h2 / 2; h = h2; }
-    const n = camera.near;
-    camera.projectionMatrix.makePerspective((cx - w / 2) * n, (cx + w / 2) * n, t * n, b * n, n, camera.far);
-    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+    // the pointer looks around: down leans back toward the full view (the hands), sideways/up turn the head a little
+    const down = clamp(-pitchS.x / LOOK.down, 0, 1);
+    const k = sstep(0, 1, Math.max(clamp(viewS.x, 0, 1), down));
+    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * (1 - .45 * k);
+    camera.position.lerpVectors(shot.screen.pos, shot.full.pos, k);
+    // the head travels a slight arc (up and back first) rather than a straight dolly
+    camera.position.y += Math.sin(k * Math.PI) * .04;
+    _q.copy(shot.screen.q).slerp(shot.full.q, k);
+    _qy.setFromAxisAngle(_Y, lookYaw); _qp.setFromAxisAngle(_X, lookUp * (1 - .5 * k));
+    camera.quaternion.copy(_qy).multiply(_q).multiply(_qp);
+    const fov = lerp(shot.screen.fov, shot.full.fov, k);
+    camera.fov = fov; camera.aspect = aspect; camera.updateProjectionMatrix();
   }
   /* never see inside the typist's head: anything added to the scene whose bounds wrap the eye is hidden */
   const added = [], hidden = new Set(), _sph = new THREE.Sphere();
@@ -881,12 +906,15 @@ M.createScene = function createScene(container){
       floorY: 0, deskTop: DESK_Y, deskBounds: { minX: -DESK.w / 2, maxX: DESK.w / 2, minZ: DESK.z - DESK.d / 2, maxZ: DESK.z + DESK.d / 2 },
       wallZ: WALL_Z, windowRect: { x: WIN.x - WIN.hw - .05, y: WIN.y - WIN.hh - .025, w: WIN.hw * 2 + .1, h: WIN.hh * 2 + .045 } }, // x, y = lower-left corner, includes the trim and sill
     add(o){ scene.add(o); added.push(o); o.traverse(m => { if (m.isMesh && !m.userData.noShadow) m.castShadow = true; }); },
-    setView(){ /* v2: one view only; kept so old callers don't break */ },
+    /* 'screen' (close, reading) | 'full' (the whole desk); toggleView() flips; view is the current target */
+    setView(name){ viewS.t = name === 'full' ? 1 : 0; if (REDUCED){ viewS.x = viewS.t; viewS.v = 0; } },
+    toggleView(){ api.setView(viewS.t ? 'screen' : 'full'); },
+    get view(){ return viewS.t ? 'full' : 'screen'; },
     /* the desk lamp: true/false; get lampOn for the current switch state */
     setLamp(on){ on = !!on; if (on === lampS.on) return; lampS.on = on; lampS.t = 0; },
     get lampOn(){ return lampS.on; },
     /* nx, ny in -1..1 from the pointer (0,0 = the screen). ny > 0 looks down toward the keyboard. */
-    setLook(nx, ny){ return; /* v3: fixed shot */
+    setLook(nx, ny){
       nx = clamp(+nx || 0, -1, 1); ny = clamp(+ny || 0, -1, 1);
       yawS.t = -curve(nx) * LOOK.yaw;
       const cy = curve(ny); pitchS.t = cy > 0 ? -cy * LOOK.down : -cy * LOOK.up;
@@ -896,7 +924,7 @@ M.createScene = function createScene(container){
     nudge(amount = 1){ if (false) leanS.v += 7 * clamp(amount, 0, 2); },
     update(dt, t){
       breathT += dt;
-      crit(yawS, 6.5, dt); crit(pitchS, 6, dt);
+      crit(yawS, 6.5, dt); crit(pitchS, 6, dt); crit(viewS, 4.2, dt);
       { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h; leanS.v += (-110 * leanS.x - 2 * .75 * 10.5 * leanS.v) * h; leanS.x += leanS.v * h; } }
       leanS.x = clamp(leanS.x, -.3, 1);
       applyCamera(t);
@@ -927,7 +955,7 @@ M.createScene = function createScene(container){
     resize(w, h){
       renderer.setSize(w, h, false); aspect = w / Math.max(1, h); camera.aspect = aspect; camera.updateProjectionMatrix();
       dustU.uScale.value = h;
-      frameLens(); camera.fov = -1; applyCamera(breathT);
+      frameLens(); solveShots(); applyCamera(breathT);
     },
   };
   api.resize(container.clientWidth || innerWidth, container.clientHeight || innerHeight);

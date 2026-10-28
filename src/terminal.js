@@ -395,6 +395,9 @@ M.createTerminal = function createTerminal(opts){
       head(label, note){ r.push({ k: 'head', i: 2, label, note: note || '' }); return o; },
       para(text, st = 'n', width = COLS - 6, i = 2){ for (const l of wrap(text, width)) o.at(i, [l, st]); return o; },
       viz(h, draw, live){ r.push({ k: 'viz', h, draw, live: live || null, t0: -1 }); return o; },
+      /* a boxed panel: title in the top border, label/value rows, selectable rows (url or copy) with
+         number shortcuts, and a footer line of keys while it is waiting for a choice */
+      card(spec){ const c = makeCard(spec); r.push(c); o.lastCard = c; return o; },
       link(label, url, i = 2, labelW = 0, shown){
         const sp = []; if (label) sp.push([pad(label, labelW), 'd']);
         sp.push([shown || url, 'n', { url }]); r.push({ k: 't', i, s: sp }); return o;
@@ -402,11 +405,24 @@ M.createTerminal = function createTerminal(opts){
     };
     return o;
   }
-  const heightOf = r => r.k === 'big' ? 2 : r.k === 'viz' ? r.h : 1;
+  const heightOf = r => r.k === 'big' ? 2 : r.k === 'viz' || r.k === 'card' ? r.h : 1;
   const lenOf = r => r.k === 't' ? r.s.reduce((n, s) => n + s[0].length, 0) + (r.i || 0) : r.k === 'big' ? r.s[0][0].length : r.k === 'head' ? r.label.length * 2 : 0;
-  const costOf = r => r.k === 'viz' ? 40 : r.k === 'big' ? lenOf(r) * 2 + 4 : r.k === 'head' ? 30 : Math.max(3, lenOf(r) - (r.i || 0));
-  const plainOf = r => r.k === 't' || r.k === 'big' ? r.s.map(s => s[1] === 'f' ? ' ' : s[0]).join('').replace(/\s+/g, ' ').trim() : '';
-  const textOf = r => r.k === 't' ? (' '.repeat(r.i || 0) + r.s.map(s => s[0]).join('')).replace(/\s+$/, '') : r.k === 'big' ? '  ' + r.s[0][0] : r.k === 'head' ? '  ' + r.label.toUpperCase() : null;
+  const costOf = r => r.k === 'viz' || r.k === 'card' ? 40 : r.k === 'big' ? lenOf(r) * 2 + 4 : r.k === 'head' ? 30 : Math.max(3, lenOf(r) - (r.i || 0));
+  const plainOf = r => r.k === 't' || r.k === 'big' ? r.s.map(s => s[1] === 'f' ? ' ' : s[0]).join('').replace(/\s+/g, ' ').trim()
+    : r.k === 'card' ? r.title + '. ' + r.items.map(it => (it.ai >= 0 ? (it.ai + 1) + ', ' : '') + it.label + ': ' + (it.full || it.value)).join('. ') : '';
+  const textOf = r => r.k === 't' ? (' '.repeat(r.i || 0) + r.s.map(s => s[0]).join('')).replace(/\s+$/, '') : r.k === 'big' ? '  ' + r.s[0][0] : r.k === 'head' ? '  ' + r.label.toUpperCase()
+    : r.k === 'card' ? r.items.map(it => pad(it.label, r.lw) + (it.full || it.value)).join('\n') : null;
+  function makeCard(spec){
+    const items = spec.items.map(it => Object.assign({}, it));
+    let ai = 0; for (const it of items) it.ai = it.url || it.copy ? ai++ : -1;
+    const lw = Math.max(0, ...items.map(it => it.label.length)) + 2;
+    const acts = items.filter(it => it.ai >= 0);
+    const room = it => (COLS - 3) - (5 + lw) - (it.hint ? it.hint.length + 2 : 0);
+    if (items.some(it => it.value.length > room(it))) for (const it of items) it.hint = '';   // values win over hints
+    for (const it of items) if (it.value.length > room(it)) it.value = it.value.slice(0, Math.max(1, room(it) - 3)) + '...';
+    return { k: 'card', title: spec.title, note: spec.note || '', items, acts, lw, sel: -1, verb: spec.verb || 'open',
+      foot: null, h: items.length + (acts.length ? 3 : 2) };
+  }
 
   function pushRow(r){ openRow = null; rows.push(r); dirty = true; }
   function emit(o, mirrorText){            // rich rows straight to the scrollback (outside a job)
@@ -494,14 +510,14 @@ M.createTerminal = function createTerminal(opts){
     j: J.url || 'https://risingfounder.net',
   };
   const EMAILS = (C.contact && Array.isArray(C.contact.emails) && C.contact.emails.length) ? C.contact.emails : [
-    { label: 'J (Rising Founder)', short: 'J', email: 'kaiav@risingfounder.net' },
-    { label: 'everything else', short: 'everything else', email: 'kaiav.nihalani@gmail.com' },
+    { label: 'J', email: 'kaiav@risingfounder.net' },
+    { label: 'Everything else', email: 'kaiav.nihalani@gmail.com' },
   ];
   const OPEN = [
-    { name: 'j', url: URLS.j, alias: ['risingfounder', 'rising'], kw: ['rising founder'], label: bare(URLS.j) },
-    { name: 'linkedin', url: URLS.linkedin, label: bare(URLS.linkedin) },
-    { name: 'x', url: URLS.x, alias: ['twitter'], label: bare(URLS.x) },
-    { name: 'gh', url: URLS.gh, alias: ['github', 'repo', 'source'], label: bare(URLS.gh) },
+    { name: 'j', url: URLS.j, alias: ['risingfounder', 'rising'], kw: ['rising founder'], label: bare(URLS.j), title: 'J', short: bare(URLS.j) },
+    { name: 'linkedin', url: URLS.linkedin, label: bare(URLS.linkedin), title: 'LinkedIn', short: bare(URLS.linkedin).replace(/^linkedin\.com\/(in\/)?/, '') },
+    { name: 'x', url: URLS.x, alias: ['twitter'], label: bare(URLS.x), title: 'X', short: '@' + bare(URLS.x).replace(/^(x|twitter)\.com\//, '') },
+    { name: 'gh', url: URLS.gh, alias: ['github', 'repo', 'source'], label: bare(URLS.gh), title: 'GitHub', short: bare(URLS.gh).replace(/^github\.com\//, '') },
   ];
   const LINKLIST = () => OPEN.filter(o => o.name !== 'j');
   const wrapT = (t, w = 50) => wrap(t, w).join('\n');
@@ -571,15 +587,16 @@ M.createTerminal = function createTerminal(opts){
       return o;
     },
     eden(o){
-      o.blank().head('eden', 'eden.txt').blank().big(E.title || 'Eden').line([E.role || '', 'd']).blank()
-        .line([E.line || '', 'b']).blank().viz(6, drawEden, () => 30).blank();
+      o.blank().big(E.title || 'Eden').blank()
+        .card({ title: 'EDEN', note: 'eden.txt', items: [{ label: 'role', value: E.role || '' }, { label: 'what', value: E.line || '' }] })
+        .blank().viz(6, drawEden, () => 30).blank();
       return o;
     },
     j(o){
-      o.blank().head('j', 'j.txt').big(J.title || 'J').line([J.role || '', 'd']).blank()
+      o.blank().big(J.title || 'J').line([J.role || '', 'd']).blank()
         .line([J.line || '', 'b']).para(J.body || '', 'n').blank()
-        .viz(5, drawBars, age => age < 1.6 ? 30 : 0).blank();
-      if (J.url) o.link('', J.url);
+        .card({ title: 'J', note: 'j.txt', items: [...(J.facts || []).map(f => ({ label: f[0], value: f[1] })),
+          { label: 'site', value: bare(URLS.j), full: URLS.j, url: URLS.j, hint: 'open' }] }).blank();
       return o;
     },
     writing(o){
@@ -595,16 +612,37 @@ M.createTerminal = function createTerminal(opts){
       return o;
     },
     links(o){
-      o.blank().head('links', 'links.txt').blank();
-      for (const t of LINKLIST()) o.link(t.name, t.url, 2, 10, t.label);
-      o.blank().line(['also ', 'f'], ['linkedin', 'n'], ['  ', 'f'], ['x', 'n'], ['  ', 'f'], ['gh', 'n'], ['  ', 'f'], ['contact', 'n'], ['  ', 'f'], ['open <name>', 'n']);
+      o.blank().card({ title: 'LINKS', note: 'links.txt', items: LINKLIST().map(t => ({ label: t.title, value: t.short, full: t.url, url: t.url, hint: t.name })) })
+        .blank().at(2, ['also ', 'f'], ['contact', 'n'], ['  ', 'f'], ['j', 'n'], ['  ', 'f'], ['open <name>', 'n']).blank();
       return o;
     },
   };
+  /* clipboard: also synchronous inside the keydown; falls back to a hidden textarea */
+  function copyText(t){
+    const fallback = () => {
+      const prev = document.activeElement;
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (prev && prev.focus) try { prev.focus({ preventScroll: true }); } catch (e){}
+        return ok;
+      } catch (e){ return false; }
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext !== false){
+        navigator.clipboard.writeText(t).catch(fallback);
+        return true;
+      }
+    } catch (e){}
+    return fallback();
+  }
   /* must run inside the keydown that asked for it, or popup blockers step in */
   function openTarget(url){
     try {
-      if (/^mailto:/i.test(url)){ location.href = url; return true; }
+      if (/^mailto:/i.test(url)) return copyText(url.replace(/^mailto:/i, '').split('?')[0]);
       const w = window.open(url, '_blank');
       if (w){ try { w.opener = null; } catch (e){} return true; }
     } catch (e){}
@@ -648,8 +686,8 @@ M.createTerminal = function createTerminal(opts){
          opts and ex for the manual. Registered commands with the same name win. ---- */
   const B = {};
   const def = (name, d) => { B[name] = d; };
-  const doc = name => ({ g: 'read', after: name === 'j' ? io => io.choose([{ label: bare(URLS.j), url: URLS.j }]) : name === 'links' ? io => io.choose(LINKLIST().map(t => ({ label: t.label, short: t.name, url: t.url }))) : null, desc: name === 'about' ? 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is' : name === 'eden' ? 'Eden. ' + (E.line || '') : name === 'j' ? J.title || 'J' : name === 'writing' ? 'posts' : 'LinkedIn and X',
-    usage: name, run(argv, io){ if (io.tty){ io.rich(DOCS[name](out())); if (this.after) return this.after(io); } else io.write(TEXT[name]()); } });
+  const doc = name => ({ g: 'read', desc: name === 'about' ? 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is' : name === 'eden' ? 'Eden. ' + (E.line || '') : name === 'j' ? J.title || 'J' : name === 'writing' ? 'posts' : 'LinkedIn and X',
+    usage: name, run(argv, io){ if (io.tty){ const o = DOCS[name](out()); io.rich(o); if (o.lastCard && o.lastCard.acts.length) return io.pick(o.lastCard); } else io.write(TEXT[name]()); } });
   for (const n of ['about', 'eden', 'j', 'writing', 'links']) def(n, doc(n));
   def('open', { g: 'read', desc: 'open a link: a url, ' + OPEN.map(o => o.name).join(', '), usage: 'open <url | j | gh | linkedin | x>', ex: ['open j', 'open https://risingfounder.net'], run(argv, io){
     const q = argv.slice(1).join(' ').trim();
@@ -660,6 +698,11 @@ M.createTerminal = function createTerminal(opts){
     else { const f = fuzzy(q, OPEN); if (f){ url = f.item.url; label = f.item.label; } }
     if (!url){ io.err('open: no link called ' + q + '. try ' + OPEN.map(x => x.name).join(', ') + ' or a url\n'); return 1; }
     if (!io.tty){ io.write(url + '\n'); return; }
+    if (/^mailto:/i.test(url)){                         // addresses are copied, never mailto'd
+      const addr = url.replace(/^mailto:/i, '').split('?')[0];
+      const ok = copyText(addr); sfx('beep');
+      io.rich(out().at(0, [ok ? 'copied ' : 'copy this: ', 'd'], [addr, 'b'])); return;
+    }
     const w = openTarget(url);
     const o = out(); o.at(0, ['opening ', 'd'], [label, 'b', { url }]); if (!w) o.at(2, ['if nothing opened, enter on the address opens it', 'f']); io.rich(o);
   } });
@@ -667,18 +710,17 @@ M.createTerminal = function createTerminal(opts){
   const linkCmd = (name, desc) => ({ g: 'read', desc, usage: name, run(argv, io){
     const t = OPEN.find(x => x.name === name);
     if (!io.tty){ io.write(t.url + '\n'); return; }
-    io.rich(out().at(0, [pad(name, 10), 'd'], [t.label, 'n', { url: t.url }]));
-    return io.choose([{ label: t.label, url: t.url }]);
+    const value = name === 'linkedin' ? 'in/' + t.short : name === 'gh' ? t.label : t.short;
+    const o = out().blank().card({ title: t.title.toUpperCase(), items: [{ label: name === 'gh' ? 'repo' : 'profile', value, full: t.url, url: t.url, hint: 'open' }] }).blank();
+    io.rich(o); return io.pick(o.lastCard);
   } });
   def('gh', linkCmd('gh', 'the source of this site, on GitHub'));
   def('linkedin', linkCmd('linkedin', 'LinkedIn'));
   def('x', linkCmd('x', 'X (Twitter)'));
   def('contact', { g: 'read', desc: 'email addresses', usage: 'contact', run(argv, io){
     if (!io.tty){ io.write(EMAILS.map(e => pad(e.label, 20) + e.email).join('\n') + '\n'); return; }
-    const o = out(); o.blank().head('contact').blank();
-    EMAILS.forEach((e, i) => o.at(2, [(i + 1) + '  ', 'f'], [pad(e.label, 20), 'd'], [e.email, 'b', { url: 'mailto:' + e.email }]));
-    o.blank(); io.rich(o);
-    return io.choose(EMAILS.map(e => ({ label: e.email, short: e.short, url: 'mailto:' + e.email })), 'email');
+    const o = out().blank().card({ title: 'CONTACT', note: 'email', verb: 'copy', items: EMAILS.map(e => ({ label: e.label, value: e.email, copy: e.email, hint: 'copy' })) }).blank();
+    io.rich(o); return io.pick(o.lastCard);
   } });
   def('welcome', { g: 'read', hidden: true, desc: 'the first screen', usage: 'welcome', run(argv, io){ if (io.tty) io.rich(welcome(out())); else io.write(C.name + '\n'); } });
 
@@ -1255,15 +1297,21 @@ M.createTerminal = function createTerminal(opts){
       exit(c){ io.code = (c | 0); },
       sleep: ms => j.sleep(ms),
       /* one-key inline prompt: items [{ label, short?, url }]; resolves with the item opened, or null */
-      choose(items, noun){
+      choose(items, title){
         if (!ctx.sink.tty || j.dead || !items || !items.length) return Promise.resolve(null);
+        const o = out().card({ title: String(title || 'OPEN').toUpperCase(), items: items.map(it => ({ label: it.short || it.name || 'link', value: it.label || it.url, full: it.url, url: it.url, copy: it.copy, hint: it.copy ? 'copy' : 'open' })) });
+        ctx.sink.rich(o);
+        return io.pick(o.lastCard);
+      },
+      /* wait for one key on a card already printed; resolves with the item acted on, or null */
+      pick(card){
+        if (!ctx.sink.tty || j.dead || !card || !card.acts.length) return Promise.resolve(null);
         return new Promise(res => {
-          openRow = null;
-          const row = { k: 't', i: 0, s: [] }, hint = items.length > 1 ? { k: 't', i: 0, s: [] } : null;
-          rows.push(row); if (hint) rows.push(hint);
-          j.choice = { items, sel: 0, row, hint, res, noun: noun || 'link' };
-          paintChoice(j.choice);
-          mirror(items.length > 1 ? 'Press 1 to ' + items.length + ' or Enter to open ' + items.map((it, i) => (i + 1) + ', ' + it.label).join('; ') + '. Any other key goes back.' : 'Press Enter or o to open ' + items[0].label + '. Any other key goes back.');
+          card.sel = 0; setFoot(card);
+          j.choice = { card, res };
+          const a = card.acts;
+          mirror(a.length > 1 ? 'Press 1 to ' + a.length + ', or Enter, to ' + card.verb + ': ' + a.map((it, i) => (i + 1) + ', ' + it.label + ' ' + (it.full || it.value)).join('; ') + '. Escape goes back.'
+            : 'Press Enter to ' + (a[0].copy ? 'copy ' : 'open ') + (a[0].full || a[0].value) + '. Any other key goes back.');
           dirty = true;
         });
       },
@@ -1275,34 +1323,36 @@ M.createTerminal = function createTerminal(opts){
     };
     return io;
   }
-  function paintChoice(ch){
-    if (ch.items.length === 1){
-      ch.row.s = [['open ', 'd'], [ch.items[0].label, 'b'], ['?  ', 'd'], ['enter', 'n'], ['/', 'f'], ['o', 'n'], [' open  ', 'f'], ['other key', 'n'], [' back', 'f']];
-      return;
-    }
-    const sp = [['open ', 'd']];
-    ch.items.forEach((it, i) => { sp.push([' ' + (i + 1) + ' ' + (it.short || it.label) + ' ', i === ch.sel ? 'i' : 'n'], [' ', 'f']); });
-    ch.row.s = sp;
-    ch.hint.s = [['1-' + ch.items.length, 'n'], [' or ', 'f'], ['enter', 'n'], [' open  ', 'f'], ['arrows', 'n'], [' move  ', 'f'], ['other key', 'n'], [' back', 'f']];
+  function setFoot(card){
+    const n = card.acts.length, dot = [' \u00b7 ', 'f'];
+    const verb = card.acts.every(a => a.copy) ? 'copy' : card.acts.every(a => !a.copy) ? 'open' : 'open/copy';
+    card.foot = n > 1
+      ? [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['1-' + n, 'n'], [' jump', 'f'], dot, ['esc', 'n'], [' back', 'f']]
+      : [['enter', 'n'], [' ' + verb, 'f'], dot, ['any other key', 'n'], [' back', 'f']];
   }
   /* a key while a choice is waiting; returns true when consumed */
   function choiceKey(e){
-    const ch = job.choice, k = e.key, n = ch.items.length;
-    if (e.ctrlKey && k.toLowerCase() === 'c'){ interrupt(); return true; }
-    if (n > 1 && (k === 'ArrowRight' || k === 'ArrowDown' || (k === 'Tab' && !e.shiftKey))){ ch.sel = (ch.sel + 1) % n; paintChoice(ch); dirty = true; return true; }
-    if (n > 1 && (k === 'ArrowLeft' || k === 'ArrowUp' || (k === 'Tab' && e.shiftKey))){ ch.sel = (ch.sel + n - 1) % n; paintChoice(ch); dirty = true; return true; }
+    const ch = job.choice, card = ch.card, k = e.key, n = card.acts.length;
+    if (e.ctrlKey && k.toLowerCase() === 'c'){ card.sel = -1; card.foot = [['^C', 'd']]; interrupt(); return true; }
+    if (n > 1 && (k === 'ArrowDown' || k === 'ArrowRight' || (k === 'Tab' && !e.shiftKey) || k === 'j')){ card.sel = (card.sel + 1) % n; dirty = true; return true; }
+    if (n > 1 && (k === 'ArrowUp' || k === 'ArrowLeft' || (k === 'Tab' && e.shiftKey) || k === 'k')){ card.sel = (card.sel + n - 1) % n; dirty = true; return true; }
     let pick = -1;
-    if (k === 'Enter' || (n === 1 && (k === 'o' || k === 'O'))) pick = ch.sel;
+    if (k === 'Enter' || k === 'o' || k === 'O' || (k === 'c' && card.acts[card.sel].copy)) pick = card.sel;
     else if (/^[1-9]$/.test(k) && +k <= n) pick = +k - 1;
     job.choice = null;
-    if (ch.hint){ const at = rows.indexOf(ch.hint); if (at >= 0){ rows.splice(at, 1); shown = Math.min(shown, rows.length); } }
     let it = null;
     if (pick >= 0){
-      it = ch.items[pick];
-      const ok = openTarget(it.url);                       // synchronous, inside the keydown
-      ch.row.s = [['opening ', 'd'], [it.label, 'b', { url: it.url }]].concat(ok ? [] : [['  (blocked? enter on it)', 'f']]);
-      if (job) job.plain += 'Opening ' + it.label + '. ';
-    } else ch.row.s = [['back', 'f']];
+      it = card.acts[pick]; card.sel = pick; card.done = true;
+      if (it.copy){                                        // synchronous, inside the keydown
+        const ok = copyText(it.copy); sfx('beep');
+        card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [it.copy, 'b']] : [['select and copy: ', 'd'], [it.copy, 'b']];
+        if (job) job.plain += (ok ? 'Copied ' : 'Copy ') + it.copy + '. ';
+      } else {
+        const ok = openTarget(it.url);
+        card.foot = [['  ', 'b', null, 'out'], ['opening ', 'd'], [it.full ? bare(it.full) : it.value, 'b']].concat(ok ? [] : [['  blocked? try open ' + bare(it.url), 'f']]);
+        if (job) job.plain += 'Opening ' + (it.full || it.value) + '. ';
+      }
+    } else { card.sel = -1; card.foot = [['back', 'f']]; }
     dirty = true;
     ch.res(it);
     return true;
@@ -1625,7 +1675,43 @@ M.createTerminal = function createTerminal(opts){
   }
 
   /* ---- drawing primitives ---- */
-  const color = st => st === 'f' ? P.faint : st === 'd' ? P.dim : st === 'b' ? P.bright : st === 'a' ? P.accent : P.normal;
+  const color = st => st === 'f' ? P.faint : st === 'd' ? P.dim : st === 'b' ? P.bright : st === 'a' ? P.accent : st === 'z' ? P.bg : P.normal;
+  /* a card: vector rules in the phosphor (VT323 has no box glyphs), cells on the text grid */
+  function drawCard(r, top){
+    const n = r.items.length, active = r.sel >= 0 && !r.done;
+    const x0 = X(1) + cw * 0.5, x1 = X(COLS - 1) - cw * 0.5;
+    const yT = top + ch * 0.48, yB = top + ch * (n + 1.48);
+    g.fillStyle = active ? P.dim : P.faint;
+    const tA = X(2.5), tB = X(3 + r.title.length) + cw * 0.5;
+    const nA = r.note ? X(COLS - 3 - r.note.length) - cw * 0.5 : x1, nB = r.note ? X(COLS - 3) + cw * 0.5 : x1;
+    g.fillRect(x0, yT, tA - x0, 2); g.fillRect(tB, yT, nA - tB, 2); if (r.note) g.fillRect(nB, yT, x1 - nB + 2, 2);
+    g.fillRect(x0, yT, 2, yB - yT); g.fillRect(x1, yT, 2, yB - yT + 2); g.fillRect(x0, yB, x1 - x0 + 2, 2);
+    text(r.title, 3, top, 'b');
+    if (r.note) text(r.note, COLS - 3 - r.note.length, top, 'f');
+    r.items.forEach((it, i) => {
+      const rt = top + ch * (i + 1);
+      const on = active && it.ai === r.sel, chosen = r.done && it.ai === r.sel;
+      if (on){ g.fillStyle = P.normal; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch - 6); }
+      const st = s => on ? 'z' : s;
+      if (it.ai >= 0) text(String(it.ai + 1), 3, rt, st(chosen ? 'b' : 'f'));
+      text(it.label, 5, rt, st('d'));
+      text(it.value, 5 + r.lw, rt, st(it.ai >= 0 ? 'b' : 'n'));
+      if (it.hint) text(it.hint, COLS - 3 - it.hint.length, rt, st(on ? 'z' : 'f'));
+    });
+    if (r.foot){
+      const ft = top + ch * (n + 2), mark = r.foot[0][3], cx = X(2), cy = ft + ch * 0.5, a = cw * 0.38;
+      drawSpans({ i: 2, s: r.foot }, ft, 1e9);
+      g.fillStyle = P.normal; g.strokeStyle = P.bright; g.lineWidth = 3;
+      if (mark === 'arrows'){                            // up and down, drawn: VT323 has no arrow glyphs
+        const up = (x, d) => { g.beginPath(); g.moveTo(x, cy - d * a * 1.1); g.lineTo(x - a, cy + d * a * 0.3); g.lineTo(x + a, cy + d * a * 0.3); g.closePath(); g.fill(); g.fillRect(x - 1.5, d > 0 ? cy : cy - a * 1.1, 3, a * 1.1); };
+        up(cx + cw * 0.5, 1); up(cx + cw * 1.5, -1);
+      } else if (mark === 'check'){
+        g.beginPath(); g.moveTo(cx + cw * 0.15, cy); g.lineTo(cx + cw * 0.5, cy + a); g.lineTo(cx + cw * 1.2, cy - a * 1.1); g.stroke();
+      } else if (mark === 'out'){
+        g.beginPath(); g.moveTo(cx + cw * 0.2, cy + a); g.lineTo(cx + cw * 1.1, cy - a); g.moveTo(cx + cw * 0.45, cy - a); g.lineTo(cx + cw * 1.1, cy - a); g.lineTo(cx + cw * 1.1, cy - a * 0.1); g.stroke();
+      }
+    }
+  }
   const X = col => PADX + col * cw;
   function text(s, col, top, st, k = 1){
     g.font = font(k); g.fillStyle = color(st); g.fillText(s, X(col), top + fs * k * 0.68);
@@ -1725,13 +1811,14 @@ M.createTerminal = function createTerminal(opts){
     for (let i = 0; i <= last; i++){
       const r = rows[i]; const h = heightOf(r);
       const isPartial = i === shown;
-      if (isPartial && partial <= 0 && r.k !== 'viz') break;
+      if (isPartial && partial <= 0 && r.k !== 'viz' && r.k !== 'card') break;
       if (u + h > first && u < first + ROWS){
         const top = PADY + (u - first) * ch;
         const lim = isPartial ? Math.floor(partial) : 1e9;
         if (r.k === 't') drawSpans(r, top, lim);
         else if (r.k === 'big') drawSpans(r, top, isPartial ? Math.floor(partial / 2) : 1e9, 2);
         else if (r.k === 'head') drawHead(r, top, isPartial ? partial / costOf(r) : 1);
+        else if (r.k === 'card') drawCard(r, top);
         else if (r.k === 'viz'){
           if (r.t0 < 0) r.t0 = now;
           const age = now - r.t0;
