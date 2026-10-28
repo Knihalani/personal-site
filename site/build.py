@@ -3,9 +3,9 @@
 
     python3 site/build.py
 
-Reads   content/copy.md            (## key sections)
+Reads   site/src/ORDER + site/src/*  (game source parts, concatenated in ORDER into site/kaiav-world.html)
+        content/copy.md            (## key sections)
         content/writings/*.md       (front matter + Markdown body; files starting with _ are skipped)
-        site/kaiav-world.html       (the game)
         concepts/contact-gate/contact-gate.html
 Writes  site/dist/kaiav-world.html
 
@@ -21,6 +21,7 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GAME = ROOT / 'site' / 'kaiav-world.html'
+SRC = ROOT / 'site' / 'src'
 GATE = ROOT / 'concepts' / 'contact-gate' / 'contact-gate.html'
 OUT = ROOT / 'site' / 'dist' / 'kaiav-world.html'
 EMAIL = re.compile(r'[\w.+-]+@[\w-]+\.[\w.]+')
@@ -68,7 +69,17 @@ def read_writings(folder):
     return posts
 
 
+def assemble_game():
+    """Concatenate the source parts listed in site/src/ORDER into site/kaiav-world.html."""
+    order = SRC / 'ORDER'
+    if not order.exists():
+        return
+    names = [l.strip() for l in order.read_text().splitlines() if l.strip() and not l.startswith('#')]
+    GAME.write_text(''.join((SRC / n).read_text(encoding='utf-8') for n in names), encoding='utf-8')
+
+
 def main():
+    assemble_game()
     content = {
         'copy': read_copy(ROOT / 'content' / 'copy.md'),
         'writings': read_writings(ROOT / 'content' / 'writings'),

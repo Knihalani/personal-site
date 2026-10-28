@@ -1773,7 +1773,7 @@ function pumpMeshing(budgetMs){
   while (dirtyList.length){
     { const c = chunks[dirtyList[dirtyList.length - 1]]; if (Math.hypot(c.cx * 16 + 8 - px, c.cz * 16 + 8 - pz) > RR) break; }
     if (worker && inflight >= 24) break;
-    if (!worker && performance.now() - t0 > budgetMs) break;
+    if (performance.now() - t0 > budgetMs) break; // packing a chunk for the worker costs too: budget both paths
     const k = dirtyList.pop(), c = chunks[k];
     c.dirty = false;
     if (!c.count && !c.mesh && !c.wmesh){ c.sent = c.ver; continue; }
@@ -4470,7 +4470,7 @@ function specRim(I, tx, tz, out){ const o = {}; let dx = tx - I.x, dz = tz - I.z
   for (let s = 0; s < I.r * 2.2; s++){ const x = Math.round(I.x + dx * s), z = Math.round(I.z + dz * s); wgenInline.api.col(I, x, z, o); if (o.in){ lx = x; lz = z; top = o.top; } }
   return { x: lx + dx * (out || 0), z: lz + dz * (out || 0), top }; }
 function layoutWilds(seed){
-  OUT_SEED = seed >>> 0; OUT.length = 0; WILD_UD.length = 0; STONED.clear(); MODRT.length = 0; WILD_LINKS.length = 0; WILD_BRIDGES.length = 0;
+  OUT_SEED = seed >>> 0; OUT.length = 0; WILD_UD.length = 0; STONED.clear(); MODRT.length = 0; BUILDQ.length = 0; buildCur = null; WILD_LINKS.length = 0; WILD_BRIDGES.length = 0;
   wgenInline.api.setSeed(OUT_SEED);
   const rand = wgenInline.api.mulberry(OUT_SEED ^ 0x9e3779b9), names = new Set();
   for (const r0 of SIZE_PLAN){
@@ -4527,36 +4527,70 @@ function requestIsland(I){
 }
 function pumpWildGen(){
   if (wgenBusy || !OUT.length) return;
-  let best = null, bd = 1e9; const px = PL.x, pz = PL.z, R = renderDist + 64;
+  let best = null, bd = 1e9; const px = PL.x, pz = PL.z, R = renderDist + 120; // wide, so the budgeted build finishes before arrival
   for (const I of OUT){ if (I.gen) continue; const d = Math.hypot(I.x - px, I.z - pz) - I.r; if (d < R && d < bd){ bd = d; best = I; } }
   if (best) requestIsland(best);
 }
 let wildDirtyMap = false;
+/* Island assembly is spread across frames: a generator per island, pumped with a ~4 ms budget.
+   Stages: terrain blocks, content blocks and props, light, chunk counts, entities, logic. The island stays
+   dormant (unmeshed, no entities, gen 1) until the last stage, so nothing half-built is ever seen. */
+const BUILDQ = []; let buildCur = null;
 function applyIsland(r){
   if (r.ver !== outVer) return; // a stale job from before a reseed
-  const I = OUT[r.k]; if (!I) return;
+  const I = OUT[r.k]; if (!I) return; BUILDQ.push({ I, r, g: islandBuild(I, r) });
+}
+function pumpBuilds(budget){
+  const t0 = performance.now();
+  // the player is standing where a pending island goes (a save loaded out here): finish that one now, no budget
+  const under = j => PL.x >= j.r.x0 - 2 && PL.z >= j.r.z0 - 2 && PL.x < j.r.x0 + j.r.w + 2 && PL.z < j.r.z0 + j.r.d + 2;
+  if (state === 'play' && ((buildCur && under(buildCur)) || BUILDQ.some(under))) budget = 1e9;
+  for (;;){ if (!buildCur){ if (!BUILDQ.length) return false; buildCur = BUILDQ.shift(); }
+    if (buildCur.g.next().done) buildCur = null; if (performance.now() - t0 >= budget) return !!(buildCur || BUILDQ.length); }
+}
+function* islandBuild(I, r){
+  const stale = () => r.ver !== outVer || OUT[r.k] !== I;
   const { x0, z0, w, d, blk, top } = r, H = WY;
-  for (let y = 0; y < H; y++) for (let z = 0; z < d; z++){ const row = w * (z + d * y), wrow = x0 + WX * ((z + z0) + WZ * y);
+  for (let y = 0; y < H; y++){ for (let z = 0; z < d; z++){ const row = w * (z + d * y), wrow = x0 + WX * ((z + z0) + WZ * y);
     for (let x = 0; x < w; x++){ const id = blk[row + x]; if (id) world[wrow + x] = id; } }
+    if ((y & 3) === 3){ yield; if (stale()) return; } }
   for (let z = 0; z < d; z++) for (let x = 0; x < w; x++){ const k = x + z * w, t = top[k]; if (t < 0) continue; const c = (x + x0) + (z + z0) * WX; isl[c] = OUT_ISL0 + I.k; hTop[c] = t; hBot[c] = r.bot[k]; eArr[c] = r.ee[k]; wTop[c] = r.wat[k]; }
-  I.bbox = [x0, z0, x0 + w - 1, z0 + d - 1];
+  I.bbox = [x0, z0, x0 + w - 1, z0 + d - 1]; yield; if (stale()) return;
   // content modules, pads and trails write straight into the world here, before lighting and meshing
-  const MX = buildIslandContent(I, r); let fx0 = x0, fz0 = z0, fx1 = x0 + w - 1, fz1 = z0 + d - 1; if (MX && MX.x1 >= MX.x0){ fx0 = Math.max(0, Math.min(fx0, MX.x0)); fz0 = Math.max(0, Math.min(fz0, MX.z0)); fx1 = Math.min(WX - 1, Math.max(fx1, MX.x1)); fz1 = Math.min(WZ - 1, Math.max(fz1, MX.z1)); }
+  const MX = yield* buildIslandContentG(I, r); if (stale()) return;
+  let fx0 = x0, fz0 = z0, fx1 = x0 + w - 1, fz1 = z0 + d - 1; if (MX && MX.x1 >= MX.x0){ fx0 = Math.max(0, Math.min(fx0, MX.x0)); fz0 = Math.max(0, Math.min(fz0, MX.z0)); fx1 = Math.min(WX - 1, Math.max(fx1, MX.x1)); fz1 = Math.min(WZ - 1, Math.max(fz1, MX.z1)); }
   // edits the player made out here earlier, loaded with the save
   edits.forEach((v, k) => { const x = k % WX, zz = (k / WX) | 0, z = zz % WZ; if (x >= x0 && x < x0 + w && z >= z0 && z < z0 + d){ if (!orig.has(k)) orig.set(k, world[k]); world[k] = v; } });
-  floodBox(fx0 - 2, 0, fz0 - 2, fx1 + 2, WY - 1, fz1 + 2);
-  for (let cz = fz0 >> 4; cz <= (fz1 + 1) >> 4; cz++) for (let cx = fx0 >> 4; cx <= (fx1 + 1) >> 4; cx++){ if (cx >= NCX || cz >= NCZ) continue; const ch = chunks[ckey(cx, 0, cz)]; let n = 0; for (let y = 0; y < WY; y++) for (let z = cz * 16; z < cz * 16 + 16; z++) for (let x = cx * 16; x < cx * 16 + 16; x++) if (world[x + WX * (z + WZ * y)]) n++; ch.count = n; markDirty(ckey(cx, 0, cz)); }
-  I.gen = 2; I.data = r; I.bbox = [x0, z0, x0 + w - 1, z0 + d - 1];
-  onIslandReady(I, r);
-  for (const br of WILD_BRIDGES) if (!br.built && OUT[br.a].gen === 2 && OUT[br.b].gen === 2) buildBridge(br);
-  if (mapStatic) for (let z = z0; z < z0 + d; z++) for (let x = x0; x < x0 + w; x++) mapColumn(x, z);
+  yield; if (stale()) return;
+  yield* floodBoxG(fx0 - 2, 0, fz0 - 2, fx1 + 2, WY - 1, fz1 + 2); if (stale()) return;
+  const keys = [];
+  for (let cz = fz0 >> 4; cz <= (fz1 + 1) >> 4; cz++) for (let cx = fx0 >> 4; cx <= (fx1 + 1) >> 4; cx++){ if (cx >= NCX || cz >= NCZ) continue; const ch = chunks[ckey(cx, 0, cz)]; let n = 0; for (let y = 0; y < WY; y++) for (let z = cz * 16; z < cz * 16 + 16; z++){ let i = cx * 16 + WX * (z + WZ * y); for (let x = 0; x < 16; x++, i++) if (world[i]) n++; } ch.count = n; keys.push(ckey(cx, 0, cz)); yield; if (stale()) return; }
+  for (const k of keys) markDirty(k);
+  // entities, then logic; only now does the island wake up
+  I.data = r; registerChests(I, r); yield; if (stale()) return;
+  spawnEnemiesFor(I, r); yield; if (stale()) return;
+  I.gen = 2; afterIslandContent(I); fixDrafts(I);
+  for (const br of WILD_BRIDGES) if (!br.built && OUT[br.a].gen === 2 && OUT[br.b].gen === 2){ yield; buildBridge(br); }
+  if (mapStatic) for (let z = z0; z < z0 + d; z++){ for (let x = x0; x < x0 + w; x++) mapColumn(x, z); if ((z & 7) === 7) yield; }
 }
-/* light flood restricted to a box (the box edge is dark sky out here) */
-function floodBox(x0, y0, z0, x1, y1, z1){
+/* a light flood restricted to a box (its edge is dark sky out here), resumable: its own queue, so relights between frames cannot disturb it */
+let fbq = null; const FBQM = (1 << 20) - 1;
+function* floodBoxG(x0, y0, z0, x1, y1, z1){
   x0 = Math.max(0, x0); z0 = Math.max(0, z0); x1 = Math.min(WX - 1, x1); z1 = Math.min(WZ - 1, z1); y0 = Math.max(0, y0); y1 = Math.min(WY - 1, y1);
-  let qt = 0;
-  for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++){ let i = x0 + WX * (z + WZ * y); for (let x = x0; x <= x1; x++, i++){ const e = B_EMIT[world[i]]; light[i] = e; if (e) lq[(qt++) & LQM] = i; } }
-  bfs(0, qt, x0, y0, z0, x1, y1, z1);
+  const q = fbq || (fbq = new Int32Array(FBQM + 1)); let qh = 0, qt = 0;
+  for (let y = y0; y <= y1; y++){ for (let z = z0; z <= z1; z++){ let i = x0 + WX * (z + WZ * y); for (let x = x0; x <= x1; x++, i++){ const e = B_EMIT[world[i]]; light[i] = e; if (e) q[(qt++) & FBQM] = i; } } if ((y & 3) === 3) yield; }
+  let n = 0;
+  while (qh !== qt){
+    const i = q[qh & FBQM]; qh++; if (++n === 8000){ n = 0; yield; }
+    const l = light[i]; if (l <= 1) continue;
+    const x = i % WX, zz = (i / WX) | 0, z = zz % WZ, y = (zz / WZ) | 0, nl = l - 1;
+    if (x > x0){ const j = i - 1; if (!B_OPQ[world[j]] && light[j] < nl){ light[j] = nl; q[(qt++) & FBQM] = j; } }
+    if (x < x1){ const j = i + 1; if (!B_OPQ[world[j]] && light[j] < nl){ light[j] = nl; q[(qt++) & FBQM] = j; } }
+    if (z > z0){ const j = i - WX; if (!B_OPQ[world[j]] && light[j] < nl){ light[j] = nl; q[(qt++) & FBQM] = j; } }
+    if (z < z1){ const j = i + WX; if (!B_OPQ[world[j]] && light[j] < nl){ light[j] = nl; q[(qt++) & FBQM] = j; } }
+    if (y > y0){ const j = i - LAYER; if (!B_OPQ[world[j]] && light[j] < nl){ light[j] = nl; q[(qt++) & FBQM] = j; } }
+    if (y < y1){ const j = i + LAYER; if (!B_OPQ[world[j]] && light[j] < nl){ light[j] = nl; q[(qt++) & FBQM] = j; } }
+  }
 }
 /* procedural rope bridges between close islands of similar height */
 function buildBridge(br){
@@ -5214,7 +5248,6 @@ function renderEnemies(t, dt){
 }
 
 /* ---- glue: island ready, reseeding, updraft motes for the Wilds ---- */
-function onIslandReady(I, r){ registerChests(I, r); spawnEnemiesFor(I, r); afterIslandContent(I); fixDrafts(I); }
 // once an island is generated, check each updraft aimed at it against the real ground near its landing rim
 // (landmarks, terraces and spires can stand taller than the shape spec) and raise the draft if needed
 let draftFixT = 0;
@@ -5316,6 +5349,9 @@ function assignContent(){
     I.mods = mods;
   }
 }
+// disc offsets per radius for site(), and a height histogram (hTop is -1..WY-1, stored +1)
+const DISC_OFF = {}, SITE_H = new Int32Array(WY + 2);
+function discOff(R){ let o = DISC_OFF[R]; if (o) return o; const a = []; for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) if (dx * dx + dz * dz <= R * R + R) a.push(dx, dz); return DISC_OFF[R] = Int16Array.from(a); }
 // ---- generation-time API (runs on the main thread inside applyIsland, before lighting and meshing) ----
 const SURF_DEF = () => GRASS;
 function contentAPI(I, r){
@@ -5334,10 +5370,14 @@ function contentAPI(I, r){
     site(R, opt){ opt = opt || {}; const cand = [];
       for (let z = I.bbox[1]; z <= I.bbox[3]; z += 2) for (let x = I.bbox[0]; x <= I.bbox[2]; x += 2) if (inI(x, z)) cand.push([x, z]);
       for (let pass = 0; pass < 2; pass++) for (let Rt = R; Rt >= Math.max(1, R - 3); Rt--){ let best = null, bs = -1e9; const need = pass ? .55 : (opt.cov || .86);
-        for (let t = 0; t < 160 && cand.length; t++){ const [x, z] = cand[(rand() * cand.length) | 0]; let cov = 0, n = 0; const hs = [];
-          for (let dz = -Rt; dz <= Rt; dz++) for (let dx = -Rt; dx <= Rt; dx++){ if (dx * dx + dz * dz > Rt * Rt + Rt) continue; n++; if (inI(x + dx, z + dz)){ cov++; hs.push(A.top(x + dx, z + dz)); } }
+        const off = discOff(Rt), n = off.length >> 1, kk = OUT_ISL0 + I.k;
+        for (let t = 0; t < 160 && cand.length; t++){ const [x, z] = cand[(rand() * cand.length) | 0]; let cov = 0;
+          // coverage first (cheap), then spacing, and only then the height median/spread (a histogram, no sort)
+          for (let o = 0; o < off.length; o += 2){ const xx = x + off[o], zz = z + off[o + 1]; if (xx >= 0 && zz >= 0 && xx < WX && zz < WZ && isl[xx + zz * WX] === kk) cov++; }
           if (cov < n * need) continue; let near = 1e9; for (const u of used) near = Math.min(near, Math.hypot(u.x - x, u.z - z) - u.R - Rt);
-          if (near < 2) continue; hs.sort((a, b) => a - b); const med = hs[hs.length >> 1], spread = hs[hs.length - 1] - hs[0];
+          if (near < 2) continue; SITE_H.fill(0); let lo = WY, hi = -1;
+          for (let o = 0; o < off.length; o += 2){ const xx = x + off[o], zz = z + off[o + 1]; if (xx >= 0 && zz >= 0 && xx < WX && zz < WZ && isl[xx + zz * WX] === kk){ const h = hTop[xx + zz * WX] + 1; SITE_H[h]++; if (h < lo) lo = h; if (h > hi) hi = h; } }
+          let med = lo, c = 0; const mi = cov >> 1; for (let h = lo; h <= hi; h++){ c += SITE_H[h]; if (c > mi){ med = h; break; } } med--; const spread = hi - lo;
           const sc = Math.min(near, 30) * .2 - spread * .5 - Math.hypot(x - I.x, z - I.z) * .05 + rand(); if (sc > bs){ bs = sc; best = { x, z, y: med + 1, R: Rt }; } }
         if (best){ used.push(best); if (!opt.noFlat) A.flatten(best.x, best.z, Rt, best.y - 1); return best; } }
       return null; },
@@ -5521,8 +5561,8 @@ function hazardTick(I, dt){
   else if (I.hz === 'vents'){ const b = getB(Math.floor(PL.x), Math.floor(PL.y - .5), Math.floor(PL.z)); if (b === EMBER && PL.onGround){ PL.vy = 17; PL.onGround = false; SND.boing(); sparkle(PL.x, PL.y, PL.z, 10, 1, .6, .3); } }
   if (!I.hzTold && I.hz){ I.hzTold = true; toast({ gust: 'Gusts sweep this island. Brace yourself.', frost: 'Frost underfoot slows you down.', lowgrav: 'The air here is light: you fall slowly.', vents: 'Ember vents: step on one to be thrown upward.' }[I.hz]); }
 }
-// ---- island assembly (called from applyIsland) ----
-function buildIslandContent(I, r){
+// ---- island assembly (a generator, stepped by islandBuild in w1 under a frame budget) ----
+function* buildIslandContentG(I, r){
   if (!I.mods) return null; const A = contentAPI(I, r); I.pads = { land: null, launch: {} }; I.padAngs = [];
   // landing pad (from the parent link) and launch pads (one per child link) beside their updrafts
   const pad = (tx, tz, inset) => { const ang = Math.atan2(tz - I.z, tx - I.x), rm = A.rim(ang); I.padAngs.push(ang); let px = Math.round(rm.x - Math.cos(ang) * inset), pz = Math.round(rm.z - Math.sin(ang) * inset);
@@ -5532,8 +5572,8 @@ function buildIslandContent(I, r){
     // a jetty from the pad out past the rim at pad height: nothing to climb between the pad and the open air
     const ca = Math.cos(ang), sa = Math.sin(ang); for (let s2 = 0; s2 < inset + 4; s2++) for (const w of [-1, 0, 1]){ const x = Math.round(px + ca * s2 - sa * w), z = Math.round(pz + sa * s2 + ca * w); if (A.inI(x, z)){ A.put(x, gy, z, s2 & 1 ? COBBLE : STEP); for (let k = 1; k < 5; k++) A.put(x, gy + k, z, 0); } }
     return { x: px, y: gy + 1, z: pz, ang }; };
-  for (const [a, J] of WILD_LINKS){ if (J === I){ I.pads.land = pad(a.x, a.z, 5); I.pads.land.from = a.gate ? -1 : a.k; } }
-  for (const [a, J] of WILD_LINKS){ if (a === I) I.pads.launch[J.k] = pad(J.x, J.z, 4); }
+  for (const [a, J] of WILD_LINKS){ if (J === I){ I.pads.land = pad(a.x, a.z, 5); I.pads.land.from = a.gate ? -1 : a.k; yield; } }
+  for (const [a, J] of WILD_LINKS){ if (a === I){ I.pads.launch[J.k] = pad(J.x, J.z, 4); yield; } }
   // stepping-stone causeways: every link gets a chain of floating 3x3 stones from launch pad to landing pad,
   // one sprint-jump apart (2-block gaps), climbing at most one block per stone; built when both ends exist
   const stones = (a, J) => { const key = (a.gate ? 'g' + WILD_LINKS.findIndex(l => l[1] === J) : a.k) + '>' + J.k; if (STONED.has(key)) return;
@@ -5560,22 +5600,22 @@ function buildIslandContent(I, r){
     for (const [cx, cy, cz] of list){ for (let ddz = -1; ddz <= 1; ddz++) for (let ddx = -1; ddx <= 1; ddx++){ if (own(cx + ddx, cz + ddz) && (B_SOLID[getB(cx + ddx, cy - 1, cz + ddz)] || hTop[cx + ddx + (cz + ddz) * WX] >= cy - 2)) continue; A.put(cx + ddx, cy - 1, cz + ddz, (ddx | ddz) ? STONE : MOSS); if (!(ddx | ddz)) A.put(cx, cy - 2, cz, STONE); } for (let ddz = -2; ddz <= 2; ddz++) for (let ddx = -2; ddx <= 2; ddx++) for (let k = 0; k < 3; k++){ const X = cx + ddx, Z = cz + ddz, Y = cy + k; if (getB(X, Y, Z) && (!own(X, Z) || Y > hTop[X + Z * WX])) A.put(X, Y, Z, 0); } }
     list.forEach((p, i) => { if (i % 3 === 1) A.put(p[0] + 1, p[1], p[2] + 1, LANTERN); });
     STONED.set(key, { list, S, E, X0, X1, exitY, entryY, ok: !list.length || list[list.length - 1][1] >= entryY - 1 }); };
-  for (const [a, J] of WILD_LINKS){ if (J === I && (a.gate || (a.gen === 2 && a.pads))) stones(a, I); if (a === I && J.gen === 2 && J.pads) stones(I, J); }
+  for (const [a, J] of WILD_LINKS){ if (J === I && (a.gate || (a.gen === 2 && a.pads))){ stones(a, I); yield; } if (a === I && J.gen === 2 && J.pads){ stones(I, J); yield; } }
   // modules
   const rts = [];
   const FB = ['motes', 'crumble', 'glide', 'gauntlet', 'ore', 'spire'];
-  I.mods.forEach((id0, i) => { let id = id0, M, ok = false;
+  for (let i = 0; i < I.mods.length; i++){ const id0 = I.mods[i]; let id = id0, M, ok = false;
     for (let f = -1; f < FB.length && !ok; f++){ if (f >= 0){ id = FB[f]; if (I.mods.includes(id) || rts.some(q => q.id === id)) continue; }
       M = { id, def: MOD[id], I, i, key: OUT_SEED + ':' + I.k + ':' + i, x: 0, y: 0, z: 0, done: false }; ok = MOD[id].build(M, A); }
-    if (!ok) return; I.mods[i] = id; const def = M.def; const s = A.used[A.used.length - 1]; if (!M.x && s){ M.x = s.x; M.y = s.y; M.z = s.z; } rts.push(M); });
+    if (!ok) continue; I.mods[i] = id; const s = A.used[A.used.length - 1]; if (!M.x && s){ M.x = s.x; M.y = s.y; M.z = s.z; } rts.push(M); yield; }
   // vents for the kiln theme
   if (I.hz === 'vents') for (let i = 0; i < 6; i++){ const s = A.site(1, { noFlat: true, cov: 1 }); if (s) A.put(s.x, s.y - 1, s.z, EMBER); }
   // the golden island: gilded rims
-  if (I.golden) for (let z = I.bbox[1]; z <= I.bbox[3]; z++) for (let x = I.bbox[0]; x <= I.bbox[2]; x++){ if (!A.inI(x, z)) continue; let edge = false; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!A.inI(x + dx, z + dz)) edge = true; if (edge || A.rand() < .03) A.put(x, A.top(x, z), z, ORE); }
+  if (I.golden) for (let z = I.bbox[1]; z <= I.bbox[3]; z++){ if ((z & 7) === 0) yield; for (let x = I.bbox[0]; x <= I.bbox[2]; x++){ if (!A.inI(x, z)) continue; let edge = false; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!A.inI(x + dx, z + dz)) edge = true; if (edge || A.rand() < .03) A.put(x, A.top(x, z), z, ORE); } }
   // trails from the landing pad to every launch pad, module entrance and vault
   const L = I.pads.land || { x: Math.round(I.x), y: A.top(Math.round(I.x), Math.round(I.z)) + 1, z: Math.round(I.z) };
-  for (const k in I.pads.launch){ const p = I.pads.launch[k]; A.trail(L.x, L.y, L.z, p.x, p.y, p.z); }
-  for (const M of rts) if (M.ex !== undefined){ if (M.ey < 2) M.ey = L.y; A.trail(L.x, L.y, L.z, M.ex, M.ey, M.ez); }
+  for (const k in I.pads.launch){ const p = I.pads.launch[k]; A.trail(L.x, L.y, L.z, p.x, p.y, p.z); yield; }
+  for (const M of rts) if (M.ex !== undefined){ if (M.ey < 2) M.ey = L.y; A.trail(L.x, L.y, L.z, M.ex, M.ey, M.ez); yield; }
   I.content = rts; for (const M of rts){ MODRT.push(M); if (MODDONE.has(M.key)){ M.done = true; } }
   return A.X;
 }
@@ -6352,7 +6392,6 @@ function cineReplay(){
   CINE.ending = false; CINE.blend = -1; CINE.paused = false; CINE.events = new Set(); CINE.shot = -1; CINE.prev = null; CINE.f.fade = 1; ENGINE.wake = .12;
   setState('cine'); $('#cine').classList.add('on'); SND.score('start'); goShot(0);
 }
-
 
 /* =====================================================================
    FIRST-PERSON ANIMATION: one rig, families of clips.
@@ -7445,7 +7484,7 @@ function frame(now){
   updatePop(dt);
   if (state !== 'pause'){ stepMobs(dt, tAcc); stepDrops(dt, tAcc); updateParticles(dt); stepFliers(dt, tAcc); updateFestival(dt, tAcc); }
   updateShards(tAcc); updateRings(tAcc); updateCubes(tAcc); updateEngine(tAcc, dt); updateGrappleFX(); if (state === 'play') { updateCrosshair(dt); updateGift(dt); updateVistas(dt); } updateBanners(tAcc); updateChests(dt, tAcc);
-  if (state !== 'title' && !CINE.on){ pumpWildGen(); updateWildsAmbience(dt); updateDmgNumbers(dt); }
+  if (state !== 'title' && !CINE.on){ pumpWildGen(); pumpBuilds(4); updateWildsAmbience(dt); updateDmgNumbers(dt); }
   updateSilhouettes(dt);
   if (state === 'play'){ stepRings(dt); stepRegrow(dt); }
   renderMobs(tAcc, dt); renderEnemies(tAcc, dt);
