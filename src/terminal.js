@@ -499,7 +499,7 @@ M.createTerminal = function createTerminal(opts){
   function pushRow(r){ openRow = null; rows.push(r); dirty = true; }
   function emit(o, mirrorText){            // rich rows straight to the scrollback (outside a job)
     links = []; sel = -1;
-    for (const r of o.rows){ if (r.k === 't') for (const s of r.s) if (s[2]) links.push(s[2]); pushRow(r); }
+    for (const r of o.rows){ if (r.k === 't') for (const s of r.s) if (s[2] && s[2].url) links.push(s[2]); pushRow(r); }
     trim();
     mirror(mirrorText || o.rows.map(plainOf).filter(Boolean).join('. '));
     toBottom(); dirty = true;
@@ -559,7 +559,7 @@ M.createTerminal = function createTerminal(opts){
     },
     rich(o){
       openRow = null;
-      for (const r of o.rows){ if (r.k === 't') for (const s of r.s) if (s[2]) links.push(s[2]); rows.push(r); }
+      for (const r of o.rows){ if (r.k === 't') for (const s of r.s) if (s[2] && s[2].url) links.push(s[2]); rows.push(r); }
       if (job) job.plain += o.rows.map(plainOf).filter(Boolean).join('. ') + ' ';
       dirty = true;
     },
@@ -1553,6 +1553,20 @@ M.createTerminal = function createTerminal(opts){
         return true;
       }
     }
+    /* a command chip types and runs its command; an inline link opens. A finger gets a little slack. */
+    const slack = cw * 0.6;
+    for (const h of drawnHits){
+      if (px < h.x0 - slack || px > h.x1 + slack || py < h.top - 4 || py >= h.bot + 4) continue;
+      if (h.link.cmd){
+        if (app || (job && !job.choice)) return false;
+        if (job && job.choice){ const c2 = job.choice; job.choice = null; c2.card.sel = -1; c2.card.foot = [['back', 'f']]; c2.res(null); }
+        revealAll(); const line = h.link.cmd;
+        if (job) ahead = line + '\n'; else { input = ''; cur = 0; execute(line); }
+        sfx('beep'); touched(); return true;
+      }
+      const w = openTarget(h.link.url); const o = out(); o.at(0, ['opening ', 'd'], [bare(h.link.url), 'n']); if (!w) o.at(0, ['if nothing opened, the address is above', 'f']);
+      if (!job) emit(o); touched(); return true;
+    }
     return false;
   }
   /* a key while a choice is waiting; returns true when consumed */
@@ -2012,7 +2026,8 @@ M.createTerminal = function createTerminal(opts){
         g.fillText(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
         for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : color(sp[1]));
       } else g.fillText(s, X(col), top + fs * k * 0.68);
-      if (link && !selected){ g.fillStyle = P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, 2); }
+      if (link && !selected){ g.fillStyle = link.cmd ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, 2); }
+      if (link && (link.cmd || link.url) && s.trim()) drawnHits.push({ x0: X(col), x1: X(col + s.length * k), top, bot: top + ch * k, link });
       col += s.length * k;
     }
   }
@@ -2094,7 +2109,7 @@ M.createTerminal = function createTerminal(opts){
       if (under){ g.font = font(); g.fillStyle = P.bg; g.fillText(under, cx, top + fs * 0.68); }
     }
   }
-  let drawnCards = [];
+  let drawnCards = [], drawnHits = [];   // what is on screen and can be clicked or tapped
   const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\ue000]/g;
   const SPAN_VEC = /[\u2190-\u2193\ue000]/, SPAN_VEC_G = /[\u2190-\u2193\ue000]/g;
   function vecGlyph(c, col, top, colr){
@@ -2149,7 +2164,7 @@ M.createTerminal = function createTerminal(opts){
     g.textBaseline = 'alphabetic';
     animFps = 0;
     if (booting){ drawBoot(); return; }
-    drawnCards = [];
+    drawnCards = []; drawnHits.length = 0;
     if (app){ drawGrid(); return; }
     // lay out units bottom-anchored
     const total = totalUnits();
