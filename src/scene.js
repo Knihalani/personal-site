@@ -385,7 +385,7 @@ M.createScene = function createScene(container){
   const WIN = { x: -.58, y: 1.42, hw: .4, hh: .42, depth: .14 };
   {
     const wallC = paint(512, 256, (u, v, o) => { const n = fbm(u * 18, v * 9, 5), m = fbm(u * 3 + 2, v * 1.5, 3); const k = .85 + .25 * n + .15 * m;
-      o[0] = .105 * k; o[1] = .112 * k; o[2] = .118 * k; }); // cool, slightly blue-grey plaster
+      o[0] = .15 * k; o[1] = .158 * k; o[2] = .166 * k; }); // cool, slightly blue-grey plaster (dark, but not so dark the ACES toe crushes it to pure black)
     const wallM = new THREE.MeshStandardMaterial({ map: tex(wallC), roughness: .95 });
     const s = new THREE.Shape(); s.moveTo(-3, 0); s.lineTo(3, 0); s.lineTo(3, 3); s.lineTo(-3, 3); s.lineTo(-3, 0);
     const hole = new THREE.Path(); hole.moveTo(WIN.x - WIN.hw, WIN.y - WIN.hh); hole.lineTo(WIN.x + WIN.hw, WIN.y - WIN.hh); hole.lineTo(WIN.x + WIN.hw, WIN.y + WIN.hh); hole.lineTo(WIN.x - WIN.hw, WIN.y + WIN.hh); hole.lineTo(WIN.x - WIN.hw, WIN.y - WIN.hh);
@@ -648,7 +648,7 @@ M.createScene = function createScene(container){
   lamp.shadow.bias = -.0004; lamp.shadow.normalBias = .004;
   scene.add(lamp, lamp.target);
   // bounce off the lit desk: a low warm fill that keeps the darks from going dead
-  const bounce = new THREE.PointLight(lin(0xa8927e), .2, 2.5, 2); bounce.position.set(-.2, DESK_Y + .1, .12); scene.add(bounce);
+  const bounce = new THREE.PointLight(lin(0xa8927e), .2, 2.5, 2); bounce.position.set(-.08, DESK_Y + .09, .16); scene.add(bounce);
   // the tube lights the room: a wide, shadowless green-white spot from the glass
   const glow = new THREE.SpotLight(new THREE.Color(PHOSPHOR[0] * .8, PHOSPHOR[1], PHOSPHOR[2] * .9), .5, 3, 1.25, 1, 2);
   glow.position.copy(screenCenter).addScaledVector(screenNormal, .02); glow.target.position.copy(screenCenter).addScaledVector(screenNormal, 1).add(new V3(0, -.35, 0));
