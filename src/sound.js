@@ -90,10 +90,10 @@ const KEY_CLASSES = {
 };
 /* playback for the recorded keys (keysamples.js): levels and pitch per class */
 const SAMPLED = {
-  normal: { down: 0.46, up: 0.13, rate: 1.0 },
-  soft:   { down: 0.34, up: 0.09, rate: 0.97 },
-  heavy:  { down: 0.6, up: 0.18, rate: 0.9 },
-  space:  { down: 0.6, up: 0.19, rate: 0.84 },
+  normal: { down: 0.75, up: 0.68, rate: 1.0 },
+  soft:   { down: 0.58, up: 0.52, rate: 0.98 },
+  heavy:  { down: 0.82, up: 0.75, rate: 1.0 },
+  space:  { down: 0.82, up: 0.75, rate: 1.0 },
 };
 /* plate / cap / case modes: [lo Hz, hi Hz, decay s, rel amp] */
 const PLATE_MODES = [[950, 1300, 0.032, 0.7], [1500, 1950, 0.024, 1.0], [2150, 2700, 0.018, 0.9],
@@ -381,23 +381,17 @@ function Engine(ctx){
     k.d.push(mk(synthKeyDown(cls, sr, seed))); k.u.push(mk(synthKeyUp(cls, sr, seed + 104729))); };
   /* 3 variants per class right away (first keystroke must sound), the rest a few at a time in later tasks */
   const S = (window.MAC || {}).KEY_SAMPLES;
-  if (S && S.hits && S.hits.length){
-    /* real recordings: decode the PCM once; heavy keys and space lean on the darkest hits */
-    const pcm = S.hits.map(b64 => { const bin = atob(b64), n = bin.length >> 1, f = new Float32Array(n);
+  if (S && S.normal){
+    /* real recordings (keysamples.js): decode the PCM once, resample if the context runs at another rate */
+    const dec = b64 => { const bin = atob(b64), n = bin.length >> 1, f = new Float32Array(n);
       for (let i = 0; i < n; i++){ const v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); f[i] = (v > 32767 ? v - 65536 : v) / 32768; }
-      return f; });
-    const mkRate = (f, from) => { if (from === sr) return mk(f);
-      const n = Math.round(f.length * sr / from), o = new Float32Array(n), r = from / sr;
-      for (let i = 0; i < n; i++){ const x = i * r, j = x | 0, t = x - j; o[i] = (f[j] || 0) * (1 - t) + (f[j + 1] || 0) * t; } return mk(o); };
-    /* release: the first ~28 ms of a hit, faded fast, played quieter and a touch higher */
-    const upOf = f => { const n = Math.min(f.length, Math.round(0.028 * S.sr)), o = f.slice(0, n);
-      for (let i = 0; i < n; i++) o[i] *= Math.pow(1 - i / n, 2); return o; };
-    const downs = pcm.map(f => mkRate(f, S.sr)), ups = pcm.map(f => mkRate(upOf(f), S.sr));
-    const dark = Math.max(3, Math.ceil(pcm.length * 0.35));
-    for (const cls in POOL){
-      const lo = cls === 'heavy' || cls === 'space';
-      E.keys[cls] = { d: lo ? downs.slice(0, dark) : downs, u: lo ? ups.slice(0, dark) : ups, sampled: true };
-    }
+      if (S.sr === sr) return mk(f);
+      const m = Math.round(n * sr / S.sr), o = new Float32Array(m), r = S.sr / sr;
+      for (let i = 0; i < m; i++){ const x = i * r, j = x | 0, t = x - j; o[i] = (f[j] || 0) * (1 - t) + (f[j + 1] || 0) * t; }
+      return mk(o); };
+    const set = s => s && { d: s.d.map(dec), u: s.u.map(dec) };
+    const normal = set(S.normal), big = set(S.enter) || normal;
+    E.keys = { normal, soft: normal, heavy: big, space: set(S.space) || normal, backspace: set(S.backspace) || big };
     E.sampled = true;
     E.fillKeys = done => { if (done) done(); };
   } else
@@ -436,7 +430,7 @@ Engine.prototype.play = function (buf, bus, when, gain, rate, pan, lpF){
   return src;
 };
 Engine.prototype.key = function (code, down, when){
-  const k = infoFor(code), pool = this.keys[k.cls], list = down ? pool.d : pool.u, c = KEY_CLASSES[k.cls];
+  const k = infoFor(code), pool = (this.sampled && code === 'Backspace' && this.keys.backspace) || this.keys[k.cls], list = down ? pool.d : pool.u, c = KEY_CLASSES[k.cls];
   /* each key leans on 3 neighbouring variants of its pool, plus an occasional wildcard; never the same twice in a row */
   let idx;
   for (let tries = 0; tries < 4; tries++){
@@ -446,7 +440,7 @@ Engine.prototype.key = function (code, down, when){
   if (down) k.last = idx; else k.lastU = idx;
   const sm = this.sampled ? SAMPLED[k.cls] : null;
   const level = (sm ? (down ? sm.down : sm.up) : (down ? c.down : c.up)) * k.gain * (0.88 + Math.random() * 0.24);
-  const rate = k.rate * (sm ? sm.rate * (down ? 1 : 1.12) : 1) * (0.985 + Math.random() * 0.03);
+  const rate = k.rate * (sm ? sm.rate : 1) * (0.985 + Math.random() * 0.03);
   this.play(list[idx], this.keyBus, when, level, rate, k.pan + (Math.random() - 0.5) * 0.04, k.bright * (0.92 + Math.random() * 0.16));
 };
 Engine.prototype.event = function (name, when){

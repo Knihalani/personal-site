@@ -904,7 +904,7 @@ M.createScene = function createScene(container){
       lum += (lumTarget - lum) * (1 - Math.exp(-dt * 4));
       lampLevel(dt); applyLamp(dt);
       glow.intensity = (.2 + .6 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.6 * lampS.adapt);
-      spill.intensity = (.012 + .05 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 3 * lampS.adapt);
+      spill.intensity = (.0025 + .01 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.5 * lampS.adapt);
       dustU.uTime.value = REDUCED ? 40 : t;
       // keep it smooth on modest GPUs: step the pixel ratio down if frames run long
       perfT += dt; frames++; if (dt > .026) slowAcc++;

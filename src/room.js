@@ -100,7 +100,7 @@ M.dressRoom = function (api){
       c.fillStyle = '#23324f'; c.font = '500 34px Caveat, "Segoe Print", cursive';
       txt.split('\n').forEach((l, i) => c.fillText(l, 16, 58 + i * 36)); });
     const g = new THREE.PlaneGeometry(w, h, 6, 4); const p = g.attributes.position; // a slight curl at the free corner
-    for (let i = 0; i < p.count; i++){ const u = p.getX(i) / w + .5, v = p.getY(i) / h + .5; p.setZ(i, .004 * Math.pow(u * (1 - v), 2.2) + .0015); } g.computeVertexNormals();
+    for (let i = 0; i < p.count; i++){ const u = p.getX(i) / w + .5, v = p.getY(i) / h + .5; p.setZ(i, .004 * Math.pow(Math.max(0, u * (1 - v)), 2.2) + .0015); } g.computeVertexNormals();
     const m = mesh(g, new THREE.MeshStandardMaterial({ map: t, roughness: .9, side: THREE.DoubleSide }), board, x, y, .007); m.rotation.z = rot;
     const pinM = mat(pin, { roughness: .35 });
     const pn = new THREE.Group(); pn.position.set(x + Math.sin(-rot) * h * .38, y + Math.cos(rot) * h * .38, .009); board.add(pn);
