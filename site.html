@@ -47,8 +47,11 @@ a{ color: inherit }
   transition: opacity .7s ease, color .2s ease, letter-spacing .3s ease; will-change: transform }
 .region.on{ opacity: 1 }
 .region .k{ display: block; font-size: 10px; letter-spacing: .14em; opacity: .55; margin-top: .45em; font-weight: 400; text-align: center }
-.region.dark{ background: var(--ink); color: var(--paper) }
-.region.light{ background: var(--paper); color: var(--ink) }
+.region{ background: none }
+.region.dark{ color: var(--paper); text-shadow: 0 0 .18em var(--ink), 0 0 .4em var(--ink), 0 0 .8em var(--ink) }
+.region.light{ color: var(--ink); text-shadow: 0 0 .18em var(--paper), 0 0 .4em var(--paper), 0 0 .8em var(--paper) }
+@media (hover: none){ .region .k{ display: none } }
+#pBody:focus{ outline: none }
 .region.big{ font-weight: 700; letter-spacing: -.02em }
 .region.small{ font-weight: 500; letter-spacing: .02em; padding: .2em .4em }
 .region:hover, .region.hot{ color: var(--vermilion) }
@@ -202,9 +205,9 @@ void main(){
     float r=uYinOn>0.?region(css):0.;
     bool dark=L<.45;
     bg=col;fg=dark?col*1.25+vec3(.075,.07,.065):col*.8;
-    if(r>0.&&r==uHover){float w=.5+.5*sin(uT*5.-cell.x*.45+cell.y*.8);idx=gm>.34?idx:floor(clamp(w*.999,0.,.999)*6.)+3.;
-      fg=mix(fg,vec3(1.,.294,.122),.85*uYinOn);}
-    else if(r>0.&&r==uSel){fg=mix(fg,vec3(1.,.294,.122),.35*uYinOn);}
+    if(r>0.&&r==uHover){float w=.5+.5*sin(uT*4.-cell.x*.35+cell.y*.6);if(gm<=.34&&w>.72)idx=min(idx+1.,9.);
+      fg=mix(fg,vec3(1.,.294,.122),(.38+.22*w)*uYinOn);}
+    else if(r>0.&&r==uSel){fg=mix(fg,vec3(1.,.294,.122),.22*uYinOn);}
   }else{
     float h=texture2D(uWater,(cell+.5)/uGrid).r-.5;float v=abs(h)*2.;
     float caus=sin(cell.x*.23+uT*.5+sin(cell.y*.17-uT*.3)*2.)*sin(cell.y*.31-uT*.42+cell.x*.05);
@@ -265,7 +268,7 @@ const Y = { x: 0, y: 0, R: 0, tx: 0, ty: 0, tR: 0 };
 function yinTarget(){
   const phone = VW <= 720, open = !!openId;
   if (open && phone){ Y.tx = VW / 2; Y.ty = VH * .2 + 8; Y.tR = Math.min(VW * .4, VH * .17); }
-  else if (open){ const pw = Math.min(480, VW * .44); Y.tx = (VW - pw) / 2; Y.ty = VH / 2; Y.tR = Math.min((VW - pw) * .38, VH * .36); }
+  else if (open){ const pw = Math.min(480, VW * .44); Y.tx = (VW - pw) / 2; Y.ty = VH / 2; Y.tR = Math.min((VW - pw) * .33, VH * .34); }
   else { Y.tx = VW / 2; Y.ty = VH / 2 + (phone ? 0 : 6); Y.tR = Math.min(VW * (phone ? .42 : .34), VH * .36); }
 }
 
@@ -513,7 +516,7 @@ function regionAt(px, py){
 }
 function placeRegions(){
   const R = Y.R, small = clamp(R * .062, 11, 15);
-  const pos = { j: [-.5 * R, .1 * R, R * .44], eden: [.5 * R, -.1 * R, R * .2], about: [0, -R / 2, small], writing: [0, R / 2, small] };
+  const pos = { j: [-.52 * R, .04 * R, R * .36], eden: [.53 * R, -.04 * R, R * .17], about: [0, -R / 2, small], writing: [0, R / 2, small] };
   for (const id in pos){ const [x, y, fs] = pos[id], b = BTN[id];
     b.style.fontSize = fs + 'px'; b.style.transform = `translate(${Math.round(Y.x + x)}px, ${Math.round(Y.y + y)}px) translate(-50%, -50%)`; }
 }
