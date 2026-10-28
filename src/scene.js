@@ -558,7 +558,7 @@ M.createScene = function createScene(container){
   lamp.shadow.bias = -.0004; lamp.shadow.normalBias = .004;
   scene.add(lamp, lamp.target);
   // bounce off the lit desk: a low warm fill that keeps the darks from going dead
-  const bounce = new THREE.PointLight(lin(0x9a7656), .035, 2.5, 2); bounce.position.set(-.15, DESK_Y + .12, .12); scene.add(bounce);
+  const bounce = new THREE.PointLight(lin(0x9a7656), .2, 2.5, 2); bounce.position.set(-.08, DESK_Y + .09, .16); scene.add(bounce);
   // the tube lights the room: a wide, shadowless green-white spot from the glass
   const glow = new THREE.SpotLight(new THREE.Color(PHOSPHOR[0] * .8, PHOSPHOR[1], PHOSPHOR[2] * .9), .5, 3, 1.25, 1, 2);
   glow.position.copy(screenCenter).addScaledVector(screenNormal, .02); glow.target.position.copy(screenCenter).addScaledVector(screenNormal, 1).add(new V3(0, -.35, 0));
@@ -696,6 +696,7 @@ M.createScene = function createScene(container){
   const aimRest = screenCenter.clone().add(new V3(0, -.003, 0));
   const restDir = new V3().subVectors(aimRest, eyeRest).normalize();
   const YAW0 = Math.atan2(-restDir.x, -restDir.z), PITCH0 = Math.asin(restDir.y);
+  const KB_YAW = Math.atan2(-(keyboardCenter.x - eyeRest.x), -(keyboardCenter.z - eyeRest.z)) - YAW0;
   const qRest = new THREE.Quaternion().setFromEuler(new THREE.Euler(PITCH0, YAW0, 0, 'YXZ'));
   const pivot = eyeRest.clone().add(new V3(0, -.11, 0)).addScaledVector(flatN, .075); // top of the neck
   const eyeArm = new V3().subVectors(eyeRest, pivot);
@@ -720,7 +721,9 @@ M.createScene = function createScene(container){
   function applyCamera(t){
     const br = REDUCED ? 0 : Math.sin(breathT * Math.PI * 2 * .21), br2 = REDUCED ? 0 : Math.sin(breathT * Math.PI * 2 * .21 - 1.1);
     const drift = REDUCED ? 0 : (Math.sin(t * .23) * .6 + Math.sin(t * .071 + 2) * .4);
-    const yaw = YAW0 + yawS.x + .0016 * drift, pitch = PITCH0 + pitchS.x + .0022 * br2 - .02 * leanS.x;
+    // as the head drops, it also swings toward the middle of the keyboard (the tube sits a touch right of it)
+    const downT = clamp(-pitchS.x / LOOK.down, 0, 1);
+    const yaw = YAW0 + yawS.x + KB_YAW * sstep(.1, .9, downT) + .0016 * drift, pitch = PITCH0 + pitchS.x + .0022 * br2 - .02 * leanS.x;
     eLook.set(pitch, yaw, .0012 * drift); qLook.setFromEuler(eLook);
     qDelta.copy(qRest).invert().premultiply(qLook);
     eyeNow.copy(pivot).add(eyeArm.clone().applyQuaternion(qDelta));
@@ -728,7 +731,7 @@ M.createScene = function createScene(container){
     fwdNow.set(0, 0, -1).applyQuaternion(qLook);
     eyeNow.addScaledVector(new V3(fwdNow.x, 0, fwdNow.z).normalize(), .012 * leanS.x);
     camera.position.copy(eyeNow); camera.quaternion.copy(qLook);
-    const down = sstep(0, 1, clamp(-pitchS.x / LOOK.down, 0, 1));
+    const down = sstep(0, 1, downT);
     const fov = lerp(fovRest, fovDown, down);
     if (Math.abs(camera.fov - fov) > 1e-4){ camera.fov = fov; camera.updateProjectionMatrix(); }
   }
@@ -770,7 +773,7 @@ M.createScene = function createScene(container){
       hasKey: code => keys.has(code) || keys.has(ALIAS[code]),
       keyWorldPos(code){ const k = keys.get(code) || keys.get(ALIAS[code]); return k ? k.world.clone() : null; },
       keyRow(code){ const k = keys.get(code) || keys.get(ALIAS[code]); return k ? k.row : -1; },
-      press(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = -TRAVEL; activeKeys.add(k); } },
+      press(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = -TRAVEL; activeKeys.add(k); api.nudge(k.row === 4 ? .45 : .3); } },
       release(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = 0; activeKeys.add(k); } },
     },
     rig: { seat: SEAT.clone(), keyboardCenter, keyboardNormal, screenCenter: screenCenter.clone(), screenNormal: screenNormal.clone(), lampPosition: bulbPos.clone(), keySpacing: U,
