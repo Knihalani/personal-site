@@ -173,39 +173,26 @@ function palmGeo(ts, KX){
 
 /* ---------------- materials: skin with wrap-diffuse subsurface + rim; cloth with a soft fresnel sheen ---------------- */
 function makeMat(kind, U){
-  const skin = kind === 'skin', nail = kind === 'nail';
-  const m = new THREE.MeshStandardMaterial(skin ? { color: lin(0xc8927a), roughness: .52, metalness: 0, vertexColors: true }
-    : nail ? { color: lin(0xf2d2c8), roughness: .22, metalness: 0 }
-    : { color: lin(kind === 'cuff' ? 0x383a41 : 0x2e3036), roughness: .93, metalness: 0, vertexColors: kind === 'cuff' });
+  // The typist is a silhouette: matte near-black (#050505), no skin or cloth shading inside the shape, only a
+  // faint cool rim where the edge turns toward the CRT or the lamp, so the outline reads against the dark keys.
+  const m = new THREE.MeshStandardMaterial({ color: lin(0x050505), roughness: 1, metalness: 0 });
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = 'varying vec3 vTP;\nvarying vec3 vTN;\n' + sh.vertexShader.replace('#include <fog_vertex>',
       '#include <fog_vertex>\n vTP = (modelMatrix * vec4(transformed, 1.0)).xyz;\n vTN = normalize(mat3(modelMatrix) * objectNormal);');
-    sh.fragmentShader = 'uniform vec3 uScrP;\nuniform vec3 uLampP;\nuniform vec3 uCrtC;\nuniform vec3 uLampC;\nuniform vec3 uAmbC;\nvarying vec3 vTP;\nvarying vec3 vTN;\n' +
+    sh.fragmentShader = 'uniform vec3 uScrP;\nuniform vec3 uLampP;\nvarying vec3 vTP;\nvarying vec3 vTN;\n' +
       sh.fragmentShader.replace('#include <output_fragment>', `
   {
     vec3 sN = normalize(vTN); sN = gl_FrontFacing ? sN : -sN;
     vec3 sV = normalize(cameraPosition - vTP);
-    vec3 lL = normalize(uLampP - vTP), lC = normalize(uScrP - vTP);
-    float nl = dot(sN, lL), nc = dot(sN, lC);
-    float fr = pow(1.0 - clamp(dot(sN, sV), 0.0, 1.0), 3.0);
-    ${skin ? `
-    // wrap diffuse: light bleeds past the terminator, reddened as it travels under the skin
-    vec3 sss = diffuseColor.rgb * vec3(1.0, 0.45, 0.33);
-    float wl = max(0.0, (nl + 0.6) / 1.6) - max(0.0, nl), wc = max(0.0, (nc + 0.6) / 1.6) - max(0.0, nc);
-    outgoingLight += sss * (uLampC * wl + uCrtC * wc) * 1.3;
-    outgoingLight += sss * uLampC * pow(clamp(dot(sV, -lL), 0.0, 1.0), 6.0) * 0.35;      // thin edges glow when backlit
-    outgoingLight += fr * (uLampC * clamp(nl * 0.5 + 0.5, 0.0, 1.0) * 0.45 + uCrtC * clamp(nc * 0.5 + 0.5, 0.0, 1.0) * 0.8 + uAmbC) * vec3(1.0, 0.82, 0.76);`
-    : nail ? `
-    outgoingLight += fr * (uCrtC * clamp(nc * 0.5 + 0.5, 0.0, 1.0) + uLampC * 0.3) * 0.6;`
-    : `
-    outgoingLight += fr * 0.8 * (uCrtC * clamp(nc * 0.6 + 0.4, 0.0, 1.0) + uLampC * pow(clamp(nl * 0.7 + 0.3, 0.0, 1.0), 2.0) * 0.6 + uAmbC);`}
+    float nc = dot(sN, normalize(uScrP - vTP)), nl = dot(sN, normalize(uLampP - vTP));
+    float fr = pow(1.0 - clamp(dot(sN, sV), 0.0, 1.0), 4.0);
+    float lit = clamp(0.55 * max(nc, 0.0) + 0.35 * max(nl, 0.0) + 0.15, 0.0, 1.0);
+    outgoingLight = vec3(0.0015) + fr * lit * vec3(0.05, 0.075, 0.1);
   }
 #include <output_fragment>`);
   };
-  if (skin){ const prev = m.onBeforeCompile; m.onBeforeCompile = sh => { prev(sh);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = clamp(roughnessFactor * (0.86 + 0.6 * (1.0 - vColor.g)), 0.3, 0.8);'); }; }
-  m.customProgramCacheKey = () => 'mac-typist-' + kind;
+  m.customProgramCacheKey = () => 'mac-typist-silhouette';
   return m;
 }
 

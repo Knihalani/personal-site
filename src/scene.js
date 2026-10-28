@@ -775,7 +775,8 @@ M.createScene = function createScene(container){
     const drift = REDUCED ? 0 : (Math.sin(t * .23) * .6 + Math.sin(t * .071 + 2) * .4);
     // as the head drops, it also swings toward the middle of the keyboard (the tube sits a touch right of it)
     const downT = clamp(-pitchS.x / LOOK.down, 0, 1);
-    const yaw = YAW0 + yawS.x + KB_YAW * sstep(.1, .9, downT) + .0016 * drift, pitch = PITCH0 + pitchS.x + .0022 * br2 - .02 * leanS.x;
+    const yaw = YAW0 + yawS.x + KB_YAW * sstep(.1, .9, downT) + .0016 * drift, pitch = PITCH0 + pitchS.x + .0022 * br2 - .02 * leanS.x
+      + .1 * sstep(.2, 1, downT);   // sat back, the gaze settles between the wrists and the top row
     eLook.set(pitch, yaw, .0012 * drift); qLook.setFromEuler(eLook);
     qDelta.copy(qRest).invert().premultiply(qLook);
     eyeNow.copy(pivot).add(eyeArm.clone().applyQuaternion(qDelta));
