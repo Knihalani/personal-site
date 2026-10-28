@@ -72,70 +72,87 @@ function finish(out, sr, peak, fadeMs){
 }
 function onePoleLP(out, sr, f){ const a = Math.exp(-TAU * f / sr); let y = 0; for (let i = 0; i < out.length; i++){ y = out[i] + a * (y - out[i]); out[i] = y; } return out; }
 
-/* ---------------- keyswitch synthesis ----------------
-   Tuned for the round, creamy "thock" of a premium board in a solid, slightly hollow case:
-   down = a soft, short tactile tick, then a warm bottom-out whose energy lives at 180-450 Hz and dies in
-   ~60-90 ms, coloured by one or two woody case resonances; up = a quieter, drier, higher clack with a
-   faint spring/plastic overtone. High frequencies are kept gentle so fast typing is a pleasant patter. */
+/* ---------------- keyswitch synthesis (physical-ish modal model) ----------------
+   Real switch sounds are noise-excited and inharmonic, with no clear pitch: most energy sits at 1-6 kHz,
+   plus a brief low knock from the case. Each stroke here is a few very short noise impulses, each driving a
+   bank of damped two-pole resonant modes (the plate, keycap and case ringing) at randomised inharmonic
+   frequencies. No sine bodies anywhere: every component is noise through resonators or filters.
+   Layers: stem bottom-out (+ a lighter tactile pre-hit), plate/case ring, a short noise case knock;
+   on release, the higher, drier top-out clack and an occasional faint spring ping; space/enter/backspace
+   add a stabiliser rattle (noise micro-impacts through their own small metallic bank). */
 const KEY_CLASSES = {
-  // body: fundamental Hz range; tau: body decay (s); tick: tactile tick amount; case: [Hz, Hz] woody peaks;
-  // stab: stabiliser tick; len: buffer length (s); down/up: playback levels
-  normal: { body: [215, 290], tau: 0.026, tick: 1.0, case: [[620, 820], [1150, 1450]], stab: 0, len: 0.16, down: 0.40, up: 0.15 },
-  soft:   { body: [200, 260], tau: 0.024, tick: 0.55, case: [[580, 760], [1100, 1350]], stab: 0, len: 0.15, down: 0.31, up: 0.11 },
-  heavy:  { body: [185, 235], tau: 0.031, tick: 0.85, case: [[520, 700], [1000, 1250]], stab: 1, len: 0.19, down: 0.52, up: 0.17 },
-  space:  { body: [140, 168], tau: 0.036, tick: 0.6, case: [[400, 520], [850, 1050]], stab: 1, len: 0.24, down: 0.52, up: 0.18 },
+  // fs: mode-frequency scale; ds: decay scale; knock: [Hz lo, Hz hi, amount]; tact: tactile pre-hit amount;
+  // stab: stabiliser rattle hits; len: buffer length (s); down/up: playback levels
+  normal: { fs: 1.0,  ds: 1.0,  knock: [190, 280, 0.5], tact: 0.35, stab: 0, len: 0.10, down: 0.42, up: 0.26 },
+  soft:   { fs: 0.94, ds: 0.9,  knock: [180, 250, 0.55], tact: 0.2,  stab: 0, len: 0.10, down: 0.32, up: 0.18 },
+  heavy:  { fs: 0.86, ds: 1.15, knock: [160, 230, 0.7], tact: 0.3,  stab: 3, len: 0.14, down: 0.62, up: 0.30 },
+  space:  { fs: 0.72, ds: 1.3,  knock: [140, 200, 0.85], tact: 0.25, stab: 5, len: 0.18, down: 0.52, up: 0.32 },
 };
+/* plate / cap / case modes: [lo Hz, hi Hz, decay s, rel amp] */
+const PLATE_MODES = [[950, 1300, 0.032, 0.7], [1500, 1950, 0.024, 1.0], [2150, 2700, 0.018, 0.9],
+  [2900, 3500, 0.014, 0.75], [3700, 4400, 0.011, 0.55], [4700, 5600, 0.008, 0.4], [6000, 7200, 0.006, 0.18]];
 
-/* Noise-excited resonator: a short noise puff through a high-Q band-pass, so the ring decays naturally
-   (tau ~ Q / (pi f)) and every hit has a slightly different grain. */
-function resonate(out, sr, r, t0, f, decay, amp, exc){
-  const Q = Math.max(1, Math.PI * f * decay);
-  burst(out, sr, r, t0, exc || 0.0008, 'bp', f, Q, amp * Math.sqrt(Q) * 0.6, decay * 7);
+/* Short noise impulse (exponential, ~exc seconds) as an excitation array. */
+function excite(n, sr, r, exc){
+  const e = new Float32Array(n), m = Math.min(n, Math.round(exc * 8 * sr)), att = Math.max(2, Math.round(0.00008 * sr));
+  for (let i = 0; i < m; i++) e[i] = (r() * 2 - 1) * Math.exp(-i / sr / exc) * (i < att ? i / att : 1);
+  return e;
+}
+/* Drive a bank of two-pole resonators (f, decay, amp) with excitation x, adding into out at t0.
+   Each mode is normalised to its own peak so amps are meaningful. */
+function modal(out, sr, t0, x, modes, gain){
+  const i0 = Math.round(t0 * sr), n = out.length - i0; if (n <= 0) return;
+  const tmp = new Float32Array(n);
+  for (const [f, decay, amp] of modes){
+    if (f >= sr * 0.45) continue;
+    const R = Math.exp(-1 / (decay * sr)), c = 2 * R * Math.cos(TAU * f / sr), R2 = R * R;
+    let y1 = 0, y2 = 0, pk = 0;
+    for (let i = 0; i < n; i++){ const y = (i < x.length ? x[i] : 0) + c * y1 - R2 * y2; y2 = y1; y1 = y; tmp[i] = y; const a = y < 0 ? -y : y; if (a > pk) pk = a; }
+    if (pk > 0){ const g = gain * amp / pk; for (let i = 0; i < n; i++) out[i0 + i] += tmp[i] * g; }
+  }
+}
+function plateModes(r, c, fMul, dMul){
+  return PLATE_MODES.map(([lo, hi, d, a]) => [(lo + (hi - lo) * r()) * c.fs * fMul,
+    d * c.ds * dMul * (0.7 + r() * 0.6), a * (0.55 + r() * 0.9)]);
 }
 
 function synthKeyDown(cls, sr, seed){
-  const r = rng(seed), c = KEY_CLASSES[cls], L = (a) => a[0] + (a[1] - a[0]) * r();
-  const out = new Float32Array(Math.round(c.len * sr));
-  const body = L(c.body), tau = c.tau * (0.9 + r() * 0.2);
-  const tb = 0.0035 + r() * 0.004;                      // tactile bump -> bottom-out gap
-  /* 1. soft tactile tick: short, low-ish, never piercing */
-  burst(out, sr, r, 0, 0.00028 + r() * 0.00012, 'bp', 2200 + r() * 1500, 1.1, 0.16 * c.tick);
-  /* 2. bottom-out impact: a dark, rounded contact rather than a bright clack */
-  burst(out, sr, r, tb, 0.0012 + r() * 0.0005, 'lp', 1300 + r() * 400, 0.7, 0.38);
-  burst(out, sr, r, tb, 0.0006, 'bp', 1900 + r() * 500, 1.2, 0.14);
-  /* 3. the thock: warm body (fundamental + a fifth-ish partial), slightly settling in pitch */
-  ring(out, sr, tb, body, tau, 0.55, 0.05);
-  ring(out, sr, tb + 0.0002, body * (1.48 + r() * 0.12), tau * 0.75, 0.32, 0.03);
-  resonate(out, sr, r, tb, body * (1.02 + r() * 0.04), tau * 0.9, 0.22);
-  ring(out, sr, tb, body * 0.52, tau * 1.25, cls === 'space' ? 0.22 : 0.09);   // weight under the body
-  /* 4. hollow, woody case colour */
-  resonate(out, sr, r, tb, L(c.case[0]), 0.014 + r() * 0.004, 0.26);
-  resonate(out, sr, r, tb + 0.0004, L(c.case[1]), 0.007, 0.13);
-  /* 5. stabiliser: one soft, damped tick a moment after (no rattle) */
+  const r = rng(seed), c = KEY_CLASSES[cls], out = new Float32Array(Math.round(c.len * sr));
+  const modes = plateModes(r, c, 1, 1), n = out.length;
+  const tb = 0.003 + r() * 0.004;                       // tactile bump -> stem bottoms out
+  /* tactile pre-hit: the same structure struck lightly */
+  modal(out, sr, 0, excite(n, sr, r, 0.00015), modes.slice(1, 5), 0.25 * c.tact);
+  /* stem bottom-out: plate, cap and case ring */
+  modal(out, sr, tb, excite(n, sr, r, 0.00025 + r() * 0.0002), modes, 0.55);
+  /* broadband click of the impact itself */
+  burst(out, sr, r, tb, 0.00018, 'hp', 1800, 0.7, 0.45);
+  /* low case knock: noise-excited, gone within ~15 ms */
+  burst(out, sr, r, tb, 0.0035 + r() * 0.002, 'bp', c.knock[0] + (c.knock[1] - c.knock[0]) * r(), 1.6, c.knock[2], 0.018);
+  /* stabiliser rattle: noise micro-impacts through a small metallic bank */
   if (c.stab){
-    const ts = tb + 0.009 + r() * 0.006;
-    burst(out, sr, r, ts, 0.0003, 'bp', 2000 + r() * 600, 1.4, 0.05);
-    ring(out, sr, ts, body * 2.1, 0.006, 0.05);
+    const sm = [[2300 + r() * 500, 0.006, 1], [3300 + r() * 600, 0.005, 0.8], [4600 + r() * 700, 0.004, 0.6], [1500 + r() * 300, 0.007, 0.5]];
+    let t = tb + 0.0015;
+    for (let i = 0; i < c.stab; i++){
+      t += 0.002 + r() * 0.005;
+      modal(out, sr, t, excite(Math.round(0.03 * sr), sr, r, 0.0001), sm, 0.2 * Math.pow(0.7, i) * (0.6 + r() * 0.8));
+    }
   }
-  onePoleLP(out, sr, 5200);
-  return finish(out, sr, 1, 10);
+  onePoleLP(out, sr, 9500);
+  return finish(out, sr, 1, 8);
 }
 function synthKeyUp(cls, sr, seed){
-  const r = rng(seed ^ 0x9e3779b9), c = KEY_CLASSES[cls], L = (a) => a[0] + (a[1] - a[0]) * r();
-  const out = new Float32Array(Math.round(0.09 * sr));
-  const body = L(c.body);
-  const tr = 0.002 + r() * 0.002;                       // slider meets the top of its housing
-  /* crisp, dry clack: higher than the down-stroke, short */
-  burst(out, sr, r, 0, 0.00022, 'bp', 2600 + r() * 600, 1.2, 0.08);
-  burst(out, sr, r, tr, 0.0006 + r() * 0.0002, 'bp', 1700 + r() * 600, 1.4, 0.5);
-  ring(out, sr, tr, body * (2.6 + r() * 0.4), 0.0065, 0.3);
-  ring(out, sr, tr, body * 1.5, 0.010, 0.14);
-  resonate(out, sr, r, tr, L(c.case[1]) * 1.1, 0.005, 0.08);
-  /* a faint spring / plastic overtone */
-  ring(out, sr, tr + 0.0005, 3300 + r() * 900, 0.004, 0.035);
-  if (cls === 'space') ring(out, sr, tr, body, 0.018, 0.18);   // even the space return stays round
-  onePoleLP(out, sr, 6500);
-  return finish(out, sr, 1, 6);
+  const r = rng(seed ^ 0x9e3779b9), c = KEY_CLASSES[cls], out = new Float32Array(Math.round(0.07 * sr)), n = out.length;
+  /* top-out clack: higher, drier (shorter decays), fewer low modes */
+  const modes = plateModes(r, c, 1.18 + r() * 0.1, 0.55).slice(1);
+  const tr = 0.0015 + r() * 0.002;
+  modal(out, sr, tr, excite(n, sr, r, 0.00015), modes, 0.5);
+  burst(out, sr, r, tr, 0.00012, 'hp', 2500, 0.7, 0.35);
+  burst(out, sr, r, tr, 0.002, 'bp', c.knock[1] * 1.3, 1.6, c.knock[2] * 0.35, 0.01);
+  /* occasional faint spring ping */
+  if (r() < 0.4) modal(out, sr, tr + 0.001, excite(Math.round(0.01 * sr), sr, r, 0.0001), [[4800 + r() * 2200, 0.03, 1]], 0.06);
+  if (c.stab) modal(out, sr, tr + 0.004 + r() * 0.004, excite(Math.round(0.02 * sr), sr, r, 0.0001), [[2600 + r() * 600, 0.005, 1], [3800 + r() * 600, 0.004, 0.7]], 0.15);
+  onePoleLP(out, sr, 10000);
+  return finish(out, sr, 1, 5);
 }
 
 /* ---------------- event synthesis ---------------- */
@@ -312,7 +329,7 @@ function infoFor(code){
     cls: keyClass(code),
     rate: 0.955 + r() * 0.09,                 // per-key pitch
     gain: 0.86 + r() * 0.22,                  // per-key level
-    bright: 3600 + r() * 2600,                // per-key cap/filter character (gentle highs)
+    bright: 7000 + r() * 4000,                // per-key cap/filter character
     pan: (x - 0.5) * 0.5,
     pool: Math.floor(r() * 1000),             // which slice of the variant pool this key leans on
     last: -1,

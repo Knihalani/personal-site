@@ -591,7 +591,7 @@ M.createTypist = function createTypist(api){
       const tgt = v2.set(0, 0, 0); let wsum = 0, lead = null;
       for (const F of H.fingers){
         if (F.mode !== 'strike' && F.mode !== 'hold') continue;
-        const wgt = F.mode === 'strike' ? (F.f === 0 ? .35 : 1) : MOD.test(F.code || '') ? .15 : .5;
+        const wgt = F.mode === 'strike' ? (F.f === 0 ? .35 : 1) * (.35 + 3 * smooth(.15, .85, F.t / F.Td)) /* the finger about to land owns the wrist */ : MOD.test(F.code || '') ? .15 : .5;
         tgt.addScaledVector(F.reach, wgt); wsum += wgt;
         if (F.mode === 'strike' && F.t / F.Td > .6 && (!lead || F.t / F.Td > lead.t / lead.Td)) lead = F;   // the finger about to land
       }
@@ -672,7 +672,7 @@ M.createTypist = function createTypist(api){
           }
           if (F === lead){           // what the finger cannot reach, the wrist makes up next frame
             const err = v1.copy(F.P).sub(F.tip);
-            if (err.length() > 2e-4) H.nudge.addScaledVector(err, .5);
+            if (err.length() > 2e-4){ err.multiplyScalar(.5); if (err.length() > .0006) err.setLength(.0006); H.nudge.add(err); }   // gently: never a visible kick
             if (H.nudge.length() > .016) H.nudge.setLength(.016);
           }
         } else if (F.mode === 'hold'){
