@@ -59,7 +59,7 @@ kbd.addEventListener('keyup', e => { onUp(e); e.stopPropagation(); });
 addEventListener('wheel', e => { if (reading()) return; if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
 addEventListener('keydown', e => { if (reading()) return; if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
 stage.addEventListener('pointerdown', () => unlock());
-addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && !REDUCED) look(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1); });
+addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && !REDUCED && !reading()) look(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1); });
 D.documentElement.addEventListener('mouseleave', () => look(0, 0));
 
 let typed = false;

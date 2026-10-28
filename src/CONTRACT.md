@@ -120,3 +120,13 @@ MAC.TERM.apps[name] = { desc, usage, start(api, argv) -> { key(e) -> bool, tick(
 // fs = { resolve(path, cwd) -> abs, exists(p), isDir(p), read(p) -> string|null, write(p, text), append(p, text),
 //        list(p) -> [{ name, dir, size, mtime }], mkdir(p), rm(p, recursive), mv(a, b), cp(a, b), stat(p) }
 ```
+
+## reader.js (v9)
+```js
+MAC.reader = { open(slugOrId) -> bool, close(), isOpen, current /* slug */, posts(), find(q), slugOf(p), sanitize(html) }
+```
+A DOM sheet over the scene (full screen on phones) for `MAC.CONTENT.writing.posts`
+(`{ id, slug, title, subtitle, date, tags, status, summary, html, wordCount, url? }`; published only, newest first;
+`url` without `html` opens the link). Deep link `#post/<slug>` (main.js `fromHash`). While open it takes every keydown
+(capture phase) so nothing reaches the terminal or the typist; main.js also checks `MAC.reader.isOpen`.
+Terminal: `writing` lists posts as a card, `read <slug|n>` / `open post <slug>` open one.

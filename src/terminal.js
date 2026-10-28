@@ -713,20 +713,21 @@ M.createTerminal = function createTerminal(opts){
         .card({ title: 'EDEN', note: 'eden.txt', items: [{ label: 'role', value: E.role || '' }, { label: 'what', value: E.line || '' }] })
         .blank();
       if (E.body) o.para(E.body, 'n').blank();
-      o.viz(6, drawEden, () => 30).blank();
+      o.viz(6, drawEden, () => 30).blank().line(['see also  ', 'f'], ...chips(['contact', 'j', 'about'], 'n')).blank();
       return o;
     },
     j(o){
       o.blank().big(J.title || 'J').line([J.role || '', 'd']).blank()
         .para(J.line || '', 'b').blank().para(J.body || '', 'n').blank()
         .card({ title: 'J', note: 'j.txt', items: [...(J.facts || []).map(f => ({ label: f[0], value: f[1] })),
-          { label: 'site', value: bare(URLS.j), full: URLS.j, url: URLS.j, hint: 'open' }] }).blank();
+          { label: 'site', value: bare(URLS.j), full: URLS.j, url: URLS.j, hint: 'open' }] }).blank()
+        .line(['see also  ', 'f'], ...chips(['contact', 'eden', 'about'], 'n')).blank();
       return o;
     },
     writing(o){
       o.blank().head('writing', 'writing/').blank();
       const ps = posts();
-      if (!ps.length){ o.viz(5, drawEmpty, () => 4).blank(); return o; }
+      if (!ps.length){ o.viz(5, drawEmpty, () => 4).blank().line(['see also  ', 'f'], ...chips(['contact', 'about'], 'n')).blank(); return o; }
       /* one row per post: date, title; narrow screens stack them and add the summary. A post with html opens
          the reader; one with only a url opens the link */
       o.card({ title: 'POSTS', note: ps.length + (ps.length === 1 ? ' post' : ' posts'), verb: 'read', items: ps.map(p => ({

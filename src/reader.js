@@ -159,7 +159,7 @@ const CSS = `
 .rd-tags{ display:flex; flex-wrap:wrap; gap:6px; margin:1.3em 0 0; padding:0; list-style:none }
 .rd-tags li{ font:500 11px/1 var(--r-mono); letter-spacing:.06em; color:var(--r-mute); border:1px solid var(--r-faint); border-radius:999px; padding:5px 9px 5px }
 .rd-rule{ height:1px; background:var(--r-faint); border:0; margin:0 }
-.rd-prose{ padding:2.2rem 0 1rem; hyphens:auto; -webkit-hyphens:auto; overflow-wrap:break-word; font-variation-settings:"opsz" 16 }
+.rd-prose{ padding:2.2rem 0 1rem; hyphens:manual; overflow-wrap:break-word; font-variation-settings:"opsz" 16 }
 .rd-prose > *{ margin:0 0 1.1em }
 .rd-prose p{ text-wrap:pretty; margin:0 0 1.1em }
 .rd-prose li p, .rd-prose blockquote p{ margin:0 0 .5em } .rd-prose li p:last-child, .rd-prose blockquote p:last-child{ margin-bottom:0 }
@@ -214,7 +214,7 @@ const CSS = `
   .rd-bar .rd-where{ display:none }
   .rd-col{ padding:0 max(20px, env(safe-area-inset-left, 0px)) 0 max(20px, env(safe-area-inset-right, 0px)) }
   .rd-head{ padding:2.4rem 0 1.6rem }
-  .rd-prose{ padding-top:1.6rem }
+  .rd-prose{ padding-top:1.6rem; hyphens:auto; -webkit-hyphens:auto }
   .rd-nav{ grid-template-columns:1fr } .rd-nav .rd-next{ grid-column:1 }
 }
 @media (prefers-reduced-motion: reduce){
