@@ -31,8 +31,9 @@ paintMute();
 
 /* ---- input: physical keyboards drive the terminal and the typist's hands ---- */
 const held = new Set();
+const reading = () => !!(M.reader && M.reader.isOpen);   // the reader owns the keyboard while it is open
 function onDown(e){
-  if (e.metaKey) return;   // Ctrl combos go to the terminal; it only consumes the ones it handles
+  if (e.metaKey || reading()) return;   // Ctrl combos go to the terminal; it only consumes the ones it handles
   if (e.target === muteBtn) return;
   unlock();
   if (term.handleKey(e)) e.preventDefault();
@@ -52,11 +53,11 @@ kbd.addEventListener('input', () => {
   for (const ch of v){ term.insertText(ch); const code = codeFor(ch); typist.keyDown(code); setTimeout(() => typist.keyUp(code), 90); }
   firstKey();
 });
-kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ onDown(e); e.stopPropagation(); } });
+kbd.addEventListener('keydown', e => { if (reading()) return; if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ onDown(e); e.stopPropagation(); } });
 kbd.addEventListener('keyup', e => { onUp(e); e.stopPropagation(); });
 /* the wheel scrolls the terminal; the cursor looks around, and moving it down leans back to the whole desk */
-addEventListener('wheel', e => { if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
-addEventListener('keydown', e => { if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
+addEventListener('wheel', e => { if (reading()) return; if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
+addEventListener('keydown', e => { if (reading()) return; if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
 stage.addEventListener('pointerdown', () => unlock());
 addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && !REDUCED) look(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1); });
 D.documentElement.addEventListener('mouseleave', () => look(0, 0));
@@ -64,8 +65,8 @@ D.documentElement.addEventListener('mouseleave', () => look(0, 0));
 let typed = false;
 function firstKey(){ if (typed) return; typed = true; $('#hint').style.opacity = '0'; }
 
-/* ---- deep links: #eden, #j, #about, #writing run the matching command ---- */
-function fromHash(){ const id = location.hash.slice(1); if (id && term.run) term.run(id); }
+/* ---- deep links: #eden, #j, #about, #writing run the matching command; #post/<slug> opens the reader ---- */
+function fromHash(){ const id = location.hash.slice(1); if (!openPost(id) && id && term.run) term.run(id); }
 addEventListener('hashchange', fromHash);
 
 /* ---- loop ---- */
@@ -95,8 +96,9 @@ function phone(){
   const click = (c, d) => { if (sound) try { sound.key(c, d); } catch (e){} };
   const tap = c => { click(c, true); setTimeout(() => click(c, false), 70); };
   kbd.addEventListener('input', () => { const v = kbd.value; kbd.value = ''; for (const ch of v){ term.insertText(ch); tap(ch === ' ' ? 'Space' : 'KeyA'); } $('#hint').style.opacity = '0'; });
-  kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape', 'Home', 'End', 'PageUp', 'PageDown', 'Delete'].includes(e.key) || e.key.startsWith('Arrow') || ((e.ctrlKey || e.altKey) && e.key.length === 1)){ unlock(); if (term.handleKey(e)) e.preventDefault(); tap(e.key === 'Enter' ? 'Enter' : e.key === 'Backspace' ? 'Backspace' : 'KeyA'); } });
-  addEventListener('keydown', e => { if (e.target === kbd || e.metaKey) return; unlock(); if (term.handleKey(e)) e.preventDefault(); });
+  const reading = () => !!(M.reader && M.reader.isOpen);
+  kbd.addEventListener('keydown', e => { if (reading()) return; if (['Enter', 'Backspace', 'Tab', 'Escape', 'Home', 'End', 'PageUp', 'PageDown', 'Delete'].includes(e.key) || e.key.startsWith('Arrow') || ((e.ctrlKey || e.altKey) && e.key.length === 1)){ unlock(); if (term.handleKey(e)) e.preventDefault(); tap(e.key === 'Enter' ? 'Enter' : e.key === 'Backspace' ? 'Backspace' : 'KeyA'); } });
+  addEventListener('keydown', e => { if (e.target === kbd || e.metaKey || reading()) return; unlock(); if (term.handleKey(e)) e.preventDefault(); });
   stage.addEventListener('pointerdown', () => { unlock(); });
   stage.addEventListener('click', e => {
     const r = cv.getBoundingClientRect();
@@ -113,11 +115,18 @@ function phone(){
     cv.style.transform = 'translateY(' + shift.toFixed(1) + 'px)';
   };
   if (window.visualViewport) visualViewport.addEventListener('resize', place);
-  function fromHash(){ const id = location.hash.slice(1); if (id && term.run) term.run(id); }
+  function fromHash(){ const id = location.hash.slice(1); if (!openPost(id) && id && term.run) term.run(id); }
   addEventListener('hashchange', fromHash);
   let last = performance.now(), T = 0;
   const frame = now => { requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt; if (term.update(dt, T)) place(); };
   const go = () => { $('#loading').classList.add('gone'); fromHash(); requestAnimationFrame(frame); };
   (D.fonts ? Promise.race([D.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve()).then(go);
+}
+/* #post/<slug>: true when the hash is a post link (opened, or already open) */
+function openPost(id){
+  const m = /^post\/(.+)$/.exec(id || ''); if (!m) return false;
+  let slug = m[1]; try { slug = decodeURIComponent(slug); } catch (e){}
+  if (M.reader && !(M.reader.isOpen && M.reader.current === slug)) M.reader.open(slug);
+  return true;
 }
 })();

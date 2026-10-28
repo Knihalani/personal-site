@@ -73,12 +73,23 @@ function fuzzy(q, items){
 }
 
 function wrap(text, width){
+  // written line breaks are kept (a blank line stays blank); "- " bullets wrap with a hanging indent
+  const src = String(text), out = [];
+  if (!/\n/.test(src)) return wrapLine(src, width, '');
+  for (const ln of src.split('\n')){
+    if (!ln.trim()){ out.push(''); continue; }
+    const b = /^\s*[-*\u2022]\s+/.exec(ln);
+    out.push(...(b ? wrapLine(ln.trim(), width, '  ') : wrapLine(ln, width, '')));
+  }
+  return out.length ? out : [''];
+}
+function wrapLine(text, width, hang){
   const out = []; let line = '';
   for (const w of String(text).split(/\s+/)){
     if (!w) continue;
-    if (!line) line = w;
+    if (!line) line = (out.length ? hang : '') + w;
     else if (line.length + 1 + w.length <= width) line += ' ' + w;
-    else { out.push(line); line = w; }
+    else { out.push(line); line = hang + w; }
   }
   if (line) out.push(line);
   return out.length ? out : [''];
@@ -460,7 +471,7 @@ M.createTerminal = function createTerminal(opts){
     : r.k === 'card' ? r.items.map(it => pad(it.label, r.lw) + (it.full || it.value)).join('\n') : null;
   function makeCard(spec){
     const items = spec.items.map(it => Object.assign({}, it));
-    let ai = 0; for (const it of items) it.ai = it.url || it.copy ? ai++ : -1;
+    let ai = 0; for (const it of items) it.ai = it.url || it.copy || it.post ? ai++ : -1;
     const lw = Math.max(0, ...items.map(it => it.label.length)) + 2;
     const acts = items.filter(it => it.ai >= 0);
     const room = it => (COLS - 3) - (5 + lw) - (it.hint ? it.hint.length + 2 : 0);
@@ -474,7 +485,9 @@ M.createTerminal = function createTerminal(opts){
       if (!stacked){ it.lines = [it.value]; it.n = 1; y++; continue; }
       const parts = []; let v = it.value;
       while (v.length > vroom){ let cut = Math.max(v.lastIndexOf('/', vroom - 1), v.lastIndexOf('.', vroom - 1), v.lastIndexOf('@', vroom - 1), v.lastIndexOf(' ', vroom)); if (cut < vroom / 2) cut = vroom - 1; parts.push(v.slice(0, cut + 1).trimEnd()); v = v.slice(cut + 1).trimStart(); }
-      parts.push(v); it.lines = parts; it.n = 1 + parts.length; y += it.n;
+      parts.push(v); it.sub0 = parts.length;
+      if (it.sub) parts.push(...wrap(it.sub, vroom).slice(0, 3));       // a post's summary, under its title
+      it.lines = parts; it.n = 1 + parts.length; y += it.n;
     }
     const note = spec.note && spec.title.length + spec.note.length + 10 <= COLS ? spec.note : '';
     return { k: 'card', title: spec.title, note, items, acts, lw, stacked, body: y, sel: -1, verb: spec.verb || 'open',
@@ -591,7 +604,7 @@ M.createTerminal = function createTerminal(opts){
     gh: L.github || L.gh || 'https://github.com/knihalani/personal-site',
     j: J.url || 'https://risingfounder.net',
   };
-  const EMAILS = (C.contact && Array.isArray(C.contact.emails) && C.contact.emails.length) ? C.contact.emails : [
+  const EMAILS = (Array.isArray(C.contact) && C.contact.length) ? C.contact : (C.contact && Array.isArray(C.contact.emails) && C.contact.emails.length) ? C.contact.emails : [
     { label: 'J', email: 'kaiav@risingfounder.net' },
     { label: 'Everything else', email: 'kaiav.nihalani@gmail.com' },
   ];
@@ -603,13 +616,23 @@ M.createTerminal = function createTerminal(opts){
   ];
   const LINKLIST = () => OPEN.filter(o => o.name !== 'j');
   const wrapT = (t, w = 50) => wrap(t, w).join('\n');
-  const posts = () => (Wr.posts || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const slugify = t => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const slugOf = p => p.slug || slugify(p.title) || String(p.id || '');
+  const posts = () => (Wr.posts || []).filter(p => p && (p.status == null || p.status === 'published')).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const POSTITEMS = posts().map(p => ({ name: slugOf(p), kw: p.title ? [String(p.title).toLowerCase()] : [] }));
+  /* a post by slug, id, title or list number (1 = newest) */
+  const findPost = q => {
+    const ps = posts(); q = String(q || '').trim(); if (!q) return null;
+    const hit = ps.find(p => slugOf(p) === q || String(p.id) === q); if (hit) return hit;
+    if (/^\d+$/.test(q) && +q >= 1 && +q <= ps.length) return ps[+q - 1];
+    const f = fuzzy(q, POSTITEMS); return f ? ps.find(p => slugOf(p) === f.item.name) || null : null;
+  };
   const TEXT = {
     about: () => [C.name, A.role, '', ...(A.body || []).map(p => wrapT(p))].filter(x => x != null).join('\n') + '\n',
-    eden: () => [E.title || 'Eden', E.role, '', E.line].filter(x => x != null).join('\n') + '\n',
+    eden: () => [E.title || 'Eden', E.role, '', E.line, E.body ? '\n' + E.body : null].filter(x => x != null).join('\n') + '\n',
     j: () => [J.title || 'J', J.role, '', J.line, wrapT(J.body || ''), '', ...(J.facts || []).map(f => pad(f[0], 9) + f[1]), '', J.url].filter(x => x != null).join('\n') + '\n',
     links: () => LINKLIST().map(t => pad(t.name, 10) + t.url).join('\n') + '\n',
-    writing: () => posts().length ? posts().map(p => [p.date, p.title, p.summary && wrapT(p.summary), p.url].filter(Boolean).join('\n')).join('\n\n') + '\n' : 'No posts yet.\n',
+    writing: () => posts().length ? posts().map(p => [p.date, p.title, p.summary && wrapT(p.summary), p.html ? 'read ' + slugOf(p) : p.url].filter(Boolean).join('\n')).join('\n\n') + '\n' : 'No posts yet.\n',
   };
   const README = [
     '# README', '',
@@ -653,8 +676,8 @@ M.createTerminal = function createTerminal(opts){
     { path: HOME + '/eden.txt', text: TEXT.eden(), doc: 'eden' },
     { path: HOME + '/j.txt', text: TEXT.j(), doc: 'j' },
     { path: HOME + '/links.txt', text: TEXT.links(), doc: 'links' },
-    ...posts().map(p => ({ path: HOME + '/writing/' + (p.date ? p.date + '-' : '') + String(p.title || 'post').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.txt',
-      text: [p.title, p.date, '', p.summary && wrapT(p.summary), p.url].filter(x => x != null).join('\n') + '\n' })),
+    ...posts().map(p => ({ path: HOME + '/writing/' + (p.date ? p.date + '-' : '') + (slugOf(p) || 'post') + '.txt',
+      text: [p.title, p.date, '', p.summary && wrapT(p.summary), '', p.html ? 'read ' + slugOf(p) : p.url].filter(x => x != null).join('\n') + '\n' })),
     { path: '/etc/motd', text: 'KN-84 personal computer. KNOS 1.04.\nType help to begin, or cat README.md for a short guide.\n' },
     { path: '/etc/hostname', text: 'kn84\n' },
   ]);
@@ -681,12 +704,14 @@ M.createTerminal = function createTerminal(opts){
     eden(o){
       o.blank().big(E.title || 'Eden').blank()
         .card({ title: 'EDEN', note: 'eden.txt', items: [{ label: 'role', value: E.role || '' }, { label: 'what', value: E.line || '' }] })
-        .blank().viz(6, drawEden, () => 30).blank();
+        .blank();
+      if (E.body) o.para(E.body, 'n').blank();
+      o.viz(6, drawEden, () => 30).blank();
       return o;
     },
     j(o){
       o.blank().big(J.title || 'J').line([J.role || '', 'd']).blank()
-        .para(J.line || '', 'b').para(J.body || '', 'n').blank()
+        .para(J.line || '', 'b').blank().para(J.body || '', 'n').blank()
         .card({ title: 'J', note: 'j.txt', items: [...(J.facts || []).map(f => ({ label: f[0], value: f[1] })),
           { label: 'site', value: bare(URLS.j), full: URLS.j, url: URLS.j, hint: 'open' }] }).blank();
       return o;
@@ -695,12 +720,11 @@ M.createTerminal = function createTerminal(opts){
       o.blank().head('writing', 'writing/').blank();
       const ps = posts();
       if (!ps.length){ o.viz(5, drawEmpty, () => 4).blank(); return o; }
-      for (const p of ps){
-        o.line([pad(p.date || '', 12), 'd'], [p.title || '', 'b']);
-        if (p.summary) o.para(p.summary, 'n', COLS - 16, 14);
-        if (p.url) o.link('', p.url, 14);
-        o.blank();
-      }
+      /* one row per post: date, title; narrow screens stack them and add the summary. A post with html opens
+         the reader; one with only a url opens the link */
+      o.card({ title: 'POSTS', note: ps.length + (ps.length === 1 ? ' post' : ' posts'), verb: 'read', items: ps.map(p => ({
+        label: p.date || '', value: p.title || 'Untitled', post: p.html ? slugOf(p) : null, url: p.html ? null : p.url || null,
+        full: p.title || '', sub: p.summary || '', hint: p.html ? 'read' : p.url ? 'open' : '' })) }).blank();
       return o;
     },
     links(o){
@@ -784,6 +808,7 @@ M.createTerminal = function createTerminal(opts){
     usage: name, run(argv, io){ if (io.tty){ const o = DOCS[name](out()); io.rich(o); if (o.lastCard && o.lastCard.acts.length) return io.pick(o.lastCard); } else io.write(TEXT[name]()); } });
   for (const n of ['about', 'eden', 'j', 'writing', 'links']) def(n, doc(n));
   def('open', { g: 'read', desc: 'open a link: a url, ' + OPEN.map(o => o.name).join(', '), usage: 'open <url | j | gh | linkedin | x>', ex: ['open j', 'open https://risingfounder.net'], run(argv, io){
+    if (argv[1] === 'post') return B.read.run(['read', ...argv.slice(2)], io);
     const q = argv.slice(1).join(' ').trim();
     if (!q){
       if (!io.tty){ io.write(OPEN.map(x => pad(x.name, 10) + x.url).join('\n') + '\n'); return; }
@@ -802,6 +827,20 @@ M.createTerminal = function createTerminal(opts){
     }
     const w = openTarget(url);
     const o = out(); o.at(0, ['opening ', 'd'], [label, 'b', { url }]); if (!w) o.at(2, ['if nothing opened, enter on the address opens it', 'f']); io.rich(o);
+  } });
+  def('read', { g: 'read', desc: 'read a post', usage: 'read <slug | n>', ex: ['read 1', 'open post <slug>'], run(argv, io){
+    const q = argv.slice(1).join(' ').trim();
+    if (!q) return B.writing.run(['writing'], io);
+    const p = findPost(q);
+    if (!p){ io.err('read: no post called ' + q + (posts().length ? '. try writing for the list' : '. no posts yet') + '\n'); return 1; }
+    if (!io.tty){ io.write(TEXT.writing().split('\n\n')[posts().indexOf(p)] + '\n'); return; }
+    if (!p.html && p.url){
+      const w = openTarget(p.url);
+      const o = out(); o.at(0, ['opening ', 'd'], [p.title || bare(p.url), 'b', { url: p.url }]); if (!w) o.at(2, ['if nothing opened, enter on the address opens it', 'f']); io.rich(o); return;
+    }
+    const ok = !!(M.reader && M.reader.open(slugOf(p)));
+    io.rich(out().at(0, [ok ? 'reading ' : 'the reader is not available: ', 'd'], [p.title || slugOf(p), 'b']).at(2, [ok ? 'esc comes back' : '', 'f']));
+    return ok ? 0 : 1;
   } });
   /* one link, printed, then a one-key prompt to open it */
   const linkCmd = (name, desc) => ({ g: 'read', desc, usage: name, run(argv, io){
@@ -1449,7 +1488,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function setFoot(card){
     const n = card.acts.length, dot = [' \u00b7 ', 'f'];
-    const verb = card.acts.every(a => a.copy) ? 'copy' : card.acts.every(a => !a.copy) ? 'open' : 'open/copy';
+    const verb = card.acts.every(a => a.post) ? 'read' : card.acts.every(a => a.copy) ? 'copy' : card.acts.every(a => !a.copy) ? 'open' : 'open/copy';
     const len = f => f.reduce((a, x) => a + x[0].length, 0);
     const opts = n > 1 ? [
       [['  ', 'n', null, 'arrows'], [' select', 'f'], dot, ['enter', 'n'], [' ' + verb, 'f'], dot, ['1-' + n, 'n'], [' jump', 'f'], dot, ['esc', 'n'], [' back', 'f']],
@@ -1465,7 +1504,11 @@ M.createTerminal = function createTerminal(opts){
   function actOn(card, it){
     card.sel = it.ai; card.done = true; card.flash = now;
     let said;
-    if (it.copy){
+    if (it.post){
+      const ok = !!(M.reader && M.reader.open(it.post));
+      card.foot = ok ? [['  ', 'b', null, 'out'], ['reading ', 'd'], [it.value, 'b']] : [['read ' + it.post, 'b'], ['  (the reader did not open)', 'f']];
+      said = ok ? 'Opened ' + it.value + ' in the reader. Escape comes back.' : 'The reader is not available.';
+    } else if (it.copy){
       const ok = copyText(it.copy); sfx('beep');
       card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [it.copy, 'b']] : [['select and copy: ', 'd'], [it.copy, 'b']];
       said = (ok ? 'Copied ' : 'Copy ') + it.copy + '.';
@@ -1634,6 +1677,7 @@ M.createTerminal = function createTerminal(opts){
     const segStart = Math.max(pre.lastIndexOf('|'), pre.lastIndexOf(';'), pre.lastIndexOf('&'));
     const cname = pre.slice(segStart + 1).trim().split(/\s+/)[0] || '';
     if (/^(man|which|help)$/.test(cname)) return { kind: 'arg', q: word, from: i, items: cmdItems() };
+    if (cname === 'read' || /^open\s+post$/.test(pre.slice(segStart + 1).trim())) return { kind: 'arg', q: word, from: i, items: POSTITEMS };
     if (cname === 'open') return { kind: 'arg', q: word, from: i, items: OPEN };
     if (word.startsWith('$')) return { kind: 'path', q: word.slice(1), from: i + 1, items: Object.keys(ENV).map(k => ({ name: k })) };
     const slash = word.lastIndexOf('/');
@@ -1649,7 +1693,7 @@ M.createTerminal = function createTerminal(opts){
       if (!l.length) l = ctx.items.filter(it => it.name.toLowerCase().startsWith(ctx.q.toLowerCase()));
       return l.map(it => it.name);
     }
-    if (!ctx.q) return ctx.kind === 'arg' && ctx.items === OPEN ? ctx.items.map(i => i.name) : [];
+    if (!ctx.q) return ctx.kind === 'arg' && (ctx.items === OPEN || ctx.items === POSTITEMS) ? ctx.items.map(i => i.name) : [];
     const scored = [];
     for (const it of ctx.items){
       let s = fscore(ctx.q, it.name);
@@ -1923,7 +1967,7 @@ M.createTerminal = function createTerminal(opts){
       const st = s => on ? 'z' : s;
       if (it.ai >= 0) text(String(it.ai + 1), 3, rt, st(chosen ? 'b' : 'f'));
       text(it.label, 5, rt, st('d'));
-      if (r.stacked) it.lines.forEach((l, k) => text(l, 5, rt + ch * (k + 1), st(it.ai >= 0 ? 'b' : 'n')));
+      if (r.stacked) it.lines.forEach((l, k) => text(l, 5, rt + ch * (k + 1), st(it.sub0 != null && k >= it.sub0 ? 'd' : it.ai >= 0 ? 'b' : 'n')));
       else text(it.value, 5 + r.lw, rt, st(it.ai >= 0 ? 'b' : 'n'));
       if (it.hint) text(it.hint, COLS - 3 - it.hint.length, rt, st('f'));
     });

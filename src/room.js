@@ -97,8 +97,11 @@ M.dressRoom = function (api){
   const card = (txt, col, w, h, x, y, rot, pin) => {
     const t = canvasTex(256, Math.round(256 * h / w), (c, W, H) => { noiseFill(c, W, H, col, .05, 800);
       if (col === '#f3ecd9'){ c.strokeStyle = 'rgba(80,120,170,.35)'; c.lineWidth = 1; for (let yy = 40; yy < H; yy += 22){ c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); } c.strokeStyle = 'rgba(200,70,60,.4)'; c.beginPath(); c.moveTo(0, 30); c.lineTo(W, 30); c.stroke(); }
-      c.fillStyle = '#23324f'; c.font = '500 34px Caveat, "Segoe Print", cursive';
-      txt.split('\n').forEach((l, i) => c.fillText(l, 16, 58 + i * 36)); });
+      // shrink the hand to fit the longest line and the line count, so any note from content.js fits its card
+      const ls = txt.split('\n'); let fs = 34;
+      const fit = () => { c.font = '500 ' + fs + 'px Caveat, "Segoe Print", cursive'; return Math.max(...ls.map(l => c.measureText(l).width)) <= W - 26 && 24 + ls.length * fs * 1.06 <= H - 8; };
+      while (fs > 16 && !fit()) fs -= 1;
+      c.fillStyle = '#23324f'; ls.forEach((l, i) => c.fillText(l, 16, 24 + fs + i * fs * 1.06)); });
     const g = new THREE.PlaneGeometry(w, h, 6, 4); const p = g.attributes.position; // a slight curl at the free corner
     for (let i = 0; i < p.count; i++){ const u = p.getX(i) / w + .5, v = p.getY(i) / h + .5; p.setZ(i, .004 * Math.pow(Math.max(0, u * (1 - v)), 2.2) + .0015); } g.computeVertexNormals();
     const m = mesh(g, new THREE.MeshStandardMaterial({ map: t, roughness: .9, side: THREE.DoubleSide }), board, x, y, .007); m.rotation.z = rot;
@@ -108,10 +111,11 @@ M.dressRoom = function (api){
     mesh(new THREE.CylinderGeometry(.0035, .0045, .006, 16).rotateX(Math.PI / 2), pinM, pn, 0, 0, .007);
     mesh(new THREE.SphereGeometry(.0046, 16, 12), pinM, pn, 0, 0, .011);
   };
-  card('ship it.\nthen ship\nthe next one', '#f3ecd9', .12, .085, -.12, .05, .04, '#c4492d');
-  card('ask better\nquestions', '#f2d65a', .075, .075, .02, .07, -.07, '#2f5aa0');
-  card('sleep >\ncoffee', '#f2a7a0', .07, .07, .13, -.03, .09, '#2b7a4b');
-  card('call home', '#9fd3c7', .075, .055, -.05, -.07, -.05, '#d9a400');
+  const NOTES = ((window.MAC.CONTENT || {}).notes || []).concat(['', '', '', '']);   // the four pinned notes come from content.js
+  card(NOTES[0] || 'ship it.\nthen ship\nthe next one', '#f3ecd9', .12, .085, -.12, .05, .04, '#c4492d');
+  card(NOTES[1] || 'ask better\nquestions', '#f2d65a', .075, .075, .02, .07, -.07, '#2f5aa0');
+  card(NOTES[2] || 'sleep >\ncoffee', '#f2a7a0', .07, .07, .13, -.03, .09, '#2b7a4b');
+  card(NOTES[3] || 'call home', '#9fd3c7', .075, .055, -.05, -.07, -.05, '#d9a400');
   // a little photo: dusk over a city, with a white border
   { const ph = canvasTex(256, 200, (c, W, H) => { c.fillStyle = '#f4f0e6'; c.fillRect(0, 0, W, H);
       const g = c.createLinearGradient(0, 12, 0, H - 40); g.addColorStop(0, '#2b3e6b'); g.addColorStop(.6, '#d9785a'); g.addColorStop(1, '#f2c38a'); c.fillStyle = g; c.fillRect(12, 12, W - 24, H - 52);
