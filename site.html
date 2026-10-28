@@ -528,8 +528,7 @@ Engine.prototype.event = function (name, when){
     this.play(this.bootBuf, this.fxBus, when, 0.42, 1, 0);
     this.play(this.spinBuf, this.fxBus, when + 0.55, 0.22, 1, 0.25);
     this.play(this.getFx('disk')[0], this.fxBus, when + 1.35, 0.26, 1, 0.25);
-    this.startWhine(when + 0.35);
-    return;
+    return;  // no flyback whine or room bed: the keys and the machine are the only sounds
   }
   const L = name !== 'drops' && this.getFx(name); if (!L) return;
   const buf = L[Math.floor(Math.random() * L.length)];
@@ -638,8 +637,6 @@ const sound = {
         /* spread the synthesis over a few tasks so the first keystroke never hitches */
         setTimeout(() => {
           try {
-            if (!muted) eng.event('boot', ctx.currentTime + 0.03); else eng.startWhine(ctx.currentTime);
-            setTimeout(() => { try { eng.startAmbience(ctx.currentTime + 0.05); } catch (e){} }, 60);
             setTimeout(() => { try { eng.fillKeys(); } catch (e){} }, 200);
             setTimeout(() => { try { eng.warm(); } catch (e){} }, 2600);
           } catch (e){}
@@ -1462,34 +1459,34 @@ M.createScene = function createScene(container){
   const qLook = new THREE.Quaternion(), qDelta = new THREE.Quaternion(), eLook = new THREE.Euler(0, 0, 0, 'YXZ');
   const eyeNow = eyeRest.clone(), fwdNow = new V3();
   let breathT = 0;
-  /* v3: ONE fixed shot. The eye sits back and above the typist's own eyes so the whole tube, the keyboard and both
-     hands are in frame at once; it never follows the pointer and never sways. The lens is fitted to those three
-     things for the current aspect (aim and FOV solved so they sit centred with a small margin). */
-  const SHOT = { back: .85, up: .32, kbPull: -.02 };
-  const eyeShot = eyeRest.clone().addScaledVector(flatN, SHOT.back); eyeShot.y += SHOT.up; eyeShot.x = (screenCenter.x + keyboardCenter.x) / 2; // square-on to the machine
-  const fitPts = () => {
-    const ps = [], gx = new V3().crossVectors(new V3(0, 1, 0), flatN).normalize();
-    for (const sx of [-1, 1]) for (const sy of [-1, 1]) ps.push(screenCenter.clone().addScaledVector(gx, sx * (GW / 2 + .012)).add(new V3(0, sy * (GH / 2 + .012), 0)));
+  /* v3: ONE fixed shot, square-on to the tube. The camera looks straight down the screen's normal (so the glass is
+     a true rectangle, no keystone), from far enough back that the near keyboard isn't blown up by perspective.
+     The keyboard and hands below are brought into frame with a shifted lens (off-axis frustum), not by tilting. */
+  const SHOT = { dist: 1.7, up: .27, kbFront: -.005, margin: .012 };
+  const camN = screenNormal.clone().normalize();
+  const camQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new V3(), camN.clone().negate(), new V3(0, 1, 0)));
+  const camUp = new V3(0, 1, 0).applyQuaternion(camQ), camRight = new V3(1, 0, 0).applyQuaternion(camQ);
+  const eyeShot = screenCenter.clone().addScaledVector(camN, SHOT.dist).addScaledVector(camUp, SHOT.up);
+  const shotPts = (() => {
+    const ps = [], m = SHOT.margin;
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) ps.push(screenCenter.clone().addScaledVector(camRight, sx * (GW / 2 + m)).addScaledVector(camUp, sy * (GH / 2 + m)));
     const kx = new V3(Math.cos(KB.yaw), 0, -Math.sin(KB.yaw)), kz = new V3(Math.sin(KB.yaw), 0, Math.cos(KB.yaw));
-    for (const sx of [-1, 1]) ps.push(keyboardCenter.clone().addScaledVector(kx, sx * (KB.w / 2 + .01)).addScaledVector(kz, KB.d / 2 + SHOT.kbPull));
+    for (const sx of [-1, 1]) ps.push(keyboardCenter.clone().addScaledVector(kx, sx * (KB.w / 2 + .008)).addScaledVector(kz, SHOT.kbFront));
     return ps;
-  };
+  })();
+  const shotInv = new THREE.Matrix4();
   function applyCamera(){
-    const ps = fitPts(), m = new THREE.Matrix4(), inv = new THREE.Matrix4();
-    let yaw = YAW0, pitch = PITCH0, tv = .3, th = .3;
-    for (let it = 0; it < 6; it++){
-      eLook.set(pitch, yaw, 0); qLook.setFromEuler(eLook);
-      m.compose(eyeShot, qLook, new V3(1, 1, 1)); inv.copy(m).invert();
-      let vmin = 9, vmax = -9, hmin = 9, hmax = -9;
-      for (const p of ps){ const c = p.clone().applyMatrix4(inv), d = -c.z, av = Math.atan2(c.y, d), ah = Math.atan2(c.x, d);
-        vmin = Math.min(vmin, av); vmax = Math.max(vmax, av); hmin = Math.min(hmin, ah); hmax = Math.max(hmax, ah); }
-      pitch += (vmin + vmax) / 2; yaw -= (hmin + hmax) / 2;
-      tv = Math.tan((vmax - vmin) / 2); th = Math.tan((hmax - hmin) / 2);
-    }
-    eLook.set(pitch, yaw, 0); qLook.setFromEuler(eLook);
-    camera.position.copy(eyeShot); camera.quaternion.copy(qLook);
-    const fov = Math.min(80, 2 * Math.atan(Math.max(tv, th / aspect) * 1.03) / D2R);
-    if (Math.abs(camera.fov - fov) > 1e-4){ camera.fov = fov; camera.updateProjectionMatrix(); }
+    camera.position.copy(eyeShot); camera.quaternion.copy(camQ); camera.updateMatrixWorld();
+    shotInv.copy(camera.matrixWorld).invert();
+    let l = 9, r = -9, b = 9, t = -9, sTop = -9;
+    shotPts.forEach((p, i) => { const c = p.clone().applyMatrix4(shotInv), d = -c.z, x = c.x / d, y = c.y / d;
+      l = Math.min(l, x); r = Math.max(r, x); b = Math.min(b, y); t = Math.max(t, y); if (i < 4) sTop = Math.max(sTop, y); });
+    // fit the content box into the frame's aspect; spare room goes evenly to both sides, or (portrait) below the keys
+    let w = r - l, h = t - b; const cx = (l + r) / 2;
+    if (w / h < aspect){ w = h * aspect; } else { const h2 = w / aspect, cy = (t + b) / 2; t = cy + h2 / 2; b = cy - h2 / 2; h = h2; }
+    const n = camera.near;
+    camera.projectionMatrix.makePerspective((cx - w / 2) * n, (cx + w / 2) * n, t * n, b * n, n, camera.far);
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
   }
   /* never see inside the typist's head: anything added to the scene whose bounds wrap the eye is hidden */
   const added = [], hidden = new Set(), _sph = new THREE.Sphere();
@@ -1963,16 +1960,16 @@ function palmGeo(ts, KX){
     const uz = Math.sign(uz0) * Math.pow(Math.abs(uz0), .55);
     const t = (uz + 1) / 2;                                    // 0 = knuckle end, 1 = wrist end
     const z = -.093 + t * .097;
-    const w = .0415 - .011 * smooth(.3, 1, t) + .002 * (ux * ts > 0 ? smooth(.2, .7, t) * (1 - smooth(.7, 1, t)) : 0);
+    const w = .0405 - .0135 * smooth(.3, 1, t) + .002 * (ux * ts > 0 ? smooth(.2, .7, t) * (1 - smooth(.7, 1, t)) : 0);
     const x = Math.sign(ux) * Math.pow(Math.abs(ux), .7) * w, xn = x / .0415;
-    const top = .0142 * (1 - .5 * xn * xn) * (1 - .3 * smooth(.6, 1, t)) + .0015;
-    const bot = .0118 * (1 - .35 * xn * xn) + .0065 * gauss(x - ts * .02, .014) * gauss(z + .035, .03) + .003 * gauss(x + ts * .022, .012) * gauss(z + .04, .035);
+    const top = .0108 * (1 - .45 * xn * xn) * (1 - .25 * smooth(.6, 1, t)) + .0014;
+    const bot = .0102 * (1 - .35 * xn * xn) + .0065 * gauss(x - ts * .02, .014) * gauss(z + .035, .03) + .003 * gauss(x + ts * .022, .012) * gauss(z + .04, .035);
     let y = uy > 0 ? Math.pow(uy, .75) * top : -Math.pow(-uy, .75) * bot;
     let red = 0;
     if (uy > 0){
       for (const kx of KX){
-        const b = gauss(x - kx, .0072) * gauss(z + .085, .0085);
-        y += .0042 * b * uy; red = Math.max(red, b);
+        const b = gauss(x - kx, .0062) * gauss(z + .086, .008);
+        y += .0052 * b * uy; red = Math.max(red, b);
         y += .0011 * gauss(x - kx * (1 - .35 * t), .0026) * smooth(.15, .45, t) * (1 - smooth(.6, .95, t)) * uy;   // extensor tendons
       }
     }
@@ -2071,7 +2068,7 @@ M.createTypist = function createTypist(api){
   const keyLocal = code => { const p = wpos(code) || layoutWorld(code); return p ? toLocal(p) : null; };
 
   const n = dirLocal(nW), lat = dirLocal(latW), kfw = dirLocal(fwdW);
-  const U_KEY = uW, TRAVEL = .0032, HOVER = .0045, HAND_W = 30;
+  const U_KEY = uW, TRAVEL = .0032, HOVER = .0045, HAND_W = 36;
 
   /* the desk surface just in front of the keyboard (for a hand resting there during long idles) */
   const spaceW = wpos('Space') || layoutWorld('Space');
@@ -2121,7 +2118,7 @@ M.createTypist = function createTypist(api){
 
   /* ---------- arms: sleeve, elbow bunching, cuff, wrist ---------- */
   const L1 = .29, L2 = .265;
-  const upperGeo = capsule(.054, .049, L1, 40,
+  const upperGeo = capsule(.046, .041, L1, 40,
     (a, y) => .05 * Math.sin(y * 70 + 1.8 * Math.sin(a * 2 + .5)) * smooth(.17, .27, y) + .025 * Math.sin(a * 4 + y * 22) + .02 * Math.sin(a * 3 - y * 30) * (1 - smooth(.04, .12, y)),
     v => { v.x *= 1.04; v.z *= .94; });
   const sleeveFold = (a, y) => (1 - smooth(.0, .1, y)) * (.075 * Math.sin(y * 92 + 1.6 * Math.sin(a * 2 + 1)) + .03 * Math.sin(a * 5 + y * 40))            // bunching at the elbow
@@ -2129,7 +2126,7 @@ M.createTypist = function createTypist(api){
       + smooth(.15, .168, y) * (1 - smooth(.188, .2, y)) * .045 * Math.sin(a * 4 + y * 50 + 1);                                       // slack piling onto the cuff
   const RIBS = 30, ribBand = y => smooth(.203, .209, y) * (1 - smooth(.233, .239, y));
   const foreGeo = lathe([[.0001, -.05], [.028, -.046], [.044, -.034], [.052, -.012], [.054, .018], [.051, .05], [.048, .09], [.0455, .13], [.0445, .158], [.0465, .177], [.045, .192],
-    [.039, .2], [.0345, .205], [.034, .209], [.0338, .214], [.0338, .22], [.0338, .226], [.0336, .232], [.031, .2385], [.0255, .2415], [.0001, .242]], 150,
+    [.039, .2], [.0345, .205], [.034, .209], [.0338, .214], [.0338, .22], [.0338, .226], [.0336, .232], [.031, .2385], [.0255, .2415], [.0001, .242]].map(([r, y]) => [r * (y > .19 ? .84 : .8), y]), 150,
     (a, y) => sleeveFold(a, y) + ribBand(y) * .05 * Math.max(-.6, Math.cos(a * RIBS)),                        // + rib knit on the cuff
     v => { v.x *= 1.1; v.z *= .86; });
   // the fabric's own shading: fold valleys darker, the knit cuff darker still with shadowed rib grooves
@@ -2139,12 +2136,12 @@ M.createTypist = function createTypist(api){
     k *= 1 - .2 * rb; k *= 1 - .3 * rb * clamp(.5 - .5 * Math.cos(a * RIBS), 0, 1);
     return [k, k, k];
   });
-  const wristGeo = tint(capsule(.0205, .0205, .05, 28, null, v => { v.x *= 1.3; v.z *= .74; v.z += .002 * smooth(.02, .05, v.y); }, 6), () => PLAIN);
-  const elbowGeo = blob(.056, .056, .056, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
+  const wristGeo = tint(capsule(.0185, .0185, .05, 28, null, v => { v.x *= 1.25; v.z *= .72; v.z += .002 * smooth(.02, .05, v.y); }, 6), () => PLAIN);
+  const elbowGeo = blob(.047, .047, .047, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
 
   /* ---------- hands ---------- */
-  const FL = [[.035, .029, .026], [.04, .024, .019], [.044, .027, .02], [.041, .025, .019], [.032, .02, .018]];
-  const FR = [[.0112, .0099, .009], [.0082, .0074, .0067], [.0085, .0077, .0069], [.008, .0072, .0065], [.0071, .0064, .0058]];
+  const FL = [[.036, .03, .026], [.041, .025, .019], [.045, .028, .02], [.042, .026, .019], [.032, .02, .0165]];
+  const FR = [[.0098, .0088, .0078], [.0075, .0067, .0059], [.0077, .0069, .006], [.0072, .0064, .0056], [.0062, .0055, .0049]];
   const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));
   const segGeo = FL.map((L, f) => L.map((l, j) => fingerSeg(FR[f][j], j < 2 ? FR[f][j + 1] : FR[f][j] * .9, l, j === 2)));
   const nailGeo = FL.map((L, f) => { const r = FR[f][2]; const g = blob(r * .8, r * .22, L[2] * .5, (x, y, z) => -.15 * Math.max(0, -y), 20, 12);
@@ -2154,15 +2151,15 @@ M.createTypist = function createTypist(api){
   for (let h = 0; h < 2; h++){
     const side = h ? 1 : -1, ts = -side;            // ts: which local x side the thumb is on
     const hand = new THREE.Group(); root.add(hand);
-    const KN = [V3(ts * .029, -.006, -.028), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.08)];
+    const KN = [V3(ts * .031, -.007, -.03), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.08)];
     mesh(palmGeo(ts, KN.slice(1).map(k => k.x)), skin, hand);
-    mesh(tint(blob(.0175, .0135, .03, null, 24, 16), () => PLAIN), skin, hand, V3(ts * .021, -.005, -.03), [0, -ts * .25, 0]);   // thenar
+    mesh(tint(blob(.015, .0115, .028, null, 24, 16), () => PLAIN), skin, hand, V3(ts * .022, -.005, -.032), [0, -ts * .25, 0]);   // thenar
     const upper = new THREE.Group(); root.add(upper); mesh(upperGeo, cloth, upper); mesh(elbowGeo, cloth, upper, V3(0, L1, 0));
     const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, cuffM, fore); mesh(wristGeo, skin, fore, V3(0, .21, 0));
     const fingers = [];
     for (let f = 0; f < 5; f++){
       const base = new THREE.Group(); base.position.copy(KN[f]); hand.add(base);
-      if (f === 0) base.rotation.set(-.35, -ts * .5, 0, 'YXZ'); else base.rotation.y = ts * (f - 2.4) * -.03;
+      if (f === 0) base.rotation.set(-.4, -ts * .6, 0, 'YXZ'); else base.rotation.y = ts * (f - 2.4) * -.05;
       const g0 = new THREE.Group(); g0.rotation.order = 'YXZ'; base.add(g0);
       const g1 = new THREE.Group(); g1.position.z = -FL[f][0]; g0.add(g1);
       const g2 = new THREE.Group(); g2.position.z = -FL[f][1]; g1.add(g2);
@@ -2190,7 +2187,7 @@ M.createTypist = function createTypist(api){
       H.homeQ.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, back))
         .multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -H.side * .2));
       const kc = H.fingers.slice(1).reduce((a, F) => a.add(F.base.position), V3()).multiplyScalar(.25);
-      const target = C.clone().addScaledVector(n, .045).addScaledVector(kfw, -.052);
+      const target = C.clone().addScaledVector(n, .056).addScaledVector(kfw, -.046);
       H.homeW.copy(target).sub(kc.clone().applyQuaternion(H.homeQ));
       H.W = new VSpring(H.homeW); H.hold.copy(H.homeW); H.region = new VSpring(H.homeW);
       const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(1, 1, 1)).invert();
@@ -2416,7 +2413,7 @@ M.createTypist = function createTypist(api){
       const tgt = v2.set(0, 0, 0); let wsum = 0, lead = null;
       for (const F of H.fingers){
         if (F.mode !== 'strike' && F.mode !== 'hold') continue;
-        const wgt = F.mode === 'strike' ? (F.f === 0 ? .35 : 1) * (.35 + 3 * smooth(.15, .85, F.t / F.Td)) /* the finger about to land owns the wrist */ : MOD.test(F.code || '') ? .15 : .5;
+        const wgt = F.mode === 'strike' ? (F.f === 0 ? .35 : 1) * (.35 + 3 * smooth(.15, .85, F.t / F.Td) + (F.t > F.Td ? 6 : 0)) /* the finger about to land owns the wrist */ : MOD.test(F.code || '') ? .15 : .5;
         tgt.addScaledVector(F.reach, wgt); wsum += wgt;
         if (F.mode === 'strike' && F.t / F.Td > .6 && (!lead || F.t / F.Td > lead.t / lead.Td)) lead = F;   // the finger about to land
       }
@@ -2488,7 +2485,7 @@ M.createTypist = function createTypist(api){
           solveFinger(F, F.P);
           if (u >= 1){
             const err = F.tip.distanceTo(Kc);
-            if (err < .0015 || F.t > F.Td + .1){
+            if (err < .0015 || F.t > F.Td + .12){
               F.mode = 'hold'; F.pressed = true; F.tC = F.t; F.depth.x = 0; F.depth.v = .9;
               contacts.push({ code: F.vcode, err: F.tip.clone().sub(Kc), t: F.t, at: T.toFixed(2) + '/h' + F.h });
               if (contacts.length > 400) contacts.shift();
@@ -2556,7 +2553,7 @@ M.createTypist = function createTypist(api){
    bloom, where Plex Mono's thin hairlines and ink traps would smear into mush. One face only: hierarchy
    comes from brightness (faint, dim, normal, bright), inverse video, and DEC-style double-size lines.
 
-   Everything is drawn on a fixed 72-column grid. Rules, arrows, bars and diagrams are drawn as vectors in
+   Everything is drawn on a fixed COLS-column grid (54 to 60; nothing assumes a width). Rules, arrows, bars and diagrams are drawn as vectors in
    the same phosphor so we never depend on box-drawing glyphs the font may not have. */
 (() => {
 'use strict';
@@ -2941,11 +2938,11 @@ M.createTerminal = function createTerminal(opts){
       blank(){ r.push({ k: 't', i: 0, s: [] }); return o; },
       big(text, st = 'b'){ r.push({ k: 'big', i: 2, s: [[text, st]] }); return o; },
       head(label, note){ r.push({ k: 'head', i: 2, label, note: note || '' }); return o; },
-      para(text, st = 'n', width = 62, i = 2){ for (const l of wrap(text, width)) o.at(i, [l, st]); return o; },
+      para(text, st = 'n', width = COLS - 6, i = 2){ for (const l of wrap(text, width)) o.at(i, [l, st]); return o; },
       viz(h, draw, live){ r.push({ k: 'viz', h, draw, live: live || null, t0: -1 }); return o; },
-      link(label, url, i = 2, labelW = 0){
+      link(label, url, i = 2, labelW = 0, shown){
         const sp = []; if (label) sp.push([pad(label, labelW), 'd']);
-        sp.push([url, 'n', { url }]); r.push({ k: 't', i, s: sp }); return o;
+        sp.push([shown || url, 'n', { url }]); r.push({ k: 't', i, s: sp }); return o;
       },
     };
     return o;
@@ -3034,18 +3031,31 @@ M.createTerminal = function createTerminal(opts){
 
   /* ---- content ---- */
   const L = C.links || {}, J = C.j || {}, E = C.eden || {}, A = C.about || {}, Wr = C.writing || {};
+  const bare = u => String(u || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+  const URLS = {
+    linkedin: L.linkedin || 'https://www.linkedin.com/in/kaiav-nihalani-594703356/',
+    x: L.x || 'https://x.com/KaiavRNihalani',
+    gh: L.github || L.gh || 'https://github.com/knihalani/personal-site',
+    j: J.url || 'https://risingfounder.net',
+  };
+  const EMAILS = (C.contact && Array.isArray(C.contact.emails) && C.contact.emails.length) ? C.contact.emails : [
+    { label: 'J (Rising Founder)', short: 'J', email: 'kaiav@risingfounder.net' },
+    { label: 'everything else', short: 'everything else', email: 'kaiav.nihalani@gmail.com' },
+  ];
   const OPEN = [
-    { name: 'linkedin', url: L.linkedin, label: 'LinkedIn' },
-    { name: 'x', url: L.x, alias: ['twitter'], label: 'X' },
-    { name: 'j', url: J.url, alias: ['risingfounder', 'rising'], kw: ['rising founder'], label: J.title },
-  ].filter(o => o.url);
-  const wrapT = (t, w = 68) => wrap(t, w).join('\n');
+    { name: 'j', url: URLS.j, alias: ['risingfounder', 'rising'], kw: ['rising founder'], label: bare(URLS.j) },
+    { name: 'linkedin', url: URLS.linkedin, label: bare(URLS.linkedin) },
+    { name: 'x', url: URLS.x, alias: ['twitter'], label: bare(URLS.x) },
+    { name: 'gh', url: URLS.gh, alias: ['github', 'repo', 'source'], label: bare(URLS.gh) },
+  ];
+  const LINKLIST = () => OPEN.filter(o => o.name !== 'j');
+  const wrapT = (t, w = 50) => wrap(t, w).join('\n');
   const posts = () => (Wr.posts || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const TEXT = {
     about: () => [C.name, A.role, '', ...(A.body || []).map(p => wrapT(p))].filter(x => x != null).join('\n') + '\n',
     eden: () => [E.title || 'Eden', E.role, '', E.line].filter(x => x != null).join('\n') + '\n',
     j: () => [J.title || 'J', J.role, '', J.line, wrapT(J.body || ''), '', ...(J.facts || []).map(f => pad(f[0], 9) + f[1]), '', J.url].filter(x => x != null).join('\n') + '\n',
-    links: () => [L.linkedin && pad('linkedin', 10) + L.linkedin, L.x && pad('x', 10) + L.x].filter(Boolean).join('\n') + '\n',
+    links: () => LINKLIST().map(t => pad(t.name, 10) + t.url).join('\n') + '\n',
     writing: () => posts().length ? posts().map(p => [p.date, p.title, p.summary && wrapT(p.summary), p.url].filter(Boolean).join('\n')).join('\n\n') + '\n' : 'No posts yet.\n',
   };
   const README = [
@@ -3057,7 +3067,9 @@ M.createTerminal = function createTerminal(opts){
     '  eden        ' + [E.title || 'Eden', E.line].filter(Boolean).join('. '),
     '  j           ' + (J.title || 'J'),
     '  writing     posts',
-    '  links       LinkedIn and X',
+    '  links       LinkedIn, X and GitHub',
+    '  contact     email addresses',
+    '  linkedin    x    gh    one link each',
     '  open x      open a link in a new tab',
     '  snake       a game',
     '  tetris      a game',
@@ -3071,7 +3083,8 @@ M.createTerminal = function createTerminal(opts){
     '  echo hello > notes/hello.txt',
     '  ls -l ~/notes', '',
     'Files you make are kept in this browser.',
-    'Tab completes. Up and down recall history. Ctrl+C stops a command.', '',
+    'Tab completes. Up and down recall history.',
+    'Ctrl+C stops a command.', '',
   ].join('\n');
   FS.seed([HOME, HOME + '/notes', HOME + '/writing', '/etc', '/tmp'], [
     { path: HOME + '/README.md', text: README },
@@ -3090,7 +3103,7 @@ M.createTerminal = function createTerminal(opts){
   function welcome(o){
     o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line(['type ', 'f'], ['help', 'n'], [' to begin, or try', 'f'])
-      .line(['about', 'n'], ['  ', 'f'], ['eden', 'n'], ['  ', 'f'], ['j', 'n'], ['  ', 'f'], ['writing', 'n'], ['  ', 'f'], ['links', 'n'], ['  ', 'f'], ['tetris', 'n'])
+      .line(['about', 'n'], ['  ', 'f'], ['eden', 'n'], ['  ', 'f'], ['j', 'n'], ['  ', 'f'], ['writing', 'n'], ['  ', 'f'], ['links', 'n'], ['  ', 'f'], ['contact', 'n'], ['  ', 'f'], ['tetris', 'n'])
       .line(['new here? ', 'f'], ['cat README.md', 'd'])
       .blank();
     return o;
@@ -3111,8 +3124,7 @@ M.createTerminal = function createTerminal(opts){
       o.blank().head('j', 'j.txt').big(J.title || 'J').line([J.role || '', 'd']).blank()
         .line([J.line || '', 'b']).para(J.body || '', 'n').blank()
         .viz(5, drawBars, age => age < 1.6 ? 30 : 0).blank();
-      if (J.url) o.link('', J.url).line(['tab selects the link, enter opens it', 'f']);
-      o.blank();
+      if (J.url) o.link('', J.url);
       return o;
     },
     writing(o){
@@ -3121,7 +3133,7 @@ M.createTerminal = function createTerminal(opts){
       if (!ps.length){ o.viz(5, drawEmpty, () => 4).blank(); return o; }
       for (const p of ps){
         o.line([pad(p.date || '', 12), 'd'], [p.title || '', 'b']);
-        if (p.summary) o.para(p.summary, 'n', 58, 14);
+        if (p.summary) o.para(p.summary, 'n', COLS - 16, 14);
         if (p.url) o.link('', p.url, 14);
         o.blank();
       }
@@ -3129,15 +3141,21 @@ M.createTerminal = function createTerminal(opts){
     },
     links(o){
       o.blank().head('links', 'links.txt').blank();
-      if (L.linkedin) o.link('linkedin', L.linkedin, 2, 11);
-      if (L.x) o.link('x', L.x, 2, 11);
-      o.blank().line(['tab selects, enter opens, or type ', 'f'], ['open x', 'd']).blank();
+      for (const t of LINKLIST()) o.link(t.name, t.url, 2, 10, t.label);
+      o.blank().line(['also ', 'f'], ['linkedin', 'n'], ['  ', 'f'], ['x', 'n'], ['  ', 'f'], ['gh', 'n'], ['  ', 'f'], ['contact', 'n'], ['  ', 'f'], ['open <name>', 'n']);
       return o;
     },
   };
-  function openUrl(url){
-    try { return window.open(url, '_blank', 'noopener'); } catch (e){ return null; }
+  /* must run inside the keydown that asked for it, or popup blockers step in */
+  function openTarget(url){
+    try {
+      if (/^mailto:/i.test(url)){ location.href = url; return true; }
+      const w = window.open(url, '_blank');
+      if (w){ try { w.opener = null; } catch (e){} return true; }
+    } catch (e){}
+    return false;
   }
+  const openUrl = openTarget;
   const uptimeStr = () => {
     const s = Math.floor((performance.now() - T0) / 1000);
     const hh = Math.floor(s / 3600), mm = Math.floor(s / 60) % 60, ss = s % 60;
@@ -3175,17 +3193,37 @@ M.createTerminal = function createTerminal(opts){
          opts and ex for the manual. Registered commands with the same name win. ---- */
   const B = {};
   const def = (name, d) => { B[name] = d; };
-  const doc = name => ({ g: 'read', desc: name === 'about' ? 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is' : name === 'eden' ? 'Eden. ' + (E.line || '') : name === 'j' ? J.title || 'J' : name === 'writing' ? 'posts' : 'LinkedIn and X',
-    usage: name, run(argv, io){ if (io.tty) io.rich(DOCS[name](out())); else io.write(TEXT[name]()); } });
+  const doc = name => ({ g: 'read', after: name === 'j' ? io => io.choose([{ label: bare(URLS.j), url: URLS.j }]) : name === 'links' ? io => io.choose(LINKLIST().map(t => ({ label: t.label, short: t.name, url: t.url }))) : null, desc: name === 'about' ? 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is' : name === 'eden' ? 'Eden. ' + (E.line || '') : name === 'j' ? J.title || 'J' : name === 'writing' ? 'posts' : 'LinkedIn and X',
+    usage: name, run(argv, io){ if (io.tty){ io.rich(DOCS[name](out())); if (this.after) return this.after(io); } else io.write(TEXT[name]()); } });
   for (const n of ['about', 'eden', 'j', 'writing', 'links']) def(n, doc(n));
-  def('open', { g: 'read', desc: 'open a link: ' + OPEN.map(o => o.name).join(', '), usage: 'open <link>', run(argv, io){
-    const q = argv.slice(1).join(' ');
+  def('open', { g: 'read', desc: 'open a link: a url, ' + OPEN.map(o => o.name).join(', '), usage: 'open <url | j | gh | linkedin | x>', ex: ['open j', 'open https://risingfounder.net'], run(argv, io){
+    const q = argv.slice(1).join(' ').trim();
     if (!q){ io.write('open what? ', 'dim'); io.write(OPEN.map(x => x.name).join('  ') + '\n'); return 1; }
-    const f = fuzzy(q, OPEN);
-    if (!f){ io.err('open: no link called ' + q + '. try ' + OPEN.map(x => x.name).join(', ') + '\n'); return 1; }
-    const w = openUrl(f.item.url);
-    if (io.tty){ const o = out(); o.at(0, ['opening ', 'd'], [f.item.label || f.item.name, 'b']).at(2, [f.item.url, 'n', { url: f.item.url }]); if (!w) o.at(2, ['if nothing opened, the address is above', 'f']); io.rich(o); }
-    else io.write(f.item.url + '\n');
+    let url = null, label = '';
+    if (/^(https?:\/\/|mailto:)\S+$/i.test(q)){ url = q; label = bare(q); }
+    else if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(q)){ url = 'https://' + q; label = bare(q); }
+    else { const f = fuzzy(q, OPEN); if (f){ url = f.item.url; label = f.item.label; } }
+    if (!url){ io.err('open: no link called ' + q + '. try ' + OPEN.map(x => x.name).join(', ') + ' or a url\n'); return 1; }
+    if (!io.tty){ io.write(url + '\n'); return; }
+    const w = openTarget(url);
+    const o = out(); o.at(0, ['opening ', 'd'], [label, 'b', { url }]); if (!w) o.at(2, ['if nothing opened, enter on the address opens it', 'f']); io.rich(o);
+  } });
+  /* one link, printed, then a one-key prompt to open it */
+  const linkCmd = (name, desc) => ({ g: 'read', desc, usage: name, run(argv, io){
+    const t = OPEN.find(x => x.name === name);
+    if (!io.tty){ io.write(t.url + '\n'); return; }
+    io.rich(out().at(0, [pad(name, 10), 'd'], [t.label, 'n', { url: t.url }]));
+    return io.choose([{ label: t.label, url: t.url }]);
+  } });
+  def('gh', linkCmd('gh', 'the source of this site, on GitHub'));
+  def('linkedin', linkCmd('linkedin', 'LinkedIn'));
+  def('x', linkCmd('x', 'X (Twitter)'));
+  def('contact', { g: 'read', desc: 'email addresses', usage: 'contact', run(argv, io){
+    if (!io.tty){ io.write(EMAILS.map(e => pad(e.label, 20) + e.email).join('\n') + '\n'); return; }
+    const o = out(); o.blank().head('contact').blank();
+    EMAILS.forEach((e, i) => o.at(2, [(i + 1) + '  ', 'f'], [pad(e.label, 20), 'd'], [e.email, 'b', { url: 'mailto:' + e.email }]));
+    o.blank(); io.rich(o);
+    return io.choose(EMAILS.map(e => ({ label: e.email, short: e.short, url: 'mailto:' + e.email })), 'email');
   } });
   def('welcome', { g: 'read', hidden: true, desc: 'the first screen', usage: 'welcome', run(argv, io){ if (io.tty) io.rich(welcome(out())); else io.write(C.name + '\n'); } });
 
@@ -3493,7 +3531,8 @@ M.createTerminal = function createTerminal(opts){
     for (const [gk, label] of groups) if (by[gk]) line(label, by[gk], gk === 'read' ? 'b' : 'n');
     if (apps.length) line('apps', apps, 'b');
     if (by.more) line('extras', by.more, 'n');
-    o.blank().at(2, ['man <cmd>', 'n'], [' for details   ', 'f'], ['tab', 'n'], [' completes   ', 'f'], ['ctrl+c', 'n'], [' stops   ', 'f'], ['cat README.md', 'n']).blank();
+    o.blank().at(2, ['man <cmd>', 'n'], [' for details   ', 'f'], ['tab', 'n'], [' completes   ', 'f'], ['ctrl+c', 'n'], [' stops', 'f'])
+      .at(2, ['open <name>', 'n'], [' opens a link   ', 'f'], ['cat README.md', 'n'], [' a guide', 'f']).blank();
     if (io.tty) io.rich(o); else io.write(o.rows.map(textOf).join('\n') + '\n');
   } });
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
@@ -3570,8 +3609,8 @@ M.createTerminal = function createTerminal(opts){
   }
   function fetchInfo(){
     const d = diskUse();
-    return [['OS', 'KNOS 1.04'], ['Host', 'KN-84 personal computer'], ['Kernel', '1.04 #1 1984'], ['Uptime', uptimeStr()], ['Shell', 'sh, ' + Object.keys(M.TERM.cmds).length + ' commands'],
-      ['Terminal', 'vt320, ' + COLS + 'x' + ROWS + ', VT323'], ['CPU', 'KN-1 @ 8 MHz'], ['Memory', '640K'], ['Disk', human(d.bytes) + ' in ' + d.files + ' files'], ['Display', 'P1 green phosphor']];
+    return [['OS', 'KNOS 1.04'], ['Host', 'KN-84'], ['Kernel', '1.04 #1 1984'], ['Uptime', uptimeStr()], ['Shell', 'sh, ' + Object.keys(M.TERM.cmds).length + ' cmds'],
+      ['Terminal', 'vt320 ' + COLS + 'x' + ROWS + ', VT323'], ['CPU', 'KN-1 @ 8 MHz'], ['Memory', '640K'], ['Disk', human(d.bytes) + ' in ' + d.files + ' files'], ['Display', 'P1 green phosphor']];
   }
 
   /* ---- expansion ---- */
@@ -3760,6 +3799,19 @@ M.createTerminal = function createTerminal(opts){
       rich(o){ if (!j.dead) ctx.sink.rich(o); },
       exit(c){ io.code = (c | 0); },
       sleep: ms => j.sleep(ms),
+      /* one-key inline prompt: items [{ label, short?, url }]; resolves with the item opened, or null */
+      choose(items, noun){
+        if (!ctx.sink.tty || j.dead || !items || !items.length) return Promise.resolve(null);
+        return new Promise(res => {
+          openRow = null;
+          const row = { k: 't', i: 0, s: [] }, hint = items.length > 1 ? { k: 't', i: 0, s: [] } : null;
+          rows.push(row); if (hint) rows.push(hint);
+          j.choice = { items, sel: 0, row, hint, res, noun: noun || 'link' };
+          paintChoice(j.choice);
+          mirror(items.length > 1 ? 'Press 1 to ' + items.length + ' or Enter to open ' + items.map((it, i) => (i + 1) + ', ' + it.label).join('; ') + '. Any other key goes back.' : 'Press Enter or o to open ' + items[0].label + '. Any other key goes back.');
+          dirty = true;
+        });
+      },
       runApp(name, argv){
         const a = Array.isArray(argv) ? (argv[0] === name ? argv : [name, ...argv]) : [name];
         if (!M.TERM.apps[name]) return Promise.resolve(127);
@@ -3767,6 +3819,38 @@ M.createTerminal = function createTerminal(opts){
       },
     };
     return io;
+  }
+  function paintChoice(ch){
+    if (ch.items.length === 1){
+      ch.row.s = [['open ', 'd'], [ch.items[0].label, 'b'], ['?  ', 'd'], ['enter', 'n'], ['/', 'f'], ['o', 'n'], [' open  ', 'f'], ['other key', 'n'], [' back', 'f']];
+      return;
+    }
+    const sp = [['open ', 'd']];
+    ch.items.forEach((it, i) => { sp.push([' ' + (i + 1) + ' ' + (it.short || it.label) + ' ', i === ch.sel ? 'i' : 'n'], [' ', 'f']); });
+    ch.row.s = sp;
+    ch.hint.s = [['1-' + ch.items.length, 'n'], [' or ', 'f'], ['enter', 'n'], [' open  ', 'f'], ['arrows', 'n'], [' move  ', 'f'], ['other key', 'n'], [' back', 'f']];
+  }
+  /* a key while a choice is waiting; returns true when consumed */
+  function choiceKey(e){
+    const ch = job.choice, k = e.key, n = ch.items.length;
+    if (e.ctrlKey && k.toLowerCase() === 'c'){ interrupt(); return true; }
+    if (n > 1 && (k === 'ArrowRight' || k === 'ArrowDown' || (k === 'Tab' && !e.shiftKey))){ ch.sel = (ch.sel + 1) % n; paintChoice(ch); dirty = true; return true; }
+    if (n > 1 && (k === 'ArrowLeft' || k === 'ArrowUp' || (k === 'Tab' && e.shiftKey))){ ch.sel = (ch.sel + n - 1) % n; paintChoice(ch); dirty = true; return true; }
+    let pick = -1;
+    if (k === 'Enter' || (n === 1 && (k === 'o' || k === 'O'))) pick = ch.sel;
+    else if (/^[1-9]$/.test(k) && +k <= n) pick = +k - 1;
+    job.choice = null;
+    if (ch.hint){ const at = rows.indexOf(ch.hint); if (at >= 0){ rows.splice(at, 1); shown = Math.min(shown, rows.length); } }
+    let it = null;
+    if (pick >= 0){
+      it = ch.items[pick];
+      const ok = openTarget(it.url);                       // synchronous, inside the keydown
+      ch.row.s = [['opening ', 'd'], [it.label, 'b', { url: it.url }]].concat(ok ? [] : [['  (blocked? enter on it)', 'f']]);
+      if (job) job.plain += 'Opening ' + it.label + '. ';
+    } else ch.row.s = [['back', 'f']];
+    dirty = true;
+    ch.res(it);
+    return true;
   }
   function interrupt(){
     if (!job) return;
@@ -3991,6 +4075,7 @@ M.createTerminal = function createTerminal(opts){
       if (ctrl && c === 'c' && app === st) interrupt();
       return true;
     }
+    if (job && job.choice){ if (typing()) revealAll(); return choiceKey(e); }
     if (typing()){ revealAll(); if (k === 'Enter' || k === 'Escape' || k === ' ' && !input) return true; }
     if (job){                                   // a command is running: only ctrl+c, ctrl+l and scrolling
       if (ctrl && c === 'c'){ interrupt(); return true; }
@@ -4246,7 +4331,7 @@ M.createTerminal = function createTerminal(opts){
     g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R); g.stroke();
     text(dp < 1 ? 'spinning up' + '.'.repeat(1 + Math.floor(t * 8) % 3) : 'ready', 12, top(3), dp < 1 ? 'n' : 'b');
     if (t < 1.45) return;
-    text('TERM', 0, top(4), 'd'); text('vt  72 x ' + ROWS, 10, top(4), 'n');
+    text('TERM', 0, top(4), 'd'); text('vt  ' + COLS + ' x ' + ROWS, 10, top(4), 'n');
     if (t > 1.6) text('OK', 42, top(4), 'b');
   }
 
@@ -4266,7 +4351,7 @@ M.createTerminal = function createTerminal(opts){
       g.fillRect(bx + cw, ly, (bw - cw * 2) * f, 5);
     });
     // agents
-    const ax = x + cw * 38, aw = cw * 11, ah = ch * 1.15;
+    const ax = x + cw * (COLS - 16), aw = cw * 11, ah = ch * 1.15;
     const ays = [y + ch * 0.45, y + h / 2 - ah / 2, y + h - ch * 0.45 - ah];
     const sx = bx + bw, sy = by + bh / 2;
     ays.forEach((ay, i) => {
@@ -4294,8 +4379,9 @@ M.createTerminal = function createTerminal(opts){
     });
   }
   function drawBars(x, y, w, h, age){
-    const labels = ['month 1', 'month 2', 'month 3'];
-    const base = y + h - ch * 1.25, maxH = h - ch * 1.6, bw = cw * 6, gap = cw * 10;
+    const narrow = COLS < 70;
+    const labels = narrow ? ['mo 1', 'mo 2', 'mo 3'] : ['month 1', 'month 2', 'month 3'];
+    const base = y + h - ch * 1.25, maxH = h - ch * 1.6, bw = cw * (narrow ? 3 : 6), gap = cw * (narrow ? 5 : 10);
     g.fillStyle = P.faint; g.fillRect(x, base, gap * 3 - cw * 2, 2);
     labels.forEach((lab, i) => {
       const p = REDUCED ? 1 : ease((age - i * 0.18) / 0.55);
@@ -4303,11 +4389,13 @@ M.createTerminal = function createTerminal(opts){
       const bx = x + i * gap + cw * 0.5;
       g.fillStyle = P.normal; g.fillRect(bx, base - bh, bw, bh);
       if (p > 0){ g.fillStyle = P.bright; g.fillRect(bx - 2, base - bh - 4, bw + 4, 4); }
-      g.font = font(); g.fillStyle = P.dim; g.fillText(lab, bx + (bw - cw * 7) / 2, base + 4 + fs * 0.68);
+      g.font = font(); g.fillStyle = P.dim; g.fillText(lab, bx + (bw - cw * lab.length) / 2, base + 4 + fs * 0.68);
     });
     // the facts, as a table aligned to the text grid beside the bars
-    const sepCol = 2 + 31, keyCol = sepCol + 2, f = J.facts || [];
-    const kw = Math.max(0, ...f.map(r => r[0].length)) + 3;
+    const f = J.facts || [];
+    const kw = Math.max(0, ...f.map(r => r[0].length)) + (narrow ? 2 : 3);
+    const vw = Math.max(0, ...f.map(r => r[1].length));
+    const sepCol = Math.min(2 + (narrow ? 16 : 31), COLS - vw - kw - 3), keyCol = sepCol + 2;
     g.fillStyle = P.faint; g.fillRect(X(sepCol), y + ch * 0.2, 2, ch * 4 - ch * 0.4);
     f.slice(0, 5).forEach(([k, v], i) => {
       const n = REDUCED ? 99 : Math.floor((age - 0.25 - i * 0.12) * 90);
@@ -4324,7 +4412,7 @@ M.createTerminal = function createTerminal(opts){
     g.beginPath(); g.moveTo(px, py); g.lineTo(px + pw - fold, py); g.lineTo(px + pw, py + fold); g.lineTo(px + pw, py + ph); g.lineTo(px, py + ph); g.closePath(); g.stroke();
     g.setLineDash([]); g.beginPath(); g.moveTo(px + pw - fold, py); g.lineTo(px + pw - fold, py + fold); g.lineTo(px + pw, py + fold); g.stroke();
     if (REDUCED || (t % 1.06) < 0.53){ g.fillStyle = P.normal; g.fillRect(px + cw * 1.2, py + ch * 0.9, cw, ch - 6); }
-    const col = 2 + 14;
+    const col = 2 + 12;
     text('No posts yet.', col, y + ch * 0.9, 'b');
     text('When there are, they will appear here,', col, y + ch * 2.0, 'd');
     text('newest first. Meanwhile:', col, y + ch * 3.0, 'd');
@@ -4333,7 +4421,8 @@ M.createTerminal = function createTerminal(opts){
   function drawFetch(x, y, w, h, age, t){
     // the KN-84 itself, in outline: a compact all-in-one with its screen lit, and a keyboard
     const ap = REDUCED ? 1 : ease(age / 0.5);
-    const bx = x, by = y + ch * 0.2, bw = cw * 18, bh = ch * 7.6;
+    const col = Math.max(14, COLS - 31);
+    const bx = x, by = y + ch * 0.2, bw = cw * Math.min(18, col - 6), bh = ch * 7.6;
     g.strokeStyle = P.normal; g.lineWidth = 2;
     g.strokeRect(bx, by, bw, bh * ap);
     if (ap >= 1){
@@ -4351,14 +4440,15 @@ M.createTerminal = function createTerminal(opts){
       const ky = by + bh + ch * 0.6, kh = ch * 2.6;
       g.strokeStyle = P.normal; g.strokeRect(bx - cw, ky, bw + cw * 2, kh);
       const kr = (kh - 12) / 4;
-      for (let r = 0; r < 3; r++) for (let c2 = 0; c2 < 11; c2++){
+      const nk = Math.floor((bw / cw) / 1.6);
+      for (let r = 0; r < 3; r++) for (let c2 = 0; c2 < nk - (r % 2); c2++){
         const kx = bx + c2 * cw * 1.6 + (r % 2) * cw * 0.5, kyy = ky + 6 + r * kr;
         g.fillStyle = P.dim; g.fillRect(kx, kyy, cw * 1.2, kr - 5);
       }
-      g.fillStyle = P.dim; g.fillRect(bx + cw * 4, ky + 6 + 3 * kr, cw * 10, kr - 5);
+      g.fillStyle = P.dim; g.fillRect(bx + bw * 0.22, ky + 6 + 3 * kr, bw * 0.56, kr - 5);
     }
     // the card
-    const col = 24; const info = fetchInfo();
+    const info = fetchInfo();
     const n = REDUCED ? 99 : Math.floor((age - 0.15) * 40);
     if (n <= 0) return;
     text('kaiav', col, y, 'b'); text('@', col + 5, y, 'f'); text('kn84', col + 6, y, 'b');
@@ -4445,7 +4535,7 @@ function box(scr, x, y, w, h, style){                       // ASCII frame, fill
 /* =====================================================================================
    TETRIS: SRS rotation + wall kicks, 7-bag, ghost, hold, next queue, lock delay
    ===================================================================================== */
-const BW = 10, BH = 20;
+const BW = 10;              // the well height adapts to the grid (BH, inside start)
 const SHAPES = {            // spawn state (0) in an n x n box, SRS orientation
   I: ['....', '####', '....', '....'],
   O: ['##', '##'],
@@ -4486,6 +4576,7 @@ T.apps.tetris = {
   desc: 'the falling blocks. arrows, space, c to hold',
   usage: 'tetris',
   start(api){
+    const BH = Math.max(10, Math.min(20, (api.rows || 23) - 2));   // well + floor + feet must fit the grid
     const board = Array.from({ length: BH }, () => Array(BW).fill(null));
     let bag = [], queue = [], cur = null, hold = null, canHold = true;
     let score = 0, lines = 0, level = 1, hi = hiGet(TETRIS_HI), newHi = false;
@@ -4595,7 +4686,10 @@ T.apps.tetris = {
       },
       render(scr){
         scr.clear(); scr.cursor(0, 0, null);
-        const W = BW * 2 + 4, ox = ((scr.cols - W) / 2) | 0, oy = Math.max(0, ((scr.rows - BH - 2) / 2) | 0);
+        const W = BW * 2 + 4;
+        const compact = scr.cols < 64 || scr.rows < 22;      // one stacked panel to the right of the well
+        const ox = compact ? Math.max(0, ((scr.cols - (W + 3 + 20)) / 2) | 0) : ((scr.cols - W) / 2) | 0;
+        const oy = Math.max(0, ((scr.rows - BH - 2) / 2) | 0);
         const bx = ox + 2;  // first board column
         // well: classic "<!" ... "!>" sides
         for (let y = 0; y < BH; y++){
@@ -4619,6 +4713,21 @@ T.apps.tetris = {
         // mini piece preview
         const mini = (p, x, y, level) => { if (!p) return; const n = SHAPES[p].length; const off = n === 4 ? 0 : 1;
           for (const [cx, cy] of STATES[p][0]) scr.put(x + (cx + off) * 2, y + cy - (p === 'I' ? 1 : 0), '  ', blk(level)); };
+        if (compact){
+          const rx = ox + W + 3;
+          scr.put(rx, oy, 'NEXT', 'dim'); mini(queue[0], rx, oy + 1, 'bright');
+          scr.put(rx + 10, oy, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx + 10, oy + 1, canHold ? 'normal' : 'faint');
+          [['SCORE', score, 'bright'], ['HIGH', Math.max(hi, score), score > hi ? 'bright' : 'normal'], ['LEVEL', level, 'normal'], ['LINES', lines, 'normal']]
+            .forEach(([a, v, st], i) => { scr.put(rx, oy + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, oy + 4 + i, String(v), st); });
+          const ks = [['<- ->', 'move'], ['up x', 'rotate'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
+          const ky = oy + 9, two = scr.rows - ky < ks.length;
+          const short = [['<->', 'move'], ['up', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
+          (two ? short : ks).forEach(([a, b], i) => {
+            const x = rx + (two ? (i % 2) * 11 : 0), y = ky + (two ? i >> 1 : i);
+            if (y >= scr.rows) return;
+            scr.put(x, y, two ? a.padEnd(4) : a.padEnd(7), 'normal'); scr.put(x + (two ? 4 : 7), y, b, 'faint');
+          });
+        } else {
         // left panel: hold + score
         const lx = ox - 16;
         scr.put(lx, oy, 'HOLD', 'dim'); scr.put(lx + 5, oy, canHold ? '' : '(used)', 'faint');
@@ -4635,6 +4744,7 @@ T.apps.tetris = {
         mini(queue[2], rx, oy + 9, 'faint');
         const keys = [['<- ->', 'move'], ['up x', 'rotate'], ['z', 'rotate back'], ['down', 'soft drop'], ['space', 'hard drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
         keys.forEach(([a, b], i) => { scr.put(rx, oy + 13 + i, a.padEnd(7), 'normal'); scr.put(rx + 7, oy + 13 + i, b, 'faint'); });
+        }
         // overlays
         const cardX = bx + 1, cardW = BW * 2 - 2;
         if (paused){
@@ -4642,8 +4752,9 @@ T.apps.tetris = {
           scr.put(cardX + ((cardW - 6) / 2 | 0), oy + 8, 'PAUSED', 'bright');
           scr.put(cardX + ((cardW - 14) / 2 | 0), oy + 10, 'p to carry on', 'dim');
         } else if (over){
-          box(scr, cardX, oy + 5, cardW, 10, 'normal');
-          const c = (y, s, st) => scr.put(cardX + ((cardW - s.length) / 2 | 0), oy + y, s, st);
+          const top = Math.max(0, Math.min(5, BH - 10));
+          box(scr, cardX, oy + top, cardW, 10, 'normal');
+          const c = (y, s, st) => scr.put(cardX + ((cardW - s.length) / 2 | 0), oy + top + y - 5, s, st);
           c(6, 'GAME  OVER', 'bright');
           c(8, 'score ' + score, 'normal');
           c(9, lines + ' lines  lvl ' + level, 'dim');
