@@ -105,7 +105,7 @@ function makeMat(color, U){
   {
     vec3 rN = normalize(vRimN); rN = gl_FrontFacing ? rN : -rN;
     vec3 rV = normalize(cameraPosition - vRimP);
-    float rF = pow(1.0 - clamp(dot(rN, rV), 0.0, 1.0), 2.6);
+    float rF = pow(1.0 - clamp(dot(rN, rV), 0.0, 1.0), 3.2);
     float sS = clamp(dot(rN, normalize(uRimScreen - vRimP)) * .65 + .35, 0.0, 1.0);
     float sL = clamp(dot(rN, normalize(uRimLamp - vRimP)) * .75 + .25, 0.0, 1.0);
     outgoingLight += rF * (uRimCrt * sS * sS + uRimWarm * sL * sL * sL + uRimAmb);
@@ -148,6 +148,7 @@ M.createTypist = function createTypist(api){
   const dirLocal = w => w.clone().applyQuaternion(invRootQ).normalize();
 
   /* keyboard frame (world): lat = typist's right along the rows, fwd = away from typist, n = key-surface up */
+  try { if (api.scene) api.scene.updateMatrixWorld(true); } catch (e){}   // key positions may not have been rendered yet
   const has = c => { try { return !!kb.hasKey(c); } catch (e){ return false; } };
   const wpos = c => { try { const p = has(c) && kb.keyWorldPos(c); return p ? p.clone() : null; } catch (e){ return null; } };
   const anchors = [];
@@ -157,7 +158,7 @@ M.createTypist = function createTypist(api){
   let latW = null, uW = .019;
   for (let i = 0; i < anchors.length && !latW; i++) for (let j = i + 1; j < anchors.length; j++){
     const A = anchors[i], B = anchors[j];
-    if (A.row === B.row && A.c !== 'Space' && B.c !== 'Space' && Math.abs(A.ux - B.ux) >= 1){
+    if (A.row === B.row && A.c !== 'Space' && B.c !== 'Space' && Math.abs(A.ux - B.ux) >= 1 && A.p.distanceTo(B.p) > 1e-4){
       const d = B.p.clone().sub(A.p); uW = d.length() / Math.abs(B.ux - A.ux); latW = d.multiplyScalar(Math.sign(B.ux - A.ux)).normalize(); break;
     }
   }
@@ -179,15 +180,15 @@ M.createTypist = function createTypist(api){
   const keyLocal = code => { const p = wpos(code) || layoutWorld(code); return p ? toLocal(p) : null; };
 
   const n = dirLocal(nW), lat = dirLocal(latW), kfw = dirLocal(fwdW);
-  const U_KEY = uW / s, TRAVEL = .0035 / s, HOVER = .0075;
+  const U_KEY = uW / s, TRAVEL = .0035 / s, HOVER = .005;
 
   /* ---------- materials ---------- */
   const U = {
     uRimScreen: { value: scrW.clone() }, uRimLamp: { value: kbW.clone().addScaledVector(latW, -.45).add(V3(0, .55, 0)) },
-    uRimCrt: { value: new THREE.Color(0x6fe0a0).multiplyScalar(.42) }, uRimWarm: { value: new THREE.Color(0xffa860).multiplyScalar(.55) },
-    uRimAmb: { value: new THREE.Color(0x1c2230).multiplyScalar(.5) },
+    uRimCrt: { value: new THREE.Color(0x7fe0b0).multiplyScalar(.26) }, uRimWarm: { value: new THREE.Color(0xffa860).multiplyScalar(.5) },
+    uRimAmb: { value: new THREE.Color(0x1c2230).multiplyScalar(.25) },
   };
-  const cloth = makeMat(0x0d0d10, U), skin = makeMat(0x120e0d, U), hairM = makeMat(0x070708, U);
+  const cloth = makeMat(0x060608, U), skin = makeMat(0x070505, U), hairM = makeMat(0x040405, U);
   const meshes = [];
   const mesh = (geo, mat, parent, pos, rot) => {
     const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = false;
@@ -209,44 +210,57 @@ M.createTypist = function createTypist(api){
 
   const SPINE0 = V3(0, .08, .03);
   const spine = new THREE.Group(); spine.position.copy(SPINE0); spine.rotation.order = 'YXZ'; root.add(spine);
-  const torsoProf = [[0, -.07], [.14, -.068], [.168, -.045], [.172, -.005], [.163, .03], [.153, .1], [.157, .2], [.17, .29], [.181, .36], [.186, .41], [.174, .45], [.142, .485], [.098, .508], [.064, .522], [0, .528]];
+  const torsoProf = [[0, -.07], [.14, -.068], [.168, -.045], [.172, -.005], [.163, .03], [.153, .1], [.157, .2], [.17, .29], [.181, .35], [.186, .395], [.17, .435], [.135, .47], [.096, .497], [.064, .515], [0, .522]];
   const torsoGeo = lathe(torsoProf, 36,
     (a, y) => .018 * Math.sin(a * 9 + y * 13 + Math.sin(a * 3) * 1.7) * smooth(.04, .16, y) * (1 - smooth(.3, .42, y))   // vertical drape folds
       + .012 * Math.sin(y * 70 + a * 2) * smooth(.02, .06, y) * (1 - smooth(.12, .2, y))                                  // bunching above the hem
       + .01 * Math.sin(a * 5 - y * 20) * smooth(.28, .4, y) * (1 - smooth(.44, .5, y)),                                  // pull across the back
     v => { v.z *= .64; v.z += .03 * smooth(.18, .46, v.y) * (v.z > 0 ? 1 : .35); });                                      // rounded, slightly hunched back
   const torso = mesh(torsoGeo, cloth, spine);
-  // the hood, bunched round the neck and lying on the upper back
-  const hoodRing = new THREE.TorusGeometry(.072, .03, 12, 32); hoodRing.rotateX(PI / 2);
-  { const P = hoodRing.attributes.position; for (let i = 0; i < P.count; i++){ const x = P.getX(i), y = P.getY(i), z = P.getZ(i), a = Math.atan2(z, x); const k = 1 + .12 * Math.sin(a * 6) * .5; P.setXYZ(i, x * 1.22 * k, y * (1 + .25 * Math.max(0, Math.sin(a))), z * k); } weldNormals(hoodRing); }
-  mesh(hoodRing, cloth, spine, V3(0, .5, .01), [.38, 0, 0]);
-  mesh(blob(.105, .1, .04, (x, y, z) => .07 * Math.sin(x * 7 + y * 3) * (z > 0 ? 1 : 0) + .05 * Math.max(0, y) * (z > 0 ? 1 : 0)), cloth, spine, V3(0, .42, .108), [.32, 0, 0]);
+  // the hood: a soft collar hugging the neck, and the hood itself piled in folds on the upper back
+  const collar = new THREE.TorusGeometry(.064, .02, 10, 32); collar.rotateX(PI / 2);
+  { const P = collar.attributes.position; for (let i = 0; i < P.count; i++){ const x = P.getX(i), y = P.getY(i), z = P.getZ(i), a = Math.atan2(z, x); const k = 1 + .05 * Math.sin(a * 5); P.setXYZ(i, x * 1.15 * k, y * (1 + .4 * Math.max(0, Math.sin(a))), z * k); } weldNormals(collar); }
+  mesh(collar, cloth, spine, V3(0, .5, .004), [.28, 0, 0]);
+  const fold = (a, b, c) => (x, y, z) => (z > -.2 ? 1 : .2) * (a * Math.sin(x * 7 + y * 4) * Math.cos(y * 5 - x * 2) + b * Math.max(0, y)) - c * Math.max(0, -y) * Math.max(0, z);
+  mesh(blob(.1, .095, .052, fold(.07, .05, .1)), cloth, spine, V3(0, .448, .095), [.48, 0, 0]);
+  mesh(blob(.07, .05, .042, fold(.06, .03, 0)), cloth, spine, V3(0, .505, .07), [.75, 0, 0]);
 
   const SHOULDER = [V3(-.172, .44, .005), V3(.172, .44, .005)];
-  for (let h = 0; h < 2; h++) mesh(blob(.064, .06, .068, (x, y) => .03 * Math.sin(x * 5 + y * 4)), cloth, spine, SHOULDER[h].clone().add(V3(0, .006, 0)));
+  for (let h = 0; h < 2; h++) mesh(blob(.05, .044, .06, (x, y) => .02 * Math.sin(x * 5 + y * 4)), cloth, spine, SHOULDER[h].clone().add(V3(-Math.sign(SHOULDER[h].x) * .018, -.014, 0)));
 
   const neck = new THREE.Group(); neck.position.set(0, .505, -.012); neck.rotation.order = 'YXZ'; spine.add(neck);
-  mesh(capsule(.05, .044, .09, 14), skin, neck, V3(0, -.02, 0));
-  const head = new THREE.Group(); head.position.set(0, .085, 0); head.rotation.order = 'YXZ'; neck.add(head);
+  mesh(capsule(.058, .05, .065, 14), skin, neck, V3(0, -.02, 0));
+  const head = new THREE.Group(); head.position.set(0, .064, 0); head.rotation.order = 'YXZ'; neck.add(head);
   mesh(blob(.077, .102, .094), skin, head, V3(0, .095, -.012));
-  mesh(blob(.06, .055, .07), skin, head, V3(0, .045, -.045));                         // jaw
-  for (const sd of [-1, 1]) mesh(blob(.012, .027, .02), skin, head, V3(sd * .077, .09, -.004), [0, -sd * .25, sd * .12]);  // ears
+  mesh(blob(.056, .05, .064), skin, head, V3(0, .045, -.036));                         // jaw
+  for (const sd of [-1, 1]) mesh(blob(.009, .022, .015), skin, head, V3(sd * .073, .088, -.006), [0, -sd * .3, sd * .1]);  // ears
   // hair: a tousled cap over the top and back of the skull, with a short nape
-  mesh(blob(.085, .088, .102, (x, y, z) => (y > -.2 ? 1 : 0) * (.07 * Math.sin(x * 9 + z * 5) * Math.sin(y * 7 + x * 3) + .05 * Math.max(0, y)) + .03 * Math.sin(z * 11 + x * 4) * Math.max(0, z), 32, 22),
-    hairM, head, V3(0, .128, 0));
-  mesh(blob(.072, .05, .06, (x, y, z) => .04 * Math.sin(x * 10 + y * 6)), hairM, head, V3(0, .06, .042));
+  mesh(blob(.083, .086, .1, (x, y, z) => smooth(-.3, .2, y) * (.028 * Math.sin(x * 6 + z * 4 + 1) * Math.sin(y * 5 + z * 3) + .04 * Math.max(0, y) * Math.max(0, z + .3)) + .015 * Math.sin(Math.atan2(z, x) * 7) * smooth(-.1, .5, y), 36, 24),
+    hairM, head, V3(0, .126, .004));
+  mesh(blob(.068, .052, .056, (x, y, z) => .02 * Math.sin(x * 8 + y * 5)), hairM, head, V3(0, .07, .036));
+  { // loose tufts break the skull's outline so it reads as hair, not a helmet
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const tuft = blob(.022, .011, .032, (x, y, z) => .1 * Math.max(0, z));
+    for (let i = 0; i < 16; i++){
+      const az = (i / 16) * PI * 2 + rnd() * .3, el = .3 + rnd() * .7;
+      const dir = V3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
+      const m = mesh(tuft, hairM, head, V3(dir.x * .078, .128 + dir.y * .08, .004 + dir.z * .092));
+      m.lookAt(m.position.clone().add(V3(dir.x * .6, -.25 + rnd() * .2, dir.z * .6 + .5)));
+      m.rotateZ(rnd() * PI);
+    }
+  }
 
   /* ---------- arms ---------- */
   const L1 = .29, L2 = .265;
-  const upperGeo = capsule(.054, .045, L1, 16, (a, y) => .045 * Math.sin(a * 4 + y * 26) * smooth(.12, .26, y) + .025 * Math.sin(a * 3 - y * 18) * (1 - smooth(.05, .14, y)));
+  const upperGeo = capsule(.05, .044, L1, 16, (a, y) => .045 * Math.sin(a * 4 + y * 26) * smooth(.12, .26, y) + .025 * Math.sin(a * 3 - y * 18) * (1 - smooth(.05, .14, y)));
   const foreGeo = lathe([[.0001, -.044], [.024, -.039], [.04, -.026], [.046, 0], [.044, .06], [.041, .15], [.043, .19], [.041, .215], [.034, .228], [.02, .232], [.0001, .233]], 16,
     (a, y) => .04 * Math.sin(a * 4 + y * 40) * smooth(.15, .2, y) + .03 * Math.sin(a * 3 + y * 25) * (1 - smooth(.0, .06, y)));
   const wristGeo = capsule(.026, .024, .06, 12);
 
   /* ---------- hands ---------- */
-  const FL = [[.034, .03, .026], [.04, .025, .019], [.044, .028, .02], [.041, .026, .019], [.032, .02, .017]];
+  const FL = [[.034, .03, .026], [.04, .025, .019], [.044, .028, .02], [.041, .026, .019], [.035, .022, .018]];
   const FR = [[.0125, .011, .0098], [.0094, .0086, .0077], [.0098, .0088, .0079], [.0092, .0083, .0075], [.0082, .0074, .0067]];
-  const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .75, 1.75));
+  const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));
   const segGeo = FL.map((L, f) => L.map((l, j) => { const g = capsule(FR[f][j], j < 2 ? FR[f][j + 1] : FR[f][j] * .92, l, 10); g.rotateX(-PI / 2); return g; }));
 
   const hands = [];
@@ -258,11 +272,11 @@ M.createTypist = function createTypist(api){
     mesh(blob(.017, .013, .029), skin, hand, V3(ts * .022, -.004, -.032));
     const upper = new THREE.Group(); root.add(upper); mesh(upperGeo, cloth, upper);
     const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, cloth, fore); mesh(wristGeo, skin, fore, V3(0, .2, 0));
-    const KN = [V3(ts * .03, -.006, -.03), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, 0, -.078)];
+    const KN = [V3(ts * .03, -.006, -.03), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.081)];
     const fingers = [];
     for (let f = 0; f < 5; f++){
       const base = new THREE.Group(); base.position.copy(KN[f]); hand.add(base);
-      if (f === 0) base.rotation.set(-.42, -ts * .7, ts * .35, 'YXZ'); else base.rotation.y = ts * (f - 2.4) * -.03;
+      if (f === 0) base.rotation.set(-.35, -ts * .5, 0, 'YXZ'); else base.rotation.y = ts * (f - 2.4) * -.03;
       const g0 = new THREE.Group(); g0.rotation.order = 'YXZ'; base.add(g0);
       const g1 = new THREE.Group(); g1.position.z = -FL[f][0]; g0.add(g1);
       const g2 = new THREE.Group(); g2.position.z = -FL[f][1]; g1.add(g2);
@@ -280,13 +294,13 @@ M.createTypist = function createTypist(api){
     const space = keyLocal('Space');
     for (const H of hands){
       const homes = HOME[H.h].slice(1).map(keyLocal), C = homes.reduce((a, p) => a.add(p), V3()).multiplyScalar(.25);
-      const fwd = kfw.clone().addScaledVector(lat, H.h ? -.2 : .2).normalize().addScaledVector(n, -.17).normalize();
+      const fwd = kfw.clone().addScaledVector(lat, H.h ? -.1 : .1).normalize().addScaledVector(n, -.17).normalize();
       const up = n.clone().addScaledVector(fwd, -n.dot(fwd)).normalize(), back = fwd.clone().negate();
       const right = up.clone().cross(back).normalize();
       H.homeQ.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, back))
         .multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -H.side * .2));
       const kc = H.fingers.slice(1).reduce((a, F) => a.add(F.base.position), V3()).multiplyScalar(.25);
-      const target = C.clone().addScaledVector(n, .031).addScaledVector(kfw, -.044 / Math.max(.8, s / 1.05));
+      const target = C.clone().addScaledVector(n, .056).addScaledVector(kfw, -.05);
       H.homeW.copy(target).sub(kc.applyQuaternion(H.homeQ));
       H.W = new VSpring(H.homeW); H.hold.copy(H.homeW);
       const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(1, 1, 1)).invert();
@@ -341,8 +355,10 @@ M.createTypist = function createTypist(api){
     const F = pickFinger(code, pos);
     if (code === 'Space' && pos) pos = thumbKey[F.h].clone();
     if (!pos) pos = F.P.clone().addScaledVector(n, -F.clear - HOVER);       // unknown: just bob the finger
-    if (F.mode === 'down' && F.code && F.code !== code && !F.pressed && F.real){ // retargeted before contact
-      const old = F.code; doPress(old); if (F.upReq) timers.push({ at: T + .05, fn: () => doRelease(old) });
+    if (F.mode === 'down' && F.code && (F.code !== code || F.upReq)){   // finger leaves a key it was still on
+      const old = F.code;
+      if (!F.pressed && F.real) doPress(old);
+      if (F.upReq) timers.push({ at: T + .05, fn: () => doRelease(old) });
     }
     F.mode = 'down'; F.code = code; F.real = real; F.pressed = false; F.upReq = false; F.t = 0;
     F.K.copy(pos); F.from.copy(F.P); F.w.x = 0; F.w.v = 0; F.depth.x = 0; F.depth.v = 0;
@@ -369,9 +385,9 @@ M.createTypist = function createTypist(api){
     if (i >= Tb.n){ c = Tb.c[Tb.n]; al = Tb.a[Tb.n]; }
     else { const k = clamp((Tb.d[i] - D) / Math.max(1e-6, Tb.d[i] - Tb.d[i + 1]), 0, 1); c = Tb.c[i] + (Tb.c[i + 1] - Tb.c[i]) * k; al = Tb.a[i] + (Tb.a[i + 1] - Tb.a[i]) * k; }
     if (D >= Tb.d[0]){ c = 0; al = 0; }
-    const p = clamp(A - al, th ? -.5 : -.65, th ? 1.1 : 1.35);
+    const p = clamp(A - al, th ? -.5 : -.3, th ? 1.1 : 1.35);
     F.g0.rotation.set(-p, psi, 0);
-    F.g1.rotation.x = -c; F.g2.rotation.x = -c * (th ? .8 : .75);
+    F.g1.rotation.x = -c; F.g2.rotation.x = -c * (th ? .8 : .55);
     F.g0.updateMatrixWorld(true);
     F.tip.set(0, 0, -F.L[2]); F.g2.localToWorld(F.tip); root.worldToLocal(F.tip);
   }
@@ -406,12 +422,12 @@ M.createTypist = function createTypist(api){
       for (const F of H.fingers){
         if (F.mode !== 'down') continue;
         const d = v1.copy(F.K).sub(F.restHome); d.addScaledVector(n, -d.dot(n));
-        const len = d.length(), g = len < 1e-6 ? 0 : clamp(1 - .016 / len, .12, 1);
+        const len = d.length(), g = len < 1e-6 ? 0 : clamp(1 - .014 / len, .12, 1);
         const wgt = F.f === 0 ? .25 : /^(Shift|Control|Alt|Meta)/.test(F.code || '') ? .5 : 1;
         tgt.add(v3.copy(H.homeW).addScaledVector(d, g).addScaledVector(n, -.004).multiplyScalar(wgt)); wsum += wgt;
       }
       let w = 7;
-      if (wsum > 0){ H.hold.copy(tgt.multiplyScalar(1 / wsum)); H.lastActive = T; w = 24; }
+      if (wsum > 0){ H.hold.copy(tgt.multiplyScalar(1 / wsum)); H.lastActive = T; w = 34; }
       else if (T - H.lastActive < .35) w = 18;
       else H.hold.copy(H.homeW).addScaledVector(n, .0025 * breath).addScaledVector(kfw, .002 * Math.sin(T * .7 + H.h * 2));
       const W = H.W.step(H.hold, w, dt);
@@ -446,7 +462,7 @@ M.createTypist = function createTypist(api){
         const idle = v2.copy(F.restLocal).add(F.fid.x); idle.y += .0012 * Math.sin(T * 1.7 + F.f * 1.3 + H.h * 2); idle.applyMatrix4(H.hand.matrix);
         if (F.mode === 'down'){
           F.t += dt;
-          spring(F.w, 1, 64, dt); spring(F.depth, F.pressed ? 1 : 0, 70, dt);
+          spring(F.w, 1, 78, dt); spring(F.depth, F.pressed ? 1 : 0, 70, dt);
           const Kc = v3.copy(F.K).addScaledVector(n, F.clear - F.depth.x * TRAVEL);
           const e = F.w.x, arc = Math.min(.016, .006 + .3 * F.from.distanceTo(Kc));
           F.P.copy(F.from).lerp(Kc, e).addScaledVector(n, arc * Math.sin(PI * Math.min(1, e)));
@@ -459,7 +475,7 @@ M.createTypist = function createTypist(api){
         solveFinger(F, F.P);
         if (F.mode === 'down'){
           const Kc = v3.copy(F.K).addScaledVector(n, F.clear);
-          if (!F.pressed && ((F.w.x > .8 && F.tip.distanceTo(Kc) < .0025) || F.t > .1)){
+          if (!F.pressed && ((F.w.x > .8 && F.tip.distanceTo(Kc) < .0025) || F.t > .09)){
             F.pressed = true; F.tC = F.t; if (F.real) doPress(F.code);
           }
           if (F.pressed && F.upReq && F.t - F.tC > .04){
