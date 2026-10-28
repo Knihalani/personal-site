@@ -4,6 +4,7 @@
 (() => {
 'use strict';
 const M = window.MAC = window.MAC || {};
+if (typeof THREE === 'undefined') return;   // three.js did not load: main.js shows the flat terminal instead
 
 /* Phosphor: soft green, a desaturated, slightly minty P1. Amber would melt into the room, because the only other
    light is a 2700K lamp. Green sits opposite it on the colour wheel, so the tube separates from the room and the

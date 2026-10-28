@@ -39,8 +39,22 @@ body.phone::before{ content: ""; position: fixed; top: 0; left: 0; right: 0; hei
 #loading.gone{ opacity: 0; pointer-events: none }
 noscript{ position: fixed; inset: 0; z-index: 4; display: grid; place-content: center; gap: 6px; background: var(--bg); font-size: 14px; text-align: center }
 noscript h1{ margin: 0; font: 500 18px var(--mono) } noscript p{ margin: 0; color: var(--dim) } noscript a{ color: #8dffb4 }
-@media (prefers-reduced-motion: reduce){ #hint, #loading{ transition: none } }
+/* the flat terminal on a desktop (no WebGL, or three.js did not load): one centred column, sized by main.js */
+body.flat #stage .phone-term{ right: 0; margin: 0 auto }
+@media (prefers-reduced-motion: reduce){ #hint, #loading, #stage .phone-term{ transition: none } }
+/* high contrast: the sound toggle's dot keeps showing its state in system colours */
+@media (forced-colors: active){ #mute::before{ forced-color-adjust: none; border-color: ButtonText } #mute[aria-pressed="true"]::before{ background: ButtonText; box-shadow: none } }
 </style>
+<script>
+/* storage that throws (blocked site data, some private modes): every module gets an in-memory stand-in for this visit */
+for (const n of ['localStorage', 'sessionStorage']){
+  let real = null;
+  try { real = window[n]; real.setItem('kaiav.probe', '1'); real.removeItem('kaiav.probe'); continue; } catch (e){}
+  const m = new Map(), k = x => String(x);
+  const get = x => { if (m.has(k(x))) return m.get(k(x)); try { return real ? real.getItem(x) : null; } catch (e){ return null; } };
+  try { Object.defineProperty(window, n, { configurable: true, value: { getItem: get, setItem: (x, v) => { m.set(k(x), String(v)); }, removeItem: x => { m.set(k(x), null); } } }); } catch (e){}
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 
 <div id="stage" aria-hidden="true"></div>

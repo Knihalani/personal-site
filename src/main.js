@@ -1,21 +1,25 @@
-/* Glue: one first-person scene, one terminal, one typist, sound, one loop. Phones get the terminal alone. */
+/* Glue: one first-person scene, one terminal, one typist, sound, one loop. Phones, and any machine where the 3D
+   cannot run (no WebGL, three.js blocked, the GPU gives up), get the terminal alone. */
 (() => {
 'use strict';
 const M = window.MAC, D = document, $ = s => D.querySelector(s);
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TOUCH = matchMedia('(pointer: coarse)').matches;
-const stage = $('#stage'), kbd = $('#kbd'), muteBtn = $('#mute'), sound = M.sound;
+const small = () => TOUCH && Math.min(innerWidth, innerHeight) < 820;
+const stage = $('#stage'), kbd = $('#kbd'), muteBtn = $('#mute'), hint = $('#hint'), sound = M.sound;
 const reading = () => !!(M.reader && M.reader.isOpen);   // the reader owns the keyboard while it is open
+let errs = 0;
+const oops = e => { if (!errs++) console.error('kept going after:', e); };   // logged once; the loop carries on
 
 /* ---- shared by both layouts ---- */
 /* sound: unlocked by the first gesture */
 let unlocked = false;
 function unlock(){ if (unlocked || !sound) return; unlocked = true; try { sound.unlock(); } catch (e){} }
 /* the toggle keeps one label; aria-pressed (and the dot drawn from it) says whether sound is on. Remembered by sound.js */
-function setupMute(afterClick){
+function setupMute(afterClick, signal){
   if (!sound){ muteBtn.hidden = true; return; }
   const paint = () => muteBtn.setAttribute('aria-pressed', String(!sound.muted));
-  muteBtn.addEventListener('click', e => { unlock(); sound.setMuted(!sound.muted); paint(); if (e.detail && afterClick) afterClick(); });
+  muteBtn.addEventListener('click', e => { unlock(); sound.setMuted(!sound.muted); paint(); if (e.detail && afterClick) afterClick(); }, { signal });
   paint();
 }
 /* #post/<slug>: true when the hash is a post link (opened, or already open) */
@@ -25,10 +29,14 @@ function openPost(id){
   if (M.reader && !(M.reader.isOpen && M.reader.current === slug)) M.reader.open(slug);
   return true;
 }
-/* deep links: #eden, #j, #about, #writing run the matching command; #post/<slug> opens the reader */
-function deepLinks(term){
-  const fromHash = () => { const id = location.hash.slice(1); if (!openPost(id) && id && term.run) term.run(id); };
-  addEventListener('hashchange', fromHash);
+/* deep links: #about, #eden, #j, #writing, #contact, #links, #help run that command; #post/<slug> opens the reader.
+   Anything else in the hash is ignored (a link never runs an arbitrary command line) */
+function deepLinks(getTerm, signal){
+  const fromHash = () => {
+    const id = location.hash.slice(1), t = getTerm();
+    if (!openPost(id) && /^(about|eden|j|writing|contact|links|help)$/.test(id) && t.run) t.run(id);
+  };
+  addEventListener('hashchange', fromHash, { signal });
   return fromHash;
 }
 /* start once the fonts are in (or after 1.5 s, whichever comes first) */
@@ -37,11 +45,21 @@ function whenReady(go){
     .then(() => { $('#loading').classList.add('gone'); go(); });
 }
 
-/* phones and small tablets: just the terminal, full screen, no 3D */
-if (TOUCH && Math.min(innerWidth, innerHeight) < 820){ phone(); return; }
+/* phones and small tablets: just the terminal, full screen; and any desktop that cannot draw the room */
+if (small() || !window.THREE || !M.createScene){ if (!small()) console.warn('3D off: three.js did not load'); flat(); return; }
 
 let api;
-try { api = M.createScene(stage); } catch (e){ console.error(e); $('#loading').textContent = 'this needs WebGL'; return; }
+try { api = M.createScene(stage); } catch (e){ console.warn('3D off:', e && e.message); stage.textContent = ''; flat(); return; }
+/* everything the 3D layout listens to goes when it is torn down (toFlat) */
+const ac = new AbortController(), sig = { signal: ac.signal };
+const on = (t, type, f, o) => t.addEventListener(type, f, Object.assign({}, sig, o));
+let dead = false, raf = 0;
+function toFlat(why){
+  if (dead) return; dead = true; console.warn('3D off:', why);
+  ac.abort(); cancelAnimationFrame(raf); hint.hidden = true;
+  try { api.renderer.dispose(); } catch (e){}
+  stage.textContent = ''; flat();
+}
 if (M.dressRoom) { try { M.dressRoom(api); } catch (e){ console.error(e); } }
 M.world = {
   lamp: on => api.setLamp ? api.setLamp(on === undefined ? !api.lampOn : on) : null,
@@ -49,11 +67,13 @@ M.world = {
 };
 const term = M.createTerminal({ content: M.CONTENT, aspect: api.screenAspect });
 api.setScreenCanvas(term.canvas);
-const typist = M.createTypist(api); if (typist.object3d && !typist.object3d.parent) api.add(typist.object3d);
+let typist;
+try { typist = M.createTypist(api); if (typist.object3d && !typist.object3d.parent) api.add(typist.object3d); }
+catch (e){ oops(e); typist = { keyDown(){}, keyUp(){}, update(){} }; }   // no hands is better than no site
 const look = (x, y) => api.setLook && api.setLook(x, y);
 /* #kbd is the real text field (screen readers, IME, paste); keystrokes themselves are read from keydown */
 const focusInput = () => { if (!reading() && D.activeElement !== kbd) try { kbd.focus({ preventScroll: true }); } catch (e){} };
-setupMute(focusInput);
+setupMute(focusInput, ac.signal);
 
 /* ---- input: physical keyboards drive the terminal and the typist's hands ---- */
 const held = new Set();
@@ -67,8 +87,8 @@ function onDown(e){
   if (!held.has(code)){ held.add(code); typist.keyDown(code); if (api.nudge) api.nudge(); }
 }
 function onUp(e){ if (term.handleKeyUp) term.handleKeyUp(e); const code = e.code || 'KeyA'; if (held.has(code)){ held.delete(code); typist.keyUp(code); } }
-addEventListener('keydown', onDown); addEventListener('keyup', onUp);
-addEventListener('blur', () => { for (const c of held) typist.keyUp(c); held.clear(); });
+on(window, 'keydown', onDown); on(window, 'keyup', onUp);
+on(window, 'blur', () => { for (const c of held) typist.keyUp(c); held.clear(); });
 
 /* text that reaches #kbd without a handled keydown: touch keyboards, IME, paste */
 const codeFor = ch => /[a-z]/i.test(ch) ? 'Key' + ch.toUpperCase() : /\d/.test(ch) ? 'Digit' + ch : ch === ' ' ? 'Space' : ch === '.' ? 'Period' : ch === ',' ? 'Comma' : ch === '-' ? 'Minus' : ch === '/' ? 'Slash' : 'Quote';
@@ -77,16 +97,16 @@ function takeText(){
   if (v.length > 4){ term.insertText(v); return; }          // a paste: no finger show
   for (const ch of v){ term.insertText(ch); const code = codeFor(ch); typist.keyDown(code); setTimeout(() => typist.keyUp(code), 90); }
 }
-kbd.addEventListener('input', e => { if (!e.isComposing) takeText(); });
-kbd.addEventListener('compositionend', takeText);
-kbd.addEventListener('keydown', e => { if (reading()) return; if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ onDown(e); e.stopPropagation(); } });
-kbd.addEventListener('keyup', e => { onUp(e); e.stopPropagation(); });
+on(kbd, 'input', e => { if (!e.isComposing) takeText(); });
+on(kbd, 'compositionend', takeText);
+on(kbd, 'keydown', e => { if (reading()) return; if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ onDown(e); e.stopPropagation(); } });
+on(kbd, 'keyup', e => { onUp(e); e.stopPropagation(); });
 /* the wheel scrolls the terminal; the cursor looks around, and moving it down leans back to the whole desk */
-addEventListener('wheel', e => { if (reading()) return; if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
-addEventListener('keydown', e => { if (reading()) return; if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
-stage.addEventListener('pointerdown', () => unlock());
+on(window, 'wheel', e => { if (reading()) return; if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
+on(window, 'keydown', e => { if (reading()) return; if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
+on(stage, 'pointerdown', () => unlock());
 /* clicking the tube: command words and card rows on the terminal are clickable (the scene maps the click to the canvas) */
-stage.addEventListener('click', e => {
+on(stage, 'click', e => {
   if (reading()) return;
   const p = api.pickScreen && term.handleTap ? api.pickScreen(e.clientX, e.clientY) : null;
   if (p && term.handleTap(p.u, p.v)){ unlock(); if (api.markScreenDirty) api.markScreenDirty(); }
@@ -94,50 +114,96 @@ stage.addEventListener('click', e => {
 });
 
 /* the one hint: shown once, gone after the first lean or ~12 s. Without pointer look (reduced motion) there is none */
-const hint = $('#hint');
 let hintT = 0;
 const hideHint = () => { if (!hintT) return; clearTimeout(hintT); hintT = 0; hint.style.opacity = '0'; setTimeout(() => { hint.hidden = true; }, 1300); };
-addEventListener('pointermove', e => {
+on(window, 'pointermove', e => {
   if (e.pointerType !== 'mouse' || REDUCED || reading()) return;
   const ny = e.clientY / innerHeight * 2 - 1;
   look(e.clientX / innerWidth * 2 - 1, ny);
   if (ny > 0.5) hideHint();
 });
-D.documentElement.addEventListener('mouseleave', () => look(0, 0));
+on(D.documentElement, 'mouseleave', () => look(0, 0));
+
+/* the GPU dropped the context (driver reset, GPU switch, too many tabs). three.js r147's restore leaves this scene
+   black, so go straight to the flat terminal; a reload brings the room back */
+on(api.renderer.domElement, 'webglcontextlost', () => toFlat('the WebGL context was lost'));
 
 /* ---- loop ---- */
-function resize(){ api.resize(innerWidth, innerHeight); }
-addEventListener('resize', resize); resize();
-let last = performance.now(), T = 0, raf = 0;
+function resize(){
+  if (small()){ toFlat('the window became phone-sized'); return; }   // a tablet in split view
+  api.resize(innerWidth, innerHeight);
+}
+on(window, 'resize', resize); resize();
+/* a GPU that cannot keep up: when most of ~5 s goes to long frames, shadows go first, then pixels below 1x
+   (scene.js has already trimmed the pixel ratio down to 1 by then) */
+let slowT = 0, spanT = 0, runT = 0, bad = 0, last = performance.now(), T = 0;
+const gl = api.renderer.getContext();
+function degrade(){
+  const r = api.renderer;
+  if (r.shadowMap.enabled){ r.shadowMap.enabled = false; api.scene.traverse(o => { if (o.isLight) o.castShadow = false; }); }
+  else if (r.getPixelRatio() <= 1 && r.getPixelRatio() > .75) r.setPixelRatio(.75);
+}
 function frame(now){
   raf = requestAnimationFrame(frame);
-  const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt;
-  if (term.update(dt, T)) api.markScreenDirty();
+  const raw = (now - last) / 1000, dt = Math.min(.05, raw); last = now; T += dt;
+  try { if (term.update(dt, T)) api.markScreenDirty(); } catch (e){ oops(e); }
   if (reading()) return;   // the reader sheet covers the room: hold the last frame and save the GPU
-  typist.update(dt, T); api.update(dt, T); if (sound && sound.update) sound.update(dt); api.render();
+  try { typist.update(dt, T); } catch (e){ oops(e); }
+  try { if (sound && sound.update) sound.update(dt); } catch (e){ oops(e); }
+  if (gl.isContextLost()) return;   // the contextlost event is on its way (see above)
+  try { api.update(dt, T); api.render(); bad = 0; } catch (e){ oops(e); if (++bad > 30) toFlat('the 3D view kept failing'); }
+  if ((runT += raw) > 2){ spanT += raw; if (raw > .06) slowT += raw; if (spanT > 5){ if (slowT / spanT > .5) degrade(); spanT = slowT = 0; } }
 }
-D.addEventListener('visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });
-const fromHash = deepLinks(term);
+on(D, 'visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });
+const fromHash = deepLinks(() => term, ac.signal);
 whenReady(() => {
+  if (dead) return;
   fromHash(); focusInput(); raf = requestAnimationFrame(frame);
   if (!REDUCED && !matchMedia('(hover: none)').matches){ hint.hidden = false; hintT = setTimeout(hideHint, 12000); }
 });
 
-function phone(){
-  D.body.classList.add('phone');
-  /* the terminal fills the screen below the header strip (and above the home indicator) */
-  const probe = D.createElement('div'); probe.className = 'phone-term'; probe.style.cssText = 'visibility:hidden;padding-bottom:env(safe-area-inset-bottom, 0px)';
-  stage.appendChild(probe);
-  const top = probe.offsetTop, inset = parseFloat(getComputedStyle(probe).paddingBottom) || 0; probe.remove();
-  const W = innerWidth, H = Math.max(200, innerHeight - top - inset);
-  const term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols: W < 420 ? 40 : W < 600 ? 46 : 54 });
-  const cv = term.canvas; cv.className = 'phone-term'; cv.style.height = H + 'px'; stage.appendChild(cv);
-  setupMute(null);
+/* the terminal alone, no 3D. Phones: full width under a header strip, text typed through #kbd. Desktops (a fallback):
+   one centred column of up to 54 columns, and the keyboard read from keydown like the 3D layout */
+function flat(){
+  D.body.classList.add('phone'); if (!TOUCH) D.body.classList.add('flat');
+  let term = null, cv = null, bw = 0, bh = 0, shift = 0;
+  /* sized to fill the screen below the header strip (and above the home indicator); built again when the size
+     really changes (a rotation, a desktop window resize). The on-screen keyboard only changes the height on
+     phones, so there it never rebuilds: place() lifts the prompt instead */
+  const build = () => {
+    const probe = D.createElement('div'); probe.className = 'phone-term'; probe.style.cssText = 'visibility:hidden;padding-bottom:env(safe-area-inset-bottom, 0px)';
+    stage.appendChild(probe);
+    const top = probe.offsetTop, inset = parseFloat(getComputedStyle(probe).paddingBottom) || 0; probe.remove();
+    const W = TOUCH ? innerWidth : Math.max(200, Math.min(innerWidth - 32, 880)), H = Math.max(200, innerHeight - top - inset - (TOUCH ? 0 : 16));
+    term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols: W < 420 ? 40 : W < 600 ? 46 : 54 });
+    if (cv) cv.remove();
+    cv = term.canvas; cv.className = 'phone-term'; cv.style.width = W + 'px'; cv.style.height = H + 'px'; stage.appendChild(cv);
+    bw = innerWidth; bh = innerHeight; shift = 0;
+  };
+  build();
+  let rt = 0;
+  addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => {
+    if (Math.abs(innerWidth - bw) > 40 || (!TOUCH && Math.abs(innerHeight - bh) > 40)){ build(); fromHash(); } else place();
+  }, 150); });
+  const focus = () => { if (!reading()) try { kbd.focus({ preventScroll: true }); } catch (e){} };
+  setupMute(TOUCH ? null : focus);
   const click = (c, d) => { if (sound) try { sound.key(c, d); } catch (e){} };
   const tap = c => { click(c, true); setTimeout(() => click(c, false), 70); };
-  kbd.addEventListener('input', () => { const v = kbd.value; kbd.value = ''; for (const ch of v){ term.insertText(ch); tap(ch === ' ' ? 'Space' : 'KeyA'); } });
-  kbd.addEventListener('keydown', e => { if (reading()) return; if (['Enter', 'Backspace', 'Tab', 'Escape', 'Home', 'End', 'PageUp', 'PageDown', 'Delete'].includes(e.key) || e.key.startsWith('Arrow') || ((e.ctrlKey || e.altKey) && e.key.length === 1)){ unlock(); if (term.handleKey(e)) e.preventDefault(); tap(e.key === 'Enter' ? 'Enter' : e.key === 'Backspace' ? 'Backspace' : 'KeyA'); } });
-  addEventListener('keydown', e => { if (e.target === kbd || e.metaKey || reading()) return; unlock(); if (term.handleKey(e)) e.preventDefault(); });
+  const special = e => ['Enter', 'Backspace', 'Tab', 'Escape', 'Home', 'End', 'PageUp', 'PageDown', 'Delete'].includes(e.key) || e.key.startsWith('Arrow') || ((e.ctrlKey || e.altKey) && e.key.length === 1);
+  /* text from #kbd: phones letter by letter (touch keyboards compose every word, so composition is not waited for);
+     desktops only see IME and paste here, and wait for the composition to end */
+  const take = () => { const v = kbd.value; kbd.value = ''; if (v.length > 4 && !TOUCH){ term.insertText(v); return; } for (const ch of v){ term.insertText(ch); tap(ch === ' ' ? 'Space' : 'KeyA'); } };
+  kbd.addEventListener('input', e => { if (TOUCH || !e.isComposing) take(); });
+  if (!TOUCH) kbd.addEventListener('compositionend', take);
+  addEventListener('keydown', e => {
+    if (e.metaKey || reading() || e.target === muteBtn) return;
+    if (TOUCH && e.target === kbd && !special(e)) return;   // phones: letters arrive through the input event
+    unlock();
+    if (term.handleKey(e)){ e.preventDefault(); tap(e.code || 'KeyA'); }
+    else if (e.target === kbd && e.key.length === 1 && !e.ctrlKey) e.preventDefault();
+  });
+  addEventListener('keyup', e => { if (!reading() && term.handleKeyUp) term.handleKeyUp(e); });
+  addEventListener('wheel', e => { if (reading() || !term.scroll) return; term.scroll(e.deltaY); e.preventDefault(); }, { passive: false });
   stage.addEventListener('pointerdown', () => { unlock(); });
   stage.addEventListener('click', e => {
     const r = cv.getBoundingClientRect();
@@ -148,7 +214,6 @@ function phone(){
   let ty = null; stage.addEventListener('touchstart', e => { ty = e.touches[0].clientY; }, { passive: true });
   stage.addEventListener('touchmove', e => { if (ty == null || !term.scroll) return; const y = e.touches[0].clientY; term.scroll((ty - y) * 2.5); ty = y; e.preventDefault(); }, { passive: false });
   // keep the prompt line above the on-screen keyboard: measured from the canvas's untransformed top
-  let shift = 0;
   const place = () => {
     const vv = window.visualViewport, bottom = vv ? vv.offsetTop + vv.height : innerHeight;
     const y = stage.getBoundingClientRect().top + cv.offsetTop + term.cursorY * cv.offsetHeight;
@@ -156,9 +221,12 @@ function phone(){
     if (s !== shift){ shift = s; cv.style.transform = s ? 'translateY(' + s + 'px)' : ''; }
   };
   if (window.visualViewport){ visualViewport.addEventListener('resize', place); visualViewport.addEventListener('scroll', place); }
-  const fromHash = deepLinks(term);
+  const fromHash = deepLinks(() => term);
   let last = performance.now(), T = 0;
-  const frame = now => { requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt; if (term.update(dt, T)) place(); };
-  whenReady(() => { fromHash(); place(); requestAnimationFrame(frame); });
+  const frame = now => {
+    requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt;
+    try { if (term.update(dt, T)) place(); } catch (e){ oops(e); }
+  };
+  whenReady(() => { fromHash(); place(); if (!TOUCH) focus(); requestAnimationFrame(frame); });
 }
 })();

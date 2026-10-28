@@ -116,13 +116,6 @@ const PLAIN = [1, 1, 1];
 
 /* ---------------- the hand surface: a signed-distance field, polygonised once with surface nets ---------------- */
 const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * .25; };
-/* round cone along +h from radius r1 at h = 0 to r2 at h = L (r = radial distance) */
-function roundCone(r, h, r1, r2, L){
-  const b = (r1 - r2) / L, a = Math.sqrt(1 - b * b), k = -b * r + a * h;
-  if (k < 0) return Math.hypot(r, h) - r1;
-  if (k > a * L) return Math.hypot(r, h - L) - r2;
-  return a * r + b * h - r1;
-}
 /* Surface nets over [lo, hi] with cell size h: one vertex per surface cell, one quad per sign-changing edge.
    Far-field values come from a coarse pass so only the narrow band near the surface is evaluated finely. */
 function* surfaceNets(sdf, lo, hi, h){
@@ -193,7 +186,7 @@ function makeMat(kind, U){
     // two thin rims: cool where the edge turns to the tube, warm (2700K) where it turns to the lamp
     float cool = clamp(0.6 * max(nc, 0.0) + 0.12, 0.0, 1.0), warm = max(nl, 0.0) * uLampK;
     float fw = pow(1.0 - clamp(dot(sN, sV), 0.0, 1.0), 3.0);
-    outgoingLight = vec3(0.0015) + fr * cool * vec3(0.06, 0.085, 0.11) + fw * warm * vec3(0.2, 0.11, 0.045);
+    outgoingLight = vec3(0.0015) + fr * cool * vec3(0.085, 0.12, 0.155) + fw * warm * vec3(0.32, 0.175, 0.07);
   }
 #include <output_fragment>`);
   };
@@ -369,12 +362,45 @@ M.createTypist = function createTypist(api){
       const up = n.clone().addScaledVector(fwd, -n.dot(fwd)).normalize(), back = fwd.clone().negate();
       const right = up.clone().cross(back).normalize();
       H.homeQ.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, back))
-        .multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -H.side * .25));
+        .multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -H.side * .13));
       const kc = H.fingers.slice(1).reduce((a, F) => a.add(F.base.position), V3()).multiplyScalar(.25 * HS);
       // knuckles ~2.8 cm above the home-row caps and ~5 cm behind them: the fingers curl down onto the keys
-      // (PIP ~35 deg, DIP ~20 deg) with the tips resting on the caps, not hovering over them
       const target = C.clone().addScaledVector(n, KNUCKLE_UP).addScaledVector(kfw, -KNUCKLE_BACK);
       H.homeW.copy(target).sub(kc.clone().applyQuaternion(H.homeQ));
+      /* Even curl: a real typist's fingers all bend about the same (MCP ~25, PIP ~45, DIP ~25 deg), the long middle
+         finger landing a little further up its key and the pinky a little lower. So the relaxed pose is chosen first
+         and the knuckles are placed where that pose puts every tip on its home key (a few mm off the anatomical arc,
+         after the hand itself is shifted to fit). The finger IK then reproduces this pose exactly at rest. */
+      H.KN0 = H.KN.map(k => k.clone());
+      {
+        const tipOff = (F, mcp, pip, psi) => {
+          const sv = [F.base.position.clone(), F.g0.rotation.clone(), F.g1.rotation.x, F.g2.rotation.x];
+          F.base.position.set(0, 0, 0); F.g0.rotation.set(-mcp, psi, 0); F.g1.rotation.x = -pip; F.g2.rotation.x = -pip * .55;
+          for (const g of [F.base, F.g0, F.g1, F.g2]) g.updateMatrix();
+          const o = V3(0, 0, -F.L[2]).applyMatrix4(F.g2.matrix).applyMatrix4(F.g1.matrix).applyMatrix4(F.g0.matrix).applyMatrix4(F.base.matrix);
+          F.base.position.copy(sv[0]); F.g0.rotation.copy(sv[1]); F.g1.rotation.x = sv[2]; F.g2.rotation.x = sv[3];
+          for (const g of [F.base, F.g0, F.g1, F.g2]) g.updateMatrix();
+          return o;
+        };
+        // per finger: MCP, PIP (DIP follows at .55; the bend spread along the finger, not hooked at the PIP), splay (+ = away from the thumb), tip offset along the key (m, + = forward)
+        const POSE = [null, [.56, .6, -.1, .001], [.6, .64, -.01, .0035], [.6, .64, .07, .0015], [.5, .7, .17, -.002]];
+        const tipH = (inv, f) => homes[f - 1].clone().addScaledVector(n, H.fingers[f].clear + REST_GAP).addScaledVector(kfw, POSE[f][3]).applyMatrix4(inv);
+        const kn = [];
+        for (let it = 0; it < 3; it++){
+          const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(HS, HS, HS)).invert(), mean = V3();
+          for (let f = 1; f < 5; f++){
+            const F = H.fingers[f], P = POSE[f];
+            kn[f] = tipH(inv, f).sub(tipOff(F, P[0], P[1], H.ts * P[2]));
+            mean.add(kn[f].clone().sub(H.KN[f]));
+          }
+          H.homeW.addScaledVector(mean.multiplyScalar(.25).applyQuaternion(H.homeQ), HS);   // move the hand, not the knuckles
+        }
+        const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(HS, HS, HS)).invert();
+        for (let f = 1; f < 5; f++){
+          const F = H.fingers[f], P = POSE[f];
+          H.KN[f].copy(tipH(inv, f).sub(tipOff(F, P[0], P[1], H.ts * P[2]))); F.base.position.copy(H.KN[f]);
+        }
+      }
       H.W = new VSpring(H.homeW); H.hold.copy(H.homeW); H.region = new VSpring(H.homeW);
       const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(HS, HS, HS)).invert();
       const ixLat = homes[0].clone().sub(space || C).dot(lat);
@@ -417,7 +443,7 @@ M.createTypist = function createTypist(api){
   let T = 0, lastKey = -9, lastHand = 0, lamped = !!rig.lampPosition, lampScan = 0, pendShift = null, deskCheck = 6, strikeSeq = 0;
   const act = S(0), lean = S(lean0), sway = S(0), twist = S(0);
   let swayT = 0, swayAt = 6, lampRef = null, lampMax = 0, lampFind = 0;
-  const ZERO = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), Y = V3(0, 1, 0), qA = new THREE.Quaternion(), mB = new THREE.Matrix4();
+  const ZERO = V3(), vI = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), Y = V3(0, 1, 0), qA = new THREE.Quaternion(), mB = new THREE.Matrix4();
 
   const snd = (c, d) => { try { if (M.sound && M.sound.key) M.sound.key(c, d); } catch (e){} };
   const doPress = c => { if (!down.has(c)){ down.add(c); try { kb.press(c); } catch (e){} snd(c, true); } };
@@ -656,8 +682,11 @@ M.createTypist = function createTypist(api){
           else { F.fidT.set(0, .002 + Math.random() * .004, (Math.random() - .5) * .004); F.fidAt = .25 + Math.random() * .4; }
         }
         F.fid.step(F.mode === 'idle' && !wsum ? F.fidT : ZERO, 14, dt);
-        const idle = v2.copy(F.restLocal).add(F.fid.x); idle.y += .0005 * (1 + Math.sin(T * 1.7 + F.f * 1.3 + H.h * 2));   // resting on the cap: only ever lifts
-        idle.applyMatrix4(H.hand.matrix);
+        // resting on the cap: the pad stays planted while the hand breathes and drifts above it (the finger flexes
+        // instead), and only ever lifts off for a fidget or a neighbour's stroke
+        const idle = v2.copy(F.restLocal).applyMatrix4(H.hand.matrix);
+        idle.addScaledVector(n, (F.restHome.dot(n) - idle.dot(n)) * (1 - dk) * (1 - smooth(.003, .012, H.W.x.distanceTo(H.homeW))));
+        vI.copy(F.fid.x).applyQuaternion(H.hand.quaternion); idle.add(vI).addScaledVector(n, .0003 * (1 + Math.sin(T * 1.7 + F.f * 1.3 + H.h * 2)));
         let cp = 0; for (const G of H.fingers) if (G !== F) cp += COUPLE[G.f][F.f] * G.act * (G.mode === 'strike' ? Math.sin(PI * clamp(G.t / G.Td, 0, 1)) * .6 + .4 : 1);
         if (cp > 0) idle.addScaledVector(n, .0016 * Math.min(cp, 1.2));      // a neighbour's stroke lifts the coupled fingers a little
         if (dk > 0){ const hgt = idle.dot(n) - (deskLocalH + FR[F.f][2] * .9 * HS); idle.addScaledVector(n, -hgt * dk * (F.f ? .85 : .5)); }
@@ -749,19 +778,25 @@ M.createTypist = function createTypist(api){
       const f = F.f, th = f === 0, R = FR[f];
       // the last joint tapers into the tip: full at the DIP, still full across the pad, narrowing to a slim, flattened
       // tip (nail on top, pad below) instead of ending in a ball
-      const rj = th ? [.0135, R[1] * 1.1, R[2] * 1.12, R[2] * .8] : [R[0] * 1.06, R[1] * 1.06, R[2] * 1.04, R[2] * .7];
+      const rj = th ? [.0135, R[1] * 1.08, R[2] * 1.05, R[2] * .74] : [R[0] * 1.02, R[1] * 1.04, R[2] * 1.03, R[2] * .7];
       const gs = [F.g0, F.g1, F.g2];
-      const segs = gs.map((g, j) => ({ e: inv(rel(g)), L: F.L[j], r0: rj[j], r1: rj[j + 1], rm: j === 2 ? rj[2] * .97 : (rj[j] + rj[j + 1]) * .5 * (th && j === 0 ? 1 : .985),
-        flat: th ? (j === 2 ? 1.2 : 1.08) : [1.12, 1.16, 1.3][j] }));
+      // one cross-section along the whole finger (no change of flatness or waist at a joint, which reads as a bead):
+      // the shafts are as full as their ends and only the last segment flattens, gradually, into the pad and nail
+      const segs = gs.map((g, j) => ({ e: inv(rel(g)), L: F.L[j], r0: rj[j], r1: rj[j + 1],
+        flat: th ? 1.1 : 1.14, flat2: j === 2 ? (th ? 1.22 : 1.3) : 0 }));
       const pts = gs.map(g => V3().setFromMatrixPosition(rel(g))); pts.push(V3(0, 0, -F.L[2]).applyMatrix4(rel(F.g2)));
       const c = pts.reduce((a, p) => a.add(p), V3()).multiplyScalar(.25);
       return { f, th, segs, pts, c, rad: Math.max(...pts.map(p => p.distanceTo(c))) + .022, flat: th ? 1.08 : 1.15, joints: [0, F.L[0], F.L[0] + F.L[1]] };
     });
     const segD = (S, x, y, z, flat) => {
-      ap(S.e, x, y, z); const r = Math.hypot(q[0], q[1] * (S.flat || flat)), hh = -q[2], m = S.L * .5;
-      return smin(roundCone(r, hh, S.r0, S.rm, m), roundCone(r, hh - m, S.rm, S.r1, m), .002);
+      // a sphere-swept tube whose radius runs continuously along the bone: neighbouring segments meet with the same
+      // radius at the joint, so their union is seamless (a smooth-min between co-axial parts would add a bead there)
+      ap(S.e, x, y, z); const hh = -q[2], t = clamp(hh / S.L, 0, 1);
+      const fl = S.flat2 ? S.flat + (S.flat2 - S.flat) * smooth(0, 1, t) : (S.flat || flat);
+      const r = S.flat2 ? S.r0 + (S.r1 - S.r0) * smooth(.3, 1, t) * (.6 + .4 * t) : S.r0 + (S.r1 - S.r0) * t;
+      return Math.hypot(q[0], q[1] * fl, hh - t * S.L) - r;
     };
-    const chainD = (C, x, y, z, from) => { let d = segD(C.segs[from], x, y, z, C.flat); for (let j = from + 1; j < 3; j++) d = smin(d, segD(C.segs[j], x, y, z, C.flat), .003); return d; };
+    const chainD = (C, x, y, z, from) => { let d = segD(C.segs[from], x, y, z, C.flat); for (let j = from + 1; j < 3; j++) d = smin(d, segD(C.segs[j], x, y, z, C.flat), .0018); return d; };
     // palm: a rounded slab, longer than wide, back gently domed, front edge following the knuckle arc.
     // Implicit F = r - 1, turned into a distance with its (analytic, shape-frozen) gradient: d = F / |grad F|.
     const zK = H.KN[2].z, PE = 2.4;
@@ -793,7 +828,7 @@ M.createTypist = function createTypist(api){
       let d = smin(palmDist(x, y, z), foreDist(x, y, z), .015);
       for (let f = 1; f < 5; f++){            // the knuckle heads
         const S = CH[f].segs[0]; ap(S.e, x, y, z);
-        d = smin(d, Math.hypot(q[0], (q[1] - .36 * S.r0) * 1.1, q[2] - .001) - .9 * S.r0, .007);
+        d = smin(d, Math.hypot(q[0] * .85, (q[1] - .2 * S.r0) * 1.25, q[2] - .002) - .74 * S.r0, .014);
       }
       return d;
     };
@@ -843,7 +878,7 @@ M.createTypist = function createTypist(api){
           if (d < best){ best = d; sArc = acc + t * L; }
           acc += L;
         }
-        const s1 = C.joints[1], s2 = C.joints[2], b1 = C.th ? .008 : .0065, b2 = .005;
+        const s1 = C.joints[1], s2 = C.joints[2], b1 = C.th ? .009 : .0085, b2 = .0068;
         const w2 = smooth(s2 - b2, s2 + b2, sArc), w0 = 1 - smooth(s1 - b1, s1 + b1, sArc), w1 = Math.max(0, 1 - w0 - w2);
         w[2 + f * 3] += share * w0; w[3 + f * 3] += share * w1; w[4 + f * 3] += share * w2;
       });
