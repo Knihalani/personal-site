@@ -395,7 +395,7 @@ button.slot:active{transform:translateY(2px)}
   <div class="tbtns">
     <button class="tb f-alt" id="tMine" type="button" aria-label="Mine"><i class="ico" data-ico="pick"></i><span>Mine</span></button>
     <button class="tb f-alt" id="tPlace" type="button" aria-label="Use or place"><i class="ico" data-ico="hand"></i><span>Use</span></button>
-    <button class="tb f-btn" id="tJump" type="button" aria-label="Jump, hold to glide"><i class="ico" data-ico="up"></i><span>Jump</span></button>
+    <button class="tb f-btn" id="tJump" type="button" aria-label="Jump; tap again in the air to open the sail"><i class="ico" data-ico="up"></i><span>Jump</span></button>
     <button class="tb f-alt" id="tBag" type="button" aria-label="Satchel"><i class="ico" data-ico="bag"></i><span>Bag</span></button>
     <button class="tb f-alt" id="tDash" type="button" aria-label="Dash"><i class="ico" data-ico="dash"></i><span>Dash</span></button>
   </div>
@@ -550,7 +550,7 @@ button.slot:active{transform:translateY(2px)}
      supported, not in water, stable for 0.5 s. Below y=12 a sky jelly scoops you up:
      1.25 s eased arc (camera pulls back to show it), set down on the safe spot facing
      the same way. If that spot was mined away: nearest supported cell within 8, else the Hub.
-   2 Sky sail. Found on the plaza stand (also craftable). Hold Space while falling to
+   2 Sky sail. Found on the plaza stand (also craftable). Press Space in mid-air (or hold it through a jump) to
      glide: forward 7.6 m/s (+6 per radian of dive), sink 1.3 m/s, steer by looking.
      Updraft columns (r 4.5) lift at up to 14 m/s, two per gap beside every bridge,
      plus launch drafts. Shown as rising square motes.
@@ -2198,10 +2198,10 @@ const GRAV = 32, FALL_MULT = 1.55, HANG_MULT = .5, TERMINAL = 50, JUMP_V = 10.2,
 const SLIDE_T = .7, SLIDE_V = 11, DASH_V = 15, DASH_CD = .85;
 const GLIDE_BASE = 9.5, GLIDE_MAX = 24, GLIDE_MIN = 5.5, LIFT = 14, BOUNCE_V = 21, CATCH_Y = 12, CATCH_T = 1.1;
 const PL = { x: 96.5, y: 40, z: 108, px: 96.5, py: 40, pz: 108, vx: 0, vy: 0, vz: 0, hw: .3, h: 1.8, onGround: false, wasGround: false, inWater: false, yaw: 0, pitch: 0,
-  stepOff: 0, sd: 0.5, md: 0.5, coyote: 0, jumpBuf: 0, air: 0, gliding: false, gs: 9.5, flaps: 0, sneak: false, slideT: 0, dashCD: 0, airDash: true, vault: 0, eyeOff: 0, mantleCD: 0, glideLock: 0, autoJT: 0,
+  stepOff: 0, sd: 0.5, md: 0.5, coyote: 0, jumpBuf: 0, air: 0, gliding: false, gs: 9.5, flaps: 0, sneak: false, slideT: 0, dashCD: 0, airDash: true, vault: 0, eyeOff: 0, mantleCD: 0, glideLock: 0, autoJT: 0, sailOpen: false,
   stable: 0, walk: 0, stepAcc: 0, landKick: 0, punch: 0, trailT: 0, safe: null, catching: false };
 const INP = { x: 0, z: 0, jump: false, jumpEdge: false, sprint: false, sneak: false, sneakEdge: false, dashEdge: false, dashX: 0, dashZ: 0, use: false };
-let hasSail = false, inUpdraft = 0, festival = 0, goldSail = false, sailLevel = 0;
+let tAccNoSail = 0, hasSail = false, inUpdraft = 0, festival = 0, goldSail = false, sailLevel = 0;
 function updraftAt(x, y, z){
   let s = 0;
   for (let i = 0; i < UPDRAFTS.length; i++){ const u = UPDRAFTS[i]; const dx = x - u.x, dz = z - u.z, d2 = dx * dx + dz * dz; if (d2 < u.r * u.r && y < u.top){ const k = (1 - Math.sqrt(d2) / u.r) * Math.min(1, (u.top - y) / 6); if (k > s) s = k; } }
@@ -2210,7 +2210,8 @@ function updraftAt(x, y, z){
 function stepPlayer(dt){
   const P = PL;
   P.px = P.x; P.py = P.y; P.pz = P.z;
-  if (P.catching){ stepCatch(dt); return; }
+  tAccNoSail = Math.max(0, tAccNoSail - dt);
+  if (P.catching){ P.sailOpen = false; stepCatch(dt); return; }
   const jumpEdge = INP.jumpEdge; INP.jumpEdge = false;
   if (jumpEdge) P.jumpBuf = JUMP_BUF;
   P.jumpBuf = Math.max(0, P.jumpBuf - dt); P.dashCD = Math.max(0, P.dashCD - dt);
@@ -2235,7 +2236,15 @@ function stepPlayer(dt){
   // glide? hold Space in the air
   const was = P.gliding;
   P.glideLock = Math.max(0, P.glideLock - dt);
-  P.gliding = hasSail && !P.onGround && !P.inWater && INP.jump && P.glideLock <= 0 && (P.vy < .5 || P.gliding) && P.air > .14;
+  // sail: press Space in mid-air to open it (stays open), press again (or C) to close; holding Space through a jump also opens it at the apex
+  if (jumpEdge && !P.onGround && P.coyote <= 0 && !P.inWater && P.air > .08){
+    if (!hasSail){ if (tAccNoSail <= 0){ toast(SAIL_STAND && !SAIL_STAND.taken ? 'Grab the sky sail from its stand on the Hub plaza first' : 'You need a sky sail to glide'); tAccNoSail = 3; } }
+    else if (P.gliding){ if (!(sailLevel >= 2 && P.flaps > 0)){ P.sailOpen = false; P.glideLock = .25; P.jumpBuf = 0; } }
+    else { P.sailOpen = true; P.glideLock = 0; P.jumpBuf = 0; if (P.vy > 1) P.vy = 1; }
+  }
+  if (INP.sneak && P.sailOpen){ P.sailOpen = false; P.glideLock = .25; }
+  if (P.onGround || P.inWater || !hasSail) P.sailOpen = false;
+  P.gliding = hasSail && !P.onGround && !P.inWater && P.glideLock <= 0 && (P.sailOpen || (INP.jump && (P.vy < .5 || P.gliding) && P.air > .14));
   if (P.gliding && !was){ P.gs = Math.max(hs, GLIDE_BASE * .9); SND.sail(); }
   inUpdraft = updraftAt(P.x, P.y, P.z);
   if (P.gliding){
@@ -2301,7 +2310,7 @@ function stepPlayer(dt){
         else if (P.onGround && autoJump && h <= 1.05 && P.jumpBuf <= 0){ P.jumpBuf = .05; P.autoJT = .4; } // jumps next tick through the normal path
         else if (!P.onGround && P.mantleCD <= 0 && h <= (P.gliding ? 1.3 : .75) && P.vy < 7){
           P.vy = Math.min(9, Math.max(P.vy, Math.sqrt(2 * GRAV * 1.7 * (h + .2))));
-          P.mantleCD = .3; P.vault = 1; if (P.gliding){ P.gliding = false; P.glideLock = .25; }
+          P.mantleCD = .3; P.vault = 1; if (P.gliding){ P.gliding = false; P.sailOpen = false; P.glideLock = .25; }
           SND.vault(); animPlace();
         }
       }
@@ -2859,7 +2868,7 @@ function updateShards(t){
     if (state === 'play' && hyp2(PL.x - SAIL_STAND.x, PL.z - SAIL_STAND.z) < 1.4 && Math.abs(PL.y + 1 - SAIL_STAND.y) < 2.2) takeSail(); }
   else if (sailMesh) sailMesh.visible = false;
 }
-function takeSail(){ SAIL_STAND.taken = true; if (!hasItem(SAIL)) invAdd(SAIL, 1); hasSail = true; SND.sail(); sparkle(SAIL_STAND.x, SAIL_STAND.y, SAIL_STAND.z, 12, 1, .85, .5); toastCard('Sky sail', 'Jump, then hold Space in the air to glide. Updrafts lift you.'); tut('sail'); saveDirty = true; }
+function takeSail(){ SAIL_STAND.taken = true; if (!hasItem(SAIL)) invAdd(SAIL, 1); hasSail = true; SND.sail(); sparkle(SAIL_STAND.x, SAIL_STAND.y, SAIL_STAND.z, 12, 1, .85, .5); toastCard('Sky sail', 'Jump, then press Space again in mid-air to open it. Press Space or C to close. Updrafts lift you.'); tut('sail'); saveDirty = true; }
 function collectShard(s){
   found.add(s.i); SND.shard(); sparkle(s.x, s.y, s.z, 16, .8, .9, 1); PL.punch = Math.max(PL.punch, .4);
   toastCard('Shard ' + found.size + ' of ' + SHARDS.length, s.text, 7000);
@@ -3369,8 +3378,8 @@ $('#invClose').addEventListener('click', () => closeInv(true));
 for (const k of ['panel', 'inv', 'journal', 'pause']) SCREENS[k].addEventListener('click', e => { if (e.target !== SCREENS[k]) return; if (k === 'panel') closePanel(true); else if (k === 'inv') closeInv(true); else if (k === 'journal') closeJournal(true); else resumePlay(true); });
 panelEl.addEventListener('click', e => { const a = e.target.closest && e.target.closest('.idx-head nav a'); if (a){ e.preventDefault(); const t = D.querySelector(a.getAttribute('href')); if (t) t.scrollIntoView({ behavior: REDUCED ? 'auto' : 'smooth', block: 'start' }); } });
 const KC = k => '<span class="kc f-key">' + k + '</span>';
-const CTL_DESK = [['Move', KC('W') + KC('A') + KC('S') + KC('D')], ['Look', KC('Mouse')], ['Jump, hold to glide', KC('Space')], ['Sprint', KC('Shift')], ['Sneak, slide when sprinting', KC('C')], ['Dash', KC('Q')], ['Read sign', KC('E')], ['Mine (hold)', KC('LMB')], ['Use / place', KC('RMB')], ['Satchel', KC('I')], ['Journal', KC('J')], ['Camera', KC('V')], ['Pause', KC('Esc')]];
-const CTL_TOUCH = [['Move', 'left thumb'], ['Look', 'drag right side'], ['Jump / glide', 'hold Jump'], ['Dash', 'Dash'], ['Read, pet', 'tap'], ['Mine', 'hold Mine'], ['Use / place', 'Use']];
+const CTL_DESK = [['Move', KC('W') + KC('A') + KC('S') + KC('D')], ['Look', KC('Mouse')], ['Jump; in the air, open or close the sail', KC('Space')], ['Sprint', KC('Shift')], ['Sneak, slide when sprinting', KC('C')], ['Dash', KC('Q')], ['Read sign', KC('E')], ['Mine (hold)', KC('LMB')], ['Use / place', KC('RMB')], ['Satchel', KC('I')], ['Journal', KC('J')], ['Camera', KC('V')], ['Pause', KC('Esc')]];
+const CTL_TOUCH = [['Move', 'left thumb'], ['Look', 'drag right side'], ['Jump / sail', 'tap Jump in the air'], ['Dash', 'Dash'], ['Read, pet', 'tap'], ['Mine', 'hold Mine'], ['Use / place', 'Use']];
 const ctlHTML = (TOUCH ? CTL_TOUCH.map(k => '<span>' + KC(k[1]) + '</span><span>' + k[0] + '</span>') : CTL_DESK.map(k => '<span>' + k[1] + '</span><span>' + k[0] + '</span>')).join('');
 ['#ctlTitle', '#ctlPause', '#ctlSign'].forEach(s => { $(s).innerHTML = ctlHTML; });
 
@@ -3419,7 +3428,7 @@ const TUT = [
   { k: 'sign', d: () => 'Walk under the arch and ' + (TOUCH ? 'tap ' + KC('Read') : 'press ' + KC('E')) + ' to read the welcome sign.', at: () => SIGNS[0] && [SIGNS[0].x + .5, SIGNS[0].y + 6, SIGNS[0].z + .5] },
   { k: 'shard', d: () => 'A lore shard floats by the plaza. Walk into it.', at: () => !found.has(0) && [SHARDS[0].x, SHARDS[0].y + .8, SHARDS[0].z] },
   { k: 'sail', d: () => 'Take the sky sail from its stand.', at: () => SAIL_STAND && !SAIL_STAND.taken && [SAIL_STAND.x, SAIL_STAND.y + .8, SAIL_STAND.z] },
-  { k: 'glide', d: () => 'Jump off the north edge and hold ' + (TOUCH ? KC('Jump') : KC('Space')) + ' to glide. Ride the updraft to Eden.', at: () => UPDRAFTS[0] && (PL.z > UPDRAFTS[0].z + 2 ? [UPDRAFTS[0].x, 40, UPDRAFTS[0].z] : (SIGNS[1] && [SIGNS[1].x + .5, SIGNS[1].y + 6, SIGNS[1].z + .5])) },
+  { k: 'glide', d: () => 'Jump off the north edge, then press ' + (TOUCH ? KC('Jump') : KC('Space')) + ' again in the air to open the sail. Ride the updraft to Eden.', at: () => UPDRAFTS[0] && (PL.z > UPDRAFTS[0].z + 2 ? [UPDRAFTS[0].x, 40, UPDRAFTS[0].z] : (SIGNS[1] && [SIGNS[1].x + .5, SIGNS[1].y + 6, SIGNS[1].z + .5])) },
   { k: 'gather', d: () => 'Your satchel is empty. ' + (TOUCH ? 'Hold ' + KC('Mine') : 'Hold ' + KC('LMB')) + ' on a tree to chop a log, or on leaves.', at: () => { const t = nearestTree(); return t && [t[0] + .5, t[1] + 2.5, t[2] + .5]; } },
   { k: 'craft', d: () => 'Open the satchel with ' + (TOUCH ? KC('Bag') : KC('I')) + ' and craft Vineseed from 2 leaves and a flower.', at: null }
 ];
