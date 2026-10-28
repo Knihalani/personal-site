@@ -642,13 +642,13 @@ M.createScene = function createScene(container){
   /* ================= LIGHTS ================= */
   const KEY_BOUNCE = .12;
   // the lamp: warm 2700K spot with soft shadows
-  const lamp = new THREE.SpotLight(lin(0xffe2c2), 5.6, 4, .8, .72, 2);
+  const lamp = new THREE.SpotLight(lin(0xffe7cf), 5.6, 4, .8, .72, 2);
   lamp.position.copy(bulbPos); lamp.target.position.copy(bulbPos).addScaledVector(lampDir, 1);
   lamp.castShadow = true; lamp.shadow.mapSize.set(1024, 1024); lamp.shadow.camera.near = .05; lamp.shadow.camera.far = 2.4;
   lamp.shadow.bias = -.0004; lamp.shadow.normalBias = .004;
   scene.add(lamp, lamp.target);
   // bounce off the lit desk: a low warm fill that keeps the darks from going dead
-  const bounce = new THREE.PointLight(lin(0xa08872), .14, 2.5, 2); bounce.position.set(-.08, DESK_Y + .09, .16); scene.add(bounce);
+  const bounce = new THREE.PointLight(lin(0xa8927e), .2, 2.5, 2); bounce.position.set(-.2, DESK_Y + .1, .12); scene.add(bounce);
   // the tube lights the room: a wide, shadowless green-white spot from the glass
   const glow = new THREE.SpotLight(new THREE.Color(PHOSPHOR[0] * .8, PHOSPHOR[1], PHOSPHOR[2] * .9), .5, 3, 1.25, 1, 2);
   glow.position.copy(screenCenter).addScaledVector(screenNormal, .02); glow.target.position.copy(screenCenter).addScaledVector(screenNormal, 1).add(new V3(0, -.35, 0));
@@ -658,7 +658,7 @@ M.createScene = function createScene(container){
   spill.position.copy(screenCenter).addScaledVector(screenNormal, .1); scene.add(spill);
   // night through the window: a cool rim from behind the machine, and a whisper of ambient
   const moon = new THREE.DirectionalLight(lin(0x6f86b8), .18); moon.position.set(WIN.x, WIN.y + .3, WALL_Z - 1); moon.target.position.set(.2, .9, .8); scene.add(moon, moon.target);
-  const hemi = new THREE.HemisphereLight(lin(0x405070), lin(0x1a120c), .26); scene.add(hemi);
+  const hemi = new THREE.HemisphereLight(lin(0x405070), lin(0x1a120c), .34); scene.add(hemi);
   screenU.uLamp.value.copy(bulbPos);
 
   /* ---- a faint light shaft under the shade (no dust: specks read as stars against the dark wall) ---- */
@@ -853,7 +853,7 @@ M.createScene = function createScene(container){
   /* setLamp(true): the switch clicks, a beat later the filament catches, stutters twice, then swells in from a deep
      orange to its full 2700K. setLamp(false): the filament glows down over ~150 ms. With the lamp off the eye
      adapts (a slow exposure lift) and the tube and the window carry the room. */
-  const LAMP_COL = lin(0xffe2c2), LAMP_DIM = lin(0xff8a3c), BULB_HOT = new THREE.Color(1, .86, .62), BULB_DIM = new THREE.Color(1, .36, .08);
+  const LAMP_COL = lin(0xffe7cf), LAMP_DIM = lin(0xff8a3c), BULB_HOT = new THREE.Color(1, .86, .62), BULB_DIM = new THREE.Color(1, .36, .08);
   const FLICK = [0, .55, .08, .0, .8, .25, .9, .45, .7];   // 40 ms steps after the relay delay
   const lampS = { on: true, t: 9, level: 1, adapt: 0 };
   const _c = new THREE.Color();
@@ -870,7 +870,7 @@ M.createScene = function createScene(container){
     const L = lampS.level, warm = sstep(.2, 1, L), off = 1 - sstep(0, .8, L);
     lamp.intensity = 5.6 * L; lamp.visible = L > .002;
     lamp.color.copy(LAMP_DIM).lerp(LAMP_COL, warm);
-    bounce.intensity = .14 * L; keyBounce.value = KEY_BOUNCE * L;
+    bounce.intensity = .2 * L; keyBounce.value = KEY_BOUNCE * L;
     shadeInnerMat.color.setScalar(.03 + .97 * L); shadeLipMat.emissiveIntensity = .35 * L; shadeRim.value = L;
     _c.copy(BULB_DIM).lerp(BULB_HOT, warm).multiplyScalar(Math.min(1, L * 1.4));
     bulbMat.color.setRGB(.07 + _c.r, .065 + _c.g, .06 + _c.b);
@@ -878,7 +878,7 @@ M.createScene = function createScene(container){
     screenU.uLampAmt.value = L;
     // the eye opens up slowly in the dark, and snaps back when the light returns
     lampS.adapt += (off - lampS.adapt) * (1 - Math.exp(-dt * (off > lampS.adapt ? .9 : 4)));
-    moon.intensity = .18 + .45 * lampS.adapt; hemi.intensity = .26 + .22 * lampS.adapt;
+    moon.intensity = .18 + .45 * lampS.adapt; hemi.intensity = .34 + .16 * lampS.adapt;
     renderer.toneMappingExposure = 1.05 + .75 * lampS.adapt;
   }
 
