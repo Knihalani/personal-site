@@ -443,7 +443,7 @@ M.createScene = function createScene(container){
 
   /* ================= THE KEYBOARD ================= */
   const U = .019, KB = { w: .316, d: .14, tilt: .085, yaw: .03, x: .015, z: .13, kz0: .008 };
-  const keyBounce = { value: .085 };    // warm bounce on the cap skirts (see topM), scaled by the lamp in applyLamp
+  const keyBounce = { value: .12 };    // warm bounce on the cap skirts (see topM), scaled by the lamp in applyLamp
   const ROW_ANGLE = [.15, .075, 0, -.05, -.085], ROW_LIFT = [.0024, .001, 0, .0003, .0009];
   const KEY_H = .0095, KEY_BASE = .0042, TRAVEL = .0032, DISH = .0008;
   const L = (s) => s.split('').map(c => ['Key' + c, 1, c]);
@@ -640,7 +640,7 @@ M.createScene = function createScene(container){
   }
 
   /* ================= LIGHTS ================= */
-  const KEY_BOUNCE = .085;
+  const KEY_BOUNCE = .12;
   // the lamp: warm 2700K spot with soft shadows
   const lamp = new THREE.SpotLight(lin(0xffe2c2), 5.6, 4, .8, .72, 2);
   lamp.position.copy(bulbPos); lamp.target.position.copy(bulbPos).addScaledVector(lampDir, 1);

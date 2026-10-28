@@ -1,7 +1,7 @@
 /* Typist: the person whose eyes the visitor looks through. Only the forearms, sleeves and hands are ever
    seen (there is no head or torso: the camera is the head), so the hands are the hero model:
-   a sculpted palm with knuckles and tendons, tapered three-segment fingers with nails, a defined thumb, a skin
-   wrist running into a ribbed hoodie cuff, and a sleeve that bunches at the elbow. Arms are 2-bone IK, fingers
+   a slightly flattened, round-edged palm whose knuckles are only a gentle ridge, three-segment fingers that taper
+   continuously to flattened tips, a thumb resting on the space bar, a wrist running into a ribbed hoodie cuff, and a sleeve that bunches at the elbow. Arms are 2-bone IK, fingers
    3-segment planar IK. Every keystroke is a timed strike (lift, accelerate, land on the cap centre, follow the
    key down, release with a rebound); the wrist travels as far as the finger needs, and any residual the finger
    cannot reach is fed back into the wrist so contact lands on the cap centre. */
@@ -318,15 +318,17 @@ M.createTypist = function createTypist(api){
   const elbowGeo = blob(.047, .047, .047, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
 
   /* ---------- hands ---------- */
-  /* Hand scale: the hand is modelled at adult size, then drawn at HS. Seen from ~45 cm above, full-size black hands
-     read as mittens over the board; at ~80% they sit on the keys like hands do in photos of someone typing. */
+  /* Hand scale: the fingers are modelled at adult size, then drawn at HS. Seen from ~45 cm above, full-size black hands
+     read as mittens over the board; at ~68% they sit on the keys like hands do in photos of someone typing. The palm
+     is not scaled from a template: it is as wide as the knuckles, which sit one key pitch apart over the home keys
+     (fingers nearly parallel, pinkies in on A and ;), so a palm spans just under four keys (~70 mm). */
   const HS = .68;
   const SKIN_H = .0036;     // surface-nets cell size (hand space; ~2.5 mm in the world, so meshing costs what it did before)
   const FL = [[.036, .03, .026], [.041, .025, .019], [.045, .028, .02], [.042, .026, .019], [.032, .02, .0165]];
   /* finger radius (hand space) at the knuckle, the two finger joints and the tip: it narrows continuously all the way
      down, so no joint reads as a bead and the tip is the slimmest point (a flattened pad, not a ball) */
-  const FR = [[.0128, .0114, .0099, .0077], [.0102, .009, .0078, .0064], [.0105, .0093, .008, .0065], [.0099, .0087, .0075, .0061], [.0086, .0076, .0066, .0054]];
-  const TIPFL = 1.3;        // how much the last joint flattens (pad below, nail above) by the tip
+  const FR = [[.0128, .0114, .0099, .0077], [.0108, .0094, .008, .0064], [.0111, .0097, .0082, .0065], [.0105, .0091, .0077, .0061], [.0091, .008, .0068, .0054]];
+  const TIPFL = 1.38;        // how much the last joint flattens (pad below, nail above) by the tip
   const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));
 
   const hands = [];

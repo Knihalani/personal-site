@@ -146,7 +146,7 @@ M.dressRoom = function (api){
   /* ================= desk corner: a stack of books with a small radio clock on top ================= */
   // close in beside the machine's right shoulder (behind the mug), turned toward the chair, so the amber readout sits at
   // the right of the lean-back view against the dark wall
-  { const st = new THREE.Group(); st.position.set(.37, DESK_Y, -.3); st.rotation.y = -.25; group.add(st);
+  { const st = new THREE.Group(); st.position.set(.345, DESK_Y, -.3); st.rotation.y = -.25; group.add(st);
     let y = 0; [['#3b4a3a', .24, .17, .028], ['#8c3b2c', .23, .16, .024], ['#d6caa9', .21, .15, .02]].forEach(([col, w, d, h], i) => {
       const pages = mat('#ebe2cb', { roughness: .95 }), cov = mat(col, { roughness: .75 });
       const b = mesh(new THREE.BoxGeometry(w, h, d), [cov, pages, cov, cov, pages, pages], st, (rnd() - .5) * .01, y + h / 2, (rnd() - .5) * .01); b.rotation.y = (rnd() - .5) * .12; y += h; });
