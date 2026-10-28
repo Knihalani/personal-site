@@ -1361,6 +1361,42 @@ M.createTerminal = function createTerminal(opts){
     ];
     card.foot = opts.find(f => len(f) <= COLS - 3) || opts[opts.length - 1];
   }
+  /* copy or open one card row; synchronous, so it must run inside the key or tap that asked */
+  function actOn(card, it){
+    card.sel = it.ai; card.done = true; card.flash = now;
+    let said;
+    if (it.copy){
+      const ok = copyText(it.copy); sfx('beep');
+      card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [it.copy, 'b']] : [['select and copy: ', 'd'], [it.copy, 'b']];
+      said = (ok ? 'Copied ' : 'Copy ') + it.copy + '.';
+    } else {
+      const ok = openTarget(it.url);
+      let shown = it.full ? bare(it.full) : it.value;
+      if (shown.length + 12 > COLS) shown = it.value.length + 12 <= COLS ? it.value : it.label;
+      card.foot = [['  ', 'b', null, 'out'], ['opening ', 'd'], [shown, 'b']].concat(ok || COLS < 50 ? [] : [['  blocked? try open ' + bare(it.url), 'f']]);
+      said = 'Opening ' + (it.full || it.value) + '.';
+    }
+    if (job) job.plain += said + ' '; else mirror(said);
+    dirty = true;
+  }
+  /* a tap on the canvas (x, y as 0..1 fractions): a card row acts as if chosen with enter */
+  function handleTap(fx, fy){
+    if (booting || app) return false;
+    const px = fx * W, py = fy * H;
+    if (px < X(1) || px > X(COLS - 1)) return false;
+    for (const r of drawnCards){
+      for (const it of r.items){
+        if (it.ai < 0) continue;
+        const rt = r._top + ch * (it.y + 1);
+        if (py < rt || py >= rt + ch * it.n) continue;
+        if (job && job.choice && job.choice.card === r){ const ch2 = job.choice; job.choice = null; actOn(r, it); ch2.res(it); }
+        else actOn(r, it);
+        touched();
+        return true;
+      }
+    }
+    return false;
+  }
   /* a key while a choice is waiting; returns true when consumed */
   function choiceKey(e){
     const ch = job.choice, card = ch.card, k = e.key, n = card.acts.length;
@@ -1372,20 +1408,8 @@ M.createTerminal = function createTerminal(opts){
     else if (/^[1-9]$/.test(k) && +k <= n) pick = +k - 1;
     job.choice = null;
     let it = null;
-    if (pick >= 0){
-      it = card.acts[pick]; card.sel = pick; card.done = true;
-      if (it.copy){                                        // synchronous, inside the keydown
-        const ok = copyText(it.copy); sfx('beep');
-        card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [it.copy, 'b']] : [['select and copy: ', 'd'], [it.copy, 'b']];
-        if (job) job.plain += (ok ? 'Copied ' : 'Copy ') + it.copy + '. ';
-      } else {
-        const ok = openTarget(it.url);
-        let shown = it.full ? bare(it.full) : it.value;
-        if (shown.length + 12 > COLS) shown = it.value.length + 12 <= COLS ? it.value : it.label;
-        card.foot = [['  ', 'b', null, 'out'], ['opening ', 'd'], [shown, 'b']].concat(ok || COLS < 50 ? [] : [['  blocked? try open ' + bare(it.url), 'f']]);
-        if (job) job.plain += 'Opening ' + (it.full || it.value) + '. ';
-      }
-    } else { card.sel = -1; card.foot = [['back', 'f']]; }
+    if (pick >= 0){ it = card.acts[pick]; actOn(card, it); }
+    else { card.sel = -1; card.foot = [['back', 'f']]; }
     dirty = true;
     ch.res(it);
     return true;
@@ -1730,8 +1754,10 @@ M.createTerminal = function createTerminal(opts){
     if (r.note) text(r.note, COLS - 3 - r.note.length, top, 'f');
     r.items.forEach(it => {
       const rt = top + ch * (it.y + 1);
-      const on = active && it.ai === r.sel, chosen = r.done && it.ai === r.sel;
-      if (on){ g.fillStyle = P.normal; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
+      const flashing = r.done && it.ai === r.sel && r.flash != null && now - r.flash < 0.35;
+      const on = (active && it.ai === r.sel) || flashing, chosen = r.done && it.ai === r.sel;
+      if (flashing){ g.fillStyle = P.bright; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
+      if (on && !flashing){ g.fillStyle = P.normal; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
       const st = s => on ? 'z' : s;
       if (it.ai >= 0) text(String(it.ai + 1), 3, rt, st(chosen ? 'b' : 'f'));
       text(it.label, 5, rt, st('d'));
@@ -1815,6 +1841,7 @@ M.createTerminal = function createTerminal(opts){
       if (under){ g.font = font(); g.fillStyle = P.bg; g.fillText(under, cx, top + fs * 0.68); }
     }
   }
+  let drawnCards = [];
   const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7]/g;
   function vecGlyph(c, col, top, colr){
     const cx = X(col) + cw / 2, cy = top + ch * 0.5, a = cw * 0.36;
@@ -1860,6 +1887,7 @@ M.createTerminal = function createTerminal(opts){
     g.textBaseline = 'alphabetic';
     animFps = 0;
     if (booting){ drawBoot(); return; }
+    drawnCards = [];
     if (app){ drawGrid(); return; }
     // lay out units bottom-anchored
     const total = totalUnits();
@@ -1878,7 +1906,7 @@ M.createTerminal = function createTerminal(opts){
         if (r.k === 't') drawSpans(r, top, lim);
         else if (r.k === 'big') drawSpans(r, top, isPartial ? Math.floor(partial / 2) : 1e9, 2);
         else if (r.k === 'head') drawHead(r, top, isPartial ? partial / costOf(r) : 1);
-        else if (r.k === 'card') drawCard(r, top);
+        else if (r.k === 'card'){ r._top = top; drawnCards.push(r); drawCard(r, top); }
         else if (r.k === 'viz'){
           if (r.t0 < 0) r.t0 = now;
           const age = now - r.t0;
@@ -2102,11 +2130,12 @@ M.createTerminal = function createTerminal(opts){
     const on = ((t - blinkT0) % 1.06) < 0.53;
     if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (app && gridCursor)) changed = true; }
     if (!app && animFps > 0 && t - lastAnim >= 1 / animFps - 1e-3) changed = true;
+    if (!app) for (const r of drawnCards) if (r.flash != null && t - r.flash < 0.45) changed = true;   // tap / pick flash
     if (changed){ draw(); lastAnim = t; dirty = false; }
     return changed;
   }
 
   draw();
-  return { canvas, handleKey, handleKeyUp, insertText, update, run, scroll, get cursorY(){ return promptY / H; } };
+  return { canvas, handleKey, handleKeyUp, handleTap, insertText, update, run, scroll, get cursorY(){ return promptY / H; } };
 };
 })();

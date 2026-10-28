@@ -324,6 +324,7 @@ M.createTypist = function createTypist(api){
   const elbowGeo = blob(.047, .047, .047, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
 
   /* ---------- hands ---------- */
+  const SKIN_H = .0022;     // surface-nets cell size (m)
   const FL = [[.036, .03, .026], [.041, .025, .019], [.045, .028, .02], [.042, .026, .019], [.032, .02, .0165]];
   const FR = [[.0098, .0088, .0078], [.0075, .0067, .0059], [.0077, .0069, .006], [.0072, .0064, .0056], [.0062, .0055, .0049]];
   const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));
@@ -712,7 +713,130 @@ M.createTypist = function createTypist(api){
   T = 0; lastKey = -9;
   for (const H of hands) H.lastActive = -9;
 
-  root.userData.dbg = { hands, s, contacts, spineOff, lean0 };
+  /* ---------- the skin: one continuous surface per hand (palm, knuckles, fingers, thumb, wrist and forearm), modelled
+     as a signed-distance field in the settled home pose, polygonised once, and skinned to the wrist, forearm and
+     finger joints. Idle hands show the sculpted shape exactly; strikes bend it at the joints. ---------- */
+  root.updateMatrixWorld(true);
+  const skinStats = [];
+  for (const H of hands){
+    const t0 = (typeof performance !== 'undefined' ? performance : Date).now();
+    const ts = H.ts, q = [0, 0, 0];
+    const handInv = H.hand.matrixWorld.clone().invert();
+    const rel = o => handInv.clone().multiply(o.matrixWorld);           // a bone's rest frame in hand space
+    const inv = m => m.clone().invert().elements;
+    const ap = (e, x, y, z) => { q[0] = e[0] * x + e[4] * y + e[8] * z + e[12]; q[1] = e[1] * x + e[5] * y + e[9] * z + e[13]; q[2] = e[2] * x + e[6] * y + e[10] * z + e[14]; return q; };
+    // per finger: hand->bone transforms, lengths and radii (lateral; the dorsal-ventral axis is flattened)
+    const CH = H.fingers.map(F => {
+      const f = F.f, th = f === 0, R = FR[f];
+      const rj = th ? [.0158, R[1] * 1.1, R[2] * 1.12, R[2] * 1.02] : [R[0] * 1.13, R[1] * 1.12, R[2] * 1.1, R[2] * .98];
+      const gs = [F.g0, F.g1, F.g2];
+      const segs = gs.map((g, j) => ({ e: inv(rel(g)), L: F.L[j], r0: rj[j], r1: rj[j + 1], rm: (rj[j] + rj[j + 1]) * .5 * (th && j === 0 ? 1 : .93) }));
+      const pts = gs.map(g => V3().setFromMatrixPosition(rel(g))); pts.push(V3(0, 0, -F.L[2]).applyMatrix4(rel(F.g2)));
+      const c = pts.reduce((a, p) => a.add(p), V3()).multiplyScalar(.25);
+      return { f, th, segs, pts, c, rad: Math.max(...pts.map(p => p.distanceTo(c))) + .022, flat: th ? 1.08 : 1.15, joints: [0, F.L[0], F.L[0] + F.L[1]] };
+    });
+    const segD = (S, x, y, z, flat) => {
+      ap(S.e, x, y, z); const r = Math.hypot(q[0], q[1] * flat), hh = -q[2], m = S.L * .5;
+      return smin(roundCone(r, hh, S.r0, S.rm, m), roundCone(r, hh - m, S.rm, S.r1, m), .002);
+    };
+    const chainD = (C, x, y, z, from) => { let d = segD(C.segs[from], x, y, z, C.flat); for (let j = from + 1; j < 3; j++) d = smin(d, segD(C.segs[j], x, y, z, C.flat), .003); return d; };
+    // implicit -> approximate distance (F / |grad F|)
+    const dImp = (fn, x, y, z) => { const e = .0005, v = fn(x, y, z);
+      const gx = fn(x + e, y, z) - fn(x - e, y, z), gy = fn(x, y + e, z) - fn(x, y - e, z), gz = fn(x, y, z + e) - fn(x, y, z - e);
+      return v / Math.max(1e-6, Math.hypot(gx, gy, gz) / (2 * e)); };
+    // palm: a rounded slab, longer than wide, back gently domed, front edge following the knuckle arc
+    const zK = H.KN[2].z;
+    const palmF = (x, y, z) => {
+      const xs = x * ts, ze = zK + 11 * (xs - .005) * (xs - .005) + .003, zb = .012;
+      const t = (z - ze) / (zb - ze), tc = clamp(t, 0, 1);
+      const w = .0392 - .0105 * smooth(.3, 1, tc), u = (xs + .001 + .002 * tc) / w, v = 2 * t - 1;
+      const top = (.0108 + .0055 * smooth(.45, 1, tc)) * (1 - .3 * Math.min(1, u * u)), bot = (.0112 + .0068 * smooth(.3, 1, tc)) * (1 - .22 * Math.min(1, u * u));
+      const ym = Math.abs(y) / (y > 0 ? top : bot);
+      const s = Math.pow(u ** 4 + v ** 4, .25);
+      return Math.pow(s ** 2.4 + ym ** 2.4, 1 / 2.4) - 1;
+    };
+    // wrist and forearm: an elliptical section (5.5 x 3.5 cm at the wrist) widening toward the elbow
+    const Fe = inv(rel(H.fore));
+    const foreF = (x, y, z) => {
+      ap(Fe, x, y, z); const sb = L2 - q[1], k = smooth(-.01, .08, sb);
+      const e = Math.hypot(q[0] / (.0272 + .0038 * k), q[2] / (.0172 + .0048 * k));
+      const cap = Math.max(0, -sb / .014, (sb - .1) / .02);
+      return Math.pow(e ** 4 + cap ** 4, .25) - 1;
+    };
+    const palmD = (x, y, z) => {
+      let d = smin(dImp(palmF, x, y, z), dImp(foreF, x, y, z), .024);
+      for (let f = 1; f < 5; f++){            // the knuckle heads
+        const S = CH[f].segs[0]; ap(S.e, x, y, z);
+        d = smin(d, Math.hypot(q[0], (q[1] - .36 * S.r0) * 1.1, q[2] - .001) - .9 * S.r0, .007);
+      }
+      return d;
+    };
+    const sdf = (x, y, z) => {
+      const pg = smin(palmD(x, y, z), segD(CH[0].segs[0], x, y, z, 1.25), .014);        // + the thumb's fleshy metacarpal (thenar)
+      let d = pg;
+      for (const C of CH){
+        if (Math.hypot(x - C.c.x, y - C.c.y, z - C.c.z) - C.rad > pg + .01) continue;
+        d = Math.min(d, smin(pg, chainD(C, x, y, z, C.th ? 1 : 0), C.th ? .006 : .0075));   // fingers blend into the palm, never into each other
+      }
+      return d;
+    };
+    // bounds: the chains plus the forearm stub
+    const lo = [1, 1, 1], hi = [-1, -1, -1], grow = p => { for (let i = 0; i < 3; i++){ lo[i] = Math.min(lo[i], p.getComponent(i) - .026); hi[i] = Math.max(hi[i], p.getComponent(i) + .026); } };
+    for (const C of CH) C.pts.forEach(grow);
+    const dF = V3(0, 1, 0).transformDirection(rel(H.fore));        // elbow -> wrist, in hand space
+    grow(V3()); grow(dF.clone().multiplyScalar(-.115)); grow(V3(0, 0, .02));
+    for (let i = 0; i < 3; i++){ lo[i] -= .012; hi[i] += .012; }
+    const SN = surfaceNets(sdf, lo, hi, SKIN_H);
+    const nv = SN.pos.length / 3, P = new Float32Array(SN.pos), N = new Float32Array(nv * 3), SI = new Uint16Array(nv * 4), SW = new Float32Array(nv * 4);
+    const grad = (x, y, z, o) => { const e = .0003; o[0] = sdf(x + e, y, z) - sdf(x - e, y, z); o[1] = sdf(x, y + e, z) - sdf(x, y - e, z); o[2] = sdf(x, y, z + e) - sdf(x, y, z - e);
+      const l = Math.hypot(o[0], o[1], o[2]) || 1; o[0] /= l; o[1] /= l; o[2] /= l; return l / (2 * e); };
+    const g = [0, 0, 0], w = new Float32Array(17), pp = V3(), ab = V3(), ap2 = V3();
+    for (let i = 0; i < nv; i++){
+      let x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2];
+      for (let it = 0; it < 2; it++){ const d = sdf(x, y, z); grad(x, y, z, g); x -= d * g[0]; y -= d * g[1]; z -= d * g[2]; }   // onto the surface
+      grad(x, y, z, g);
+      P[i * 3] = x; P[i * 3 + 1] = y; P[i * 3 + 2] = z; N[i * 3] = g[0]; N[i * 3 + 1] = g[1]; N[i * 3 + 2] = g[2];
+      // weights: palm vs each finger by a soft nearest-part rule, then along the finger by smooth steps at the joints
+      w.fill(0);
+      const dp = palmD(x, y, z), dc = CH.map(C => chainD(C, x, y, z, 0));
+      const m = Math.min(dp, ...dc), TAU = .0021;
+      const ep = Math.exp(-(dp - m) / TAU), ec = dc.map(d => Math.exp(-(d - m) / TAU)), sum = ep + ec.reduce((a, b) => a + b, 0);
+      ap(Fe, x, y, z); const wf = smooth(-.004, .04, L2 - q[1]);
+      w[0] += ep / sum * (1 - wf); w[1] += ep / sum * wf;
+      pp.set(x, y, z);
+      CH.forEach((C, f) => {
+        const share = ec[f] / sum; if (share < 1e-4) return;
+        let best = 1e9, sArc = 0, acc = 0;
+        for (let j = 0; j < 3; j++){
+          ab.copy(C.pts[j + 1]).sub(C.pts[j]); const L = ab.length();
+          const t = clamp(ap2.copy(pp).sub(C.pts[j]).dot(ab) / (L * L), j ? 0 : -1e9, j < 2 ? 1 : 1e9);
+          const d = ap2.copy(C.pts[j]).addScaledVector(ab, t).distanceTo(pp);
+          if (d < best){ best = d; sArc = acc + t * L; }
+          acc += L;
+        }
+        const s1 = C.joints[1], s2 = C.joints[2], b1 = C.th ? .008 : .0065, b2 = .005;
+        const w2 = smooth(s2 - b2, s2 + b2, sArc), w0 = 1 - smooth(s1 - b1, s1 + b1, sArc), w1 = Math.max(0, 1 - w0 - w2);
+        w[2 + f * 3] += share * w0; w[3 + f * 3] += share * w1; w[4 + f * 3] += share * w2;
+      });
+      const order = [...w.keys()].sort((a, b) => w[b] - w[a]).slice(0, 4);
+      const tot = order.reduce((a, k) => a + w[k], 0) || 1;
+      order.forEach((k, j) => { SI[i * 4 + j] = k; SW[i * 4 + j] = w[k] / tot; });
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
+    geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
+    geo.setIndex(SN.idx);
+    const bones = [H.hand, H.fore]; H.fingers.forEach(F => bones.push(F.g0, F.g1, F.g2));
+    const sm = new THREE.SkinnedMesh(geo, skin);
+    sm.bind(new THREE.Skeleton(bones), H.hand.matrixWorld.clone());     // inverses taken from the current (home) pose
+    sm.frustumCulled = false; sm.castShadow = true; sm.receiveShadow = true; sm.name = 'hand-skin';
+    root.add(sm); H.skin = sm;
+    skinStats.push({ verts: nv, tris: SN.idx.length / 3, ms: Math.round((typeof performance !== 'undefined' ? performance : Date).now() - t0) });
+  }
+
+  root.userData.dbg = { hands, s, skinStats, contacts, spineOff, lean0 };
   return { object3d: root, keyDown, keyUp, update };
 };
 })();
