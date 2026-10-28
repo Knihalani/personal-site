@@ -1,5 +1,5 @@
 /* Typist: the person whose eyes the visitor looks through. Only the forearms, sleeves and hands are ever
-   seen (head, hair, hood and torso render into the lamp's shadow map only), so the hands are the hero model:
+   seen (there is no head or torso: the camera is the head), so the hands are the hero model:
    a sculpted palm with knuckles and tendons, tapered three-segment fingers with nails, a defined thumb, a skin
    wrist running into a ribbed hoodie cuff, and a sleeve that bunches at the elbow. Arms are 2-bone IK, fingers
    3-segment planar IK. Every keystroke is a timed strike (lift, accelerate, land on the cap centre, follow the
@@ -177,21 +177,23 @@ function* surfaceNets(sdf, lo, hi, h){
 /* ---------------- materials: skin with wrap-diffuse subsurface + rim; cloth with a soft fresnel sheen ---------------- */
 function makeMat(kind, U){
   // The typist is a silhouette: matte near-black (#050505), no skin or cloth shading inside the shape, only a
-  // faint cool rim where the edge turns toward the CRT or the lamp, so the outline reads against the dark keys.
+  // faint cool rim from the CRT and a faint warm one from the lamp, so the outline reads against the dark keys.
   const m = new THREE.MeshStandardMaterial({ color: lin(0x050505), roughness: 1, metalness: 0 });
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = 'varying vec3 vTP;\nvarying vec3 vTN;\n' + sh.vertexShader.replace('#include <fog_vertex>',
       '#include <fog_vertex>\n vTP = (modelMatrix * vec4(transformed, 1.0)).xyz;\n vTN = normalize(mat3(modelMatrix) * objectNormal);');
-    sh.fragmentShader = 'uniform vec3 uScrP;\nuniform vec3 uLampP;\nvarying vec3 vTP;\nvarying vec3 vTN;\n' +
+    sh.fragmentShader = 'uniform vec3 uScrP;\nuniform vec3 uLampP;\nuniform float uLampK;\nvarying vec3 vTP;\nvarying vec3 vTN;\n' +
       sh.fragmentShader.replace('#include <output_fragment>', `
   {
     vec3 sN = normalize(vTN); sN = gl_FrontFacing ? sN : -sN;
     vec3 sV = normalize(cameraPosition - vTP);
     float nc = dot(sN, normalize(uScrP - vTP)), nl = dot(sN, normalize(uLampP - vTP));
     float fr = pow(1.0 - clamp(dot(sN, sV), 0.0, 1.0), 4.0);
-    float lit = clamp(0.55 * max(nc, 0.0) + 0.35 * max(nl, 0.0) + 0.15, 0.0, 1.0);
-    outgoingLight = vec3(0.0015) + fr * lit * vec3(0.07, 0.095, 0.12);
+    // two thin rims: cool where the edge turns to the tube, warm (2700K) where it turns to the lamp
+    float cool = clamp(0.6 * max(nc, 0.0) + 0.12, 0.0, 1.0), warm = max(nl, 0.0) * uLampK;
+    float fw = pow(1.0 - clamp(dot(sN, sV), 0.0, 1.0), 3.0);
+    outgoingLight = vec3(0.0015) + fr * cool * vec3(0.06, 0.085, 0.11) + fw * warm * vec3(0.2, 0.11, 0.045);
   }
 #include <output_fragment>`);
   };
@@ -259,6 +261,7 @@ M.createTypist = function createTypist(api){
 
   const n = dirLocal(nW), lat = dirLocal(latW), kfw = dirLocal(fwdW);
   const U_KEY = uW, TRAVEL = .0032, HOVER = .0045, HAND_W = 36;
+  const REST_GAP = .0005, KNUCKLE_UP = .028, KNUCKLE_BACK = .052;   // fingertips rest on the caps (a hair above: never pressing)
 
   /* the desk surface just in front of the keyboard (for a hand resting there during long idles) */
   const spaceW = wpos('Space') || layoutWorld('Space');
@@ -275,18 +278,19 @@ M.createTypist = function createTypist(api){
   const U = {
     uScrP: { value: scrW.clone() }, uLampP: { value: lampW },
     uCrtC: { value: new THREE.Color(.36, 1, .62).multiplyScalar(.075) }, uLampC: { value: new THREE.Color(1, .7, .46).multiplyScalar(.2) },
-    uAmbC: { value: new THREE.Color(.11, .13, .2).multiplyScalar(.12) },
+    uAmbC: { value: new THREE.Color(.11, .13, .2).multiplyScalar(.12) }, uLampK: { value: 1 },
   };
   const cloth = makeMat('cloth', U), cuffM = makeMat('cuff', U), skin = makeMat('skin', U);
-  const ghost = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });   // casts the body's shadow, never seen
   const mesh = (geo, mat, parent, pos, rot) => {
-    const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = mat !== ghost;
+    const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true;
     if (pos) m.position.copy(pos); if (rot) m.rotation.set(rot[0], rot[1], rot[2], rot[3] || 'XYZ');
-    if (mat === ghost){ m.userData.noShadow = false; m.renderOrder = -1; }
     parent.add(m); return m;
   };
+  // hips and legs sit under the desk, out of the lamp's reach: they draw (cheaply) but never enter the shadow map
+  const noCast = o => o.traverse(m => { if (m.isMesh){ m.castShadow = false; m.userData.noShadow = true; } });
 
-  /* ---------- body: hips and legs as cloth, the rest shadow-only (the camera sits in the head) ---------- */
+  /* ---------- body: hips and legs as cloth. No head, neck or torso meshes: the camera sits in the head, and from the
+     lamp (in front of and beside the typist) their shadows fall behind the chair where nothing shows them. ---------- */
   const floorY = clamp(seatW.y > .2 ? -seatW.y : -.42, -.55, -.3);
   const hips = new THREE.Group(); root.add(hips);
   mesh(blob(.165, .085, .15, (x, y, z) => .03 * Math.sin(x * 6 + z * 4) * (y > 0 ? 1 : .3)), cloth, hips, V3(0, .075, .01));
@@ -297,14 +301,11 @@ M.createTypist = function createTypist(api){
     seg(hip, knee, .074, .056); seg(knee, ankle, .052, .04);
     mesh(blob(.045, .035, .11), cloth, hips, ankle.clone().add(V3(0, -.035, -.055)));
   }
+  noCast(hips);
   const SPINE0 = V3(0, .08, .03);
   const spine = new THREE.Group(); spine.position.copy(SPINE0); spine.rotation.order = 'YXZ'; root.add(spine);
-  const torsoProf = [[0, -.07], [.14, -.068], [.168, -.045], [.172, -.005], [.163, .03], [.153, .1], [.157, .2], [.17, .29], [.181, .35], [.186, .395], [.17, .435], [.135, .47], [.096, .497], [.064, .515], [0, .522]];
-  mesh(lathe(torsoProf, 24, null, v => { v.z *= .64; }), ghost, spine);
   const SHOULDER = [V3(-.172, .44, .005), V3(.172, .44, .005)];
   const EYE_S = V3(0, .665, -.085);                       // eyes, in spine space
-  mesh(capsule(.058, .05, .065, 12), ghost, spine, V3(0, .485, -.012));
-  mesh(blob(.08, .105, .1), ghost, spine, V3(0, .66, -.03));   // head + hair
 
   /* ---------- arms: sleeve, elbow bunching, cuff, wrist ---------- */
   const L1 = .29, L2 = .265;
@@ -324,7 +325,10 @@ M.createTypist = function createTypist(api){
   const elbowGeo = blob(.047, .047, .047, (x, y, z) => .05 * Math.sin(x * 7 + y * 5) * Math.cos(z * 4));
 
   /* ---------- hands ---------- */
-  const SKIN_H = .0026;     // surface-nets cell size (m)
+  /* Hand scale: the hand is modelled at adult size, then drawn at HS. Seen from ~45 cm above, full-size black hands
+     read as mittens over the board; at ~80% they sit on the keys like hands do in photos of someone typing. */
+  const HS = .8;
+  const SKIN_H = .0028;     // surface-nets cell size (hand space; ~2.2 mm in the world)
   const FL = [[.036, .03, .026], [.041, .025, .019], [.045, .028, .02], [.042, .026, .019], [.032, .02, .0165]];
   const FR = [[.0098, .0088, .0078], [.0075, .0067, .0059], [.0077, .0069, .006], [.0072, .0064, .0056], [.0062, .0055, .0049]];
   const TABLES = FL.map((L, f) => f === 0 ? fingerTable(L, .8, 1.25) : fingerTable(L, .55, 1.75));
@@ -332,7 +336,7 @@ M.createTypist = function createTypist(api){
   const hands = [];
   for (let h = 0; h < 2; h++){
     const side = h ? 1 : -1, ts = -side;            // ts: which local x side the thumb is on
-    const hand = new THREE.Group(); root.add(hand);
+    const hand = new THREE.Group(); hand.scale.setScalar(HS); root.add(hand);
     const KN = [V3(ts * .031, -.007, -.03), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.08)];
     const upper = new THREE.Group(); root.add(upper); mesh(upperGeo, cloth, upper); mesh(elbowGeo, cloth, upper, V3(0, L1, 0));
     const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, cuffM, fore);
@@ -343,7 +347,9 @@ M.createTypist = function createTypist(api){
       const g0 = new THREE.Group(); g0.rotation.order = 'YXZ'; base.add(g0);
       const g1 = new THREE.Group(); g1.position.z = -FL[f][0]; g0.add(g1);
       const g2 = new THREE.Group(); g2.position.z = -FL[f][1]; g1.add(g2);
-      fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][2] * .9 * .87 + .0004,
+      // clear: fingertip axis end to key top. The tip tapers to ~.68 of the DIP radius (see the skin), so the pad
+      // that meets the cap sits about that far below the axis, in world units
+      fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][2] * (f ? .7 : .8) * .92 * HS + .0003,
         mode: 'idle', code: null, vcode: null, real: false, pressed: false, upReq: false, t: 0, tC: 0, Td: .08, lift: .005, relT: 9,
         w: S(0), depth: S(0), act: 0, K: V3(), from: V3(), P: V3(), tip: V3(), restLocal: V3(), restHome: V3(), reach: V3(), start: 0,
         fid: new VSpring(V3()), fidT: V3(), fidAt: 1 + Math.random() * 4, queue: [], vel: V3(), prevP: V3(), v0: V3() });
@@ -358,23 +364,26 @@ M.createTypist = function createTypist(api){
     const space = keyLocal('Space');
     for (const H of hands){
       const homes = HOME[H.h].slice(1).map(keyLocal), C = homes.reduce((a, p) => a.add(p), V3()).multiplyScalar(.25);
-      const fwd = kfw.clone().addScaledVector(lat, H.h ? -.1 : .1).normalize().addScaledVector(n, -.17).normalize();
+      // the back of the hand rises gently from a low wrist to the knuckles (~11 deg), the way relaxed typing hands do
+      const fwd = kfw.clone().addScaledVector(lat, H.h ? -.17 : .17).normalize().addScaledVector(n, .2).normalize();   // turned in a little, in line with the forearm
       const up = n.clone().addScaledVector(fwd, -n.dot(fwd)).normalize(), back = fwd.clone().negate();
       const right = up.clone().cross(back).normalize();
       H.homeQ.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, back))
-        .multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -H.side * .2));
-      const kc = H.fingers.slice(1).reduce((a, F) => a.add(F.base.position), V3()).multiplyScalar(.25);
-      const target = C.clone().addScaledVector(n, .047).addScaledVector(kfw, -.053);
+        .multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -H.side * .25));
+      const kc = H.fingers.slice(1).reduce((a, F) => a.add(F.base.position), V3()).multiplyScalar(.25 * HS);
+      // knuckles ~2.8 cm above the home-row caps and ~5 cm behind them: the fingers curl down onto the keys
+      // (PIP ~35 deg, DIP ~20 deg) with the tips resting on the caps, not hovering over them
+      const target = C.clone().addScaledVector(n, KNUCKLE_UP).addScaledVector(kfw, -KNUCKLE_BACK);
       H.homeW.copy(target).sub(kc.clone().applyQuaternion(H.homeQ));
       H.W = new VSpring(H.homeW); H.hold.copy(H.homeW); H.region = new VSpring(H.homeW);
-      const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(1, 1, 1)).invert();
+      const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(HS, HS, HS)).invert();
       const ixLat = homes[0].clone().sub(space || C).dot(lat);
       const half = 2.7 * U_KEY;
       const tl = clamp(ixLat + (H.h ? -.35 : .55) * U_KEY, -half, half);
       thumbKey[H.h] = (space || C.clone().addScaledVector(kfw, -2 * U_KEY)).clone().addScaledVector(lat, tl);
       H.fingers.forEach((F, f) => {
         const k = f === 0 ? thumbKey[H.h] : homes[f - 1];
-        F.restHome.copy(k).addScaledVector(n, F.clear + (f === 0 ? HOVER * 1.4 : HOVER));
+        F.restHome.copy(k).addScaledVector(n, F.clear + (f === 0 ? .0025 : REST_GAP));
         F.restLocal.copy(F.restHome).applyMatrix4(inv);
       });
       // resting on the desk: wrist down on the wood in front of the board, hand turned out and flattened
@@ -407,7 +416,7 @@ M.createTypist = function createTypist(api){
   const owner = new Map(), down = new Set(), timers = [], contacts = [];
   let T = 0, lastKey = -9, lastHand = 0, lamped = !!rig.lampPosition, lampScan = 0, pendShift = null, deskCheck = 6, strikeSeq = 0;
   const act = S(0), lean = S(lean0), sway = S(0), twist = S(0);
-  let swayT = 0, swayAt = 6;
+  let swayT = 0, swayAt = 6, lampRef = null, lampMax = 0, lampFind = 0;
   const ZERO = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), Y = V3(0, 1, 0), qA = new THREE.Quaternion(), mB = new THREE.Matrix4();
 
   const snd = (c, d) => { try { if (M.sound && M.sound.key) M.sound.key(c, d); } catch (e){} };
@@ -563,6 +572,10 @@ M.createTypist = function createTypist(api){
   function update(dt, t){
     dt = clamp(dt || 0, 0, .05); T += dt;
     if (!lamped && (lampScan -= dt) <= 0){ lampScan = 1.5; findLamp(); }
+    // the warm rim follows the lamp's switch: track the spot light at the lamp's position
+    if (!lampRef && api.scene && (lampFind -= dt) <= 0){ lampFind = 2; let bd = .3;
+      api.scene.traverse(o => { if (o.isSpotLight){ const d = o.getWorldPosition(V3()).distanceTo(U.uLampP.value); if (d < bd){ bd = d; lampRef = o; } } }); }
+    if (lampRef){ lampMax = Math.max(lampMax, lampRef.intensity); U.uLampK.value = lampRef.visible && lampMax > 0 ? lampRef.intensity / lampMax : 0; }
     for (let i = timers.length - 1; i >= 0; i--) if (T >= timers[i].at){ const f = timers[i].fn; timers.splice(i, 1); f(); }
     if (pendShift && T - pendShift.at > .085) flushShift();
 
@@ -602,7 +615,7 @@ M.createTypist = function createTypist(api){
       } else {
         H.region.step(H.homeW, T - H.lastActive < .6 ? .5 : 2.5, dt);
         if (T - H.lastActive < .35) w = 14;
-        H.hold.copy(H.homeW).lerp(H.region.x, .35).addScaledVector(n, .0022 * breath).addScaledVector(kfw, .0015 * Math.sin(T * .7 + H.h * 2)).addScaledVector(lat, .001 * Math.sin(T * .43 + H.h));
+        H.hold.copy(H.homeW).lerp(H.region.x, .35).addScaledVector(n, .0011 * (1 + breath)).addScaledVector(kfw, .0015 * Math.sin(T * .7 + H.h * 2)).addScaledVector(lat, .001 * Math.sin(T * .43 + H.h));
       }
       const W = H.W.step(H.hold, w, dt);
       spring(H.desk, H.deskT, H.deskT ? 2.6 : 9, dt);
@@ -620,7 +633,7 @@ M.createTypist = function createTypist(api){
       poseHand(H, Wp, H.yaw.x * (1 - dk), dk);
       const dLat = v1.copy(W).sub(H.homeW).dot(lat);
       spring(H.elbowOut, clamp(dLat * H.side * 4, -.4, .6), 6, dt);
-      const pole = V3(H.side * (.85 + H.elbowOut.x), -.6, .3).normalize();
+      const pole = V3(H.side * (1.25 + H.elbowOut.x), -.55, .3).normalize();   // elbows out by the sides: the forearms come in from the corners
       pole.addScaledVector(dv, -pole.dot(dv)).normalize();
       const a = (L1 * L1 - L2 * L2 + dist * dist) / (2 * dist), hh = Math.sqrt(Math.max(0, L1 * L1 - a * a));
       const E = Sh.clone().addScaledVector(dv, a).addScaledVector(pole, hh);
@@ -643,11 +656,11 @@ M.createTypist = function createTypist(api){
           else { F.fidT.set(0, .002 + Math.random() * .004, (Math.random() - .5) * .004); F.fidAt = .25 + Math.random() * .4; }
         }
         F.fid.step(F.mode === 'idle' && !wsum ? F.fidT : ZERO, 14, dt);
-        const idle = v2.copy(F.restLocal).add(F.fid.x); idle.y += .0009 * Math.sin(T * 1.7 + F.f * 1.3 + H.h * 2);
+        const idle = v2.copy(F.restLocal).add(F.fid.x); idle.y += .0005 * (1 + Math.sin(T * 1.7 + F.f * 1.3 + H.h * 2));   // resting on the cap: only ever lifts
         idle.applyMatrix4(H.hand.matrix);
         let cp = 0; for (const G of H.fingers) if (G !== F) cp += COUPLE[G.f][F.f] * G.act * (G.mode === 'strike' ? Math.sin(PI * clamp(G.t / G.Td, 0, 1)) * .6 + .4 : 1);
-        if (cp > 0) idle.addScaledVector(n, -.0024 * Math.min(cp, 1.2));
-        if (dk > 0){ const hgt = idle.dot(n) - (deskLocalH + FR[F.f][2] * .9); idle.addScaledVector(n, -hgt * dk * (F.f ? .85 : .5)); }
+        if (cp > 0) idle.addScaledVector(n, .0016 * Math.min(cp, 1.2));      // a neighbour's stroke lifts the coupled fingers a little
+        if (dk > 0){ const hgt = idle.dot(n) - (deskLocalH + FR[F.f][2] * .9 * HS); idle.addScaledVector(n, -hgt * dk * (F.f ? .85 : .5)); }
 
         if (F.mode === 'strike'){
           F.t += dt;
@@ -662,7 +675,7 @@ M.createTypist = function createTypist(api){
           solveFinger(F, F.P);
           if (u >= 1){
             const err = F.tip.distanceTo(Kc);
-            if (err < .0015 || F.t > F.Td + .12){
+            if (err < .001 || F.t > F.Td + .1){
               F.mode = 'hold'; F.pressed = true; F.tC = F.t; F.depth.x = 0; F.depth.v = .9;
               contacts.push({ code: F.vcode, err: F.tip.clone().sub(Kc), t: F.t, at: T.toFixed(2) + '/h' + F.h });
               if (contacts.length > 400) contacts.shift();
@@ -734,15 +747,18 @@ M.createTypist = function createTypist(api){
     // per finger: hand->bone transforms, lengths and radii (lateral; the dorsal-ventral axis is flattened)
     const CH = H.fingers.map(F => {
       const f = F.f, th = f === 0, R = FR[f];
-      const rj = th ? [.0135, R[1] * 1.1, R[2] * 1.12, R[2] * 1.02] : [R[0] * 1.06, R[1] * 1.06, R[2] * 1.06, R[2] * .98];
+      // the last joint tapers into the tip: full at the DIP, still full across the pad, narrowing to a slim, flattened
+      // tip (nail on top, pad below) instead of ending in a ball
+      const rj = th ? [.0135, R[1] * 1.1, R[2] * 1.12, R[2] * .8] : [R[0] * 1.06, R[1] * 1.06, R[2] * 1.04, R[2] * .7];
       const gs = [F.g0, F.g1, F.g2];
-      const segs = gs.map((g, j) => ({ e: inv(rel(g)), L: F.L[j], r0: rj[j], r1: rj[j + 1], rm: (rj[j] + rj[j + 1]) * .5 * (th && j === 0 ? 1 : .93) }));
+      const segs = gs.map((g, j) => ({ e: inv(rel(g)), L: F.L[j], r0: rj[j], r1: rj[j + 1], rm: j === 2 ? rj[2] * .97 : (rj[j] + rj[j + 1]) * .5 * (th && j === 0 ? 1 : .985),
+        flat: th ? (j === 2 ? 1.2 : 1.08) : [1.12, 1.16, 1.3][j] }));
       const pts = gs.map(g => V3().setFromMatrixPosition(rel(g))); pts.push(V3(0, 0, -F.L[2]).applyMatrix4(rel(F.g2)));
       const c = pts.reduce((a, p) => a.add(p), V3()).multiplyScalar(.25);
       return { f, th, segs, pts, c, rad: Math.max(...pts.map(p => p.distanceTo(c))) + .022, flat: th ? 1.08 : 1.15, joints: [0, F.L[0], F.L[0] + F.L[1]] };
     });
     const segD = (S, x, y, z, flat) => {
-      ap(S.e, x, y, z); const r = Math.hypot(q[0], q[1] * flat), hh = -q[2], m = S.L * .5;
+      ap(S.e, x, y, z); const r = Math.hypot(q[0], q[1] * (S.flat || flat)), hh = -q[2], m = S.L * .5;
       return smin(roundCone(r, hh, S.r0, S.rm, m), roundCone(r, hh - m, S.rm, S.r1, m), .002);
     };
     const chainD = (C, x, y, z, from) => { let d = segD(C.segs[from], x, y, z, C.flat); for (let j = from + 1; j < 3; j++) d = smin(d, segD(C.segs[j], x, y, z, C.flat), .003); return d; };
@@ -765,7 +781,7 @@ M.createTypist = function createTypist(api){
     // wrist and forearm: an elliptical section (5.5 x 3.5 cm at the wrist) widening toward the elbow
     const Fe = inv(rel(H.fore));
     const foreDist = (x, y, z) => {
-      ap(Fe, x, y, z); const sb = L2 - q[1], k = smooth(.0, .085, sb), a = .0252 + .004 * k, b = .0155 + .005 * k; q[2] += .0015 * (1 - k);
+      ap(Fe, x, y, z); const sb = L2 - q[1], k = smooth(.0, .085, sb), a = .0228 + .0036 * k, b = .014 + .0045 * k; q[2] += .0015 * (1 - k);
       const e = Math.hypot(q[0] / a, q[2] / b) + 1e-9;
       const c1 = -sb / .014, c2 = (sb - .085) / .02, cap = Math.max(0, c1, c2), cs = cap === c1 ? .014 : .02;
       const e2 = e * e, cc = cap * cap, r = Math.sqrt(Math.sqrt(e2 * e2 + cc * cc)) + 1e-9;

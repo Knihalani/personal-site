@@ -116,14 +116,15 @@ function sanitize(html){
 /* typographer's quotes in prose text (never inside code or pre). The character before a quote decides its direction,
    carried across inline tags and reset at each block. */
 const BLOCKS = new Set(['P', 'H2', 'H3', 'LI', 'BLOCKQUOTE', 'FIGCAPTION', 'DIV', 'FIGURE', 'UL', 'OL', 'BR', 'HR']);
+const curl = (t, prev = ' ') => String(t).replace(/['"]/g, (q, i) => {
+  const before = i ? t[i - 1] : prev, opens = /[\s(\[{\u2014\u2013-]/.test(before);
+  if (q === '"') return opens ? '\u201c' : '\u201d';
+  if (opens && /^'\d\ds\b/.test(t.slice(i))) return '\u2019';     // '90s
+  return opens ? '\u2018' : '\u2019';
+});
 function smarten(root){
   let prev = ' ';
-  const quote = (t) => t.replace(/['"]/g, (q, i) => {
-    const before = i ? t[i - 1] : prev, opens = /[\s(\[{\u2014\u2013-]/.test(before);
-    if (q === '"') return opens ? '\u201c' : '\u201d';
-    if (opens && /^'\d\ds\b/.test(t.slice(i))) return '\u2019';     // '90s
-    return opens ? '\u2018' : '\u2019';
-  });
+  const quote = t => curl(t, prev);
   const walk = n => {
     for (let c = n.firstChild; c; c = c.nextSibling){
       if (c.nodeType === 3){ const v = c.nodeValue; if (/['"]/.test(v)) c.nodeValue = quote(v); if (v) prev = v[v.length - 1]; }
@@ -320,8 +321,8 @@ function render(p){
   const bits = [p.date && el('time', { datetime: p.date }, fmtDate(p.date)), mins + ' min read'].filter(Boolean);
   bits.forEach((b, k) => { if (k) kicker.append(el('span', { class: 'rd-dot', 'aria-hidden': 'true' }, '·')); kicker.append(b); });
   const head = el('header', { class: 'rd-head' }, kicker,
-    el('h1', { class: 'rd-title', id: 'rd-title' }, p.title || 'Untitled'),
-    p.subtitle ? el('p', { class: 'rd-sub' }, p.subtitle) : null,
+    el('h1', { class: 'rd-title', id: 'rd-title' }, curl(p.title || 'Untitled')),
+    p.subtitle ? el('p', { class: 'rd-sub' }, curl(p.subtitle)) : null,
     (p.tags && p.tags.length) ? el('ul', { class: 'rd-tags', 'aria-label': 'tags' }, ...p.tags.map(t => el('li', null, String(t)))) : null);
   const prose = el('div', { class: 'rd-prose' }); prose.append(body.cloneNode(true));
   const newer = i > 0 ? ps[i - 1] : null, older = i >= 0 && i < ps.length - 1 ? ps[i + 1] : null;
@@ -335,7 +336,7 @@ function render(p){
   const end = el('footer', { class: 'rd-end' }, el('div', { class: 'rd-fin', 'aria-hidden': 'true' }, '• • •'), nav,
     el('div', { class: 'rd-home' }, el('button', { class: 'rd-btn', type: 'button', onclick: () => close() }, '← back to terminal')));
   col.replaceChildren(head, el('hr', { class: 'rd-rule' }), prose, end);
-  where.textContent = p.title || '';
+  where.textContent = curl(p.title || '');
   sheet.style.scrollBehavior = 'auto'; sheet.scrollTop = 0; sheet.style.scrollBehavior = '';
   onScroll();
   D.title = (p.title ? p.title + ' — ' : '') + ((M.CONTENT && M.CONTENT.name) || 'Kaiav Nihalani');

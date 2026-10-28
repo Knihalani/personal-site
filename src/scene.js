@@ -996,7 +996,7 @@ M.createScene = function createScene(container){
       // beige case green: hold the tube's light on the room back until the lamp has come up
       const reveal = intro.t < intro.end + .5 ? sstep(.6, intro.end + .5, intro.t) : 1;
       glow.intensity = (.2 + .6 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.6 * lampS.adapt) * (.25 + .75 * reveal);
-      spill.intensity = (.0015 + .006 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + .8 * lampS.adapt) * reveal;
+      spill.intensity = (.0026 + .01 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.2 * lampS.adapt) * reveal;
       // keep it smooth on modest GPUs: step the pixel ratio down if frames run long
       // only frames that were actually drawn count (idle frames are throttled), and not during the reveal
       if (drewLast && intro.t > intro.end){ perfT += dt; frames++; if (dt > .026) slowAcc++; }

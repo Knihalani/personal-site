@@ -2054,7 +2054,7 @@ M.createTerminal = function createTerminal(opts){
     if (!t || !t.cyc || t.list.length < 2 || t.after !== input){
       if (!nudgeOn()) return [];
       if (input) return [[['press ', 'f'], ['enter', 'd'], [' to run it', 'f']]];
-      return [[['try ', 'f'], chip('about', 'd'), ['  or  ', 'f'], chip('help', 'd'), [COLS >= 46 ? '   type it, then press enter' : '', 'f']]];
+      return [[['try ', 'f'], chip('about', 'd'), ['  or  ', 'f'], chip('help', 'd')]];
     }
     const w = Math.min(COLS - 2, Math.max(...t.list.map(x => x.length)) + 2), nc = Math.max(1, Math.floor(COLS / w));
     const lines = Math.ceil(t.list.length / nc), maxL = Math.min(5, Math.max(2, ROWS - 6));

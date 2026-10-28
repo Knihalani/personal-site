@@ -350,7 +350,7 @@ T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer durati
         scr.fill(bx, y, bw, 1, '·', 'faint'); scr.fill(bx, y, Math.round(bw * frac), 1, ' ', blk(done ? 'bright' : 'dim'));
         y += 2;
         center(scr, y, done ? "time's up" : paused ? 'paused' : fmtHMS(dur) + ' timer', done ? 'bright' : 'normal');
-        keysLine(scr, H - 1, done ? [['any key', 'done']] : [['space', paused ? 'resume' : 'pause'], ['+/-', 'a minute'], ['r', 'restart'], ['q', 'quit']]);
+        keysLine(scr, H - 1, done ? [['any key', 'done']] : [['space', paused ? 'resume' : 'pause'], ['q', 'quit'], ['+/-', 'a minute'], ['r', 'restart']]);
       },
     };
   } };
