@@ -433,7 +433,7 @@ M.createScene = function createScene(container){
   }
 
   /* ================= THE KEYBOARD ================= */
-  const U = .019, KB = { w: .316, d: .14, tilt: .085, yaw: .03, x: -.005, z: .175, kz0: .008 };
+  const U = .019, KB = { w: .316, d: .14, tilt: .085, yaw: .03, x: .015, z: .13, kz0: .008 };
   const ROW_ANGLE = [.15, .075, 0, -.05, -.085], ROW_LIFT = [.0024, .001, 0, .0003, .0009];
   const KEY_H = .0095, KEY_BASE = .0042, TRAVEL = .0032, DISH = .0008;
   const L = (s) => s.split('').map(c => ['Key' + c, 1, c]);
@@ -770,25 +770,33 @@ M.createScene = function createScene(container){
   const qLook = new THREE.Quaternion(), qDelta = new THREE.Quaternion(), eLook = new THREE.Euler(0, 0, 0, 'YXZ');
   const eyeNow = eyeRest.clone(), fwdNow = new V3();
   let breathT = 0;
-  function applyCamera(t){
-    const br = REDUCED ? 0 : Math.sin(breathT * Math.PI * 2 * .21), br2 = REDUCED ? 0 : Math.sin(breathT * Math.PI * 2 * .21 - 1.1);
-    const drift = REDUCED ? 0 : (Math.sin(t * .23) * .6 + Math.sin(t * .071 + 2) * .4);
-    // as the head drops, it also swings toward the middle of the keyboard (the tube sits a touch right of it)
-    const downT = clamp(-pitchS.x / LOOK.down, 0, 1);
-    const yaw = YAW0 + yawS.x + KB_YAW * sstep(.1, .9, downT) + .0016 * drift, pitch = PITCH0 + pitchS.x + .0022 * br2 - .02 * leanS.x
-      + .1 * sstep(.2, 1, downT);   // sat back, the gaze settles between the wrists and the top row
-    eLook.set(pitch, yaw, .0012 * drift); qLook.setFromEuler(eLook);
-    qDelta.copy(qRest).invert().premultiply(qLook);
-    eyeNow.copy(pivot).add(eyeArm.clone().applyQuaternion(qDelta));
-    eyeNow.y += .0016 * br;
-    // looking down, the head also settles back and up a little (sitting back from the desk), so both hands and
-    // the board are seen from a natural ~45 cm rather than from right over the wrists
-    { const d = sstep(0, 1, downT); eyeNow.addScaledVector(flatN, .13 * d); eyeNow.y += .03 * d; }
-    fwdNow.set(0, 0, -1).applyQuaternion(qLook);
-    eyeNow.addScaledVector(new V3(fwdNow.x, 0, fwdNow.z).normalize(), .012 * leanS.x);
-    camera.position.copy(eyeNow); camera.quaternion.copy(qLook);
-    const down = sstep(0, 1, downT);
-    const fov = lerp(fovRest, fovDown, down);
+  /* v3: ONE fixed shot. The eye sits back and above the typist's own eyes so the whole tube, the keyboard and both
+     hands are in frame at once; it never follows the pointer and never sways. The lens is fitted to those three
+     things for the current aspect (aim and FOV solved so they sit centred with a small margin). */
+  const SHOT = { back: .85, up: .32, kbPull: -.02 };
+  const eyeShot = eyeRest.clone().addScaledVector(flatN, SHOT.back); eyeShot.y += SHOT.up; eyeShot.x = (screenCenter.x + keyboardCenter.x) / 2; // square-on to the machine
+  const fitPts = () => {
+    const ps = [], gx = new V3().crossVectors(new V3(0, 1, 0), flatN).normalize();
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) ps.push(screenCenter.clone().addScaledVector(gx, sx * (GW / 2 + .012)).add(new V3(0, sy * (GH / 2 + .012), 0)));
+    const kx = new V3(Math.cos(KB.yaw), 0, -Math.sin(KB.yaw)), kz = new V3(Math.sin(KB.yaw), 0, Math.cos(KB.yaw));
+    for (const sx of [-1, 1]) ps.push(keyboardCenter.clone().addScaledVector(kx, sx * (KB.w / 2 + .01)).addScaledVector(kz, KB.d / 2 + SHOT.kbPull));
+    return ps;
+  };
+  function applyCamera(){
+    const ps = fitPts(), m = new THREE.Matrix4(), inv = new THREE.Matrix4();
+    let yaw = YAW0, pitch = PITCH0, tv = .3, th = .3;
+    for (let it = 0; it < 6; it++){
+      eLook.set(pitch, yaw, 0); qLook.setFromEuler(eLook);
+      m.compose(eyeShot, qLook, new V3(1, 1, 1)); inv.copy(m).invert();
+      let vmin = 9, vmax = -9, hmin = 9, hmax = -9;
+      for (const p of ps){ const c = p.clone().applyMatrix4(inv), d = -c.z, av = Math.atan2(c.y, d), ah = Math.atan2(c.x, d);
+        vmin = Math.min(vmin, av); vmax = Math.max(vmax, av); hmin = Math.min(hmin, ah); hmax = Math.max(hmax, ah); }
+      pitch += (vmin + vmax) / 2; yaw -= (hmin + hmax) / 2;
+      tv = Math.tan((vmax - vmin) / 2); th = Math.tan((hmax - hmin) / 2);
+    }
+    eLook.set(pitch, yaw, 0); qLook.setFromEuler(eLook);
+    camera.position.copy(eyeShot); camera.quaternion.copy(qLook);
+    const fov = Math.min(80, 2 * Math.atan(Math.max(tv, th / aspect) * 1.03) / D2R);
     if (Math.abs(camera.fov - fov) > 1e-4){ camera.fov = fov; camera.updateProjectionMatrix(); }
   }
   /* never see inside the typist's head: anything added to the scene whose bounds wrap the eye is hidden */
@@ -878,14 +886,14 @@ M.createScene = function createScene(container){
     setLamp(on){ on = !!on; if (on === lampS.on) return; lampS.on = on; lampS.t = 0; },
     get lampOn(){ return lampS.on; },
     /* nx, ny in -1..1 from the pointer (0,0 = the screen). ny > 0 looks down toward the keyboard. */
-    setLook(nx, ny){
+    setLook(nx, ny){ return; /* v3: fixed shot */
       nx = clamp(+nx || 0, -1, 1); ny = clamp(+ny || 0, -1, 1);
       yawS.t = -curve(nx) * LOOK.yaw;
       const cy = curve(ny); pitchS.t = cy > 0 ? -cy * LOOK.down : -cy * LOOK.up;
     },
     setPointer(nx, ny){ api.setLook(nx, ny); },
     /* a keystroke: the head dips toward the work for a moment */
-    nudge(amount = 1){ if (!REDUCED) leanS.v += 7 * clamp(amount, 0, 2); },
+    nudge(amount = 1){ if (false) leanS.v += 7 * clamp(amount, 0, 2); },
     update(dt, t){
       breathT += dt;
       crit(yawS, 6.5, dt); crit(pitchS, 6, dt);

@@ -25,7 +25,7 @@ const PALETTE = {             // one phosphor, four intensities. Retune here to 
   accent: '#8dffb4',          // matches, highlights: the same phosphor, driven harder
 };
 const FONT = 'VT323, "IBM Plex Mono", ui-monospace, monospace';
-const COLS = 72;               // grid width; ~23 rows at 4:3
+const COLS = 54;               // grid width; ~23 rows at 4:3
 const WIDTH = 1280;            // canvas px
 const LINE = 0.9;              // line height in em (VT323 has generous built-in leading)
 const RATE = 1500;             // typing-out speed, characters per second
@@ -541,7 +541,8 @@ M.createTerminal = function createTerminal(opts){
   /* ---- documents ---- */
   function welcome(o){
     o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
-      .line(['type ', 'f'], ['help', 'n'], [' to begin, or try ', 'f'], ['about', 'n'], ['  ', 'f'], ['eden', 'n'], ['  ', 'f'], ['j', 'n'], ['  ', 'f'], ['writing', 'n'], ['  ', 'f'], ['links', 'n'])
+      .line(['type ', 'f'], ['help', 'n'], [' to begin, or try', 'f'])
+      .line(['about', 'n'], ['  ', 'f'], ['eden', 'n'], ['  ', 'f'], ['j', 'n'], ['  ', 'f'], ['writing', 'n'], ['  ', 'f'], ['links', 'n'], ['  ', 'f'], ['tetris', 'n'])
       .line(['new here? ', 'f'], ['cat README.md', 'd'])
       .blank();
     return o;
