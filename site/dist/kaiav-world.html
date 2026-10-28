@@ -546,6 +546,7 @@ button.slot:active{transform:translateY(2px)}
     <button class="tb f-btn" id="tJump" type="button" aria-label="Jump; tap again in the air to open the sail"><i class="ico" data-ico="up"></i><span>Jump</span></button>
     <button class="tb f-alt" id="tBag" type="button" aria-label="Satchel"><i class="ico" data-ico="bag"></i><span>Bag</span></button>
     <button class="tb f-alt" id="tDash" type="button" aria-label="Dash"><i class="ico" data-ico="dash"></i><span>Dash</span></button>
+    <button class="tb f-alt" id="tCrouch" type="button" aria-label="Crouch (toggle)"><i class="ico" data-ico="down"></i><span>Crouch</span></button>
     <button class="tb f-alt" id="tHook" type="button" aria-label="Fire or release the grappling hook" hidden><i class="ico" data-ico="hook"></i><span>Hook</span></button>
   </div>
 </div>
@@ -2869,12 +2870,14 @@ function raycast(ox, oy, oz, dx, dy, dz, maxD, out, solidOnly){
 
 /* ================= player ================= */
 // tuning (see design doc). Fast and fluid but controllable.
-const STEP_DT = 1 / 120, WALK = 5.5, SPRINT = 8.5, SNEAK = 2.2, G_ACCEL = 6.5, AIR_ACCEL = 3.4, FRICTION = 11, STOP_SPEED = 2.5;
+const STEP_DT = 1 / 120, WALK = 5.5, SPRINT = 8.5, SNEAK = 2.2, G_ACCEL = 10, AIR_ACCEL = 3.4, FRICTION = 15, STOP_SPEED = 3.2; // crisp starts (~.1 s) and stops (~.15 s), no drift
 const GRAV = 32, FALL_MULT = 1.55, HANG_MULT = .5, TERMINAL = 50, JUMP_V = 10.2, COYOTE = .11, JUMP_BUF = .13, SPRINT_JUMP_BOOST = 1.08;
 const SLIDE_T = .7, SLIDE_V = 11, DASH_V = 15, DASH_CD = .85;
-const GLIDE_BASE = 9.5, GLIDE_MAX = 24, GLIDE_MIN = 5.5, LIFT = 14, BOUNCE_V = 21, CATCH_Y = 12, CATCH_T = 1.1;
+const GLIDE_BASE = 9, GLIDE_MAX = 23, GLIDE_MIN = 5.5, LIFT = 12, BOUNCE_V = 21, CATCH_Y = 12, CATCH_T = 1.1;
+// paraglider: trim airspeed, still-air sink at trim, max turn rate (rad/s), energy gravity going down / up
+const GL_SINK = 1.4, GL_SINK1 = 1.0, GL_TURN = 1.85, GL_GDN = 9.8, GL_GUP = 14;
 const PL = { x: 160.5, y: 70, z: 190, px: 160.5, py: 70, pz: 190, vx: 0, vy: 0, vz: 0, hw: .3, h: 1.8, onGround: false, wasGround: false, inWater: false, yaw: 0, pitch: 0,
-  stepOff: 0, sd: 0.5, md: 0.5, coyote: 0, jumpBuf: 0, air: 0, gliding: false, gs: 9.5, flaps: 0, sneak: false, slideT: 0, dashCD: 0, airDash: true, vault: 0, eyeOff: 0, mantleCD: 0, glideLock: 0, autoJT: 0, sailOpen: false,
+  stepOff: 0, sd: 0.5, md: 0.5, coyote: 0, jumpBuf: 0, air: 0, gliding: false, gs: 9.5, flaps: 0, sneak: false, slideT: 0, dashCD: 0, airDash: true, vault: 0, eyeOff: 0, mantleCD: 0, glideLock: 0, autoJT: 0, sailOpen: false, turn: 0, bank: 0, udv: 0, gam: 0, hd: 0, steer: 0,
   stable: 0, walk: 0, stepAcc: 0, stepPh: 0, stall: 0, landKick: 0, punch: 0, trailT: 0, safe: null, catching: false, wallT: 0, wallNx: 0, wallNz: 0 };
 const INP = { x: 0, z: 0, jump: false, jumpEdge: false, sprint: false, sneak: false, sneakEdge: false, dashEdge: false, dashX: 0, dashZ: 0, use: false };
 let tAccNoSail = 0, hasSail = false, inUpdraft = 0, festival = 0, goldSail = false, sailLevel = 0;
@@ -2900,48 +2903,42 @@ function stepPlayer(dt){
   const wl = hyp2(wx, wz), mag = Math.min(1, wl); if (wl > 1e-4){ wx /= wl; wz /= wl; }
   let hs = hyp2(P.vx, P.vz);
   const sprint = INP.sprint && INP.z > .3 && !INP.sneak;
-  // slide: crouch while sprinting
+  // slide: crouch while sprinting. A crouch press in the air closes the sail.
+  const crouchEdge = INP.sneakEdge;
   if (INP.sneakEdge && P.onGround && hs > 6.5 && P.slideT <= 0){ const k = Math.max(hs, SLIDE_V) / hs; P.vx *= k; P.vz *= k; P.slideT = SLIDE_T; SND.slide(); dust(P.x, P.y, P.z, 8, 2.5); P.punch = Math.max(P.punch, .3); }
   INP.sneakEdge = false;
   if (P.slideT > 0){ P.slideT -= dt; if (!P.onGround || hs < 3.2) P.slideT = Math.min(P.slideT, 0); }
   P.sneak = INP.sneak && P.onGround && P.slideT <= 0;
-  // dash: Q or a double-tapped direction
+  // dash: Q (in the air too, once; with the sail open it adds to the glide instead of replacing it)
   if (INP.dashEdge){ INP.dashEdge = false; if (P.dashCD <= 0 && (P.onGround || P.airDash) && !P.inWater){
     let dx = -sy * INP.dashZ + cy * INP.dashX, dz = -cy * INP.dashZ - sy * INP.dashX; const dl = hyp2(dx, dz); if (dl < .1){ dx = -sy; dz = -cy; } else { dx /= dl; dz /= dl; }
-    P.vx = dx * DASH_V; P.vz = dz * DASH_V; if (!P.onGround){ P.vy = Math.max(P.vy, 2.5); P.airDash = false; P.gliding = false; }
+    if (P.gliding){ const s0 = Math.max(DASH_V, hs + 4); P.vx = dx * s0; P.vz = dz * s0; P.vy = Math.max(P.vy, P.udv); P.airDash = false; }
+    else { P.vx = dx * DASH_V; P.vz = dz * DASH_V; if (!P.onGround){ P.vy = Math.max(P.vy, 2.5); P.airDash = false; } }
     P.dashCD = DASH_CD; P.punch = Math.max(P.punch, .9); SND.dash(); dashBurst(P.x, P.y + .9, P.z, dx, dz); hs = DASH_V; } }
   let wishSpeed = (P.sneak ? SNEAK : sprint ? SPRINT : WALK) * mag * (P.inWater ? .6 : 1);
   // glide? hold Space in the air
   const was = P.gliding;
   P.glideLock = Math.max(0, P.glideLock - dt);
-  // sail: press Space in mid-air to open it (stays open), press again (or C) to close; holding Space through a jump also opens it at the apex
+  // sail: press Space in mid-air to open it (stays open), press again (or crouch) to close; holding Space through a jump also opens it at the apex
   if (jumpEdge && !P.onGround && P.coyote <= 0 && !hooked && P.wallT > 0 && tryWallKick(P)){ /* kicked off the wall */ }
   else if (jumpEdge && !P.onGround && P.coyote <= 0 && !P.inWater && P.air > .08 && !hooked){
     if (!hasSail){ if (tAccNoSail <= 0){ toast(storySeen ? 'You need a sky sail to glide' : 'Wake the Memory Engine first: it has a gift for you'); tAccNoSail = 3; } }
     else if (P.gliding){ if (!(sailLevel >= 2 && P.flaps > 0)){ P.sailOpen = false; P.glideLock = .25; P.jumpBuf = 0; } }
-    else { P.sailOpen = true; P.glideLock = 0; P.jumpBuf = 0; if (P.vy > 1) P.vy = 1; }
+    else { P.sailOpen = true; P.glideLock = 0; P.jumpBuf = 0; } // velocity is kept as it is: the wing takes the momentum it is given
   }
-  if (INP.sneak && P.sailOpen){ P.sailOpen = false; P.glideLock = .25; }
+  if (crouchEdge && P.sailOpen && !P.onGround){ P.sailOpen = false; P.glideLock = .25; }
   if (P.onGround || P.inWater || !hasSail || hooked) P.sailOpen = false;
   P.gliding = hasSail && !hooked && !P.onGround && !P.inWater && P.glideLock <= 0 && (P.sailOpen || (INP.jump && (P.vy < .5 || P.gliding) && P.air > .14));
-  if (P.gliding && !was){ P.gs = Math.max(hs, GLIDE_BASE * .9); SND.sail(); }
+  if (P.gliding && !was){ P.udv = 0; P.turn = 0; P.steer = 0; P.gs = hyp3(P.vx, P.vy, P.vz); SND.sail(); }
+  if (!P.gliding){ P.bank *= Math.exp(-6 * dt); P.turn = 0; }
   inUpdraft = updraftAt(P.x, P.y, P.z);
   if (P.gliding){
     if (inUpdraft > .2 && sailLevel >= 2) P.flaps = 3;
-    if (jumpEdge && sailLevel >= 2 && P.flaps > 0){ P.flaps--; P.vy = Math.max(P.vy, 0) + 7; P.gs = Math.min(GLIDE_MAX, P.gs + 3); P.punch = Math.max(P.punch, .8); SND.flap(); sparkle(P.x, P.y + 2, P.z, 8, 1, .95, .8); }
-    // energy model, paraglider-style: diving trades height for speed, pulling up trades speed for height,
-    // and a slow wing stalls gently: lift fades, the nose drops and speed rebuilds (no endless climbing)
-    P.stall += ((P.gs < GLIDE_MIN + 1.6 && P.pitch > .05 ? 1 : 0) - P.stall) * (1 - Math.exp(-4 * dt));
-    if (P.stall > .3 && P.pitch > -.25) P.pitch -= P.stall * .9 * dt;
-    const p = clamp(P.pitch, -1.1, .7) - P.stall * .55, sp = Math.sin(p);
-    P.gs += (-sp * (sp < 0 ? 18 : 15) - (P.gs - GLIDE_BASE) * (sailLevel >= 1 ? .16 : .24)) * dt;
-    P.gs = clamp(P.gs, GLIDE_MIN, GLIDE_MAX);
-    const sink = (sailLevel >= 1 ? .75 : 1.25) * (1 + P.stall * 1.6);
-    const ty = P.gs * sp * .85 * (sp > 0 ? clamp((P.gs - GLIDE_MIN) / 3, 0, 1) : 1) - sink + inUpdraft * LIFT;
-    P.vy += (ty - P.vy) * (1 - Math.exp(-(inUpdraft > 0 ? 6 : 5) * dt));
-    const fh = P.gs * Math.cos(p) * (wHas(heldWeapon(), 'feather') ? 1.15 : 1), tx = -sy * fh + cy * INP.x * 3, tz = -cy * fh - sy * INP.x * 3;
-    const kh = 1 - Math.exp(-3.2 * dt); P.vx += (tx - P.vx) * kh; P.vz += (tz - P.vz) * kh;
-    P.trailT -= dt; if (P.trailT <= 0){ P.trailT = .045; glideTrail(P.x, P.y + 2.4, P.z, sy, cy, P.gs); }
+    // rising air is a separate, smoothed layer: it lifts the wing without touching its airspeed or heading
+    { const du = (inUpdraft * LIFT - P.udv) * (1 - Math.exp(-2.4 * dt)); P.udv += du; P.vy += du; }
+    if (jumpEdge && sailLevel >= 2 && P.flaps > 0){ P.flaps--; P.vy = P.udv + Math.max(P.vy - P.udv, 0) + 6.5; glideBoost(2); P.punch = Math.max(P.punch, .8); SND.flap(); sparkle(P.x, P.y + 2, P.z, 8, 1, .95, .8); }
+    stepGlide(P, dt);
+    P.trailT -= dt; if (P.trailT <= 0){ P.trailT = .045; glideTrail(P.x, P.y + 2.95, P.z, Math.sin(P.hd), Math.cos(P.hd), P.gs); }
   } else {
     if (P.onGround){
       const fr = P.slideT > 0 ? .7 : FRICTION, sp = hyp2(P.vx, P.vz);
@@ -3029,6 +3026,43 @@ function stepPlayer(dt){
   // the jelly catches real falls into the void (not drops into a cave or a swing on the rope)
   if (!P.catching && GR.st !== 2 && (P.y < CATCH_Y || (P.safe && P.vy < -4 && !P.gliding && P.y < P.safe.y - 14 && voidBelow(P)))) startCatch();
 }
+/* paraglider flight model. The velocity vector is the state: each step it is read (relative to any rising air) as
+   airspeed V, flight-path angle gam and heading hd, steered, and written back, so dashes, flings, rings and walls carry through.
+   - steering: the heading turns toward where you look at a limited rate (~106 deg/s) and the wing banks with the turn rate
+   - pitch: looking level holds a best-glide attitude (auto-level); looking down dives (up to ~20 m/s); looking up trades speed for height
+   - extra speed lifts the nose by itself, so a dive ends in a smooth pull-up arc; a slow wing lowers its nose (soft stall) */
+function stepGlide(P, dt){
+  const ax = P.vx, ay = P.vy - P.udv, az = P.vz, hsA = hyp2(ax, az);
+  let V = hyp3(ax, ay, az), hd = hsA > .4 ? Math.atan2(-ax, -az) : P.yaw, gam = Math.atan2(ay, Math.max(hsA, 1e-3));
+  // keyboard/stick: A/D swing the view (and so the heading target) gently, on top of mouse look
+  P.steer += (INP.x - P.steer) * (1 - Math.exp(-5 * dt)); if (Math.abs(P.steer) > .01) P.yaw -= P.steer * 1.25 * dt;
+  const err = angDiff(P.yaw, hd), rate = clamp(err * 3.2, -GL_TURN, GL_TURN);
+  P.turn += (rate - P.turn) * (1 - Math.exp(-7 * dt)); hd += P.turn * dt;
+  P.bank += (clamp(P.turn / GL_TURN, -1, 1) * .5 - P.bank) * (1 - Math.exp(-5 * dt));
+  const trim = GLIDE_BASE + (sailLevel >= 1 ? .5 : 0), sink = sailLevel >= 1 ? GL_SINK1 : GL_SINK, g0 = -Math.atan2(sink, trim);
+  const drag = GL_GDN * Math.sin(-g0) / (trim * trim) * (wHas(heldWeapon(), 'feather') ? .8 : 1);
+  const pt = clamp(P.pitch, -1.3, 1.2);
+  let cmd = g0;
+  if (pt < -.2) cmd += (pt + .2) * .95; // look down: dive
+  else if (pt > .22) cmd += (pt - .22) * .5; // look up: climb on spare speed
+  cmd += clamp((V - trim) * .045, -.08, .45) * (pt < -.2 ? .5 : 1); // spare speed lifts the nose: dives end in an arc
+  const stallV = GLIDE_MIN + 1.2; if (V < stallV) cmd = Math.min(cmd, g0 - (stallV - V) * .16); // soft stall recovery
+  cmd = clamp(cmd, -1.15, .55);
+  gam += clamp((cmd - gam) * 3, -2.4, 2.4) * dt;
+  const sg = Math.sin(gam);
+  V += (-(sg > 0 ? GL_GUP : GL_GDN) * sg - drag * V * V) * dt;
+  V = clamp(V, 0, GLIDE_MAX);
+  P.stall += (clamp((stallV + .3 - V) / 1.2, 0, 1) - P.stall) * (1 - Math.exp(-4 * dt));
+  const ch = Math.cos(gam) * V;
+  P.vx = -Math.sin(hd) * ch; P.vz = -Math.cos(hd) * ch; P.vy = sg * V + P.udv;
+  P.gs = V; P.hd = hd; P.gam = gam;
+}
+// a push along the glide (rings, flaps): scales the air-relative velocity, never redirects it
+function glideBoost(dv){
+  const P = PL, ay = P.vy - P.udv, v = hyp3(P.vx, ay, P.vz);
+  if (v < .5){ P.vx -= Math.sin(P.yaw) * dv; P.vz -= Math.cos(P.yaw) * dv; return; }
+  const k = Math.min(GLIDE_MAX, v + dv) / v; P.vx *= k; P.vz *= k; P.vy = P.udv + ay * k;
+}
 function voidBelow(P){ const x = Math.floor(P.x), z = Math.floor(P.z); for (let y = Math.floor(P.y); y > Math.max(0, P.y - 30); y--) if (B_SOLID[getB(x, y, z)]) return false; return true; }
 /* small feel helpers: dust, landing rings, dash bursts, glider trails */
 const _dc = [.6, .55, .5];
@@ -3038,7 +3072,7 @@ function dust(x, y, z, n, sp, id){
 }
 function landRing(x, y, z, k){ const id = getB(Math.floor(x), Math.floor(y - .5), Math.floor(z)); dust(x, y, z, 6 + Math.round(k * 10), 2 + k * 3, id); }
 function dashBurst(x, y, z, dx, dz){ for (let i = 0; i < (LOW ? 6 : 12); i++) emit(x - dx * .6 + (Math.random() - .5) * .6, y + (Math.random() - .5) * 1.2, z - dz * .6 + (Math.random() - .5) * .6, -dx * (2 + Math.random() * 3), (Math.random() - .5), -dz * (2 + Math.random() * 3), .95, .93, .86, .3, .35 + Math.random() * .2, 2, 0); }
-function glideTrail(x, y, z, sy, cy, gs){ if (LOW && Math.random() < .5) return; const g = goldSail ? [1, .85, .45] : [.95, .95, .92]; for (const s of [-1.3, 1.3]) emit(x + cy * s + sy * .8, y, z - sy * s + cy * .8, 0, 0, 0, g[0], g[1], g[2], .18 + gs * .006, .6, 2, 0); }
+function glideTrail(x, y, z, sy, cy, gs){ if (LOW && Math.random() < .5) return; const g = goldSail ? [1, .85, .45] : [.95, .95, .92]; for (const s of [-1.85, 1.85]) emit(x + cy * s + sy * .5, y, z - sy * s + cy * .8, 0, 0, 0, g[0], g[1], g[2], .18 + gs * .006, .6, 2, 0); }
 /* ---- the catch: a sky jelly scoops you up and sets you back on your last safe spot ---- */
 const CATCH = { t: 0, fx: 0, fy: 0, fz: 0, tx: 0, ty: 0, tz: 0, yaw: 0 };
 function validSafe(){
@@ -3560,7 +3594,7 @@ function updateShards(t){
   updateStandSail(t);
   if (SAIL_STAND && !SAIL_STAND.taken && state === 'play' && hyp2(PL.x - SAIL_STAND.x, PL.z - SAIL_STAND.z) < 1.4 && Math.abs(PL.y + 1 - SAIL_STAND.y) < 2.2) takeSail();
 }
-function takeSail(){ SAIL_STAND.taken = true; if (!hasItem(SAIL)) invAdd(SAIL, 1); hasSail = true; SND.sail(); sparkle(SAIL_STAND.x, SAIL_STAND.y, SAIL_STAND.z, 12, 1, .85, .5); toastCard('Sky sail', 'Jump, then press Space again in mid-air to open it. Press Space or C to close. Updrafts lift you.'); tut('sail'); saveDirty = true; }
+function takeSail(){ SAIL_STAND.taken = true; if (!hasItem(SAIL)) invAdd(SAIL, 1); hasSail = true; SND.sail(); sparkle(SAIL_STAND.x, SAIL_STAND.y, SAIL_STAND.z, 12, 1, .85, .5); toastCard('Sky sail', TOUCH ? 'Jump, then tap Jump again in mid-air to open it. Tap Jump again to close. Updrafts lift you.' : 'Jump, then press Space again in mid-air to open it. Steer with the mouse, look down to dive. Space or Shift closes it. Updrafts lift you.'); tut('sail'); saveDirty = true; }
 function collectShard(s){
   found.add(s.i); SND.shard(); sparkle(s.x, s.y, s.z, 16, .8, .9, 1); PL.punch = Math.max(PL.punch, .4);
   toastCard('Sky relic ' + found.size + ' of ' + SHARDS.length, s.text, 6000);
@@ -3593,7 +3627,7 @@ function stepRings(dt){
   const r = RINGS[k], dx = PL.x - r.x, dy = PL.y + .9 - r.y, dz = PL.z - r.z, along = dx * r.nx + dz * r.nz;
   const pxp = (RC.lx - r.x) * r.nx + (RC.lz - r.z) * r.nz; RC.lx = PL.x; RC.lz = PL.z;
   if (pxp < 0 && along >= 0){ const lat = -dx * r.nz + dz * r.nx; if (lat * lat + dy * dy < r.r * r.r){
-    RC.flash[k] = 1; RC.next++; SND.ring(RC.next); sparkle(r.x, r.y, r.z, 10, 1, .86, .45); PL.gs = Math.min(GLIDE_MAX, PL.gs + 1.5);
+    RC.flash[k] = 1; RC.next++; SND.ring(RC.next); sparkle(r.x, r.y, r.z, 10, 1, .86, .45); if (PL.gliding) glideBoost(1.5);
     if (RC.next >= RINGS.length){ const first = !RC.done; RC.done = true; RC.best = RC.best ? Math.min(RC.best, RC.t) : RC.t; SND.reward(); toastCard('Ring course clear', (first ? 'A relic has appeared on Basin Isle. ' : '') + 'Time ' + RC.t.toFixed(1) + 's, best ' + RC.best.toFixed(1) + 's.', 6000); RC.next = 0; RC.t = 0; saveDirty = true; renderJournalSoon(); }
     chipRing();
   } }
@@ -3795,6 +3829,7 @@ function buildAvatar(){
   armL.position.set(-.36, 1.38, 0); armR.position.set(.36, 1.38, 0);
   const legL = new THREE.Mesh(limb(pants, shoe, .23), mat), legR = new THREE.Mesh(limb(pants, shoe, .23), mat);
   legL.position.set(-.13, .7, 0); legR.position.set(.13, .7, 0);
+  avatar.rotation.order = 'YXZ'; // yaw, then lean/pitch about the body's own axes
   avatar.add(head, body, armL, armR, legL, legR); avatar.userData = { head, armL, armR, legL, legR };
   avatar.visible = false; scene.add(avatar);
 }
@@ -3938,78 +3973,122 @@ function spriteDropMesh(id, w){
   return (SPRITE_DROPS[key] = m);
 }
 
-/* ---- the sky sail ---- */
-const SAILN = 9, SAILK = [0, .07, .22, .45, .72, 1], SAILTH = [.075, .14, .17, .14, .085, .012];
+/* ---- the sky sail: a voxel paraglider ----
+   Eleven cells along a shallow arc (a wing, not a parachute dome), each a stepped (pixel-crafted) airfoil of boxes with a dark cell mouth at the leading edge,
+   ribs between cells and a thinner trailing edge. Lines run from two points on every rib to a pair of carabiners, plus
+   brake lines from the wingtips to the hands. The group origin is the harness, so banking swings the wing about the pilot.
+   The cells are rigid little models transformed on the CPU each frame (a few thousand vertices): inflation, spread,
+   flex, flutter and stall are per-cell scales and rotations. */
+const SAILN = 11, SAIL_R = 3.1, SAIL_A = .74, SAIL_C = 1.25, SAIL_TH = .26, SAIL_W = SAIL_R * 2 * SAIL_A / SAILN;
+// the airfoil, stepped like voxels: [u0, u1, top, bottom] along the chord (u: 0 leading edge .. 1 trailing edge), in thicknesses
+const SAIL_PROF = [[0, .12, -.2, -.86], [.12, .38, 0, -1], [.38, .66, -.1, -.88], [.66, .88, -.3, -.68], [.88, 1, -.44, -.56]];
+const SAIL_COL = { a: [.93, .86, .68], b: [.78, .42, .33], tip: [.86, .62, .27], slot: [.16, .11, .1] };
+const SAIL_GOLD = { a: [1, .87, .48], b: [.9, .63, .27], tip: [.98, .76, .32], slot: [.2, .13, .08] };
 let sailRig = null;
+function sailCellBoxes(i, P){
+  const w = SAIL_W, zL = -SAIL_C / 2, d = Math.abs(i - (SAILN - 1) / 2), fab = d === (SAILN - 1) / 2 ? P.tip : d % 2 ? P.b : P.a, out = [];
+  const sh = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
+  SAIL_PROF.forEach((s, k) => { const y0 = s[2] * SAIL_TH, y1 = s[3] * SAIL_TH, z0 = zL + s[0] * SAIL_C, z1 = zL + s[1] * SAIL_C, c = sh(fab, k >= 3 ? .93 : 1);
+    out.push([0, (y0 + y1) / 2, (z0 + z1) / 2, w * .985, y0 - y1, z1 - z0, c]);
+    // rib on the left edge of every cell (and the right edge of the last): a darker seam a touch proud of the skin
+    out.push([-w / 2, (y0 + y1) / 2, (z0 + z1) / 2, .03, y0 - y1 + .014, z1 - z0 + .004, sh(fab, .66)]);
+    if (i === SAILN - 1) out.push([w / 2, (y0 + y1) / 2, (z0 + z1) / 2, .03, y0 - y1 + .014, z1 - z0 + .004, sh(fab, .66)]); });
+  // the cell mouth: a dark opening on the leading edge, framed by a lighter lip above it
+  const n = SAIL_PROF[0], ny = (n[2] + n[3]) / 2 * SAIL_TH, nh = (n[2] - n[3]) * SAIL_TH;
+  out.push([0, ny - nh * .08, zL - .006, w * .62, nh * .56, .014, P.slot], [0, ny + nh * .34, zL - .005, w * .8, nh * .12, .012, sh(fab, 1.12)]);
+  // wingtip stabilisers hang below the outer cells
+  if (i === 0 || i === SAILN - 1){ const sx = i ? w / 2 : -w / 2; out.push([sx, -SAIL_TH * 1.15, .14, .025, SAIL_TH * .55, SAIL_C * .45, sh(fab, .95)]); }
+  return out;
+}
 function makeSail(withBar){
-  const cols = SAILN * 2 + 1, rows = SAILK.length; // columns: rib, mid, rib, mid ... rib
-  const nTop = cols * rows, nVert = nTop * 2 + cols * 2 * 2 + rows * 2 * 2;
-  const pos = new Float32Array(nVert * 3), col = new Float32Array(nVert * 3), idx = [];
-  const C1 = [.95, .87, .66], C2 = [.79, .41, .33], SLOT = [.2, .14, .13];
-  const cellOf = c => Math.min(SAILN - 1, Math.floor(c / 2));
-  const setC = (v, c) => { col[v * 3] = c[0]; col[v * 3 + 1] = c[1]; col[v * 3 + 2] = c[2]; };
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++){ const cell = cellOf(c), base = (cell % 2 ? C2 : C1), rib = c % 2 === 0 ? .82 : 1, te = r === rows - 1 ? .78 : 1;
-    setC(r * cols + c, [base[0] * rib * te, base[1] * rib * te, base[2] * rib * te]); setC(nTop + r * cols + c, [base[0] * .74 * rib, base[1] * .74 * rib, base[2] * .74 * rib]); }
-  const T = (r, c) => r * cols + c, Bm = (r, c) => nTop + r * cols + c;
-  for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols - 1; c++){ idx.push(T(r, c), T(r + 1, c), T(r + 1, c + 1), T(r, c), T(r + 1, c + 1), T(r, c + 1)); idx.push(Bm(r, c), Bm(r + 1, c + 1), Bm(r + 1, c), Bm(r, c), Bm(r, c + 1), Bm(r + 1, c + 1)); }
-  // leading edge (the open cell mouths) and trailing edge strips
-  let v = nTop * 2; const le0 = v; for (let c = 0; c < cols; c++){ setC(v, c % 2 ? SLOT : [.6, .45, .38]); setC(v + 1, SLOT); v += 2; }
-  for (let c = 0; c < cols - 1; c++){ const a = le0 + c * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
-  const te0 = v; for (let c = 0; c < cols; c++){ setC(v, [.55, .3, .25]); setC(v + 1, [.45, .25, .2]); v += 2; }
-  for (let c = 0; c < cols - 1; c++){ const a = te0 + c * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
-  // tip walls
-  const tw0 = v; for (let s = 0; s < 2; s++) for (let r = 0; r < rows; r++){ setC(v, [.7, .55, .45]); setC(v + 1, [.5, .38, .3]); v += 2; }
-  for (let s = 0; s < 2; s++) for (let r = 0; r < rows - 1; r++){ const a = tw0 + (s * rows + r) * 2; if (s) idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); else idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aCol', new THREE.BufferAttribute(col, 3)); g.setIndex(idx);
-  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nVert * 3), 3)); g.attributes.position.setUsage(THREE.DynamicDrawUsage);
-  const mesh = new THREE.Mesh(g, litMat({ rim: .3, emis: .42, side: THREE.DoubleSide })); // sunlit fabric reads as translucent from below mesh.frustumCulled = false;
-  // suspension lines: from the underside of every rib to the two ends of the harness bar
-  const nl = (SAILN + 1) * 2 * 2, lp = new Float32Array(nl * 3); const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(lp, 3)); lg.attributes.position.setUsage(THREE.DynamicDrawUsage);
-  const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x3a2e28, transparent: true, opacity: .85 })); lines.frustumCulled = false;
-  const grp = new THREE.Group(); grp.add(mesh, lines);
-  let bar = null; if (withBar){ bar = new THREE.Mesh(boxGeo([[0, 0, 0, .78, .06, .06, [.45, .3, .19]], [-.3, 0, 0, .1, .09, .09, [.24, .2, .19]], [.3, 0, 0, .1, .09, .09, [.24, .2, .19]], [0, .03, 0, .06, .1, .06, [.85, .66, .3]]]), litMat({ rim: .3 })); bar.position.set(0, -1.62, .05); grp.add(bar); }
-  return { grp, mesh, lines, bar, cols, rows, nTop, le0, te0, tw0, infl: new Float32Array(SAILN), open: 0 };
+  const parts = [], cellOf = [];
+  for (let i = 0; i < SAILN; i++){ const g = boxGeo(sailCellBoxes(i, SAIL_COL)); parts.push(g); for (let v = 0; v < g.attributes.position.count; v++) cellOf.push(i); }
+  const nV = cellOf.length, base = new Float32Array(nV * 3), bnor = new Float32Array(nV * 3), col = new Float32Array(nV * 3), gold = new Float32Array(nV * 3), idx = [];
+  let o = 0;
+  parts.forEach((g, i) => { base.set(g.attributes.position.array, o * 3); const gn = g.attributes.normal.array;
+    for (let k = 1; k < gn.length; k += 3) if (gn[k] < -.5){ gn[k] = .55; gn[k + 1] = .4; } // thin sunlit fabric: the underside glows instead of going muddy
+    bnor.set(gn, o * 3); col.set(g.attributes.aCol.array, o * 3);
+    gold.set(boxGeo(sailCellBoxes(i, SAIL_GOLD)).attributes.aCol.array, o * 3); const ix = g.index.array; for (let k = 0; k < ix.length; k++) idx.push(ix[k] + o); o += g.attributes.position.count; g.dispose(); });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(base), 3).setUsage(THREE.DynamicDrawUsage));
+  geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(bnor), 3).setUsage(THREE.DynamicDrawUsage));
+  geo.setAttribute('aCol', new THREE.BufferAttribute(col, 3)); geo.setIndex(idx);
+  // lit like every other model: world light, sky ambient and the same rim; only a hint of glow so it reads against the sky
+  const mesh = new THREE.Mesh(geo, litMat({ rim: .3, emis: .06 })); mesh.frustumCulled = false;
+  const nl = (SAILN + 1) * 2 + 2, lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nl * 6), 3).setUsage(THREE.DynamicDrawUsage));
+  const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x2a2220, transparent: true, opacity: .8 })); lines.frustumCulled = false;
+  const grp = new THREE.Group(); grp.rotation.order = 'YXZ'; grp.add(mesh, lines);
+  let bar = null;
+  if (withBar){ const M = [.45, .3, .19], K = [.85, .66, .3], S = [.24, .2, .19];
+    bar = new THREE.Mesh(boxGeo([[0, 0, .02, .5, .05, .05, M], [-.25, .02, 0, .07, .13, .07, K], [.25, .02, 0, .07, .13, .07, K], [-.27, .5, .06, .06, .1, .06, S], [.27, .5, .06, .06, .1, .06, S]]), litMat({ rim: .3 })); grp.add(bar); }
+  return { grp, mesh, lines, bar, base, bnor, cellOf, col, gold, cell: new Float32Array(SAILN * 8), open: 0 };
 }
-// deform: spread (0 folded .. 1 open), per-cell inflation, flex (speed), returns nothing
-function poseSail(S, open, flex, t, fp){
-  const { cols, rows, nTop } = S, p = S.mesh.geometry.attributes.position.array, A = 1.02, Rr = 1.8, zL = -.62, zT = .56;
-  const spread = sstep(0, .55, open);
-  for (let i = 0; i < SAILN; i++){ const dc = Math.abs(i - (SAILN - 1) / 2) / ((SAILN - 1) / 2); S.infl[i] = clamp(open * 1.7 - dc * .7, 0, 1); }
-  const infl = c => { const a = S.infl[Math.min(SAILN - 1, Math.floor(c / 2))], b = S.infl[Math.max(0, Math.min(SAILN - 1, Math.ceil(c / 2) - 1))]; return (a + b) * .5; };
-  const flutter = (1 - open) * .06;
-  const put = (v, x, y, z) => { p[v * 3] = x; p[v * 3 + 1] = y; p[v * 3 + 2] = z; };
-  const pts = (r, c, top) => {
-    const th0 = (-A + 2 * A * c / (cols - 1)) * (.07 + .93 * spread), u = SAILK[r], z = zL + (zT - zL) * u;
-    const inf = infl(c), mid = c % 2 === 1, bul = mid ? .04 * inf : 0, thick = SAILTH[r] * (.22 + .78 * inf);
-    const reflex = (u - .3) * flex * .12 + Math.sin(t * 9 + c * .7 + u * 4) * flutter;
-    const rad = Rr + (top ? bul : -thick - (mid ? .015 * inf : 0)), sx = Math.sin(th0), cyy = Math.cos(th0);
-    return [sx * rad, cyy * rad - Rr + reflex - (1 - spread) * .25 * (1 - Math.abs(th0)), z];
-  };
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++){ const a = pts(r, c, true), b = pts(r, c, false); put(r * cols + c, a[0], a[1], a[2]); put(nTop + r * cols + c, b[0], b[1], b[2]); }
-  for (let c = 0; c < cols; c++){ const a = pts(0, c, true), b = pts(0, c, false); put(S.le0 + c * 2, a[0], a[1], a[2] - .005); put(S.le0 + c * 2 + 1, b[0], b[1], b[2] - .005); const e = pts(rows - 1, c, true), f = pts(rows - 1, c, false); put(S.te0 + c * 2, e[0], e[1], e[2]); put(S.te0 + c * 2 + 1, f[0], f[1], f[2]); }
-  for (let s = 0; s < 2; s++){ const c = s ? cols - 1 : 0; for (let r = 0; r < rows; r++){ const a = pts(r, c, true), b = pts(r, c, false), v = S.tw0 + (s * rows + r) * 2; put(v, a[0], a[1], a[2]); put(v + 1, b[0], b[1], b[2]); } }
-  const g = S.mesh.geometry; g.attributes.position.needsUpdate = true; g.computeVertexNormals();
-  // lines: two per rib (front and rear riser) down to the bar ends
-  const lp = S.lines.geometry.attributes.position.array; let k = 0; const by = -1.62 * (.3 + .7 * spread), bx = .32;
-  for (let j = 0; j <= SAILN; j++){ const c = j * 2; for (const r of [1, 3]){ const q = pts(r, c, false); const ex = c < cols / 2 ? -bx : bx, f = fp ? .28 : 1; lp[k++] = q[0]; lp[k++] = q[1]; lp[k++] = q[2]; lp[k++] = q[0] + (ex - q[0]) * f; lp[k++] = q[1] + (by - q[1]) * f; lp[k++] = q[2] + (.05 - q[2]) * f; } } // first person: only the upper risers, so nothing cuts across the view
-  S.lines.geometry.attributes.position.needsUpdate = true; S.lines.material.opacity = .85 * spread;
-  if (S.bar) S.bar.position.y = by;
+const _sailT = [0, 0, 0];
+// transform a point given in cell-local space by cell i's current pose (into group space)
+function sailXf(S, i, lx, ly, lz){
+  const c = S.cell, k = i * 8, sx = c[k], sy = c[k + 1], crx = Math.cos(c[k + 2]), srx = Math.sin(c[k + 2]), crz = Math.cos(c[k + 3]), srz = Math.sin(c[k + 3]);
+  const x = lx * sx, y = ly * sy, y1 = y * crx - lz * srx, z1 = y * srx + lz * crx;
+  _sailT[0] = x * crz - y1 * srz + c[k + 4]; _sailT[1] = x * srz + y1 * crz + c[k + 5]; _sailT[2] = z1 + c[k + 6]; return _sailT;
 }
-function setSailGold(S){ const c = S.mesh.geometry.attributes.aCol; for (let i = 0; i < c.count; i++){ const r = c.getX(i), g = c.getY(i); if (r > .7 && g > .6) c.setXYZ(i, 1, .85, .42); } c.needsUpdate = true; }
+/* pose the wing. open: 0 folded .. 1 flying. flex: -.3 .. 1 with airspeed. t: time. fp: first-person framing.
+   o (optional): { bank, stall, RM } bank in radians (+ = turning left), stall 0..1, RM 0 for reduced motion */
+function poseSail(S, open, flex, t, fp, o){
+  o = o || {}; const RM = o.RM === undefined ? (REDUCED ? 0 : 1) : o.RM, stall = (o.stall || 0), bank = o.bank || 0;
+  const lift0 = o.lift || (fp ? 2.55 : 2.6), fwd = o.fwd === undefined ? (fp ? 3.3 : .22) : o.fwd;
+  const spread = sstep(0, .55, open), lift = lift0 * (.4 + .6 * sstep(0, .6, open)), A = SAIL_A * (1 - .07 * Math.max(flex, 0)) * (.14 + .86 * spread);
+  const mid = (SAILN - 1) / 2, c = S.cell;
+  for (let i = 0; i < SAILN; i++){
+    const side = i < mid ? -1 : i > mid ? 1 : 0, dc = Math.abs(i - mid) / mid;
+    // inflation runs from the centre cell out to the tips, each with a little overshoot; folding runs it back, tips first
+    const s = clamp(open * 1.8 - dc * .8, 0, 1); let inf = RM ? EZ.outBack(s) : sstep(0, 1, s);
+    inf *= 1 - stall * (.22 + .14 * Math.sin(t * 9 + i * 1.3)) * (.4 + .6 * dc);
+    const billow = 1 + RM * (.025 + .02 * Math.max(flex, 0)) * Math.sin(t * (2.2 + Math.max(flex, 0) * 2.5) + i * .8);
+    let th = ((i + .5) / SAILN * 2 - 1) * A; th *= 1 + stall * .22 * dc * dc;
+    // brakes: the inside of a turn pulls its trailing edge down; tips flutter, more with speed
+    const brake = Math.max(0, -side * bank) * 1.1 * (.3 + .7 * dc), fl = dc > .45 ? (dc - .45) / .55 : 0;
+    const rx = (1 - Math.min(inf, 1)) * .55 - .05 * Math.max(flex, 0) + brake + RM * fl * (.035 + .05 * Math.max(flex, 0)) * Math.sin(t * 21 + i * 2.1);
+    const rz = -th + RM * fl * .03 * Math.sin(t * 17 + i * 1.7);
+    const k = i * 8; c[k] = .5 + .5 * Math.min(inf, 1.05); c[k + 1] = Math.max(.12, inf * billow); c[k + 2] = rx; c[k + 3] = rz;
+    c[k + 4] = Math.sin(th) * SAIL_R; c[k + 5] = Math.cos(th) * SAIL_R - SAIL_R + lift; c[k + 6] = -fwd;
+  }
+  const p = S.mesh.geometry.attributes.position.array, nr = S.mesh.geometry.attributes.normal.array, B = S.base, N = S.bnor, cell = S.cellOf;
+  for (let v = 0, n = cell.length; v < n; v++){
+    const i = cell[v], k = i * 8, j = v * 3, sx = c[k], sy = c[k + 1], crx = Math.cos(c[k + 2]), srx = Math.sin(c[k + 2]), crz = Math.cos(c[k + 3]), srz = Math.sin(c[k + 3]);
+    const x = B[j] * sx, y = B[j + 1] * sy, z = B[j + 2], y1 = y * crx - z * srx, z1 = y * srx + z * crx;
+    p[j] = x * crz - y1 * srz + c[k + 4]; p[j + 1] = x * srz + y1 * crz + c[k + 5]; p[j + 2] = z1 + c[k + 6];
+    const ny = N[j + 1] * crx - N[j + 2] * srx, nz = N[j + 1] * srx + N[j + 2] * crx;
+    nr[j] = N[j] * crz - ny * srz; nr[j + 1] = N[j] * srz + ny * crz; nr[j + 2] = nz;
+  }
+  S.mesh.geometry.attributes.position.needsUpdate = true; S.mesh.geometry.attributes.normal.needsUpdate = true;
+  // lines: front and rear riser from every rib to the carabiner on its side; brake lines from the tips to the hands
+  const cb = o.cb || (fp ? [.52, -.62, -.18] : [.25, 0, 0]), lp = S.lines.geometry.attributes.position.array, zL = -SAIL_C / 2, yb = -SAIL_TH * .9;
+  let q = 0; const seg = (a, bx, by, bz) => { lp[q++] = a[0]; lp[q++] = a[1]; lp[q++] = a[2]; lp[q++] = bx; lp[q++] = by; lp[q++] = bz; };
+  for (let r = 0; r <= SAILN; r++){ const i = Math.min(r, SAILN - 1), lx = r === SAILN ? SAIL_W / 2 : -SAIL_W / 2, sd = r <= mid ? -1 : 1;
+    const keep = !fp || r <= 1 || r >= SAILN - 1 || r === 3 || r === SAILN - 3; // first person: a few lines frame the view, they do not cage it
+    for (const u of [.22, .62]){ const a = sailXf(S, i, lx, yb, zL + u * SAIL_C); if (keep) seg(a, cb[0] * sd, cb[1], cb[2]); else seg(a, a[0], a[1], a[2]); } }
+  const hy = fp ? cb[1] : cb[1] + .42, hz = fp ? cb[2] : cb[2] - .1;
+  seg(sailXf(S, 0, -SAIL_W / 2, -SAIL_TH * .5, -zL), -(fp ? cb[0] : .55), hy - Math.max(0, bank) * .25, hz);
+  seg(sailXf(S, SAILN - 1, SAIL_W / 2, -SAIL_TH * .5, -zL), (fp ? cb[0] : .55), hy - Math.max(0, -bank) * .25, hz);
+  S.lines.geometry.attributes.position.needsUpdate = true; S.lines.material.opacity = .8 * spread;
+  if (S.bar) S.bar.position.set(0, cb[1], cb[2]);
+}
+function setSailGold(S){ const a = S.mesh.geometry.attributes.aCol; a.array.set(S.gold); a.needsUpdate = true; }
 let standSail = null, standBase = null;
 function buildSailModels(){
   sailRig = makeSail(true); sailRig.grp.visible = false; scene.add(sailRig.grp);
   if (SAIL_STAND){
-    standSail = makeSail(true); poseSail(standSail, .88, 0, 0); standSail.grp.scale.setScalar(.36); scene.add(standSail.grp);
+    standSail = makeSail(true); poseSail(standSail, 1, 0, 0, false, { RM: 0 }); standSail.grp.scale.setScalar(.34); scene.add(standSail.grp);
     const W = [.45, .31, .2], W2 = [.36, .24, .15], BR = [.85, .66, .3];
     standBase = new THREE.Mesh(boxGeo([[0, .06, 0, .96, .12, .96, W2], [0, .14, 0, .8, .06, .8, W], [-.36, .78, 0, .1, 1.24, .1, W], [.36, .78, 0, .1, 1.24, .1, W], [0, 1.38, 0, .86, .08, .1, W2], [0, .18, .41, .3, .1, .02, BR]]), litMat({ rim: .3 }));
     standBase.position.set(SAIL_STAND.x, SAIL_STAND.y - 1.9, SAIL_STAND.z); scene.add(standBase);
   }
 }
+// the display sail hangs from the stand's crossbar and breathes in the breeze (re-posed only when you are close)
 function updateStandSail(t){
-  if (!standSail) return; const on = SAIL_STAND && !SAIL_STAND.taken && Math.abs(PL.x - SAIL_STAND.x) + Math.abs(PL.z - SAIL_STAND.z) < 120;
+  if (!standSail) return; const d = SAIL_STAND ? Math.abs(PL.x - SAIL_STAND.x) + Math.abs(PL.z - SAIL_STAND.z) : 1e9, on = SAIL_STAND && !SAIL_STAND.taken && d < 120;
   standSail.grp.visible = !!on; if (!on) return;
-  standSail.grp.position.set(SAIL_STAND.x, SAIL_STAND.y - .5 + .62 + Math.sin(t * 1.6) * .04, SAIL_STAND.z); standSail.grp.rotation.set(Math.sin(t * 1.1) * .04, t * .35, Math.sin(t * 1.3) * .05);
+  if (d < 40 && !REDUCED) poseSail(standSail, 1, .15 + .15 * Math.sin(t * .7), t, false);
+  standSail.grp.position.set(SAIL_STAND.x, SAIL_STAND.y - .46 + Math.sin(t * 1.6) * .03, SAIL_STAND.z); standSail.grp.rotation.set(Math.sin(t * 1.1) * .04, t * .35, Math.sin(t * 1.3) * .05);
 }
 /* =====================================================================
    THE WILDS: a seeded crescent of procedural islands beyond the safe skies.
@@ -6907,6 +6986,7 @@ const ICON_ART = {
   play: ['............', '..#.........', '..##........', '..###.......', '..####......', '..#####.....', '..#####.....', '..####......', '..###.......', '..##........', '..#.........', '............'],
   book: ['............', '.####..####.', '.#..#..#..#.', '.#.##..##.#.', '.#..#..#..#.', '.#.##..##.#.', '.#..#..#..#.', '.#.##..##.#.', '.#..#..#..#.', '.####..####.', '.....##.....', '............'],
   pin: ['....####....', '...######...', '..########..', '..###..###..', '..###..###..', '..########..', '...######...', '....####....', '.....##.....', '.....##.....', '............', '............'],
+  down: ['............', '.##......##.', '.###....###.', '..###..###..', '...######...', '....####....', '.....##.....', '............', '.##########.', '.##########.', '............', '............'],
   up: ['............', '.....##.....', '....####....', '...######...', '..###..###..', '.###....###.', '.##.....###.', '.....##.....', '....####....', '...######...', '..###..###..', '.##......##.'],
   pick: ['............', '...######...', '..##....##..', '.##..##..##.', '.#...##...#.', '.....##.....', '.....##.....', '.....##.....', '.....##.....', '.....##.....', '.....##.....', '............'],
   hand: ['............', '....#.#.#...', '....#.#.#.#.', '....#.#.#.#.', '..#.#######.', '..#.#######.', '..##.######.', '...########.', '....######..', '....######..', '....######..', '............'],
@@ -7114,7 +7194,7 @@ const keys = Object.create(null);
 let mineHeld = false, useHeld = false, useCD = 0;
 const SCREENS = { title: $('#title'), pause: $('#pause'), inv: invEl, panel: $('#panel'), journal: $('#journal') };
 const hudEl = $('#hud'), touchEl = $('#touch'), resumeEl = $('#resume');
-function clearInput(){ for (const k in keys) keys[k] = false; mineHeld = false; useHeld = false; INP.jump = false; INP.jumpEdge = false; joy.on = false; joy.x = joy.y = 0; $('#stick').classList.remove('on'); }
+function clearInput(){ for (const k in keys) keys[k] = false; mineHeld = false; useHeld = false; INP.jump = false; INP.jumpEdge = false; sprintLatch = false; joy.on = false; joy.x = joy.y = 0; $('#stick').classList.remove('on'); }
 function showScreen(el, on){
   if (on){ if (el.hidden){ el.hidden = false; el.classList.remove('out'); el.classList.remove('in'); void el.offsetWidth; el.classList.add('in'); } }
   else if (!el.hidden && !el.classList.contains('out')){ el.classList.remove('in'); el.classList.add('out'); setTimeout(() => { if (el.classList.contains('out')){ el.hidden = true; el.classList.remove('out'); } }, 130); }
@@ -7222,8 +7302,8 @@ $('#invClose').addEventListener('click', () => closeInv(true));
 for (const k of ['panel', 'inv', 'journal', 'pause']) SCREENS[k].addEventListener('click', e => { if (e.target !== SCREENS[k]) return; if (k === 'panel') closePanel(true); else if (k === 'inv') closeInv(true); else if (k === 'journal') closeJournal(true); else resumePlay(true); });
 panelEl.addEventListener('click', e => { const a = e.target.closest && e.target.closest('.idx-head nav a'); if (a){ e.preventDefault(); const t = D.querySelector(a.getAttribute('href')); if (t) t.scrollIntoView({ behavior: REDUCED ? 'auto' : 'smooth', block: 'start' }); } });
 const KC = k => '<span class="kc f-key">' + k + '</span>';
-const CTL_DESK = [['Move', KC('W') + KC('A') + KC('S') + KC('D')], ['Look', KC('Mouse')], ['Jump; in the air, open or close the sail', KC('Space')], ['Sprint', KC('Shift')], ['Sneak, slide when sprinting', KC('C')], ['Dash', KC('Q')], ['Interact', KC('E')], ['Mine (hold)', KC('LMB')], ['Use / place', KC('RMB')], ['Satchel', KC('I')], ['Journal', KC('J')], ['Camera', KC('V')], ['Pause', KC('Esc')]];
-const CTL_TOUCH = [['Move', 'left thumb'], ['Look', 'drag right side'], ['Jump / sail', 'tap Jump in the air'], ['Dash', 'Dash'], ['Read, pet', 'tap'], ['Mine', 'hold Mine'], ['Use / place', 'Use']];
+const CTL_DESK = [['Move', KC('W') + KC('A') + KC('S') + KC('D')], ['Look', KC('Mouse')], ['Jump; in the air, open or close the sail', KC('Space')], ['Sprint (hold)', KC('Ctrl') + ' or ' + KC('W') + KC('W')], ['Crouch (hold); slide while sprinting', KC('Shift')], ['Dash', KC('Q')], ['Interact / read', KC('E')], ['Grapple', KC('F')], ['Mine (hold)', KC('LMB')], ['Use / place', KC('RMB')], ['Satchel', KC('I')], ['Journal', KC('J')], ['Camera', KC('V')], ['Pause', KC('Esc')]];
+const CTL_TOUCH = [['Move', 'left thumb'], ['Sprint', 'push stick far'], ['Look', 'drag right side'], ['Jump / sail', 'tap Jump in the air'], ['Crouch', 'Crouch'], ['Dash', 'Dash'], ['Read, pet', 'tap'], ['Mine', 'hold Mine'], ['Use / place', 'Use']];
 const ctlHTML = (TOUCH ? CTL_TOUCH.map(k => '<span>' + KC(k[1]) + '</span><span>' + k[0] + '</span>') : CTL_DESK.map(k => '<span>' + k[1] + '</span><span>' + k[0] + '</span>')).join('');
 ['#ctlTitle', '#ctlPause', '#ctlSign'].forEach(s => { $(s).innerHTML = ctlHTML; });
 
@@ -7240,7 +7320,7 @@ function renderJournal(){
   { const vault = OUT.find(I => I.forceVault);
     $('#jrGear').innerHTML = '<div class="gearbox">' + [['sail', 'Sky sail', GEAR.sail, storySeen ? 'Gifted by the Memory Engine' : 'Wake the Memory Engine to receive it'], ['grapple', 'Grappling hook', GEAR.grapple, 'Locked. It rests in the Sky Vault' + (vault ? ' on ' + vault.name + (vault.seen ? ' (found)' : ', far out in the Wilds') : ', deep in the Wilds') + '. Guarded.']].map(([k, nm, on, lock]) => '<div class="gear' + (on ? ' on' : '') + '"><span class="gi f-slot" style="background-image:url(' + gearIconURL(k, on) + ')"></span><span class="gt"><b>' + nm + '</b><em>' + (on ? 'Equipped' : esc(lock)) + '</em></span></div>').join('') + '</div>';
     const K = s => s.split(' ').map(k => KC(k)).join(''), T = TOUCH;
-    const MV = [['Sprint', T ? K('Push') + ' stick far' : K('Shift') + ' or ' + K('W') + K('W') + ' hold', 'Faster, wider FOV'], ['Sprint jump', T ? K('Jump') : K('Space'), 'Carries sprint speed'], ['Slide', T ? '' : K('C'), 'Crouch while sprinting'], ['Slide jump', T ? K('Jump') : K('Space'), 'Jump out of a slide; keeps its speed'], ['Dash', T ? K('Dash') : K('Q') + ' or ' + K('A') + K('A'), 'Once in the air too'], ['Mantle', T ? K('Jump') : K('Space'), 'Jump at a ledge and you pull up'], ['Wall kick', T ? K('Jump') : K('Space'), 'In the air against a wall, twice'], ['Sail', T ? K('Jump') : K('Space'), 'In the air: open or close'], ['Flap', T ? K('Jump') : K('Space'), 'While gliding, after 6 relics'], ['Grapple', T ? K('Hook') : K('F') + ' or ' + K('RMB'), GEAR.grapple ? 'Fire at rock; again to let go' : 'Needs the grappling hook'], ['Reel', T ? K('Jump') : K('Space') + ' hold', 'Shorten the rope'], ['Fling to sail', T ? K('Hook') + K('Jump') : K('F') + ' ' + K('Space'), 'Release at the top, open the sail']];
+    const MV = [['Sprint', T ? K('Push') + ' stick far' : K('Ctrl') + ' or ' + K('W') + K('W') + ' hold', 'Faster, wider FOV'], ['Crouch', T ? K('Crouch') : K('Shift') + ' hold', 'Slow and steady; you will not walk off edges'], ['Sprint jump', T ? K('Jump') : K('Space'), 'Carries sprint speed'], ['Slide', T ? K('Crouch') : K('Shift'), 'Crouch while sprinting'], ['Slide jump', T ? K('Jump') : K('Space'), 'Jump out of a slide; keeps its speed'], ['Dash', T ? K('Dash') : K('Q'), 'Once in the air too'], ['Mantle', T ? K('Jump') : K('Space'), 'Jump at a ledge and you pull up'], ['Wall kick', T ? K('Jump') : K('Space'), 'In the air against a wall, twice'], ['Sail', T ? K('Jump') : K('Space'), 'In the air: open or close; keeps your speed'], ['Steer', T ? K('Look') : K('Mouse') + ' or ' + K('A') + K('D'), 'The wing turns toward where you look'], ['Dive', T ? K('Look') + ' down' : K('Mouse') + ' down', 'Trade height for speed; level out to swoop up'], ['Flap', T ? K('Jump') : K('Space'), 'While gliding, after 6 relics'], ['Grapple', T ? K('Hook') : K('F') + ' or ' + K('RMB'), GEAR.grapple ? 'Fire at rock; again to let go' : 'Needs the grappling hook'], ['Reel', T ? K('Jump') : K('Space') + ' hold', 'Shorten the rope'], ['Fling to sail', T ? K('Hook') + K('Jump') : K('F') + ' ' + K('Space'), 'Release at the top, open the sail']];
     $('#jrMoves').innerHTML = MV.map(m => '<span class="kk">' + (m[1] || '') + '</span><span class="mv"><b>' + m[0] + '</b> · ' + m[2] + '</span>').join(''); }
   $('#jrIsles').innerHTML = DISC.map(i => '<span class="' + (visited.has(i) ? 'on' : '') + '">' + (visited.has(i) || i === 0 ? ISL[i].name : '? ? ?') + '</span>').join('');
   $('#jrSail').innerHTML = ['Glide', 'Long glide', 'Boost flap'].map((n, i) => '<span class="' + (i <= sailLevel && hasSail ? 'on' : '') + '">' + n + (i ? ' <em>' + (i * 3) + ' shards</em>' : '') + '</span>').join('');
@@ -7279,9 +7359,9 @@ function stepTravel(dt){
 
 /* ================= tutorial (one thing at a time, dismissable, remembered) ================= */
 const TUT = [
-  { k: 'move', d: () => (TOUCH ? 'Drag on the right to look. Use the left thumb to walk.' : 'Look with the mouse and walk with ' + KC('W') + KC('A') + KC('S') + KC('D') + '.'), at: null },
+  { k: 'move', d: () => (TOUCH ? 'Drag on the right to look. Use the left thumb to walk; push it far to sprint.' : 'Look with the mouse and walk with ' + KC('W') + KC('A') + KC('S') + KC('D') + '. Hold ' + KC('Ctrl') + ' to sprint, ' + KC('Shift') + ' to crouch.'), at: null },
   { k: 'story', d: () => 'Walk to the Memory Engine at the heart of the island and ' + (TOUCH ? 'tap ' + KC('Tap') : 'press ' + KC('E')) + ' at its console to watch the story.', at: () => ENGINE && [ENGINE.console.x, ENGINE.console.y + 2.6, ENGINE.console.z] },
-  { k: 'glide', d: () => 'Step into the shimmering updraft off the east rim, then press ' + (TOUCH ? KC('Jump') : KC('Space')) + ' in the air to open the sail and ride it to an islet.', at: () => UPDRAFTS[0] && [UPDRAFTS[0].x, UPDRAFTS[0].top - 11, UPDRAFTS[0].z] },
+  { k: 'glide', d: () => 'Step into the shimmering updraft off the east rim, then press ' + (TOUCH ? KC('Jump') : KC('Space')) + ' in the air to open the sail. Look where you want to fly, and down to dive.', at: () => UPDRAFTS[0] && [UPDRAFTS[0].x, UPDRAFTS[0].top - 11, UPDRAFTS[0].z] },
   { k: 'gather', d: () => 'Your satchel is empty. ' + (TOUCH ? 'Hold ' + KC('Mine') : 'Hold ' + KC('LMB')) + ' on a tree to chop a log, or on leaves.', at: () => { const t = nearestTree(); return t && [t[0] + .5, t[1] + 2.5, t[2] + .5]; } },
   { k: 'craft', d: () => 'Open the satchel with ' + (TOUCH ? KC('Bag') : KC('I')) + ' and craft Vineseed from 2 leaves and a flower.', at: null }
 ];
@@ -7333,17 +7413,18 @@ Wn.addEventListener('keydown', e => {
     return;
   }
   if (state === 'play'){
+    if (e.ctrlKey) e.preventDefault(); // Ctrl is the sprint key: keep Ctrl+D, Ctrl+S, Ctrl+A and friends from reaching the browser
     if (c === 'F5' || c === 'KeyV'){ e.preventDefault(); setThird(!third); return; }
     if (c === 'Space'){ e.preventDefault(); if (!e.repeat) INP.jumpEdge = true; INP.jump = true; }
     if (!e.repeat){
       const nowT = performance.now(), last = tapT[c] || 0; tapT[c] = nowT;
       if (c === 'KeyW' && nowT - last < 250) sprintLatch = true; // double-tap W and hold to sprint
+      if ((c === 'ControlLeft' || c === 'ControlRight') && (keys.KeyW || keys.ArrowUp)) sprintLatch = true; // tapping Ctrl while walking keeps the sprint until you stop
       if (c === 'KeyF') grappleAction();
-      if ((c === 'KeyA' || c === 'KeyD' || c === 'KeyS') && nowT - last < 240) dashDir(c === 'KeyA' ? -1 : c === 'KeyD' ? 1 : 0, c === 'KeyS' ? -1 : 0);
       if (c === 'KeyQ') dashDir(null);
-      if (c === 'KeyC' || c === 'ControlLeft') INP.sneakEdge = true;
+      if (c === 'ShiftLeft' || c === 'ShiftRight' || c === 'KeyC') INP.sneakEdge = true;
     }
-    if (c.startsWith('Arrow') || c === 'ControlLeft') e.preventDefault();
+    if (c.startsWith('Arrow') || c === 'ControlLeft' || c === 'ControlRight' || c === 'ShiftLeft' || c === 'ShiftRight') e.preventDefault();
     keys[c] = true;
     if (c === 'KeyE'){ if (nearEngine) startCine(); else if (nearSign) openPanel('sign', nearSign.id); else if (nearChestC) openChest(nearChestC); else openInv(); }
     else if (c === 'KeyI') openInv();
@@ -7356,7 +7437,9 @@ Wn.addEventListener('keydown', e => {
   else if (state === 'pause'){ if (c === 'Escape'){ e.preventDefault(); resumePlay(false); } else if (c === 'KeyJ') openJournal(); }
   else if (state === 'title'){ if (c === 'Enter' && tg === D.body){ startPlay(); } }
 }, true);
-Wn.addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Space') INP.jump = false; if (e.code === 'KeyW') sprintLatch = false; });
+Wn.addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Space') INP.jump = false; if (e.code === 'KeyW' || e.code === 'ArrowUp') sprintLatch = false; });
+// Ctrl+W cannot be blocked by a page: while Ctrl (sprint) is held in play, ask before the tab closes
+Wn.addEventListener('beforeunload', e => { if (state === 'play' && (keys.ControlLeft || keys.ControlRight)){ e.preventDefault(); e.returnValue = ''; } });
 const tapT = Object.create(null); let sprintLatch = false;
 function dashDir(x, z){ if (x === null){ const l = hyp2(INP.x, INP.z); INP.dashX = l > .1 ? INP.x : 0; INP.dashZ = l > .1 ? INP.z : 1; } else { INP.dashX = x; INP.dashZ = z; } INP.dashEdge = true; }
 Wn.addEventListener('blur', () => { clearInput(); });
@@ -7411,6 +7494,9 @@ holdBtn('#tJump', () => { INP.jumpEdge = true; INP.jump = true; }, () => { INP.j
 holdBtn('#tPlace', () => { if (combatGuard(true)) return; useHeld = true; useAction(true); }, () => { useHeld = false; combatGuard(false); });
 holdBtn('#tBag', () => { openInv(); }, null);
 holdBtn('#tDash', () => { dashDir(null); }, null);
+// crouch on touch is a toggle; in the air it just closes the sail
+let touchCrouch = false;
+holdBtn('#tCrouch', () => { INP.sneakEdge = true; if (PL.onGround) touchCrouch = !touchCrouch; }, () => { $('#tCrouch').classList.toggle('on', touchCrouch); });
 holdBtn('#tHook', () => { grappleAction(); }, null);
 let atkHeld = false, nearChestC = null, nearEngine = false;
 function tapAction(){ if (nearEngine){ startCine(); return; } if (nearSign){ openPanel('sign', nearSign.id); return; } if (nearChestC){ openChest(nearChestC); return; } if (MOBHIT.m){ interactMob(MOBHIT.m); } }
@@ -7421,8 +7507,8 @@ function sampleInput(dt){
   const l = hyp2(ix, iz); if (l > 1){ ix /= l; iz /= l; }
   INP.x = ix; INP.z = iz;
   if (INP.sprintBreak){ INP.sprintBreak = false; sprintLatch = false; }
-  INP.sprint = !!(keys.ShiftLeft || keys.ShiftRight) || sprintLatch || (joy.on && hyp2(joy.x, joy.y) > .9);
-  INP.sneak = !!(keys.KeyC || keys.ControlLeft);
+  INP.sprint = !!(keys.ControlLeft || keys.ControlRight) || sprintLatch || (joy.on && hyp2(joy.x, joy.y) > .9);
+  INP.sneak = !!(keys.ShiftLeft || keys.ShiftRight || keys.KeyC) || touchCrouch;
   // smoothed touch look
   if (lookPtr.ax || lookPtr.ay){ const k = 1 - Math.exp(-34 * dt); const dx = lookPtr.ax * k, dy = lookPtr.ay * k; lookPtr.ax -= dx; lookPtr.ay -= dy; look(dx, dy, .0095); if (Math.abs(lookPtr.ax) < .05) lookPtr.ax = 0; if (Math.abs(lookPtr.ay) < .05) lookPtr.ay = 0; }
 }
@@ -7531,7 +7617,7 @@ function updateCamera(dt){
   // head bob: tiny, speed-scaled, optional
   const bobOn = headBob && P.onGround && hs > .6 && !sliding ? Math.min(1, hs / 6) : 0;
   const ph = P.stepPh * 6.2832, bobY = -Math.cos(ph) * .03 * bobOn, bobX = Math.sin(ph * .5) * .02 * bobOn; // trough on each footfall
-  spring(HR.eye, sliding ? -.62 : 0, 14, dt);
+  spring(HR.eye, sliding ? -.62 : P.sneak ? -.3 : 0, 14, dt);
   EYE.x = ix; EYE.y = iy + 1.62 + HR.eye.x - P.stepOff - P.landKick + bobY; EYE.z = iz;
   catchBlend += ((P.catching ? 1 : 0) - catchBlend) * Math.min(1, dt * (P.catching ? 5 : 3));
   const f = fwd();
@@ -7543,15 +7629,14 @@ function updateCamera(dt){
   } else camera.position.set(EYE.x + Math.cos(P.yaw) * bobX, EYE.y, EYE.z - Math.sin(P.yaw) * bobX);
   // roll: lean into strafes, bank on glider turns, tilt during slides
   const yawRate = angDiff(P.yaw, HR.lastYaw) / Math.max(dt, 1e-3), pitchRate = (P.pitch - HR.lastPitch) / Math.max(dt, 1e-3); HR.lastYaw = P.yaw; HR.lastPitch = P.pitch;
-  const rollT = RM * (P.gliding ? clamp(-yawRate * .09, -.32, .32) : (-INP.x * .03 * Math.min(1, hs / 5) + (sliding ? .07 : 0) - (P.dashCD > DASH_CD - .2 ? INP.dashX * .06 : 0)));
+  const rollT = RM * (P.gliding ? P.bank * .45 + (P.stall > .2 ? Math.sin(tAcc * 7) * .03 * P.stall : 0) : (-INP.x * .03 * Math.min(1, hs / 5) + (sliding ? .07 : 0) - (P.dashCD > DASH_CD - .2 ? INP.dashX * .06 : 0)));
   spring(HR.roll, rollT, 8, dt);
   const vaultDip = Math.sin(Math.PI * P.vault) * .14 * RM;
-  // the camera leads a touch into turns while moving; mantles dip then lift
-  spring(HR.lead, RM * clamp(yawRate * .012, -.045, .045) * Math.min(1, hs / 4), 6, dt);
+  // mantles dip then lift (no yaw lead: the view turns exactly with the mouse)
   HR.mantleT += dt; if (P.vault > .95 && HR.mantleT > .3) HR.mantleT = 0;
   const mant = HR.mantleT < CLIP_MANTLE.d ? clipAt(CLIP_MANTLE, HR.mantleT) * RM : 0;
   camera.position.y += mant;
-  camera.rotation.set(P.pitch - catchBlend * .25 - vaultDip * .5 + mant * .6 + Math.sin(tAcc * 60) * camKick * .02 + (P.stall > .2 ? Math.sin(tAcc * 31) * .004 * P.stall : 0), P.yaw + HR.lead.x, HR.roll.x);
+  camera.rotation.set(P.pitch - catchBlend * .25 - vaultDip * .5 + mant * .6 + Math.sin(tAcc * 60) * camKick * .02 + (P.stall > .2 ? Math.sin(tAcc * 31) * .004 * P.stall * RM : 0), P.yaw, HR.roll.x);
   // FOV responds to speed: sprint, slide, dash, glider speed, punches
   const gs = P.gliding ? P.gs : 0;
   const ft = 72 + RM * (clamp((hs - 6) * 1.3, 0, 9) + clamp((gs - 9) * 1.1, 0, 15)) + P.punch * 9 * RM;
@@ -7560,23 +7645,41 @@ function updateCamera(dt){
   // speed lines + wind
   speedLines(dt, P.gliding ? clamp((gs - 12) / 10, 0, 1) : clamp((hs - 9) / 6, 0, 1));
   if (AU.glideG){ const sp = P.gliding ? gs : (P.onGround ? 0 : hs); const g = clamp((sp - 5) / 18, 0, 1) * .13; if (Math.abs(g - (AU._g || 0)) > .004){ AU._g = g; AU.glideG.gain.setTargetAtTime(g, AU.ctx.currentTime, .1); AU.glideF.frequency.setTargetAtTime(400 + sp * 60, AU.ctx.currentTime, .1); } }
+  // the wing flies along its heading; the pilot hangs under it. hdg: where the wing points (look yaw when on foot)
+  const sailT = HR.sailO || 0, hdg = P.gliding || sailT > .01 ? P.hd : P.yaw;
   // avatar (third person / catch)
   if (avatar){
     const show = third || catchBlend > .1; avatar.visible = show;
-    if (show){ avatar.position.set(ix, iy + HR.eye.x * .5, iz); avatar.rotation.set(sliding ? -.5 : 0, P.yaw, 0); const u = avatar.userData, sw = Math.sin(P.walk * 2.4) * .8 * Math.min(1, hs / 5), up = P.catching ? -2.6 : (P.gliding ? -2.9 : 0);
-      u.legL.rotation.x = P.onGround ? sw : -.6; u.legR.rotation.x = P.onGround ? -sw : .3; u.armL.rotation.x = up || -sw * .8; u.armR.rotation.x = up || (sw * .8 - (HR.mineT < .34 ? -clipAt(CLIP_MINE_RX, HR.mineT) * 1.4 : 0)); u.head.rotation.x = P.pitch * .5; }
+    if (show){ const u = avatar.userData, sw = Math.sin(P.walk * 2.4) * .8 * Math.min(1, hs / 5), crouch = P.sneak ? 1 : 0;
+      avatar.position.set(ix, iy + HR.eye.x * .5, iz);
+      if (P.gliding && !P.catching){
+        // seated pilot: thighs forward, hands up on the brake lines; the inside hand pulls down in a turn and the body leans in
+        const dang = RM * Math.sin(tAcc * 2.1) * .06, bk = P.bank, lr = bk * .55 + (P.stall > .2 ? Math.sin(tAcc * 6) * .06 * P.stall * RM : 0), sl = Math.sin(lr) * 1.48;
+        avatar.rotation.set(.15, hdg, lr); avatar.position.set(ix + sl * Math.cos(hdg), iy + 1.48 * (1 - Math.cos(lr)), iz - sl * Math.sin(hdg)); // swings about the harness
+        u.legL.rotation.set(1.35 + dang, 0, .06); u.legR.rotation.set(1.3 - dang, 0, -.06);
+        u.armL.rotation.set(2.45 - Math.max(0, bk) * 1.1, 0, -.38); u.armR.rotation.set(2.45 - Math.max(0, -bk) * 1.1, 0, .38);
+        u.head.rotation.x = P.pitch * .4;
+      } else {
+        const up = P.catching ? -2.6 : 0;
+        avatar.rotation.set(sliding ? -.5 : crouch * .28, P.yaw, 0);
+        u.legL.rotation.set(P.onGround ? sw - crouch * .5 : -.6, 0, 0); u.legR.rotation.set(P.onGround ? -sw - crouch * .5 : .3, 0, 0);
+        u.armL.rotation.set(up || -sw * .8, 0, 0); u.armR.rotation.set(up || (sw * .8 - (HR.mineT < .34 ? -clipAt(CLIP_MINE_RX, HR.mineT) * 1.4 : 0)), 0, 0); u.head.rotation.x = P.pitch * .5 - crouch * .2;
+      }
+    }
   }
-  // glider: opens with an overshooting spring, flexes with speed and banks with turns
+  // glider: cells inflate centre-out with a little overshoot, flex with speed, bank and surge with the flight, flutter at the tips
   if (sailRig){
-    // unfurl: the span spreads, then cells inflate from the centre outward; folding runs it backwards, faster
-    const want = P.gliding ? 1 : 0; HR.sailO = clamp((HR.sailO || 0) + (want ? dt * 2.1 : -dt * 3.4), 0, 1);
+    const want = P.gliding ? 1 : 0; HR.sailO = clamp(sailT + (want ? dt * (RM ? 2 : 3) : -dt * 3.2), 0, 1);
     const o = HR.sailO; sailRig.grp.visible = o > .01;
-    if (o > .01){ const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw), flex = clamp((gs - 9) / 14, -.3, 1), ease = want ? EZ.outCubic(o) : EZ.inOutSine(o);
-      poseSail(sailRig, ease, flex, tAcc, !third);
-      const fwdD = third ? .1 : .75, up = third ? 3.62 : 1.06 + 1.62;
-      sailRig.grp.position.set(ix - sy * fwdD, iy + up - (1 - ease) * .5, iz - cy * fwdD);
-      sailRig.grp.rotation.set(third ? -P.pitch * .15 : -P.pitch * .35 - .08, P.yaw, HR.roll.x * 1.4 + Math.sin(tAcc * 2.3) * .025);
-      const sc = .3 + .7 * Math.min(1, ease * 1.6); sailRig.grp.scale.setScalar(sc); if (sailRig.bar) sailRig.bar.visible = third; }
+    if (o > .01){
+      const flex = clamp((gs - 9) / 11, -.3, 1), g0 = -Math.atan2(sailLevel >= 1 ? GL_SINK1 : GL_SINK, GLIDE_BASE);
+      // surge: the wing swings ahead of the pilot in a dive and lags behind on a pull-up
+      spring(HR.canopy, P.gliding ? clamp((P.gam - g0) * .3, -.28, .22) * RM : 0, 4, dt);
+      poseSail(sailRig, o, flex, tAcc, !third, { bank: P.bank, stall: P.stall, RM });
+      const hx = ix, hy = third ? iy + 1.48 + HR.eye.x * .5 : EYE.y - HR.eye.x, hz = iz;
+      sailRig.grp.position.set(hx, hy, hz);
+      sailRig.grp.rotation.set(HR.canopy.x - (third ? .04 : .1), hdg, P.bank + (P.stall > .2 ? Math.sin(tAcc * 5.3) * .07 * P.stall * RM : 0));
+      if (sailRig.bar) sailRig.bar.visible = third; }
   }
   if (hand) updateHandRig(dt, hs, sliding, bobX, bobY);
 }

@@ -137,76 +137,120 @@ function spriteDropMesh(id, w){
   return (SPRITE_DROPS[key] = m);
 }
 
-/* ---- the sky sail ---- */
-const SAILN = 9, SAILK = [0, .07, .22, .45, .72, 1], SAILTH = [.075, .14, .17, .14, .085, .012];
+/* ---- the sky sail: a voxel paraglider ----
+   Eleven cells along a shallow arc (a wing, not a parachute dome), each a stepped (pixel-crafted) airfoil of boxes with a dark cell mouth at the leading edge,
+   ribs between cells and a thinner trailing edge. Lines run from two points on every rib to a pair of carabiners, plus
+   brake lines from the wingtips to the hands. The group origin is the harness, so banking swings the wing about the pilot.
+   The cells are rigid little models transformed on the CPU each frame (a few thousand vertices): inflation, spread,
+   flex, flutter and stall are per-cell scales and rotations. */
+const SAILN = 11, SAIL_R = 3.1, SAIL_A = .74, SAIL_C = 1.25, SAIL_TH = .26, SAIL_W = SAIL_R * 2 * SAIL_A / SAILN;
+// the airfoil, stepped like voxels: [u0, u1, top, bottom] along the chord (u: 0 leading edge .. 1 trailing edge), in thicknesses
+const SAIL_PROF = [[0, .12, -.2, -.86], [.12, .38, 0, -1], [.38, .66, -.1, -.88], [.66, .88, -.3, -.68], [.88, 1, -.44, -.56]];
+const SAIL_COL = { a: [.93, .86, .68], b: [.78, .42, .33], tip: [.86, .62, .27], slot: [.16, .11, .1] };
+const SAIL_GOLD = { a: [1, .87, .48], b: [.9, .63, .27], tip: [.98, .76, .32], slot: [.2, .13, .08] };
 let sailRig = null;
+function sailCellBoxes(i, P){
+  const w = SAIL_W, zL = -SAIL_C / 2, d = Math.abs(i - (SAILN - 1) / 2), fab = d === (SAILN - 1) / 2 ? P.tip : d % 2 ? P.b : P.a, out = [];
+  const sh = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
+  SAIL_PROF.forEach((s, k) => { const y0 = s[2] * SAIL_TH, y1 = s[3] * SAIL_TH, z0 = zL + s[0] * SAIL_C, z1 = zL + s[1] * SAIL_C, c = sh(fab, k >= 3 ? .93 : 1);
+    out.push([0, (y0 + y1) / 2, (z0 + z1) / 2, w * .985, y0 - y1, z1 - z0, c]);
+    // rib on the left edge of every cell (and the right edge of the last): a darker seam a touch proud of the skin
+    out.push([-w / 2, (y0 + y1) / 2, (z0 + z1) / 2, .03, y0 - y1 + .014, z1 - z0 + .004, sh(fab, .66)]);
+    if (i === SAILN - 1) out.push([w / 2, (y0 + y1) / 2, (z0 + z1) / 2, .03, y0 - y1 + .014, z1 - z0 + .004, sh(fab, .66)]); });
+  // the cell mouth: a dark opening on the leading edge, framed by a lighter lip above it
+  const n = SAIL_PROF[0], ny = (n[2] + n[3]) / 2 * SAIL_TH, nh = (n[2] - n[3]) * SAIL_TH;
+  out.push([0, ny - nh * .08, zL - .006, w * .62, nh * .56, .014, P.slot], [0, ny + nh * .34, zL - .005, w * .8, nh * .12, .012, sh(fab, 1.12)]);
+  // wingtip stabilisers hang below the outer cells
+  if (i === 0 || i === SAILN - 1){ const sx = i ? w / 2 : -w / 2; out.push([sx, -SAIL_TH * 1.15, .14, .025, SAIL_TH * .55, SAIL_C * .45, sh(fab, .95)]); }
+  return out;
+}
 function makeSail(withBar){
-  const cols = SAILN * 2 + 1, rows = SAILK.length; // columns: rib, mid, rib, mid ... rib
-  const nTop = cols * rows, nVert = nTop * 2 + cols * 2 * 2 + rows * 2 * 2;
-  const pos = new Float32Array(nVert * 3), col = new Float32Array(nVert * 3), idx = [];
-  const C1 = [.95, .87, .66], C2 = [.79, .41, .33], SLOT = [.2, .14, .13];
-  const cellOf = c => Math.min(SAILN - 1, Math.floor(c / 2));
-  const setC = (v, c) => { col[v * 3] = c[0]; col[v * 3 + 1] = c[1]; col[v * 3 + 2] = c[2]; };
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++){ const cell = cellOf(c), base = (cell % 2 ? C2 : C1), rib = c % 2 === 0 ? .82 : 1, te = r === rows - 1 ? .78 : 1;
-    setC(r * cols + c, [base[0] * rib * te, base[1] * rib * te, base[2] * rib * te]); setC(nTop + r * cols + c, [base[0] * .74 * rib, base[1] * .74 * rib, base[2] * .74 * rib]); }
-  const T = (r, c) => r * cols + c, Bm = (r, c) => nTop + r * cols + c;
-  for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols - 1; c++){ idx.push(T(r, c), T(r + 1, c), T(r + 1, c + 1), T(r, c), T(r + 1, c + 1), T(r, c + 1)); idx.push(Bm(r, c), Bm(r + 1, c + 1), Bm(r + 1, c), Bm(r, c), Bm(r, c + 1), Bm(r + 1, c + 1)); }
-  // leading edge (the open cell mouths) and trailing edge strips
-  let v = nTop * 2; const le0 = v; for (let c = 0; c < cols; c++){ setC(v, c % 2 ? SLOT : [.6, .45, .38]); setC(v + 1, SLOT); v += 2; }
-  for (let c = 0; c < cols - 1; c++){ const a = le0 + c * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
-  const te0 = v; for (let c = 0; c < cols; c++){ setC(v, [.55, .3, .25]); setC(v + 1, [.45, .25, .2]); v += 2; }
-  for (let c = 0; c < cols - 1; c++){ const a = te0 + c * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
-  // tip walls
-  const tw0 = v; for (let s = 0; s < 2; s++) for (let r = 0; r < rows; r++){ setC(v, [.7, .55, .45]); setC(v + 1, [.5, .38, .3]); v += 2; }
-  for (let s = 0; s < 2; s++) for (let r = 0; r < rows - 1; r++){ const a = tw0 + (s * rows + r) * 2; if (s) idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); else idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aCol', new THREE.BufferAttribute(col, 3)); g.setIndex(idx);
-  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nVert * 3), 3)); g.attributes.position.setUsage(THREE.DynamicDrawUsage);
-  const mesh = new THREE.Mesh(g, litMat({ rim: .3, emis: .42, side: THREE.DoubleSide })); // sunlit fabric reads as translucent from below mesh.frustumCulled = false;
-  // suspension lines: from the underside of every rib to the two ends of the harness bar
-  const nl = (SAILN + 1) * 2 * 2, lp = new Float32Array(nl * 3); const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(lp, 3)); lg.attributes.position.setUsage(THREE.DynamicDrawUsage);
-  const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x3a2e28, transparent: true, opacity: .85 })); lines.frustumCulled = false;
-  const grp = new THREE.Group(); grp.add(mesh, lines);
-  let bar = null; if (withBar){ bar = new THREE.Mesh(boxGeo([[0, 0, 0, .78, .06, .06, [.45, .3, .19]], [-.3, 0, 0, .1, .09, .09, [.24, .2, .19]], [.3, 0, 0, .1, .09, .09, [.24, .2, .19]], [0, .03, 0, .06, .1, .06, [.85, .66, .3]]]), litMat({ rim: .3 })); bar.position.set(0, -1.62, .05); grp.add(bar); }
-  return { grp, mesh, lines, bar, cols, rows, nTop, le0, te0, tw0, infl: new Float32Array(SAILN), open: 0 };
+  const parts = [], cellOf = [];
+  for (let i = 0; i < SAILN; i++){ const g = boxGeo(sailCellBoxes(i, SAIL_COL)); parts.push(g); for (let v = 0; v < g.attributes.position.count; v++) cellOf.push(i); }
+  const nV = cellOf.length, base = new Float32Array(nV * 3), bnor = new Float32Array(nV * 3), col = new Float32Array(nV * 3), gold = new Float32Array(nV * 3), idx = [];
+  let o = 0;
+  parts.forEach((g, i) => { base.set(g.attributes.position.array, o * 3); const gn = g.attributes.normal.array;
+    for (let k = 1; k < gn.length; k += 3) if (gn[k] < -.5){ gn[k] = .55; gn[k + 1] = .4; } // thin sunlit fabric: the underside glows instead of going muddy
+    bnor.set(gn, o * 3); col.set(g.attributes.aCol.array, o * 3);
+    gold.set(boxGeo(sailCellBoxes(i, SAIL_GOLD)).attributes.aCol.array, o * 3); const ix = g.index.array; for (let k = 0; k < ix.length; k++) idx.push(ix[k] + o); o += g.attributes.position.count; g.dispose(); });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(base), 3).setUsage(THREE.DynamicDrawUsage));
+  geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(bnor), 3).setUsage(THREE.DynamicDrawUsage));
+  geo.setAttribute('aCol', new THREE.BufferAttribute(col, 3)); geo.setIndex(idx);
+  // lit like every other model: world light, sky ambient and the same rim; only a hint of glow so it reads against the sky
+  const mesh = new THREE.Mesh(geo, litMat({ rim: .3, emis: .06 })); mesh.frustumCulled = false;
+  const nl = (SAILN + 1) * 2 + 2, lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nl * 6), 3).setUsage(THREE.DynamicDrawUsage));
+  const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x2a2220, transparent: true, opacity: .8 })); lines.frustumCulled = false;
+  const grp = new THREE.Group(); grp.rotation.order = 'YXZ'; grp.add(mesh, lines);
+  let bar = null;
+  if (withBar){ const M = [.45, .3, .19], K = [.85, .66, .3], S = [.24, .2, .19];
+    bar = new THREE.Mesh(boxGeo([[0, 0, .02, .5, .05, .05, M], [-.25, .02, 0, .07, .13, .07, K], [.25, .02, 0, .07, .13, .07, K], [-.27, .5, .06, .06, .1, .06, S], [.27, .5, .06, .06, .1, .06, S]]), litMat({ rim: .3 })); grp.add(bar); }
+  return { grp, mesh, lines, bar, base, bnor, cellOf, col, gold, cell: new Float32Array(SAILN * 8), open: 0 };
 }
-// deform: spread (0 folded .. 1 open), per-cell inflation, flex (speed), returns nothing
-function poseSail(S, open, flex, t, fp){
-  const { cols, rows, nTop } = S, p = S.mesh.geometry.attributes.position.array, A = 1.02, Rr = 1.8, zL = -.62, zT = .56;
-  const spread = sstep(0, .55, open);
-  for (let i = 0; i < SAILN; i++){ const dc = Math.abs(i - (SAILN - 1) / 2) / ((SAILN - 1) / 2); S.infl[i] = clamp(open * 1.7 - dc * .7, 0, 1); }
-  const infl = c => { const a = S.infl[Math.min(SAILN - 1, Math.floor(c / 2))], b = S.infl[Math.max(0, Math.min(SAILN - 1, Math.ceil(c / 2) - 1))]; return (a + b) * .5; };
-  const flutter = (1 - open) * .06;
-  const put = (v, x, y, z) => { p[v * 3] = x; p[v * 3 + 1] = y; p[v * 3 + 2] = z; };
-  const pts = (r, c, top) => {
-    const th0 = (-A + 2 * A * c / (cols - 1)) * (.07 + .93 * spread), u = SAILK[r], z = zL + (zT - zL) * u;
-    const inf = infl(c), mid = c % 2 === 1, bul = mid ? .04 * inf : 0, thick = SAILTH[r] * (.22 + .78 * inf);
-    const reflex = (u - .3) * flex * .12 + Math.sin(t * 9 + c * .7 + u * 4) * flutter;
-    const rad = Rr + (top ? bul : -thick - (mid ? .015 * inf : 0)), sx = Math.sin(th0), cyy = Math.cos(th0);
-    return [sx * rad, cyy * rad - Rr + reflex - (1 - spread) * .25 * (1 - Math.abs(th0)), z];
-  };
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++){ const a = pts(r, c, true), b = pts(r, c, false); put(r * cols + c, a[0], a[1], a[2]); put(nTop + r * cols + c, b[0], b[1], b[2]); }
-  for (let c = 0; c < cols; c++){ const a = pts(0, c, true), b = pts(0, c, false); put(S.le0 + c * 2, a[0], a[1], a[2] - .005); put(S.le0 + c * 2 + 1, b[0], b[1], b[2] - .005); const e = pts(rows - 1, c, true), f = pts(rows - 1, c, false); put(S.te0 + c * 2, e[0], e[1], e[2]); put(S.te0 + c * 2 + 1, f[0], f[1], f[2]); }
-  for (let s = 0; s < 2; s++){ const c = s ? cols - 1 : 0; for (let r = 0; r < rows; r++){ const a = pts(r, c, true), b = pts(r, c, false), v = S.tw0 + (s * rows + r) * 2; put(v, a[0], a[1], a[2]); put(v + 1, b[0], b[1], b[2]); } }
-  const g = S.mesh.geometry; g.attributes.position.needsUpdate = true; g.computeVertexNormals();
-  // lines: two per rib (front and rear riser) down to the bar ends
-  const lp = S.lines.geometry.attributes.position.array; let k = 0; const by = -1.62 * (.3 + .7 * spread), bx = .32;
-  for (let j = 0; j <= SAILN; j++){ const c = j * 2; for (const r of [1, 3]){ const q = pts(r, c, false); const ex = c < cols / 2 ? -bx : bx, f = fp ? .28 : 1; lp[k++] = q[0]; lp[k++] = q[1]; lp[k++] = q[2]; lp[k++] = q[0] + (ex - q[0]) * f; lp[k++] = q[1] + (by - q[1]) * f; lp[k++] = q[2] + (.05 - q[2]) * f; } } // first person: only the upper risers, so nothing cuts across the view
-  S.lines.geometry.attributes.position.needsUpdate = true; S.lines.material.opacity = .85 * spread;
-  if (S.bar) S.bar.position.y = by;
+const _sailT = [0, 0, 0];
+// transform a point given in cell-local space by cell i's current pose (into group space)
+function sailXf(S, i, lx, ly, lz){
+  const c = S.cell, k = i * 8, sx = c[k], sy = c[k + 1], crx = Math.cos(c[k + 2]), srx = Math.sin(c[k + 2]), crz = Math.cos(c[k + 3]), srz = Math.sin(c[k + 3]);
+  const x = lx * sx, y = ly * sy, y1 = y * crx - lz * srx, z1 = y * srx + lz * crx;
+  _sailT[0] = x * crz - y1 * srz + c[k + 4]; _sailT[1] = x * srz + y1 * crz + c[k + 5]; _sailT[2] = z1 + c[k + 6]; return _sailT;
 }
-function setSailGold(S){ const c = S.mesh.geometry.attributes.aCol; for (let i = 0; i < c.count; i++){ const r = c.getX(i), g = c.getY(i); if (r > .7 && g > .6) c.setXYZ(i, 1, .85, .42); } c.needsUpdate = true; }
+/* pose the wing. open: 0 folded .. 1 flying. flex: -.3 .. 1 with airspeed. t: time. fp: first-person framing.
+   o (optional): { bank, stall, RM } bank in radians (+ = turning left), stall 0..1, RM 0 for reduced motion */
+function poseSail(S, open, flex, t, fp, o){
+  o = o || {}; const RM = o.RM === undefined ? (REDUCED ? 0 : 1) : o.RM, stall = (o.stall || 0), bank = o.bank || 0;
+  const lift0 = o.lift || (fp ? 2.55 : 2.6), fwd = o.fwd === undefined ? (fp ? 3.3 : .22) : o.fwd;
+  const spread = sstep(0, .55, open), lift = lift0 * (.4 + .6 * sstep(0, .6, open)), A = SAIL_A * (1 - .07 * Math.max(flex, 0)) * (.14 + .86 * spread);
+  const mid = (SAILN - 1) / 2, c = S.cell;
+  for (let i = 0; i < SAILN; i++){
+    const side = i < mid ? -1 : i > mid ? 1 : 0, dc = Math.abs(i - mid) / mid;
+    // inflation runs from the centre cell out to the tips, each with a little overshoot; folding runs it back, tips first
+    const s = clamp(open * 1.8 - dc * .8, 0, 1); let inf = RM ? EZ.outBack(s) : sstep(0, 1, s);
+    inf *= 1 - stall * (.22 + .14 * Math.sin(t * 9 + i * 1.3)) * (.4 + .6 * dc);
+    const billow = 1 + RM * (.025 + .02 * Math.max(flex, 0)) * Math.sin(t * (2.2 + Math.max(flex, 0) * 2.5) + i * .8);
+    let th = ((i + .5) / SAILN * 2 - 1) * A; th *= 1 + stall * .22 * dc * dc;
+    // brakes: the inside of a turn pulls its trailing edge down; tips flutter, more with speed
+    const brake = Math.max(0, -side * bank) * 1.1 * (.3 + .7 * dc), fl = dc > .45 ? (dc - .45) / .55 : 0;
+    const rx = (1 - Math.min(inf, 1)) * .55 - .05 * Math.max(flex, 0) + brake + RM * fl * (.035 + .05 * Math.max(flex, 0)) * Math.sin(t * 21 + i * 2.1);
+    const rz = -th + RM * fl * .03 * Math.sin(t * 17 + i * 1.7);
+    const k = i * 8; c[k] = .5 + .5 * Math.min(inf, 1.05); c[k + 1] = Math.max(.12, inf * billow); c[k + 2] = rx; c[k + 3] = rz;
+    c[k + 4] = Math.sin(th) * SAIL_R; c[k + 5] = Math.cos(th) * SAIL_R - SAIL_R + lift; c[k + 6] = -fwd;
+  }
+  const p = S.mesh.geometry.attributes.position.array, nr = S.mesh.geometry.attributes.normal.array, B = S.base, N = S.bnor, cell = S.cellOf;
+  for (let v = 0, n = cell.length; v < n; v++){
+    const i = cell[v], k = i * 8, j = v * 3, sx = c[k], sy = c[k + 1], crx = Math.cos(c[k + 2]), srx = Math.sin(c[k + 2]), crz = Math.cos(c[k + 3]), srz = Math.sin(c[k + 3]);
+    const x = B[j] * sx, y = B[j + 1] * sy, z = B[j + 2], y1 = y * crx - z * srx, z1 = y * srx + z * crx;
+    p[j] = x * crz - y1 * srz + c[k + 4]; p[j + 1] = x * srz + y1 * crz + c[k + 5]; p[j + 2] = z1 + c[k + 6];
+    const ny = N[j + 1] * crx - N[j + 2] * srx, nz = N[j + 1] * srx + N[j + 2] * crx;
+    nr[j] = N[j] * crz - ny * srz; nr[j + 1] = N[j] * srz + ny * crz; nr[j + 2] = nz;
+  }
+  S.mesh.geometry.attributes.position.needsUpdate = true; S.mesh.geometry.attributes.normal.needsUpdate = true;
+  // lines: front and rear riser from every rib to the carabiner on its side; brake lines from the tips to the hands
+  const cb = o.cb || (fp ? [.52, -.62, -.18] : [.25, 0, 0]), lp = S.lines.geometry.attributes.position.array, zL = -SAIL_C / 2, yb = -SAIL_TH * .9;
+  let q = 0; const seg = (a, bx, by, bz) => { lp[q++] = a[0]; lp[q++] = a[1]; lp[q++] = a[2]; lp[q++] = bx; lp[q++] = by; lp[q++] = bz; };
+  for (let r = 0; r <= SAILN; r++){ const i = Math.min(r, SAILN - 1), lx = r === SAILN ? SAIL_W / 2 : -SAIL_W / 2, sd = r <= mid ? -1 : 1;
+    const keep = !fp || r <= 1 || r >= SAILN - 1 || r === 3 || r === SAILN - 3; // first person: a few lines frame the view, they do not cage it
+    for (const u of [.22, .62]){ const a = sailXf(S, i, lx, yb, zL + u * SAIL_C); if (keep) seg(a, cb[0] * sd, cb[1], cb[2]); else seg(a, a[0], a[1], a[2]); } }
+  const hy = fp ? cb[1] : cb[1] + .42, hz = fp ? cb[2] : cb[2] - .1;
+  seg(sailXf(S, 0, -SAIL_W / 2, -SAIL_TH * .5, -zL), -(fp ? cb[0] : .55), hy - Math.max(0, bank) * .25, hz);
+  seg(sailXf(S, SAILN - 1, SAIL_W / 2, -SAIL_TH * .5, -zL), (fp ? cb[0] : .55), hy - Math.max(0, -bank) * .25, hz);
+  S.lines.geometry.attributes.position.needsUpdate = true; S.lines.material.opacity = .8 * spread;
+  if (S.bar) S.bar.position.set(0, cb[1], cb[2]);
+}
+function setSailGold(S){ const a = S.mesh.geometry.attributes.aCol; a.array.set(S.gold); a.needsUpdate = true; }
 let standSail = null, standBase = null;
 function buildSailModels(){
   sailRig = makeSail(true); sailRig.grp.visible = false; scene.add(sailRig.grp);
   if (SAIL_STAND){
-    standSail = makeSail(true); poseSail(standSail, .88, 0, 0); standSail.grp.scale.setScalar(.36); scene.add(standSail.grp);
+    standSail = makeSail(true); poseSail(standSail, 1, 0, 0, false, { RM: 0 }); standSail.grp.scale.setScalar(.34); scene.add(standSail.grp);
     const W = [.45, .31, .2], W2 = [.36, .24, .15], BR = [.85, .66, .3];
     standBase = new THREE.Mesh(boxGeo([[0, .06, 0, .96, .12, .96, W2], [0, .14, 0, .8, .06, .8, W], [-.36, .78, 0, .1, 1.24, .1, W], [.36, .78, 0, .1, 1.24, .1, W], [0, 1.38, 0, .86, .08, .1, W2], [0, .18, .41, .3, .1, .02, BR]]), litMat({ rim: .3 }));
     standBase.position.set(SAIL_STAND.x, SAIL_STAND.y - 1.9, SAIL_STAND.z); scene.add(standBase);
   }
 }
+// the display sail hangs from the stand's crossbar and breathes in the breeze (re-posed only when you are close)
 function updateStandSail(t){
-  if (!standSail) return; const on = SAIL_STAND && !SAIL_STAND.taken && Math.abs(PL.x - SAIL_STAND.x) + Math.abs(PL.z - SAIL_STAND.z) < 120;
+  if (!standSail) return; const d = SAIL_STAND ? Math.abs(PL.x - SAIL_STAND.x) + Math.abs(PL.z - SAIL_STAND.z) : 1e9, on = SAIL_STAND && !SAIL_STAND.taken && d < 120;
   standSail.grp.visible = !!on; if (!on) return;
-  standSail.grp.position.set(SAIL_STAND.x, SAIL_STAND.y - .5 + .62 + Math.sin(t * 1.6) * .04, SAIL_STAND.z); standSail.grp.rotation.set(Math.sin(t * 1.1) * .04, t * .35, Math.sin(t * 1.3) * .05);
+  if (d < 40 && !REDUCED) poseSail(standSail, 1, .15 + .15 * Math.sin(t * .7), t, false);
+  standSail.grp.position.set(SAIL_STAND.x, SAIL_STAND.y - .46 + Math.sin(t * 1.6) * .03, SAIL_STAND.z); standSail.grp.rotation.set(Math.sin(t * 1.1) * .04, t * .35, Math.sin(t * 1.3) * .05);
 }
