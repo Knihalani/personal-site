@@ -224,7 +224,7 @@ function stepPlayer(dt){
     if (P.gliding){ const s0 = Math.max(DASH_V, hs + 4); P.vx = dx * s0; P.vz = dz * s0; P.vy = Math.max(P.vy, P.udv); P.airDash = false; }
     else { P.vx = dx * DASH_V; P.vz = dz * DASH_V; if (!P.onGround){ P.vy = Math.max(P.vy, 2.5); P.airDash = false; } }
     P.dashCD = DASH_CD; P.punch = Math.max(P.punch, .9); SND.dash(); dashBurst(P.x, P.y + .9, P.z, dx, dz); hs = DASH_V; } }
-  let wishSpeed = (P.sneak ? SNEAK : sprint ? SPRINT : WALK) * mag * (P.inWater ? .6 : 1);
+  let wishSpeed = (P.sneak ? SNEAK : sprint ? SPRINT : WALK) * mag * (P.inWater ? .6 : 1) * (CB.guard ? .55 : 1); // guarding slows you
   // glide? hold Space in the air
   const was = P.gliding;
   P.glideLock = Math.max(0, P.glideLock - dt);
