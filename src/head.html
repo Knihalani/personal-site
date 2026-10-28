@@ -13,9 +13,9 @@ html, body{ margin: 0; height: 100%; background: var(--bg); color: var(--fg); ov
 #stage canvas{ display: block; width: 100%; height: 100%; outline: none }
 .ui{ position: fixed; z-index: 2; font: 500 11px var(--mono); letter-spacing: .08em; color: var(--dim) }
 #hint{ left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom, 0px)); transition: opacity .8s; pointer-events: none; text-align: center }
-#view{ right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); background: none; border: 1px solid rgba(233,226,208,.18); color: var(--dim); font: inherit; letter-spacing: inherit; padding: 6px 10px; cursor: pointer }
-#view:hover{ color: var(--fg); border-color: rgba(233,226,208,.4) }
-#view:focus-visible, #stage canvas:focus-visible{ outline: 1px solid rgba(233,226,208,.5); outline-offset: -4px }
+#mute{ right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); background: none; border: 1px solid rgba(233,226,208,.18); color: var(--dim); font: inherit; letter-spacing: inherit; padding: 6px 10px; cursor: pointer }
+#mute:hover{ color: var(--fg); border-color: rgba(233,226,208,.4) }
+#mute:focus-visible, #stage canvas:focus-visible{ outline: 1px solid rgba(233,226,208,.5); outline-offset: -4px }
 #kbd{ position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; resize: none }
 .sr{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
 #loading{ position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); font: 500 11px var(--mono); letter-spacing: .3em; text-transform: uppercase; transition: opacity .8s; z-index: 3; background: var(--bg) }
@@ -26,7 +26,7 @@ html, body{ margin: 0; height: 100%; background: var(--bg); color: var(--fg); ov
 
 <div id="stage" aria-hidden="true"></div>
 <div id="loading">warming up the tube</div>
-<div id="hint" class="ui">start typing · try <b>help</b></div>
-<button id="view" class="ui" type="button" aria-pressed="false">look around</button>
+<div id="hint" class="ui">start typing · try <b>help</b> · move the mouse down to see your hands</div>
+<button id="mute" class="ui" type="button" aria-pressed="false">sound on</button>
 <textarea id="kbd" aria-label="Terminal input" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
 <main class="sr" aria-live="polite" id="mirror"><h1>Kaiav Nihalani</h1></main>

@@ -72,3 +72,48 @@ textarea; hash deep links (#eden, #j, #about, #writing run the matching command)
 ## Testing
 Build into your own scratch folder: `python3 build.py --out <dir>`. Missing modules are stubbed by
 `src/stubs.js`, so each module can be tested alone.
+
+---------------------------------------------------------------------------------------------------
+# v2 additions (POV-only, full terminal, sound)
+
+## View
+There is ONE view: the typist's own eyes (first person). At rest the CRT fills most of the frame and is fully
+legible. Moving the pointer looks around like a seated head would: down (up to ~35°) to watch the hands type
+on the keyboard, a little left/right/up. On touch, a drag looks around and springs back. `setView` is gone;
+`setLook(nx, ny)` replaces `setPointer` (nx, ny in -1..1, from the pointer position; 0,0 = looking at the screen).
+The typist's head/hair/torso must not intrude into the camera (hide head meshes or keep them behind the near plane).
+The visible parts are the forearms, sleeves and hands, so they must look great from above and behind.
+
+## Sound: src/sound.js
+```js
+MAC.sound = {
+  unlock(),                 // call from the first user gesture (keydown / pointerdown)
+  key(code, down),          // mechanical key sound for KeyboardEvent.code, on press and release (varies per key, Space/Enter/Shift heavier)
+  event(name),              // 'boot' (CRT power-on thunk + degauss + whine), 'disk' (floppy seek), 'beep' (terminal bell), 'error'
+  setMuted(bool), muted,    // remembered in localStorage
+  update(dt),               // room tone, CRT whine fades
+}
+```
+The typist calls `MAC.sound.key(code, true)` at finger contact and `(code, false)` at release (if MAC.sound exists).
+The terminal calls `MAC.sound.event('disk' | 'beep' | 'error')` where it makes sense.
+
+## Terminal extension API (terminal.js implements it; apps.js uses it)
+```js
+MAC.TERM = { cmds: {}, apps: {} };   // created by terminal.js if missing; apps.js may load after and register
+
+// Plain commands (print to scrollback; support pipes and > / >> redirection through io)
+MAC.TERM.cmds[name] = { desc: 'one line', usage: 'name [args]', run(argv, io) }   // may return a Promise
+// io = { out(text), err(text), stdin: string, fs, env, cwd, exit(code), sleep(ms), cols, rows, runApp(name, argv) }
+//   out/err accept text containing \n. ANSI-ish styling via io.out(text, style) with style one of
+//   'dim' | 'bright' | 'faint' | 'accent' | 'inverse'.
+
+// Full-screen apps (vim, games, top...) take over the whole terminal grid until they exit
+MAC.TERM.apps[name] = { desc, usage, start(api, argv) -> { key(e) -> bool, tick(dt) -> bool /*dirty*/, render(scr) } }
+// api = { cols, rows, fs, env, cwd, exit(code), print(text) /* goes to scrollback after exit */, sound: MAC.sound }
+// scr = { cols, rows, clear(), put(x, y, text, style /* 'normal'|'dim'|'bright'|'faint'|'accent'|'inverse'|{fg, inverse} */),
+//         fill(x, y, w, h, ch, style), cursor(x, y, shape /* 'block'|'bar'|'under'|null */) }
+
+// Virtual filesystem (persisted to localStorage, seeded on first run)
+// fs = { resolve(path, cwd) -> abs, exists(p), isDir(p), read(p) -> string|null, write(p, text), append(p, text),
+//        list(p) -> [{ name, dir, size, mtime }], mkdir(p), rm(p, recursive), mv(a, b), cp(a, b), stat(p) }
+```
