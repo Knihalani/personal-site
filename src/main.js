@@ -26,7 +26,7 @@ addEventListener('blur', () => { for (const c of held) typist.keyUp(c); held.cle
 
 /* ---- phones: tap the scene to raise the keyboard; text arrives through a hidden textarea ---- */
 const kbd = $('#kbd');
-stage.addEventListener('pointerdown', () => { if (matchMedia('(pointer: coarse)').matches){ kbd.focus(); setView('screen'); } });
+stage.addEventListener('pointerdown', () => { if (matchMedia('(pointer: coarse)').matches){ kbd.focus(); if (view !== 'pov') setView('pov'); } });
 kbd.addEventListener('input', () => {
   const v = kbd.value; kbd.value = '';
   for (const ch of v){ term.insertText(ch); const code = /[a-z]/i.test(ch) ? 'Key' + ch.toUpperCase() : /\d/.test(ch) ? 'Digit' + ch : ch === ' ' ? 'Space' : 'Period'; typist.keyDown(code); setTimeout(() => typist.keyUp(code), 90); }
@@ -35,10 +35,10 @@ kbd.addEventListener('input', () => {
 kbd.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Tab' || e.key.startsWith('Arrow')){ onDown(e); e.stopPropagation(); } });
 
 /* ---- view toggle: cinematic over-the-shoulder, or the screen filling the frame for reading ---- */
-let view = 'scene';
-function setView(v){ view = v; api.setView(v); const b = $('#view'); b.textContent = v === 'scene' ? 'screen view' : 'room view'; b.setAttribute('aria-pressed', String(v === 'screen')); }
-$('#view').addEventListener('click', () => setView(view === 'scene' ? 'screen' : 'scene'));
-addEventListener('dblclick', () => setView(view === 'scene' ? 'screen' : 'scene'));
+let view = 'pov';
+function setView(v){ view = v; api.setView(v); const b = $('#view'); b.textContent = v === 'pov' ? 'look around' : 'back to the screen'; b.setAttribute('aria-pressed', String(v !== 'pov')); }
+$('#view').addEventListener('click', () => setView(view === 'pov' ? 'scene' : 'pov'));
+addEventListener('dblclick', () => setView(view === 'pov' ? 'scene' : 'pov'));
 addEventListener('pointermove', e => api.setPointer(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1));
 addEventListener('wheel', e => { if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
 

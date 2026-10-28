@@ -672,8 +672,19 @@ M.createScene = function createScene(container){
 
   /* ================= CAMERA ================= */
   const pose = (pos, target, fov) => ({ pos, target, fov });
-  let aspect = 16 / 10, view = 'scene';
+  let aspect = 16 / 10, view = 'pov';
   function viewPose(name){
+    if (name === 'pov'){
+      // the typist's eyes: a little above the tube, looking slightly down at it, framed so the screen
+      // (plus a sliver of bezel) fills most of the view. Never closer than a seated viewer would be.
+      const fill = aspect < 1 ? .94 : .8;
+      let fov = 32; const tv = Math.tan(fov * Math.PI / 360);
+      let d = Math.max((GH * .5) / (tv * fill), (GW * .5) / (tv * aspect * fill));
+      if (d < .42){ d = .42; }
+      if (d > .62){ d = .62; fov = 2 * Math.atan(Math.max((GH * .5) / (fill * d), (GW * .5) / (fill * d * aspect))) * 180 / Math.PI; }
+      const eye = screenCenter.clone().addScaledVector(screenNormal, d); eye.y += d * .12;
+      return pose(eye, screenCenter.clone().add(new V3(0, -.006, 0)), fov);
+    }
     if (name === 'screen'){
       // fill ~88% of the frame; on tall phones the dolly stops short of the typist's head and widens instead
       let fov = 30; const tv = Math.tan(fov * Math.PI / 360);
@@ -687,13 +698,13 @@ M.createScene = function createScene(container){
     const tall = pose(new V3(.34, 1.27, 1.06), new V3(-.01, .9, -.06), 50);
     return pose(wide.pos.clone().lerp(tall.pos, p), wide.target.clone().lerp(tall.target, p), lerp(wide.fov, tall.fov, p));
   }
-  const cur = viewPose('scene'), from = pose(new V3(), new V3(), 33); let to = cur, tween = 1;
+  const cur = viewPose('pov'), from = pose(new V3(), new V3(), 33); let to = cur, tween = 1;
   const ptr = new THREE.Vector2(), ptrS = new THREE.Vector2();
   const easeIO = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   function applyCamera(){
     const fwd = new V3().subVectors(cur.target, cur.pos), dist = fwd.length(); fwd.normalize();
     const right = new V3().crossVectors(fwd, new V3(0, 1, 0)).normalize(), up = new V3().crossVectors(right, fwd);
-    const amt = (view === 'screen' ? .012 : .045) * dist;
+    const amt = (view === 'screen' ? .012 : view === 'pov' ? .006 : .045) * dist;
     camera.position.copy(cur.pos).addScaledVector(right, ptrS.x * amt).addScaledVector(up, -ptrS.y * amt * .6);
     camera.lookAt(cur.target); if (camera.fov !== cur.fov){ camera.fov = cur.fov; camera.updateProjectionMatrix(); }
   }
@@ -728,7 +739,7 @@ M.createScene = function createScene(container){
     rig: { seat: SEAT.clone(), keyboardCenter, keyboardNormal, screenCenter: screenCenter.clone(), screenNormal: screenNormal.clone(), lampPosition: bulbPos.clone(), keySpacing: U },
     add(o){ scene.add(o); o.traverse(m => { if (m.isMesh && !m.userData.noShadow) m.castShadow = true; }); },
     setView(name){
-      if (name !== 'scene' && name !== 'screen') return; view = name;
+      if (name !== 'scene' && name !== 'screen' && name !== 'pov') return; view = name;
       from.pos.copy(cur.pos); from.target.copy(cur.target); from.fov = cur.fov; to = viewPose(name); tween = REDUCED ? 1 : 0;
       if (REDUCED){ cur.pos.copy(to.pos); cur.target.copy(to.target); cur.fov = to.fov; }
     },
