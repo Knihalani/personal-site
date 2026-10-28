@@ -813,7 +813,7 @@ M.createScene = function createScene(container){
   function applyCamera(){
     // the pointer looks around: down leans back toward the full view (the hands), sideways/up turn the head a little
     const down = clamp(-pitchS.x / LOOK.down, 0, 1);
-    const k = sstep(0, 1, Math.max(clamp(viewS.x, 0, 1), down));
+    const k = sstep(0, 1, 1 - (1 - clamp(viewS.x, 0, 1)) * (1 - down));
     const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * (1 - .45 * k);
     camera.position.lerpVectors(shot.screen.pos, shot.full.pos, k);
     // the head travels a slight arc (up and back first) rather than a straight dolly
@@ -924,7 +924,7 @@ M.createScene = function createScene(container){
     nudge(amount = 1){ if (false) leanS.v += 7 * clamp(amount, 0, 2); },
     update(dt, t){
       breathT += dt;
-      crit(yawS, 6.5, dt); crit(pitchS, 6, dt); crit(viewS, 4.2, dt);
+      crit(yawS, 3.4, dt); crit(pitchS, 3.1, dt); crit(viewS, 3.2, dt);   // slow, critically damped: glides, never overshoots
       { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h; leanS.v += (-110 * leanS.x - 2 * .75 * 10.5 * leanS.v) * h; leanS.x += leanS.v * h; } }
       leanS.x = clamp(leanS.x, -.3, 1);
       applyCamera(t);

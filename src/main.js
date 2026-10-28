@@ -5,6 +5,8 @@ const M = window.MAC, D = document, $ = s => D.querySelector(s);
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TOUCH = matchMedia('(pointer: coarse)').matches;
 const stage = $('#stage');
+/* phones and small tablets: just the terminal, full screen, no 3D */
+if (TOUCH && Math.min(innerWidth, innerHeight) < 820){ phone(); return; }
 let api;
 try { api = M.createScene(stage); } catch (e){ console.error(e); $('#loading').textContent = 'this needs WebGL'; return; }
 if (M.dressRoom) { try { M.dressRoom(api); } catch (e){ console.error(e); } }
@@ -38,7 +40,7 @@ function onDown(e){
   if (!held.has(code)){ held.add(code); typist.keyDown(code); if (api.nudge) api.nudge(); }
   firstKey();
 }
-function onUp(e){ const code = e.code || 'KeyA'; if (held.has(code)){ held.delete(code); typist.keyUp(code); } }
+function onUp(e){ if (term.handleKeyUp) term.handleKeyUp(e); const code = e.code || 'KeyA'; if (held.has(code)){ held.delete(code); typist.keyUp(code); } }
 addEventListener('keydown', onDown); addEventListener('keyup', onUp);
 addEventListener('blur', () => { for (const c of held) typist.keyUp(c); held.clear(); });
 
@@ -52,28 +54,10 @@ kbd.addEventListener('input', () => {
 });
 kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ onDown(e); e.stopPropagation(); } });
 kbd.addEventListener('keyup', e => { onUp(e); e.stopPropagation(); });
-/* two views: scroll (or swipe on touch) steps back to the whole desk or in to the screen; shift+scroll scrolls the terminal */
-const setView = v => { if (api.setView) api.setView(v); };
-let wheelAcc = 0, wheelLock = 0;
-addEventListener('wheel', e => {
-  e.preventDefault();
-  if (e.shiftKey && term.scroll){ term.scroll(e.deltaY || e.deltaX); return; }
-  const now = performance.now(); if (now < wheelLock) return;
-  wheelAcc += e.deltaY; if (Math.abs(wheelAcc) < 30) return;
-  setView(wheelAcc > 0 ? 'full' : 'screen'); wheelAcc = 0; wheelLock = now + 450;
-}, { passive: false });
+/* the wheel scrolls the terminal; the cursor looks around, and moving it down leans back to the whole desk */
+addEventListener('wheel', e => { if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
 addEventListener('keydown', e => { if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
-let drag = null;
-stage.addEventListener('pointerdown', e => {
-  unlock();
-  if (e.pointerType !== 'mouse'){ drag = { y: e.clientY, moved: false }; stage.setPointerCapture(e.pointerId); }
-});
-stage.addEventListener('pointermove', e => {
-  if (!drag) return; const dy = e.clientY - drag.y;
-  if (Math.abs(dy) > 50 && !drag.moved){ drag.moved = true; setView(dy < 0 ? 'full' : 'screen'); }
-});
-stage.addEventListener('pointerup', () => { if (drag && !drag.moved) kbd.focus(); drag = null; });
-stage.addEventListener('pointercancel', () => { drag = null; });
+stage.addEventListener('pointerdown', () => unlock());
 addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && !REDUCED) look(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1); });
 D.documentElement.addEventListener('mouseleave', () => look(0, 0));
 
@@ -95,6 +79,41 @@ function frame(now){
   typist.update(dt, T); api.update(dt, T); if (sound && sound.update) sound.update(dt); api.render();
 }
 D.addEventListener('visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });
-const go = () => { $('#loading').classList.add('gone'); fromHash(); raf = requestAnimationFrame(frame); if (TOUCH) $('#hint').innerHTML = 'tap the screen to type · swipe up to step back'; };
+const go = () => { $('#loading').classList.add('gone'); fromHash(); raf = requestAnimationFrame(frame); };
 (D.fonts ? Promise.race([D.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve()).then(go);
+
+function phone(){
+  D.body.classList.add('phone');
+  const W = innerWidth, H = (window.visualViewport ? visualViewport.height : innerHeight);
+  const term = M.createTerminal({ content: M.CONTENT, aspect: W / innerHeight, cols: W < 420 ? 40 : W < 600 ? 46 : 54 });
+  const cv = term.canvas; cv.className = 'phone-term'; stage.appendChild(cv);
+  const sound = M.sound, kbd = $('#kbd'), muteBtn = $('#mute');
+  let unlocked = false; const unlock = () => { if (unlocked || !sound) return; unlocked = true; try { sound.unlock(); } catch (e){} };
+  const paint = () => { const m = sound ? !!sound.muted : true; muteBtn.textContent = m ? 'sound off' : 'sound on'; };
+  if (!sound) muteBtn.hidden = true; else { muteBtn.addEventListener('click', () => { unlock(); sound.setMuted(!sound.muted); paint(); }); paint(); }
+  $('#hint').innerHTML = 'tap to type · try <b>help</b>';
+  const click = (c, d) => { if (sound) try { sound.key(c, d); } catch (e){} };
+  const tap = c => { click(c, true); setTimeout(() => click(c, false), 70); };
+  kbd.addEventListener('input', () => { const v = kbd.value; kbd.value = ''; for (const ch of v){ term.insertText(ch); tap(ch === ' ' ? 'Space' : 'KeyA'); } $('#hint').style.opacity = '0'; });
+  kbd.addEventListener('keydown', e => { if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ unlock(); if (term.handleKey(e)) e.preventDefault(); tap(e.key === 'Enter' ? 'Enter' : e.key === 'Backspace' ? 'Backspace' : 'KeyA'); } });
+  addEventListener('keydown', e => { if (e.target === kbd || e.metaKey) return; unlock(); if (term.handleKey(e)) e.preventDefault(); });
+  stage.addEventListener('pointerdown', () => { unlock(); });
+  stage.addEventListener('click', () => kbd.focus());
+  // touch drag scrolls the terminal's history
+  let ty = null; stage.addEventListener('touchstart', e => { ty = e.touches[0].clientY; }, { passive: true });
+  stage.addEventListener('touchmove', e => { if (ty == null || !term.scroll) return; const y = e.touches[0].clientY; term.scroll((ty - y) * 2.5); ty = y; e.preventDefault(); }, { passive: false });
+  // keep the prompt line above the on-screen keyboard
+  const place = () => {
+    const vh = window.visualViewport ? visualViewport.height : innerHeight, ch = cv.getBoundingClientRect().height || innerHeight;
+    const y = term.cursorY * ch, shift = Math.min(0, vh - 18 - y);
+    cv.style.transform = 'translateY(' + shift.toFixed(1) + 'px)';
+  };
+  if (window.visualViewport) visualViewport.addEventListener('resize', place);
+  function fromHash(){ const id = location.hash.slice(1); if (id && term.run) term.run(id); }
+  addEventListener('hashchange', fromHash);
+  let last = performance.now(), T = 0;
+  const frame = now => { requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt; if (term.update(dt, T)) place(); };
+  const go = () => { $('#loading').classList.add('gone'); fromHash(); requestAnimationFrame(frame); };
+  (D.fonts ? Promise.race([D.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve()).then(go);
+}
 })();

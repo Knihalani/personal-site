@@ -25,7 +25,7 @@ const PALETTE = {             // one phosphor, four intensities. Retune here to 
   accent: '#8dffb4',          // matches, highlights: the same phosphor, driven harder
 };
 const FONT = 'VT323, "IBM Plex Mono", ui-monospace, monospace';
-const COLS = 54;               // grid width; ~23 rows at 4:3
+let COLS = 54;                 // grid width (opts.cols on phones); ~18 rows at 4:3
 const WIDTH = 1280;            // canvas px
 const LINE = 0.9;              // line height in em (VT323 has generous built-in leading)
 const RATE = 1500;             // typing-out speed, characters per second
@@ -328,7 +328,8 @@ function fieldList(spec){
 
 M.createTerminal = function createTerminal(opts){
   const C = (opts && opts.content) || M.CONTENT || {};
-  const aspect = opts && opts.aspect > 0.5 && opts.aspect < 3 ? opts.aspect : 4 / 3;
+  if (opts && opts.cols >= 32) COLS = opts.cols | 0;
+  const aspect = opts && opts.aspect > 0.3 && opts.aspect < 3 ? opts.aspect : 4 / 3;
   const W = WIDTH, H = Math.round(WIDTH / aspect);
   const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d', { alpha: false });
@@ -1713,6 +1714,7 @@ M.createTerminal = function createTerminal(opts){
     }
   }
   const X = col => PADX + col * cw;
+  let promptY = 0;   // bottom of the prompt line, canvas px (phones keep it above the on-screen keyboard)
   function text(s, col, top, st, k = 1){
     g.font = font(k); g.fillStyle = color(st); g.fillText(s, X(col), top + fs * k * 0.68);
   }
@@ -1753,6 +1755,7 @@ M.createTerminal = function createTerminal(opts){
     if (cur > room) off = cur - room;
     const vis = input.slice(off, off + room);
     drawSpans({ i: 0, s: [...promptSpans(), [vis, 'n']] }, top, 999);
+    promptY = top + ch;
     const cx = X(PL + cur - off);
     if (gh){
       const gcol = PL + input.length - off;
@@ -2040,6 +2043,6 @@ M.createTerminal = function createTerminal(opts){
   }
 
   draw();
-  return { canvas, handleKey, insertText, update, run, scroll };
+  return { canvas, handleKey, insertText, update, run, scroll, get cursorY(){ return promptY / H; } };
 };
 })();
