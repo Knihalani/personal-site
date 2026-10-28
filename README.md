@@ -11,25 +11,28 @@ keyboard, and you hear a real Topre switch for every press and release.
 
 | | |
 |---|---|
-| **type** | everything goes to the terminal. Start with `help` |
+| **type** | everything goes to the terminal. Start with `help`, or click a highlighted word |
 | **move the cursor** | look around. Move it down to lean back and see the whole desk and the hands |
 | **scroll** | scroll back through the terminal (also Page Up / Page Down) |
 | **phones** | just the terminal, full screen. Tap to type, drag to scroll, tap an email to copy it |
 
-Deep links run a command on load: `#j`, `#eden`, `#about`, `#links`, `#contact`.
+Without WebGL the desktop gets the same terminal-only page. Deep links run a page on load:
+`#about`, `#eden`, `#j`, `#writing`, `#contact`, `#links`, `#help`, and `#post/<slug>` opens a post.
 
 ## What's in the terminal
 
-- **About Kaiav:** `about`, `eden`, `j`, `links`, `linkedin`, `x`, `gh`, `contact` (copies an
-  address to the clipboard), `open <name|url>`
-- **Tools:** `weather [city]`, `todo`, `cal`, `clock`, `timer`, `stopwatch`, `pomodoro`, `bc`, `date`
-- **Play:** `typing` (a WPM test), `tetris`, `snake`, `donut`, `matrix`, `fortune`, `cowsay`, `banner`, `lamp`
+- **About Kaiav:** `about`, `eden`, `j`, `writing` (posts open in a typeset reader), `contact`
+  (copies an address), `links`, `linkedin`, `x`, `gh`, `open <name|url>`
+- **Do something:** `edit` (a nano-style editor), `todo`, `weather [city]`, `timer`, `qr`, `pass` and an
+  encrypted `vault` (kept only in your browser), `cal`, `bc`, `convert`, `roll`, `countdown`
+- **The network** (live site only; the claude.ai preview blocks it): `curl`, `hn`, `wiki`, `define`
+- **Play:** `tetris`, `snake` (tap controls on phones), `typing` (a WPM test), `donut`, `lamp`
 - **A real little shell:** pipes, `>` `>>` `<` redirection, `&&` `||` `;`, globs, `$VAR`, aliases,
-  history (`!!`, `!n`), Tab completion, "did you mean". Also `ls` `cd` `cat` `grep` `sed` `sort` `uniq`
-  `wc` `head` `tail` `tree` `cp` `mv` `rm` `mkdir` `touch` `man` `neofetch` and friends, on a
-  filesystem that's saved in your browser
+  history (`!!`, `!n`, ctrl+r), Tab completion, "did you mean", plain phrases like "who are you".
+  Also `ls` `cd` `cat` `grep` `sort` `wc` `head` `tail` `tree` `cp` `mv` `rm` `mkdir` `touch` `man`,
+  on a filesystem saved in your browser (built-in files are read-only)
 
-`help` lists everything, `help all` lists more, and `man <command>` explains any command.
+`help` shows the essentials, `help all` lists everything, and `man <command>` explains any command.
 
 ## How it's built
 
@@ -41,27 +44,32 @@ lighting.
 src/
   head.html      page shell, fonts, styles, overlay UI
   content.js     all copy about Kaiav (MAC.CONTENT)
-  keysamples.js  the key recordings, embedded as PCM
+  keysamples.js  the key recordings, one small embedded MP3 sprite
   sound.js       Web Audio: key playback with per-key variation, terminal beeps and disk sounds
   scene.js       the room, computer, CRT shader, keyboard, lamp and camera
   room.js        set dressing: shelf, books, cork board, prints, curtains, radio clock
   typist.js      the hands: arm and finger IK, strike timing synced to key travel and sound
   terminal.js    the shell, the virtual filesystem and the canvas renderer the CRT displays
   apps.js        full-screen apps: tetris, snake, donut, lamp
-  extras.js      weather, todo, clocks, typing test, fortune, cowsay, banner, matrix
-  main.js        input routing, phone mode, the loop
+  extras.js      weather, todo, timer, typing test, qr, pass/vault, the network commands and small tools
+  editor.js      edit / nano / vi / vim
+  reader.js      the typeset post reader
+  main.js        input routing, the terminal-only layout (phones, no WebGL), fallbacks, the loop
   CONTRACT.md    how the modules talk to each other, and the terminal extension API
-build.py         concatenates src/ into index.html (static hosting) and site.html (an embeddable fragment)
+build.py         concatenates src/ into index.html, 404.html and site.html (an embeddable fragment)
+tools/
+  copy-desk.html the private Copy Desk (all site copy and posts, with a TipTap editor), published as a claude.ai artifact
 ```
 
 ```sh
 python3 build.py            # writes index.html and site.html
 python3 build.py --out dir  # build somewhere else
+python3 build.py --dev      # include src/stubs.js, so modules can be tested on their own
 ```
 
 To deploy to Cloudflare Pages, run `./deploy.sh`. It needs a token with *Cloudflare Pages: Edit* in `CLOUDFLARE_API_TOKEN`.
 
-Open `index.html` in a browser. It needs WebGL; phones skip WebGL and get the terminal only.
+Open `index.html` in a browser. Phones, and browsers without WebGL, get the terminal on its own.
 
 ### Adding a command
 
