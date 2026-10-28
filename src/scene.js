@@ -611,6 +611,9 @@ M.createScene = function createScene(container){
   const glow = new THREE.SpotLight(new THREE.Color(PHOSPHOR[0] * .8, PHOSPHOR[1], PHOSPHOR[2] * .9), .5, 3, 1.25, 1, 2);
   glow.position.copy(screenCenter).addScaledVector(screenNormal, .02); glow.target.position.copy(screenCenter).addScaledVector(screenNormal, 1).add(new V3(0, -.35, 0));
   scene.add(glow, glow.target);
+  // spill: the tube also washes its own bezel, the lip and the front of the case in soft green (the spot can't, it faces away)
+  const spill = new THREE.PointLight(new THREE.Color(PHOSPHOR[0] * .75, PHOSPHOR[1], PHOSPHOR[2] * .85), .03, .9, 2);
+  spill.position.copy(screenCenter).addScaledVector(screenNormal, .1); scene.add(spill);
   // night through the window: a cool rim from behind the machine, and a whisper of ambient
   const moon = new THREE.DirectionalLight(lin(0x6f86b8), .18); moon.position.set(WIN.x, WIN.y + .3, WALL_Z - 1); moon.target.position.set(.2, .9, .8); scene.add(moon, moon.target);
   const hemi = new THREE.HemisphereLight(lin(0x405070), lin(0x1a120c), .26); scene.add(hemi);
@@ -833,8 +836,8 @@ M.createScene = function createScene(container){
     screenU.uLampAmt.value = L;
     // the eye opens up slowly in the dark, and snaps back when the light returns
     lampS.adapt += (off - lampS.adapt) * (1 - Math.exp(-dt * (off > lampS.adapt ? .9 : 4)));
-    moon.intensity = .18 + .3 * lampS.adapt; hemi.intensity = .26 + .1 * lampS.adapt;
-    renderer.toneMappingExposure = 1.05 + .55 * lampS.adapt;
+    moon.intensity = .18 + .45 * lampS.adapt; hemi.intensity = .26 + .22 * lampS.adapt;
+    renderer.toneMappingExposure = 1.05 + .75 * lampS.adapt;
   }
 
   /* ================= API ================= */
@@ -900,7 +903,8 @@ M.createScene = function createScene(container){
       lumTimer -= dt; if (lumDirty && lumTimer <= 0){ lumDirty = false; lumTimer = .25; sampleLum(); }
       lum += (lumTarget - lum) * (1 - Math.exp(-dt * 4));
       lampLevel(dt); applyLamp(dt);
-      glow.intensity = (.2 + .6 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.2 * lampS.adapt);
+      glow.intensity = (.2 + .6 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 1.6 * lampS.adapt);
+      spill.intensity = (.012 + .05 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value * (1 + 3 * lampS.adapt);
       dustU.uTime.value = REDUCED ? 40 : t;
       // keep it smooth on modest GPUs: step the pixel ratio down if frames run long
       perfT += dt; frames++; if (dt > .026) slowAcc++;

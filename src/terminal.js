@@ -975,7 +975,7 @@ M.createTerminal = function createTerminal(opts){
   def('neofetch', { g: 'system', desc: 'about this machine', usage: 'neofetch', run(argv, io){
     const info = fetchInfo();
     if (!io.tty){ io.write('kaiav@kn84\n' + info.map(([k, v]) => pad(k, 10) + v).join('\n') + '\n'); return; }
-    const o = out(); o.blank().viz(13, drawFetch, () => 4).blank(); io.rich(o);
+    const o = out(); o.blank().viz(13, drawFetch, age => age < 1.2 ? 30 : 4).blank(); io.rich(o);
     if (job) job.plain += info.map(([k, v]) => k + ' ' + v).join('. ') + ' ';
   } });
 
