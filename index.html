@@ -284,12 +284,12 @@ function yinTarget(){
 const N = 30;
 const KOI = [
   { // Kohaku: white with vermilion. Becomes yang (Eden); its eyes become the dark dot (Writing)
-    base: [236, 228, 211], body: C.cream, fin: 'rgba(246,239,225,.82)', finEdge: 'rgba(255,120,80,.55)', eye: C.ink, eyeTo: C.ink,
+    base: [236, 228, 211], body: C.cream, fin: 'rgba(246,239,225,.7)', finEdge: 'rgba(255,150,110,.4)', eye: C.ink, eyeTo: C.ink,
     patches: [[.04, 0, .95, C.red], [.27, .38, .95, C.red], [.31, -.42, .55, C.red], [.5, -.25, .9, C.red], [.66, .3, .62, C.red], [.8, -.1, .4, C.red]],
     off: 0
   },
   { // Showa: black with red and white. Becomes yin (J); its gold eyes become the pale dot (About me)
-    base: [14, 15, 16], body: '#141516', fin: 'rgba(30,30,32,.85)', finEdge: 'rgba(255,122,26,.7)', eye: C.gold, eyeTo: C.paper,
+    base: [14, 15, 16], body: '#141516', fin: 'rgba(40,36,34,.78)', finEdge: 'rgba(236,228,211,.45)', eye: C.gold, eyeTo: C.paper,
     patches: [[.08, .25, .75, C.red], [.3, -.3, .85, C.orange], [.44, .42, .5, C.showaWhite], [.58, -.05, .75, C.red], [.72, .4, .45, C.showaWhite], [.2, -.55, .35, C.showaWhite]],
     off: Math.PI
   }
@@ -347,15 +347,15 @@ function drawFin(c, p, dirx, diry, len, wid, fill, edge, flap){
 }
 function drawTail(c, s, k, t, m){
   const p = at(s, 1), w0 = Math.max(s.w[Math.floor(N * .7)], Y.R * .06);
-  const bx = -p.fx, by = -p.fy, len = lerp(Y.R * .3, Y.R * .2, m), spread = .55 + .12 * Math.sin(t * 7 + k.off);
+  const bx = -p.fx, by = -p.fy, len = lerp(Y.R * .34, Y.R * .2, m), spread = .7 + .14 * Math.sin(t * 7 + k.off);
   const sw = Math.sin(t * 6.2 + k.off) * .35 * (1 - m * .6);
   const ang = Math.atan2(by, bx) + sw;
   c.save(); c.translate(p.x, p.y); c.rotate(ang);
-  c.beginPath(); c.moveTo(0, -w0 * .25);
+  c.beginPath(); c.moveTo(0, -w0 * .45);
   c.bezierCurveTo(len * .4, -len * spread * .6, len * .9, -len * spread, len * 1.05, -len * spread * .85);
   c.quadraticCurveTo(len * .62, -len * .08, len * .7, 0);
   c.quadraticCurveTo(len * .62, len * .08, len * 1.05, len * spread * .85);
-  c.bezierCurveTo(len * .9, len * spread, len * .4, len * spread * .6, 0, w0 * .25);
+  c.bezierCurveTo(len * .9, len * spread, len * .4, len * spread * .6, 0, w0 * .45);
   c.closePath(); c.fillStyle = k.fin; c.fill();
   c.strokeStyle = k.finEdge; c.lineWidth = Math.max(1, len * .03);
   for (let r = -3; r <= 3; r++){ c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(len * .5, r * len * spread * .14, len * .98, r * len * spread * .26); c.stroke(); }
@@ -367,7 +367,7 @@ function drawKoi(c, k, s, t, m, alpha){
   const fade = 1 - smooth(0, .75, m);
   // pectoral fins (under the body), flapping
   if (fade > .01){
-    const p = at(s, .2), len = Y.R * .2 * fade, wid = Y.R * .06 * fade, fl = Math.sin(t * 4.1 + k.off) * .35;
+    const p = at(s, .2), len = Y.R * .22 * fade, wid = Y.R * .1 * fade, fl = Math.sin(t * 4.1 + k.off) * .35;
     for (const side of [1, -1]){
       const ex = p.x + p.nx * p.w * side * .7, ey = p.y + p.ny * p.w * side * .7;
       drawFin(c, { x: ex, y: ey }, p.nx * side - p.fx * .9, p.ny * side - p.fy * .9, len, wid, k.fin, k.finEdge, fl * side);
