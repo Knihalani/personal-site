@@ -140,7 +140,7 @@ M.createScene = function createScene(container){
   /* ================= THE COMPUTER ================= */
   const CW = .246, CH = .345, CD = .275, CR = .022;
   const SLOPE = Math.tan(5 * Math.PI / 180), SLOPE_Y0 = -.112; // face leans back above the chin
-  const BZ = { y: .046, hw: .1075, hh: .0835, r: .024, wall: .017, depth: .021 }; // recessed CRT bezel
+  const BZ = { y: .046, hw: .1095, hh: .0855, r: .023, wall: .015, depth: .021 }; // recessed CRT bezel (v11: tube ~4% bigger, bezel thinner)
   const faceZ = y => CD / 2 - Math.max(0, y - SLOPE_Y0) * SLOPE;
   const SLOT = { x: .043, y: -.074, hw: .047, hh: .0028 };
   const computer = new THREE.Group();
@@ -210,10 +210,10 @@ M.createScene = function createScene(container){
       const UV = g.attributes.uv; for (let i = 0; i < UV.count; i++) UV.setXY(i, UV.getX(i) * 4, UV.getY(i) * 4);
       return g; };
     {
-      const lip = mesh(frameGeo(BZ.hw + .0085, BZ.hh + .0085, BZ.r + .0085, BZ.hw + .0022, BZ.hh + .0022, BZ.r + .0022, .0006, .0017, .0019, 5), lipM);
+      const lip = mesh(frameGeo(BZ.hw + .0075, BZ.hh + .0075, BZ.r + .0075, BZ.hw + .002, BZ.hh + .002, BZ.r + .002, .0006, .0017, .0019, 5), lipM);
       const z = faceZ(BZ.y); lip.position.set(0, BZ.y, z - .0006); lip.rotation.x = -Math.atan(SLOPE); computer.add(lip);
       // a hairline parting groove just outside the lip, where the bezel moulding meets the case
-      const gs = rrShape(BZ.hw + .0118, BZ.hh + .0118, BZ.r + .0118); gs.holes.push(rrShape(BZ.hw + .0106, BZ.hh + .0106, BZ.r + .0106));
+      const gs = rrShape(BZ.hw + .0107, BZ.hh + .0107, BZ.r + .0107); gs.holes.push(rrShape(BZ.hw + .0096, BZ.hh + .0096, BZ.r + .0096));
       const groove = mesh(new THREE.ShapeGeometry(gs, 12), new THREE.MeshStandardMaterial({ color: lin(0x6d6556), roughness: .8 }), false);
       groove.position.set(0, BZ.y, faceZ(BZ.y) + .0003); groove.rotation.x = -Math.atan(SLOPE); computer.add(groove);
     }
@@ -259,7 +259,7 @@ M.createScene = function createScene(container){
   const screenU = {
     uTex: { value: blankTex }, uHas: { value: 0 }, uRes: { value: new THREE.Vector2(1024, 768) }, uTime: { value: 0 },
     uFlicker: { value: 1 }, uRoll: { value: REDUCED ? 0 : 1 }, uPhos: { value: new THREE.Vector3(...PHOSPHOR) }, uMono: { value: .88 },
-    uLamp: { value: new V3() }, uInset: { value: new THREE.Vector2(.045, .05) }, uBright: { value: 1 }, uLampAmt: { value: 1 },
+    uWarm: { value: 1 }, uLamp: { value: new V3() }, uInset: { value: new THREE.Vector2(.036, .042) }, uBright: { value: 1 }, uLampAmt: { value: 1 },
   };
   const screenMat = new THREE.ShaderMaterial({
     uniforms: screenU, extensions: { derivatives: true },
@@ -268,7 +268,7 @@ M.createScene = function createScene(container){
       void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal);
         gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: `
-      uniform sampler2D uTex; uniform float uHas, uTime, uFlicker, uRoll, uMono, uBright, uLampAmt; uniform vec2 uRes, uInset; uniform vec3 uPhos, uLamp;
+      uniform sampler2D uTex; uniform float uHas, uTime, uFlicker, uRoll, uMono, uBright, uLampAmt, uWarm; uniform vec2 uRes, uInset; uniform vec3 uPhos, uLamp;
       varying vec2 vUv; varying vec3 vW; varying vec3 vN;
       float luma(vec3 c){ return dot(c, vec3(.299, .587, .114)); }
       vec3 phos(vec3 c){ float l = luma(c); vec3 m = uPhos * l + vec3(pow(l, 3.)) * .32; return mix(c, m, uMono); }
@@ -305,6 +305,10 @@ M.createScene = function createScene(container){
           float v = 16. * t.x * t.y * (1. - t.x) * (1. - t.y); col *= mix(.74, 1., pow(clamp(v, 0., 1.), .3));
           col *= uFlicker * (1. + uRoll * .012 * smoothstep(.0, .5, .5 - abs(fract(t.y - uTime * .06) - .5) * 6.));
           col *= inside * uBright;
+          // power-on: the raster opens out from a bright horizontal line, then the phosphor settles to full
+          if (uWarm < 1.){ float op = smoothstep(0., .45, uWarm), hy = abs(t.y - .5);
+            float band = 1. - smoothstep(.5 * op * op, .5 * op * op + .004 + .01 * (1. - op), hy);
+            col = col * band * smoothstep(.2, 1., uWarm) + uPhos * band * .5 * (1. - smoothstep(.0, .55, uWarm)) * inside; }
         }
         // the unlit tube is a dark grey-green, slightly lighter in the middle where the glass is thickest
         vec3 base = vec3(.018, .024, .021) * (1. - .45 * length(vUv - .5));
@@ -474,8 +478,6 @@ M.createScene = function createScene(container){
     }
     const atlas = tex(ac, true, ANISO);
     const topM = new THREE.MeshStandardMaterial({ map: atlas, roughness: .62 });
-    const sideA = new THREE.MeshStandardMaterial({ color: new THREE.Color(...ALPHA_C.map(c => c / 255)).convertSRGBToLinear().multiplyScalar(.93), roughness: .6 });
-    const sideM = new THREE.MeshStandardMaterial({ color: new THREE.Color(...MOD_C.map(c => c / 255)).convertSRGBToLinear().multiplyScalar(.93), roughness: .6 });
 
     // case: base slab plus a raised surround, all in the same slightly-more-yellowed plastic
     const kbC = paint(256, 128, (u, v, o) => { plasticBase(u, v, o, 1, .45); o[1] *= .985; o[2] *= .95; });
@@ -503,9 +505,11 @@ M.createScene = function createScene(container){
           const xn = Math.min(1, Math.abs(p.x) / (hw - .0013)); p.y -= DISH * (1 - xn * xn) * top * (w > 2 ? .6 : 1);
         });
         const UV = g.attributes.uv, face = g.userData.face;
-        for (let i = 0; i < UV.count; i++) if (face[i] === 2) UV.setXY(i, lerp(u0, u1, UV.getX(i)), lerp(v0, v1, UV.getY(i)));
-        const sm = mod ? sideM : sideA;
-        const cap = mesh(g, [sm, sm, topM, sm, sm, sm]);
+        // one material per cap (one draw call instead of six): the skirt samples a clean corner of its own cell,
+        // which carries the cap colour shaded slightly darker, like the old separate side material
+        const su = u1 - 4 / AW, sv = v0 + 4 / AH;
+        for (let i = 0; i < UV.count; i++) if (face[i] === 2) UV.setXY(i, lerp(u0, u1, UV.getX(i)), lerp(v0, v1, UV.getY(i))); else UV.setXY(i, su, sv);
+        const cap = mesh(g, topM);
         const holder = new THREE.Group();
         const restY = KEY_BASE + KEY_H / 2 + ROW_LIFT[r];
         holder.position.set(-7.5 * U + (col + w / 2) * U, restY, KB.kz0 + (r - 2) * U);
@@ -550,7 +554,7 @@ M.createScene = function createScene(container){
       const r = .0058 * sstep(.08, .16, t) * sstep(.86, .78, t), th = t * 48 * Math.PI * 2;
       p.addScaledVector(side, Math.cos(th) * r).addScaledVector(up2, Math.sin(th) * r); pts.push(p);
     }
-    const cable = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 1400, .0017, 6, false), new THREE.MeshStandardMaterial({ color: lin(0xb9b09b), roughness: .55 }));
+    const cable = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 760, .0017, 6, false), new THREE.MeshStandardMaterial({ color: lin(0xb9b09b), roughness: .55 }));
     scene.add(cable);
     const plug = mesh(new THREE.BoxGeometry(.011, .007, .012), new THREE.MeshStandardMaterial({ color: lin(0xb3a993), roughness: .6 }));
     plug.position.copy(computer.localToWorld(new V3(-.07, -.148, faceZ(-.148) + .006))); plug.rotation.y = computerYaw; scene.add(plug);
@@ -580,12 +584,13 @@ M.createScene = function createScene(container){
       const off = new V3().crossVectors(d, s1).normalize().multiplyScalar(.016), side = s1.clone().normalize(), w = new V3().crossVectors(d, side).normalize();
       for (const sg of [1, -1]){ const pts = []; for (let i = 0; i <= 220; i++){ const t = i / 220, th = t * 46 * Math.PI * 2;
           pts.push(a.clone().addScaledVector(d, t * Lr).add(off).addScaledVector(side, sg * .011 + Math.cos(th) * .0032).addScaledVector(w, Math.sin(th) * .0032)); }
-        g.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 440, .0007, 4), brass)); } }
+        g.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 260, .0007, 4), brass)); } }
     // the shade: a bell with a rolled lip, enamel outside, warm white inside
     const prof = [[0, 0], [.018, 0], [.024, -.006], [.028, -.03], [.036, -.056], [.052, -.086], [.068, -.11], [.073, -.118], [.0745, -.122], [.071, -.123]].reverse().map(([x, y]) => new THREE.Vector2(x, y)); // bottom-up so normals face out
     const shade = new THREE.Group();
-    const outer = mesh(new THREE.LatheGeometry(prof, 48), enamel); shade.add(outer);
-    const innerM = shadeInnerMat = new THREE.MeshStandardMaterial({ color: lin(0xe8dcc4), emissive: lin(0xffc58a), emissiveIntensity: .12, roughness: .7, side: THREE.BackSide });
+    const enamelShade = enamel.clone(); enamelShade.side = THREE.DoubleSide;
+    const outer = mesh(new THREE.LatheGeometry(prof, 48), enamelShade); shade.add(outer);
+    const innerM = shadeInnerMat = new THREE.MeshStandardMaterial({ color: lin(0xe8dcc4), emissive: lin(0xffc58a), emissiveIntensity: .12, roughness: .7, side: THREE.DoubleSide });
     shade.add(mesh(new THREE.LatheGeometry(prof.map(v => new THREE.Vector2(v.x * .985, v.y)), 48), innerM, false));
     bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, .86, .62), toneMapped: false });
     const bulb = mesh(new THREE.SphereGeometry(.024, 24, 16), bulbMat, false);
@@ -742,6 +747,8 @@ M.createScene = function createScene(container){
      down a little, the way a real head does, and the lens widens as it goes so the whole keyboard fits. */
   const D2R = Math.PI / 180;
   const LOOK = { yaw: 12 * D2R, down: 35 * D2R, up: 6 * D2R };
+  const REST_FILL = .72;                      // glass height / frame height at rest
+  const YAW_REST = 4.5 * D2R, YAW_FULL = 10 * D2R, UP_MAX = 2.5 * D2R;   // how far the head turns: little while reading, more when leaned back
   const flatN = new V3(screenNormal.x, 0, screenNormal.z).normalize();
   const EYE_D = .6, EYE_UP = .125;
   const eyeRest = screenCenter.clone().addScaledVector(flatN, EYE_D); eyeRest.y = screenCenter.y + EYE_UP;
@@ -789,9 +796,10 @@ M.createScene = function createScene(container){
   const shot = { screen: { pos: new V3(), q: new THREE.Quaternion(), fov: 30 }, full: { pos: eyeFull.clone(), q: new THREE.Quaternion(), fov: 40 } };
   const viewS = { x: 0, v: 0, t: 0 };   // 0 = screen, 1 = full
   function solveShots(){
-    // screen: the glass fills ~86% of the height (or ~92% of the width on portrait screens), dead centre, square-on
+    // screen: the glass fills ~72% of the height (or ~84% of the width on narrow windows), dead centre, square-on,
+    // so the bezel and a margin of the case frame it all round
     const fovS = 30, tv = Math.tan(fovS / 2 * D2R);
-    const need = Math.max((GH / 2) / .86, (GW / 2) / (.92 * aspect));
+    const need = Math.max((GH / 2) / REST_FILL, (GW / 2) / (.84 * aspect));
     shot.screen.pos.copy(screenCenter).addScaledVector(camN, need / tv).addScaledVector(camUpS, .0);
     shot.screen.q.copy(camQS); shot.screen.fov = fovS;
     // full: aim and fov solved so the machine, keyboard and hands sit centred with a small margin
@@ -814,7 +822,7 @@ M.createScene = function createScene(container){
     // the pointer looks around: down leans back toward the full view (the hands), sideways/up turn the head a little
     const down = clamp(-pitchS.x / LOOK.down, 0, 1);
     const k = sstep(0, 1, 1 - (1 - clamp(viewS.x, 0, 1)) * (1 - down));
-    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * (1 - .45 * k);
+    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * lerp(YAW_REST, YAW_FULL, k);
     camera.position.lerpVectors(shot.screen.pos, shot.full.pos, k);
     // the head travels a slight arc (up and back first) rather than a straight dolly
     camera.position.y += Math.sin(k * Math.PI) * .04;
@@ -916,8 +924,12 @@ M.createScene = function createScene(container){
     /* nx, ny in -1..1 from the pointer (0,0 = the screen). ny > 0 looks down toward the keyboard. */
     setLook(nx, ny){
       nx = clamp(+nx || 0, -1, 1); ny = clamp(+ny || 0, -1, 1);
-      yawS.t = -curve(nx) * LOOK.yaw;
-      const cy = curve(ny); pitchS.t = cy > 0 ? -cy * LOOK.down : -cy * LOOK.up;
+      // a wide dead zone around the reading view: the whole upper half of the window and the middle band are rest,
+      // so the screen holds still while the cursor wanders over it. Leaning back starts a third of the way down.
+      // yaw is normalised here (-1..1) and scaled in applyCamera: ~4.5 deg while reading, ~10 deg leaned back.
+      const ax = Math.abs(nx), sx = sstep(.18, .95, ax);
+      yawS.t = -Math.sign(nx) * sx;
+      pitchS.t = ny > 0 ? -sstep(.3, .92, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
     },
     setPointer(nx, ny){ api.setLook(nx, ny); },
     /* a keystroke: the head dips toward the work for a moment */

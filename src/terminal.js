@@ -393,11 +393,13 @@ M.createTerminal = function createTerminal(opts){
   let suggestion = '';                 // "did you mean" target, shown as ghost on an empty prompt
   let tabState = null;
   let ahead = '';           // keys typed while a command runs, waiting for the next prompt ('\n' = a queued Enter)
+  let okRuns = 0;           // commands that worked this visit (the first-visit hint goes after two)
   let runQueued = false;    // a whole line came in with the type-ahead: run it on the next frame
   let rs = null;            // ctrl+r search: { q, i, draft, dcur }
   let history = [];
   try { const h = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); if (Array.isArray(h)) history = h.filter(s => typeof s === 'string').slice(-200); } catch (e){}
   let hIdx = history.length, hDraft = '', hPrefix = '';
+  const fresh = !history.length;     // a first-time visitor (nothing typed here before)
   let ran = 0;
   let job = null;                      // the running command line, if any
   let app = null;                      // the full-screen app, if any
@@ -688,19 +690,22 @@ M.createTerminal = function createTerminal(opts){
   /* ---- documents ---- */
   function welcome(o){
     o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
-      .line(['type ', 'f'], ['help', 'n'], [' to begin, or try', 'f'])
-.flow(['about', 'eden', 'j', 'links', 'contact', 'weather', 'tetris'].map(w => [[w, 'n']]), '  ')
+      .line(['type a word and press enter, or ' + (TAP ? 'tap' : 'click') + ' one', 'd'])
+      .flow(['about', 'eden', 'j', 'contact', 'links', 'weather', 'tetris'].map(w => [chip(w, 'b')]), '   ')
       .blank();
-    if (!history.length) o.line(['new here? ', 'f'], ['cat README.md', 'n'], [COLS >= 46 ? ' is a short guide' : ' first', 'f'])
-      .line(['tab', 'n'], [' completes   ', 'f'], ['\u2191', 'n'], [' recalls', 'f'], COLS >= 46 ? ['   ctrl+r', 'n'] : ['', 'n'], [COLS >= 46 ? ' searches' : '', 'f']).blank();
-    else o.line(['new here? ', 'f'], ['cat README.md', 'd']).blank();
+    if (!history.length) o.line(chip('help', 'n'), [' shows everything you can do', 'f']).blank();
+    else o.line(chip('help', 'n'), ['   tab completes   ', 'f'], ['\u2191', 'n'], [' recalls', 'f']).blank();
     return o;
   }
+  /* a command chip: a word that, clicked or tapped, types and runs itself. A faint underline marks it. */
+  const TAP = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  function chip(w, st = 'n', cmd){ return [w, st, { cmd: cmd || w }]; }
+  function chips(ws, st = 'n'){ const r = []; ws.forEach((w, k) => { if (k) r.push(['  ', 'f']); r.push(chip(w, st)); }); return r; }
   const DOCS = {
     about(o){
       o.blank().head('about', 'about.txt').blank().big(C.name || '').line([A.role || '', 'n']).blank();
       for (const p of A.body || []) o.para(p, /^\[.*\]$/.test(p) ? 'd' : 'n');
-      o.blank().line(['see also  ', 'f'], ['eden', 'd'], ['  ', 'f'], ['j', 'd'], ['  ', 'f'], ['links', 'd']).blank();
+      o.blank().line(['see also  ', 'f'], ...chips(['contact', 'eden', 'j', 'links'], 'n')).blank();
       return o;
     },
     eden(o){
@@ -731,7 +736,7 @@ M.createTerminal = function createTerminal(opts){
     },
     links(o){
       o.blank().card({ title: 'LINKS', note: 'links.txt', items: LINKLIST().map(t => ({ label: t.title, value: t.short, full: t.url, url: t.url, hint: t.name })) })
-        .blank().at(2, ['also ', 'f'], ['contact', 'n'], ['  ', 'f'], ['j', 'n'], ['  ', 'f'], ['open <name>', 'n']).blank();
+        .blank().at(2, ['also  ', 'f'], ...chips(['contact', 'j'], 'n'), ['  ', 'f'], ['open <name>', 'n']).blank();
       return o;
     },
   };
@@ -902,7 +907,7 @@ M.createTerminal = function createTerminal(opts){
     if (!t || t === '~') t = HOME; else if (t === '-'){ t = ENV.OLDPWD || cwd; io.write(tildify(t) + '\n'); }
     const p = FS.resolve(t, cwd);
     if (!FS.exists(p)){ io.err('cd: no such directory: ' + argv[1] + '\n'); hintPath('cd', argv[1]); return 1; }
-    if (!FS.isDir(p)){ io.err('cd: not a directory: ' + argv[1] + '\n'); return 1; }
+    if (!FS.isDir(p)){ io.err('cd: ' + argv[1] + ' is a file, not a folder\n'); if (job) job.hint = 'cat ' + argv[1]; return 1; }
     setCwd(p);
   } });
   def('pwd', { g: 'files', desc: 'print the working directory', usage: 'pwd', run(argv, io){ io.write(cwd + '\n'); } });
@@ -1031,57 +1036,6 @@ M.createTerminal = function createTerminal(opts){
     if (o.u) ls = ls.filter((x, i) => i === 0 || x !== ls[i - 1]);
     if (ls.length) io.write(ls.join('\n') + '\n');
   } });
-  def('uniq', { g: 'text', desc: 'drop repeated adjacent lines', usage: 'uniq [-c] [file]', opts: [['-c', 'prefix each line with its count']], ex: ['sort words.txt | uniq -c'], run(argv, io){
-    const { o, a } = getopts(argv.slice(1));
-    const ls = sources(io, a, 'uniq').flatMap(s => linesOf(s.text)); const r = [];
-    for (const l of ls){ if (r.length && r[r.length - 1][0] === l) r[r.length - 1][1]++; else r.push([l, 1]); }
-    if (r.length) io.write(r.map(([l, n]) => (o.c ? String(n).padStart(7) + ' ' : '') + l).join('\n') + '\n');
-  } });
-  def('tr', { g: 'text', desc: 'translate or delete characters', usage: 'tr [-d] set1 [set2]', ex: ["echo hello | tr a-z A-Z", "echo hello | tr -d l"], run(argv, io){
-    const { o, a } = getopts(argv.slice(1));
-    if (!a.length || (!o.d && a.length < 2)){ io.err('usage: tr [-d] set1 [set2]\n'); return 1; }
-    const s1 = expandSet(a[0]), s2 = o.d ? '' : expandSet(a[1]);
-    let r = '';
-    for (const c of io.stdin || ''){ const k = s1.indexOf(c); if (k < 0) r += c; else if (!o.d) r += s2[Math.min(k, s2.length - 1)] || ''; }
-    io.write(r);
-  } });
-  def('cut', { g: 'text', desc: 'pick columns from each line', usage: 'cut -d X -f LIST | -c LIST [file...]', opts: [['-d X', 'field separator (tab)'], ['-f LIST', 'fields, like 1,3 or 2-'], ['-c LIST', 'characters']], ex: ['cut -d " " -f 1 links.txt'], run(argv, io){
-    const { o, a } = getopts(argv.slice(1), 'dfc');
-    if (!o.f && !o.c){ io.err('usage: cut -d X -f LIST | -c LIST [file...]\n'); return 1; }
-    const want = fieldList(o.f || o.c), d = o.d || '\t';
-    const r = sources(io, a, 'cut').flatMap(s => linesOf(s.text)).map(l => o.c ? [...l].filter((_, i) => want(i + 1)).join('') : !l.includes(d) ? l : l.split(d).filter((_, i) => want(i + 1)).join(d));
-    if (r.length) io.write(r.join('\n') + '\n');
-  } });
-  def('sed', { g: 'text', desc: 'find and replace', usage: "sed 's/find/replace/[g][i]' [file...]", ex: ["echo hello | sed 's/l/L/g'", "sed 's/eden/Eden/i' notes/x.txt"], run(argv, io){
-    const a = argv.slice(1).filter(x => x !== '-e');
-    const sc = a[0] || '';
-    if (sc[0] !== 's' || sc.length < 4){ io.err("sed: only s/find/replace/flags is supported\n"); return 1; }
-    const dl = sc[1], parts = []; let curp = '';
-    for (let i = 2; i < sc.length; i++){
-      if (sc[i] === '\\' && sc[i + 1] === dl){ curp += dl; i++; continue; }
-      if (sc[i] === dl){ parts.push(curp); curp = ''; continue; }
-      curp += sc[i];
-    }
-    parts.push(curp);
-    if (parts.length < 3){ io.err('sed: unterminated s command\n'); return 1; }
-    const [find, rep, flags] = parts;
-    let re; try { re = new RegExp(find.replace(/\\([(){}|+?])/g, '$1'), (flags.includes('g') ? 'g' : '') + (flags.includes('i') || flags.includes('I') ? 'i' : '')); }
-    catch (e){ io.err('sed: bad pattern: ' + find + '\n'); return 1; }
-    let r = '';
-    for (let i = 0; i < rep.length; i++){
-      const c = rep[i];
-      if (c === '\\' && i + 1 < rep.length){ const n = rep[++i]; r += /\d/.test(n) ? '$' + n : n === 'n' ? '\n' : n === '&' ? '&' : n === '$' ? '$$' : n; }
-      else if (c === '&') r += '$&';
-      else if (c === '$') r += '$$';
-      else r += c;
-    }
-    const ls = sources(io, a.slice(1), 'sed').flatMap(s => linesOf(s.text)).map(l => l.replace(re, r));
-    if (ls.length) io.write(ls.join('\n') + '\n');
-  } });
-  def('rev', { g: 'text', desc: 'reverse each line', usage: 'rev [file...]', run(argv, io){
-    const ls = sources(io, argv.slice(1), 'rev').flatMap(s => linesOf(s.text)).map(l => [...l].reverse().join(''));
-    if (ls.length) io.write(ls.join('\n') + '\n');
-  } });
 
   /* system */
   def('date', { g: 'system', desc: 'now, in your time zone', usage: 'date', run(argv, io){
@@ -1122,13 +1076,6 @@ M.createTerminal = function createTerminal(opts){
     io.write('up ', 'dim'); io.write(uptimeStr(), 'bright'); io.write('  since you arrived, ', 'dim'); io.write(String(ran)); io.write(ran === 1 ? ' command\n' : ' commands\n', 'dim');
   } });
   def('whoami', { g: 'system', desc: 'your user name', usage: 'whoami', run(argv, io){ io.write(ENV.USER + '\n'); } });
-  def('hostname', { g: 'system', desc: "this machine's name", usage: 'hostname', run(argv, io){ io.write('kn84\n'); } });
-  def('uname', { g: 'system', desc: 'about the system', usage: 'uname [-a] [-s] [-n] [-r] [-m]', opts: [['-a', 'everything']], run(argv, io){
-    const { o } = getopts(argv.slice(1)); const f = { s: 'KNOS', n: 'kn84', r: '1.04', v: '#1 1984', m: 'KN-84' };
-    const keys = o.a ? ['s', 'n', 'r', 'v', 'm'] : Object.keys(f).filter(k => o[k]);
-    io.write((keys.length ? keys : ['s']).map(k => f[k]).join(' ') + '\n');
-  } });
-  def('env', { g: 'system', desc: 'the environment', usage: 'env', run(argv, io){ io.write(Object.keys(ENV).sort().map(k => k + '=' + ENV[k]).join('\n') + '\n'); } });
   def('which', { g: 'system', desc: 'what a command is', usage: 'which name...', run(argv, io){
     let miss = 0;
     for (const n of argv.slice(1)){
@@ -1159,41 +1106,49 @@ M.createTerminal = function createTerminal(opts){
   } });
   /* help: a short, curated page by default (everything a visitor is likely to want, fitting one screen);
      help all lists every command, grouped by its g; help <cmd> is man */
+  /* plain help is for someone who has never used a terminal: what you can do, in words, with commands to click */
   const HELP_TOP = [
-    ['kaiav', ['about', 'eden', 'j', 'writing', 'links', 'contact']],
-    ['net', ['weather', 'curl', 'hn', 'wiki', 'define', 'github', 'ip']],
-    ['tools', ['todo', 'timer', 'pomodoro', 'qr', 'convert', 'pass', 'hash', 'roll', 'countdown', 'cal']],
-    ['play', ['tetris', 'snake', 'typing', 'donut', 'matrix', 'banner', 'fortune', 'cowsay', 'lamp']],
-    ['files', ['ls', 'cd', 'cat', 'tree', 'mkdir', 'mv', 'cp', 'rm']],
-    ['text', ['echo', 'grep', 'sed', 'sort', 'wc', 'head', 'tail']],
-    ['shell', ['man', 'history', 'alias', 'clear', 'neofetch']],
+    ['about Kaiav', 'who he is, what he builds', ['about', 'eden', 'j', 'writing', 'contact', 'links']],
+    ['do something', 'small, useful tools', ['weather', 'todo', 'qr', 'pass', 'vault', 'timer']],
+    ['play', 'a game for a minute', ['tetris', 'snake', 'typing', 'donut']],
+    ['files', 'look around this computer', ['ls', 'cat', 'edit']],
   ];
   const HELP_ALL = [['read', 'kaiav'], ['net', 'net'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
   def('help', { g: 'system', desc: 'what you can type here', usage: 'help [all | command]', ex: ['help', 'help all', 'help weather'], run(argv, io){
     if (argv[1] && argv[1] !== 'all' && argv[1] !== '-a') return B.man.run(['man', argv[1]], io);
     const all = !!argv[1];
     const exists = n => (M.TERM.cmds[n] && !M.TERM.cmds[n].hidden && typeof M.TERM.cmds[n].run === 'function') || (M.TERM.apps[n] && typeof M.TERM.apps[n].start === 'function');
-    let groups;
-    if (all){
-      const by = {};
-      const add = (n, c) => { const gk = c.g && HELP_ALL.some(x => x[0] === c.g) ? c.g : 'misc'; (by[gk] = by[gk] || []).push(n); };
-      for (const [n, c] of Object.entries(M.TERM.cmds)) if (c && !c.hidden && typeof c.run === 'function') add(n, c);
-      for (const [n, a] of Object.entries(M.TERM.apps)) if (a && typeof a.start === 'function' && !M.TERM.cmds[n]) add(n, Object.assign({ g: 'fun' }, a));
-      groups = HELP_ALL.filter(([k]) => by[k]).map(([k, label]) => [label, by[k]]);
-    } else groups = HELP_TOP.map(([label, names]) => [label, names.filter(exists)]).filter(x => x[1].length);
+    if (!all){
+      const groups = HELP_TOP.map(([label, what, names]) => [label, what, names.filter(exists)]).filter(x => x[2].length);
+      if (!io.tty){ io.write(groups.map(([l, w, ns]) => l + ' (' + w + ')\n  ' + ns.join('  ')).join('\n') + '\n\nhelp all for everything. man <command> for details.\n'); return; }
+      const o = out(); o.blank().head('help').blank()
+        .line(['type a word and press enter, or ' + (TAP ? 'tap' : 'click') + ' one', 'd']).blank();
+      for (const [label, what, names] of groups){
+        o.line([label, 'b'], [COLS - 4 - label.length - what.length >= 2 ? '  ' + what : '', 'f']);
+        o.flow(names.map(n => [chip(n, 'n')]), '  ', 4);
+      }
+      o.blank().flow([[chip('help all', 'n'), [' for everything', 'f']], [['man <command>', 'n'], [' for details', 'f']]], '  ·  ').blank();
+      io.rich(o); return;
+    }
+    const by = {};
+    const add = (n, c) => { const gk = c.g && HELP_ALL.some(x => x[0] === c.g) ? c.g : 'misc'; (by[gk] = by[gk] || []).push(n); };
+    for (const [n, c] of Object.entries(M.TERM.cmds)) if (c && !c.hidden && typeof c.run === 'function') add(n, c);
+    for (const [n, a] of Object.entries(M.TERM.apps)) if (a && typeof a.start === 'function' && !M.TERM.cmds[n]) add(n, Object.assign({ g: 'fun' }, a));
+    const groups = HELP_ALL.filter(([k]) => by[k]).map(([k, label]) => [label, by[k]]);
     if (!io.tty){ io.write(groups.map(([l, ns]) => pad(l, 8) + ns.join(' ')).join('\n') + '\n'); return; }
     const LW = COLS >= 50 ? 9 : 8, room = COLS - 2 - LW;
-    const o = out(); o.blank().head(all ? 'every command' : 'help', all ? '' : 'help all for more').blank();
+    const o = out(); o.blank().head('every command').blank();
     for (const [label, names] of groups){
-      const ws = []; let l = '';
-      for (const n of names){ if (l && l.length + 2 + n.length > room){ ws.push(l); l = n; } else l = l ? l + '  ' + n : n; }
-      if (l) ws.push(l);
-      ws.forEach((w, k) => o.at(2, [pad(k ? '' : label, LW), 'd'], [w, label === 'kaiav' ? 'b' : 'n']));
+      let line = [], w = 0, first = true;
+      const flush = () => { o.at(2, [pad(first ? label : '', LW), 'd'], ...line); line = []; w = 0; first = false; };
+      for (const n of names){
+        if (line.length && w + 2 + n.length > room) flush();
+        if (line.length){ line.push(['  ', 'f']); w += 2; }
+        line.push(chip(n, label === 'kaiav' ? 'b' : 'n')); w += n.length;
+      }
+      if (line.length) flush();
     }
-    o.blank();
-    const tip = [[['man <cmd>', 'n'], [' details', 'f']], [['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']]];
-    if (!all) tip.push([['open <name>', 'n'], [' a link', 'f']], [['help all', 'n'], [' everything', 'f']]);
-    o.flow(tip, '   ').blank();
+    o.blank().flow([[['man <cmd>', 'n'], [' details', 'f']], [['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']]], '   ').blank();
     io.rich(o);
   } });
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
@@ -1201,11 +1156,6 @@ M.createTerminal = function createTerminal(opts){
     if (!history.length){ io.write('no history yet\n', 'dim'); return; }
     history.forEach((s, i) => { io.write(String(i + 1).padStart(5, ' ') + '  ', 'faint'); io.write(s + '\n'); });
   } });
-  def('export', { g: 'shell', desc: 'set an environment variable', usage: 'export NAME=value', ex: ['export GREETING=hi', 'echo $GREETING'], run(argv, io){
-    if (argv.length < 2){ for (const k of Object.keys(ENV).sort()) io.write('export ' + k + '="' + ENV[k] + '"\n'); return; }
-    for (const a of argv.slice(1)){ const m = /^([A-Za-z_]\w*)(?:=(.*))?$/s.exec(a); if (!m){ io.err('export: not a valid name: ' + a + '\n'); io.exit(1); continue; } if (m[2] != null) ENV[m[1]] = m[2]; else if (!(m[1] in ENV)) ENV[m[1]] = ''; }
-  } });
-  def('unset', { g: 'shell', desc: 'remove an environment variable', usage: 'unset NAME...', run(argv){ for (const a of argv.slice(1)) delete ENV[a]; } });
   def('alias', { g: 'shell', desc: 'name a command line', usage: "alias [name='command']", ex: ["alias hi='echo hello'", 'alias'], run(argv, io){
     if (argv.length < 2){ for (const k of Object.keys(ALIASES).sort()) io.write('alias ' + k + "='" + ALIASES[k] + "'\n"); return; }
     for (const a of argv.slice(1)){
@@ -1215,12 +1165,7 @@ M.createTerminal = function createTerminal(opts){
     }
     saveAliases();
   } });
-  def('unalias', { g: 'shell', desc: 'remove an alias', usage: 'unalias name...', run(argv, io){
-    for (const a of argv.slice(1)){ if (hasAlias(a)) delete ALIASES[a]; else { io.err('unalias: ' + a + ': not found\n'); io.exit(1); } }
-    saveAliases();
-  } });
   def('clear', { g: 'system', desc: 'clear the screen', usage: 'clear', run(argv, io){ if (io.tty) clearScreen(); } });
-  def('reset', { g: 'system', desc: 'clear the screen and start fresh', usage: 'reset', run(argv, io){ if (!io.tty) return; clearScreen(); io.rich(welcome(out())); } });
   def('neofetch', { g: 'system', desc: 'about this machine', usage: 'neofetch', run(argv, io){
     const info = fetchInfo();
     if (!io.tty){ io.write('kaiav@kn84\n' + info.map(([k, v]) => pad(k, 10) + v).join('\n') + '\n'); return; }
@@ -1229,19 +1174,6 @@ M.createTerminal = function createTerminal(opts){
   } });
 
   /* misc */
-  def('seq', { g: 'misc', desc: 'count', usage: 'seq [first [step]] last', ex: ['seq 5', 'seq 10 -2 0'], run(argv, io){
-    const n = argv.slice(1).map(Number);
-    if (!n.length || n.some(x => !isFinite(x))){ io.err('usage: seq [first [step]] last\n'); return 1; }
-    const [a, s, b] = n.length === 1 ? [1, 1, n[0]] : n.length === 2 ? [n[0], 1, n[1]] : n;
-    if (!s){ io.err('seq: step cannot be zero\n'); return 1; }
-    const r = []; for (let x = a; s > 0 ? x <= b : x >= b; x += s){ r.push(+x.toFixed(10)); if (r.length >= 10000) break; }
-    if (r.length) io.write(r.join('\n') + '\n');
-  } });
-  def('sleep', { g: 'misc', desc: 'wait a while (ctrl+c stops it)', usage: 'sleep seconds', run(argv, io){
-    const m = /^(\d*\.?\d+)([smh]?)$/.exec(argv[1] || '');
-    if (!m){ io.err('usage: sleep seconds\n'); return 1; }
-    return io.sleep(parseFloat(m[1]) * ({ '': 1, s: 1, m: 60, h: 3600 })[m[2]] * 1000);
-  } });
   def('bc', { g: 'misc', desc: 'a calculator', usage: 'bc [expression]', opts: [], more: 'Arithmetic with + - * / % ^ and parentheses, plus sqrt, abs, floor, ceil, round and pi. Reads the expression from its arguments, or one per line from a pipe.', ex: ['bc 2^10', "echo '(1+2)*3' | bc"], run(argv, io){
     const src = argv.length > 1 ? [argv.slice(1).join(' ')] : linesOf(io.stdin || '');
     if (!src.length){ io.err('usage: bc expression   (try: bc 2^10)\n'); return 1; }
@@ -1250,14 +1182,12 @@ M.createTerminal = function createTerminal(opts){
       try { const v = calc(l); if (v != null) io.write(v + '\n'); } catch (e){ io.err('bc: ' + (e.message || 'syntax error') + '\n'); io.exit(1); }
     }
   } });
-  def('true', { g: 'misc', desc: 'do nothing, successfully', usage: 'true', run(){ return 0; } });
-  def('false', { g: 'misc', desc: 'do nothing, unsuccessfully', usage: 'false', run(){ return 1; } });
   let exits = 0;
   def('exit', { g: 'misc', desc: 'leave', usage: 'exit', run(argv, io){
     const lines = ["you can't leave. the coffee's still hot.", 'not yet. the lamp is warm and the coffee is still hot.', "logout refused: there's still coffee in the mug.", 'the door is the browser tab. the coffee is right here.'];
     io.write(lines[exits++ % lines.length] + '\n', 'dim');
   } });
-  const SHELL_BUILTIN = ['cd', 'export', 'unset', 'alias', 'unalias', 'history', 'exit', 'help', 'echo', 'pwd', 'true', 'false'];
+  const SHELL_BUILTIN = ['cd', 'alias', 'history', 'exit', 'help', 'echo', 'pwd'];
   for (const [n, c] of Object.entries(B)) if (!M.TERM.cmds[n]) M.TERM.cmds[n] = c;
   const CONTENT_KW = { about: ['bio', 'kaiav', 'me'], eden: ['agents', 'context'], j: ['rising', 'rising founder', 'jose'], writing: ['blog', 'posts', 'essays'], links: ['linkedin', 'twitter', 'social', 'contact'] };
   /* everything you can type as a command, read fresh each time so late registrations count */
@@ -1387,7 +1317,8 @@ M.createTerminal = function createTerminal(opts){
     if (job !== j) return;
     for (const t of j.timers) clearTimeout(t);
     job = null; openRow = null;
-    if (j.hint){ suggestion = j.hint; tty.write('did you mean ', 'dim'); tty.write(j.hint, 'bright'); tty.write('?  press enter\n', 'faint'); j.plain += ' Did you mean ' + j.hint + '?'; }
+    if (status === 0 && !j.dead) okRuns++;
+    if (j.hint){ suggestion = j.hint; tty.rich(out().at(0, ['did you mean ', 'd'], chip(j.hint, 'b'), ['?  press enter', 'f'])); j.plain += ' Did you mean ' + j.hint + '?'; }
     if (ahead) flushAhead();
     trim(); mirror(j.plain || ''); toBottom(); dirty = true; touched();
     if (REDUCED) revealAll();
@@ -1435,6 +1366,8 @@ M.createTerminal = function createTerminal(opts){
     return st;
   }
   async function runCmd(argv, ctx, j){
+    const lc = String(argv[0]).toLowerCase();                       // LS works like ls
+    if (lc !== argv[0] && !M.TERM.apps[argv[0]] && !M.TERM.cmds[argv[0]] && (M.TERM.apps[lc] || M.TERM.cmds[lc])) argv[0] = lc;
     const name = argv[0];
     const appDef = M.TERM.apps[name], cmd = M.TERM.cmds[name];
     if (appDef && typeof appDef.start === 'function') return launchApp(name, argv, ctx, j);
@@ -1454,7 +1387,7 @@ M.createTerminal = function createTerminal(opts){
     errLine(ctx.errSink, name + ': command not found\n');
     const f = fuzzy(name, cmdItems());
     if (f){ j.hint = [f.item.name, ...argv.slice(1)].join(' '); }
-    else if (ctx.errSink === tty){ tty.write('type ', 'faint'); tty.write('help'); tty.write(' for the list\n', 'faint'); }
+    else if (ctx.errSink === tty) tty.rich(out().at(0, ['this shell knows commands, not sentences. try ', 'f'], chip('help', 'n')));
     return 127;
   }
   function makeIo(ctx, j){
@@ -1485,6 +1418,20 @@ M.createTerminal = function createTerminal(opts){
           dirty = true;
         });
       },
+      /* ask for a line (opts.secret: drawn as dots, never echoed or mirrored) or, with opts.keys, one key.
+         Resolves with the text / the key (lowercased), or null on esc. A one-key ask passes other
+         printable keys on to the next prompt, so nothing typed is lost. */
+      ask(prompt, opts){
+        opts = opts || {};
+        if (!ctx.sink.tty || j.dead) return Promise.resolve(null);
+        return new Promise(res => {
+          openRow = null;
+          j.ask = { spans: Array.isArray(prompt) ? prompt : [[String(prompt), 'd']], secret: !!opts.secret, one: Array.isArray(opts.keys), keys: opts.keys || [], buf: '', res, i: opts.i != null ? opts.i : 2 };
+          if (!opts.secret) mirror(j.ask.spans.map(x => x[0]).join(''));
+          blinkT0 = now; dirty = true;
+        });
+      },
+      redraw(){ dirty = true; },
       runApp(name, argv){
         const a = Array.isArray(argv) ? (argv[0] === name ? argv : [name, ...argv]) : [name];
         if (!M.TERM.apps[name]) return Promise.resolve(127);
@@ -1568,6 +1515,33 @@ M.createTerminal = function createTerminal(opts){
       if (!job) emit(o); touched(); return true;
     }
     return false;
+  }
+  /* a key while io.ask is waiting */
+  function askKey(e){
+    const a = job.ask, k = e.key, ctl = e.ctrlKey && !e.altKey;
+    if (ctl && k.toLowerCase() === 'c'){ endAsk(null); interrupt(); return true; }
+    if (a.one){
+      if (k.length > 1 && !['Enter', 'Escape', 'Backspace', 'Tab'].includes(k)) return true;
+      const kk = k.length === 1 ? k.toLowerCase() : k, hit = a.keys.includes(kk);
+      endAsk(hit ? kk : k === 'Escape' ? null : kk);
+      if (!hit && k.length === 1 && k !== ' ' && !e.ctrlKey && !e.altKey) ahead += k;
+      return true;
+    }
+    if (k === 'Enter'){ endAsk(a.buf); return true; }
+    if (k === 'Escape'){ endAsk(null); return true; }
+    if (k === 'Backspace' || (ctl && k.toLowerCase() === 'u')){ a.buf = k === 'Backspace' && !e.ctrlKey && !e.altKey ? a.buf.slice(0, -1) : ''; }
+    else if (k.length === 1 && !e.ctrlKey && !e.altKey && a.buf.length < 256 && k >= ' ') a.buf += k;
+    blinkT0 = now; blinkOn = true; dirty = true;
+    return true;
+  }
+  function endAsk(v){
+    const a = job.ask; job.ask = null;
+    if (!a.one){
+      const echo = a.secret ? '\u2022'.repeat(Math.min(a.buf.length, 16)) : a.buf;
+      rows.push({ k: 't', i: a.i, s: [...a.spans, [echo, a.secret ? 'd' : 'n']].concat(v == null ? [['  esc', 'f']] : []) }); shown = rows.length; partial = 0;
+    }
+    a.buf = ''; dirty = true; toBottom();
+    a.res(v);
   }
   /* a key while a choice is waiting; returns true when consumed */
   function choiceKey(e){
@@ -1678,13 +1652,34 @@ M.createTerminal = function createTerminal(opts){
     return [['kaiav', 'd'], [':', 'f'], [p, 'n'], [' $ ', 'd']];
   }
   const promptLen = () => promptSpans().reduce((n, s) => n + s[0].length, 0);
+  /* forgiveness for people new to shells: a copied "$ " prompt, cd.., and a few plain-English questions */
+  const PHRASES = [
+    [/^(hi|hello|hey|hiya|yo|sup|howdy|hola|good (morning|afternoon|evening)|gm)( there)?$/, 'hello'],
+    [/^(who are you|who is (this|kaiav|he)|who'?s kaiav|about (you|me|kaiav)|tell me about (yourself|kaiav)|bio)$/, 'about'],
+    [/^(what is this|what'?s this|what is this place|what can i do|what do i do|how does this work|how do i use this|commands|menu|start|instructions|h)$/, 'help'],
+    [/^(contact( me)?|email|e-?mail me|get in touch|reach out|hire|hire (you|me|kaiav)|say hi)$/, 'contact'],
+    [/^(games?|play|play a game|fun)$/, 'games'],
+    [/^(socials?|linkedin|twitter)$/, 'links'],
+    [/^(blog|posts|essays|articles)$/, 'writing'],
+  ];
+  function forgive(line){
+    let l = line.replace(/^\s*[$%#>]\s+/, '');                 // pasted with its prompt
+    if (/^\s*kaiav:\S*\s*\$\s+/.test(l)) l = l.replace(/^\s*kaiav:\S*\s*\$\s+/, '');
+    l = l.replace(/^(\s*)cd(\.\.|~|\/)(?=\s|$|\/)/, '$1cd $2');     // cd.. and cd~
+    const q = l.trim().toLowerCase().replace(/[?!.,]+$/, '').replace(/\s+/g, ' ');
+    if (!q || /[|;&<>$`'"]/.test(q)) return l;
+    const w = q.split(' ')[0];
+    if (M.TERM.cmds[w] || M.TERM.apps[w] || hasAlias(w)) return l;   // a real command wins
+    for (const [re, cmd] of PHRASES) if (re.test(q) && (M.TERM.cmds[cmd] || M.TERM.apps[cmd])) return cmd;
+    return l;
+  }
   function execute(raw, programmatic){
     rows.push({ k: 't', i: 0, s: [...promptSpans(), [raw, 'n']] }); shown = rows.length; partial = 0;
     openRow = null;
     input = ''; cur = 0; suggestion = ''; tabState = null; sel = -1;
     hIdx = history.length; hDraft = '';
     if (!raw.trim()){ toBottom(); dirty = true; return; }
-    runLine(raw, programmatic);
+    runLine(forgive(raw), programmatic);
   }
 
   /* ---- completion and typeahead ---- */
@@ -1700,6 +1695,11 @@ M.createTerminal = function createTerminal(opts){
     if (/^(man|which|help)$/.test(cname)) return { kind: 'arg', q: word, from: i, items: cmdItems() };
     if (cname === 'read' || /^open\s+post$/.test(pre.slice(segStart + 1).trim())) return { kind: 'arg', q: word, from: i, items: POSTITEMS };
     if (cname === 'open') return { kind: 'arg', q: word, from: i, items: OPEN };
+    const cdef = M.TERM.cmds[cname];                                   // a command can complete its own arguments
+    if (cdef && typeof cdef.complete === 'function' && !word.includes('/')){
+      let l = null; try { l = cdef.complete(pre.slice(segStart + 1).trim().split(/\s+/).slice(1), word); } catch (e){}
+      if (Array.isArray(l) && l.length) return { kind: 'arg', q: word, from: i, items: l.map(n => ({ name: String(n) })), all: true };
+    }
     if (word.startsWith('$')) return { kind: 'path', q: word.slice(1), from: i + 1, items: Object.keys(ENV).map(k => ({ name: k })) };
     const slash = word.lastIndexOf('/');
     const dirPart = word.slice(0, slash + 1), q = word.slice(slash + 1);
@@ -1714,7 +1714,7 @@ M.createTerminal = function createTerminal(opts){
       if (!l.length) l = ctx.items.filter(it => it.name.toLowerCase().startsWith(ctx.q.toLowerCase()));
       return l.map(it => it.name);
     }
-    if (!ctx.q) return ctx.kind === 'arg' && (ctx.items === OPEN || ctx.items === POSTITEMS) ? ctx.items.map(i => i.name) : [];
+    if (!ctx.q) return ctx.kind === 'arg' && (ctx.all || ctx.items === OPEN || ctx.items === POSTITEMS) ? ctx.items.map(i => i.name) : [];
     const scored = [];
     for (const it of ctx.items){
       let s = fscore(ctx.q, it.name);
@@ -1843,6 +1843,7 @@ M.createTerminal = function createTerminal(opts){
       if (ctrl && c === 'c' && app === st) interrupt();
       return true;
     }
+    if (job && job.ask){ if (typing()) revealAll(); return askKey(e); }
     if (job && job.choice){ if (typing()) revealAll(); return choiceKey(e); }
     if (typing()){ revealAll(); if (!input && (k === 'Enter' || k === 'Escape' || k === ' ')) return true; }   // a key skips the typing-out; a typed line still runs
     if (job){                                   // a command is running: only ctrl+c, ctrl+l and scrolling
@@ -1933,6 +1934,7 @@ M.createTerminal = function createTerminal(opts){
       }
       return;
     }
+    if (job && job.ask){ for (const ch of String(str)){ if (!job || !job.ask) break; askKey({ key: ch === '\n' || ch === '\r' ? 'Enter' : ch, ctrlKey: false, altKey: false }); } return; }
     if (job && job.choice){                     // phones: a tapped key answers the card
       for (const ch of String(str)){ if (!job || !job.choice) break; choiceKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false, shiftKey: false }); }
       return;
@@ -2043,7 +2045,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function totalUnits(){
     let u = 0; for (let i = 0; i < rows.length && i <= shown; i++) if (i < shown || partial > 0 || rows[i].k === 'viz') u += i < rows.length ? heightOf(rows[i]) : 0;
-    return u + (promptVisible() ? 1 + belowPrompt().length : 0);
+    return u + (promptVisible() ? 1 + belowPrompt().length : job && job.ask && !app && !typing() ? 1 : 0);
   }
   /* quiet rows under the prompt: the ctrl+r search line, or the tab candidates */
   function fitSpans(opts){ const len = f => f.reduce((n, x) => n + x[0].length, 0); return opts.find(f => len(f) <= COLS) || opts[opts.length - 1]; }
@@ -2057,7 +2059,11 @@ M.createTerminal = function createTerminal(opts){
       ])];
     }
     const t = tabState;
-    if (!t || !t.cyc || t.list.length < 2 || t.after !== input) return [];
+    if (!t || !t.cyc || t.list.length < 2 || t.after !== input){
+      if (!fresh || okRuns >= 2 || sel >= 0) return [];            // first visit: a quiet nudge until a command or two has worked
+      if (input) return [[['press ', 'f'], ['enter', 'd'], [' to run it', 'f']]];
+      return [[['try ', 'f'], chip('about', 'd'), ['  or  ', 'f'], chip('help', 'd'), [COLS >= 46 ? '   type it, then press enter' : '', 'f']]];
+    }
     const w = Math.min(COLS - 2, Math.max(...t.list.map(x => x.length)) + 2), nc = Math.max(1, Math.floor(COLS / w));
     const lines = Math.ceil(t.list.length / nc), maxL = Math.min(5, Math.max(2, ROWS - 6));
     const selL = Math.floor(Math.max(0, t.i) / nc), from = lines <= maxL ? 0 : clamp(selL - maxL + 1, 0, lines - maxL);
@@ -2077,6 +2083,14 @@ M.createTerminal = function createTerminal(opts){
   }
   const promptVisible = () => !booting && !typing() && !job && !app;
 
+  function drawAsk(top){                 // io.ask's line: the question, what is typed (dots when secret), a cursor
+    const a = job.ask, room = Math.max(4, COLS - a.i - a.spans.reduce((n, x) => n + x[0].length, 0) - 1);
+    let b = a.secret ? '\u2022'.repeat(a.buf.length) : a.buf; if (b.length > room) b = b.slice(-room);
+    const sp = [...a.spans, [b, a.secret ? 'd' : 'n']];
+    drawSpans({ i: a.i, s: sp }, top, 999);
+    promptY = top + ch;
+    if (!a.one && blinkOn){ const col = a.i + sp.reduce((n, x) => n + x[0].length, 0); if (col < COLS){ g.fillStyle = P.normal; g.fillRect(X(col), top + 3, cw, ch - 6); } }
+  }
   function drawPrompt(top){
     const gh = rs ? null : ghost();
     const PL = promptLen();
@@ -2110,12 +2124,13 @@ M.createTerminal = function createTerminal(opts){
     }
   }
   let drawnCards = [], drawnHits = [];   // what is on screen and can be clicked or tapped
-  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\ue000]/g;
-  const SPAN_VEC = /[\u2190-\u2193\ue000]/, SPAN_VEC_G = /[\u2190-\u2193\ue000]/g;
+  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\u2022\ue000]/g;
+  const SPAN_VEC = /[\u2190-\u2193\u2022\ue000]/, SPAN_VEC_G = /[\u2190-\u2193\u2022\ue000]/g;
   function vecGlyph(c, col, top, colr){
     const cx = X(col) + cw / 2, cy = top + ch * 0.5, a = cw * 0.36;
     g.fillStyle = colr;
     if (c === '\u00b7'){ g.fillRect(cx - 2, cy - 2, 4, 4); return; }
+    if (c === '\u2022'){ g.beginPath(); g.arc(cx, cy + 1, cw * 0.19, 0, 6.2832); g.fill(); return; }   // a masked character
     if (c === LOCK){                                       // a small padlock: shackle and body
       const bw = cw * 0.72, bh = ch * 0.3, bx = cx - bw / 2, by = cy - bh * 0.2;
       g.fillRect(bx, by, bw, bh);
@@ -2199,6 +2214,8 @@ M.createTerminal = function createTerminal(opts){
     if (promptVisible()){
       if (u >= first && u < first + ROWS) drawPrompt(PADY + (u - first) * ch);
       belowPrompt().forEach((r, k) => { const y = u + 1 + k; if (y >= first && y < first + ROWS) drawSpans({ i: 0, s: r }, PADY + (y - first) * ch, 999); });
+    } else if (job && job.ask && !app && !typing()){
+      if (u >= first && u < first + ROWS) drawAsk(PADY + (u - first) * ch);
     } else if (job && !job.choice && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
       text(COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 0, PADY + (u - first) * ch, 'f');
     }
@@ -2411,7 +2428,7 @@ M.createTerminal = function createTerminal(opts){
     if (runQueued && !job && !app && !rs){ runQueued = false; execute(input); if (!job) flushAhead(); changed = true; }
     if (job && !job.hinted && !app && now - job.t0 > 0.9){ job.hinted = true; changed = true; }
     const on = ((t - blinkT0) % 1.06) < 0.53;
-    if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (app && gridCursor)) changed = true; }
+    if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (job && job.ask && !job.ask.one) || (app && gridCursor)) changed = true; }
     if (!app && animFps > 0 && t - lastAnim >= 1 / animFps - 1e-3) changed = true;
     if (!app) for (const r of drawnCards) if (r.flash != null && t - r.flash < 0.45) changed = true;   // tap / pick flash
     if (changed){ draw(); lastAnim = t; dirty = false; }

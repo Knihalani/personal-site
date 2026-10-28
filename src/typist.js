@@ -125,14 +125,14 @@ function roundCone(r, h, r1, r2, L){
 }
 /* Surface nets over [lo, hi] with cell size h: one vertex per surface cell, one quad per sign-changing edge.
    Far-field values come from a coarse pass so only the narrow band near the surface is evaluated finely. */
-function surfaceNets(sdf, lo, hi, h){
+function* surfaceNets(sdf, lo, hi, h){
   const nx = Math.ceil((hi[0] - lo[0]) / h) + 1, ny = Math.ceil((hi[1] - lo[1]) / h) + 1, nz = Math.ceil((hi[2] - lo[2]) / h) + 1;
   const C = 3, cx = Math.ceil((nx - 1) / C) + 1, cy = Math.ceil((ny - 1) / C) + 1, cz = Math.ceil((nz - 1) / C) + 1;
   const G = new Float32Array(cx * cy * cz);
-  for (let k = 0; k < cz; k++) for (let j = 0; j < cy; j++) for (let i = 0; i < cx; i++)
-    G[i + cx * (j + cy * k)] = sdf(lo[0] + i * C * h, lo[1] + j * C * h, lo[2] + k * C * h);
+  for (let k = 0; k < cz; k++){ for (let j = 0; j < cy; j++) for (let i = 0; i < cx; i++)
+    G[i + cx * (j + cy * k)] = sdf(lo[0] + i * C * h, lo[1] + j * C * h, lo[2] + k * C * h); yield; }
   const F = new Float32Array(nx * ny * nz), band = 3.8 * h;
-  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
+  for (let k = 0; k < nz; k++, yield) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
     const g = G[Math.round(i / C) + cx * (Math.round(j / C) + cy * Math.round(k / C))];
     const edge = i === 0 || j === 0 || k === 0 || i === nx - 1 || j === ny - 1 || k === nz - 1;
     F[i + nx * (j + ny * k)] = edge ? Math.max(h, Math.abs(g)) : Math.abs(g) > band ? g : sdf(lo[0] + i * h, lo[1] + j * h, lo[2] + k * h);
@@ -141,7 +141,7 @@ function surfaceNets(sdf, lo, hi, h){
   const cell = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1), pos = [];
   const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
   const cv = new Float32Array(8);
-  for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++){
+  for (let k = 0; k < nz - 1; k++, yield) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++){
     let m = 0;
     for (let c = 0; c < 8; c++){ cv[c] = F[id(i + (c & 1), j + (c >> 1 & 1), k + (c >> 2))]; if (cv[c] < 0) m |= 1 << c; }
     if (m === 0 || m === 255) continue;
@@ -716,10 +716,16 @@ M.createTypist = function createTypist(api){
   /* ---------- the skin: one continuous surface per hand (palm, knuckles, fingers, thumb, wrist and forearm), modelled
      as a signed-distance field in the settled home pose, polygonised once, and skinned to the wrist, forearm and
      finger joints. Idle hands show the sculpted shape exactly; strikes bend it at the joints. ---------- */
+  /* Meshing both hands costs ~0.8 s of CPU, so it is not done before the first frame: each hand's field is set up
+     now (capturing the home pose and the bind matrices), then polygonised in small slices on idle time after the
+     page is interactive. At rest the camera faces the tube, so the hands are never seen before they are ready. */
   root.updateMatrixWorld(true);
   const skinStats = [];
-  for (const H of hands){
-    const t0 = (typeof performance !== 'undefined' ? performance : Date).now();
+  const now = () => (typeof performance !== 'undefined' ? performance : Date).now();
+  const skinJobs = hands.map(H => function* (){
+    const t0 = now();
+    const bindM = H.hand.matrixWorld.clone(), bones = [H.hand, H.fore]; H.fingers.forEach(F => bones.push(F.g0, F.g1, F.g2));
+    const boneInv = bones.map(b => b.matrixWorld.clone().invert());
     const ts = H.ts, q = [0, 0, 0];
     const handInv = H.hand.matrixWorld.clone().invert();
     const rel = o => handInv.clone().multiply(o.matrixWorld);           // a bone's rest frame in hand space
@@ -790,7 +796,8 @@ M.createTypist = function createTypist(api){
     const dF = V3(0, 1, 0).transformDirection(rel(H.fore));        // elbow -> wrist, in hand space
     grow(V3()); grow(dF.clone().multiplyScalar(-.1)); grow(V3(0, 0, .02));
     for (let i = 0; i < 3; i++){ lo[i] -= .012; hi[i] += .012; }
-    const SN = surfaceNets(sdf, lo, hi, SKIN_H); const tSN = (typeof performance !== "undefined" ? performance : Date).now() - t0;
+    yield 'setup';
+    const SN = yield* surfaceNets(sdf, lo, hi, SKIN_H); const tSN = now() - t0;
     const nv = SN.pos.length / 3, P = new Float32Array(SN.pos), N = new Float32Array(nv * 3), SI = new Uint16Array(nv * 4), SW = new Float32Array(nv * 4);
     const grad = (x, y, z, o) => {      // tetrahedral gradient: 4 samples
       const e = .0003, a = sdf(x + e, y - e, z - e), b = sdf(x - e, y - e, z + e), c = sdf(x - e, y + e, z - e), d = sdf(x + e, y + e, z + e);
@@ -798,6 +805,7 @@ M.createTypist = function createTypist(api){
       const l = Math.hypot(o[0], o[1], o[2]) || 1; o[0] /= l; o[1] /= l; o[2] /= l; };
     const g = [0, 0, 0], w = new Float32Array(17), pp = V3(), ab = V3(), ap2 = V3();
     for (let i = 0; i < nv; i++){
+      if ((i & 127) === 127) yield;
       let x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2];
       const d0 = sdf(x, y, z); grad(x, y, z, g); x -= d0 * g[0]; y -= d0 * g[1]; z -= d0 * g[2];    // onto the surface
       P[i * 3] = x; P[i * 3 + 1] = y; P[i * 3 + 2] = z; N[i * 3] = g[0]; N[i * 3 + 1] = g[1]; N[i * 3 + 2] = g[2];
@@ -833,12 +841,23 @@ M.createTypist = function createTypist(api){
     geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
     geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
     geo.setIndex(SN.idx);
-    const bones = [H.hand, H.fore]; H.fingers.forEach(F => bones.push(F.g0, F.g1, F.g2));
     const sm = new THREE.SkinnedMesh(geo, skin);
-    sm.bind(new THREE.Skeleton(bones), H.hand.matrixWorld.clone());     // inverses taken from the current (home) pose
+    sm.bind(new THREE.Skeleton(bones, boneInv), bindM);     // inverses captured in the home pose, before any key was struck
     sm.frustumCulled = false; sm.castShadow = true; sm.receiveShadow = true; sm.name = 'hand-skin';
     root.add(sm); H.skin = sm;
-    skinStats.push({ verts: nv, tris: SN.idx.length / 3, nets: Math.round(tSN), ms: Math.round((typeof performance !== 'undefined' ? performance : Date).now() - t0) });
+    skinStats.push({ verts: nv, tris: SN.idx.length / 3, nets: Math.round(tSN), ms: Math.round(now() - t0) });
+  }());
+  for (const g of skinJobs) g.next();            // set up now: runs to the 'setup' yield, so the bind pose is the home pose
+  {
+    // then mesh in ~6 ms slices between frames; a hidden tab or no idle time still finishes (timeout)
+    const idle = window.requestIdleCallback ? (f => requestIdleCallback(f, { timeout: 60 })) : (f => setTimeout(f, 16));
+    let j = 0;
+    const slice = () => {
+      const end = now() + 6;
+      while (j < skinJobs.length && now() < end){ if (skinJobs[j].next().done) j++; }
+      if (j < skinJobs.length) idle(slice); else if (api.renderer && api.scene && api.camera) try { api.renderer.compile(api.scene, api.camera); } catch (e){}
+    };
+    setTimeout(() => idle(slice), 250);
   }
 
   root.userData.dbg = { hands, s, skinStats, contacts, spineOff, lean0 };

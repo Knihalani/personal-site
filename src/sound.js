@@ -534,13 +534,15 @@ Engine.prototype.tick = function (dt){
 };
 
 /* ---------------- public API ---------------- */
-let eng = null, booted = false, muted = false, hidden = false;
+let eng = null, booted = false, muted = false, hidden = false, unlockedAt = 0;
 try { muted = localStorage.getItem(LS_KEY) === '1'; } catch (e){}
 
 function ready(){
   if (!eng) return false;
   const ctx = eng.ctx;
-  if (ctx.state !== 'running'){ if (!muted && !hidden && ctx.state === 'suspended') ctx.resume().catch(() => {}); return false; }
+  /* the first keystroke usually lands while resume() is still in flight: schedule it anyway. A suspended context's
+     clock is frozen, so the hit plays the instant the context starts rather than being dropped. */
+  if (ctx.state !== 'running'){ if (!muted && !hidden && ctx.state === 'suspended'){ ctx.resume().catch(() => {}); return unlockedAt > 0 && performance.now() - unlockedAt < 1500; } return false; }
   return !muted;
 }
 
@@ -555,6 +557,7 @@ const sound = {
         eng = new Engine(ctx);
         eng.out.gain.value = muted ? 0 : 1;
       }
+      if (!unlockedAt) unlockedAt = performance.now();
       const ctx = eng.ctx, go = () => {
         if (booted) return; booted = true;
         /* spread the synthesis over a few tasks so the first keystroke never hitches */

@@ -1,5 +1,5 @@
 /* apps.js: full-screen apps and small commands for the terminal (see CONTRACT.md, "Terminal extension API").
-   tetris, snake, donut (full-screen) and lamp / lights (plain command).
+   tetris, snake, donut (full-screen) and lamp (plain command).
 
    Drawing: VT323 has no block-element glyphs, so solid cells are drawn the way a real VT did it: inverse
    video spaces. A block's brightness comes from { fg: level, inverse: true } where level is one of the
@@ -535,5 +535,4 @@ const lamp = {
   },
 };
 T.cmds.lamp = lamp;
-T.cmds.lights = Object.assign({}, lamp, { hidden: true, usage: 'lights [on | off | status]', desc: 'same as lamp' });
 })();

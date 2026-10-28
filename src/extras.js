@@ -769,7 +769,6 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
     io.rich(o);
     return r.ok ? 0 : 22;
   } };
-T.cmds.fetch = Object.assign({}, T.cmds.curl, { hidden: true, desc: 'same as curl' });
 
 /* =====================================================================================
    hn, wiki, define, github, ip: live data, each one a small card
@@ -1093,7 +1092,6 @@ T.cmds.convert = { g: 'tools', desc: 'convert units', usage: 'convert number uni
     else { o.at(2, [fmtNum(v) + ' ' + from.name, 'b'], ['  ' + from.kind, 'f']).blank(); const w = Math.max(...targets.map(t => fmtNum(conv(t)).length)); for (const t of targets) o.at(4, [fmtNum(conv(t)).padStart(w), 'n'], [' ' + t.name, 'd']); }
     o.blank(); io.rich(o);
   } };
-T.cmds.units = Object.assign({}, T.cmds.convert, { hidden: true });
 
 T.cmds.roll = { g: 'tools', desc: 'roll dice', usage: 'roll [NdS[+K]]...', ex: ['roll', 'roll d20', 'roll 2d6+3', 'roll 4d6 d8'],
   more: 'Dice notation: 2d6+3 means two six-sided dice plus three. One six-sided die unless you say.',
