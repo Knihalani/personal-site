@@ -687,12 +687,14 @@ let rs = 12345; function rnd(){ rs |= 0; rs = rs + 0x6D2B79F5 | 0; let t = Math.
 /* ================= blocks ================= */
 const TN = ['grassTop','grassSide','dirt','stone','sand','logSide','logTop','leaves','planks','glass','lantern','ore','cobble','bridge','step','sign',
   'ebark','eleaf','crystal','jstone','water','tgrass','rose','sunf','bell','gravel','brick','blossom','deep','moss','lanternTop','stepSide','jstoneTop','signTop','bridgeTop','vine','vineTop',
-  'snowTop','snowSide','ice','redrock','redband','ash','basalt','ember','mycelTop','mycelSide','mstem','capRed','capBlue','ruin','ruinMoss','tent','deadBush','gshroom','frostLeaf'];
+  'snowTop','snowSide','ice','redrock','redband','ash','basalt','ember','mycelTop','mycelSide','mstem','capRed','capBlue','ruin','ruinMoss','tent','deadBush','gshroom','frostLeaf',
+  'roots','hvine','birchSide','birchTop','birchLeaf','fern','mushRed','autumn','pineLeaf'];
 const T = {}; TN.forEach((n, i) => T[n] = i);
 const AIR=0, GRASS=1, DIRT=2, STONE=3, SAND=4, LOG=5, LEAVES=6, PLANKS=7, GLASS=8, LANTERN=9, ORE=10, COBBLE=11, BRIDGE=12, STEP=13, SIGN=14,
   EBARK=15, ELEAF=16, CRYSTAL=17, JSTONE=18, WATER=19, TGRASS=20, ROSE=21, SUNF=22, BELL=23, GRAVEL=24, BRICK=25, BLOSSOM=26, DEEP=27, MOSS=28, LAMP=29, PBRICK=30, VINE=31,
-  SNOW=32, ICE=33, REDROCK=34, REDBAND=35, ASH=36, BASALT=37, EMBER=38, MYCEL=39, MSTEM=40, MCAPR=41, MCAPB=42, RUIN=43, RUINM=44, TENT=45, DEADB=46, GSHROOM=47, FROSTLEAF=48, CHEST=49;
-const NB = 56;
+  SNOW=32, ICE=33, REDROCK=34, REDBAND=35, ASH=36, BASALT=37, EMBER=38, MYCEL=39, MSTEM=40, MCAPR=41, MCAPB=42, RUIN=43, RUINM=44, TENT=45, DEADB=46, GSHROOM=47, FROSTLEAF=48, CHEST=49,
+  ROOTS=50, HVINE=51, BIRCH=52, BIRCHL=53, FERN=54, MUSHR=55, AUTUMN=56, PINEL=57;
+const NB = 64;
 const B_NAME = [], B_TOOL = [], B_SND = [];
 const B_TILES = new Uint8Array(NB * 6), B_RT = new Uint8Array(NB), B_OPQ = new Uint8Array(NB), B_SOLID = new Uint8Array(NB), B_EMIT = new Uint8Array(NB),
   B_PROT = new Uint8Array(NB), B_HARD = new Float32Array(NB), B_DROP = new Uint8Array(NB), B_SWAY = new Uint8Array(NB), B_ICON = new Uint8Array(NB);
@@ -758,6 +760,15 @@ def(DEADB, 'Dead bush', T.deadBush, 3, { hard: 0, drop: 100, snd: 'grass' });
 def(GSHROOM, 'Glow shroom', T.gshroom, 3, { hard: 0, snd: 'grass', emit: 5 });
 def(FROSTLEAF, 'Frosted needles', T.frostLeaf, 1, { hard: .25, tool: 'axe', snd: 'leaf', drop: LEAVES, sway: 1 });
 def(CHEST, 'Chest', T.planks, 5, { prot: 1, snd: 'wood' });
+// ---- richer islands: hanging roots and vines, more tree species, ferns, mushrooms
+def(ROOTS, 'Hanging roots', T.roots, 3, { hard: 0, drop: 0, snd: 'grass', sway: 1 });
+def(HVINE, 'Hanging vine', T.hvine, 3, { hard: 0, drop: 0, snd: 'leaf', sway: 1 });
+def(BIRCH, 'Birch log', [T.birchTop, T.birchSide], 1, { hard: .8, tool: 'axe', snd: 'wood', drop: LOG });
+def(BIRCHL, 'Birch leaves', T.birchLeaf, 1, { hard: .25, tool: 'axe', snd: 'leaf', sway: 1, drop: LEAVES });
+def(FERN, 'Fern', T.fern, 3, { hard: 0, drop: 0, snd: 'grass', sway: 1 });
+def(MUSHR, 'Red mushroom', T.mushRed, 3, { hard: 0, snd: 'grass' });
+def(AUTUMN, 'Autumn leaves', T.autumn, 1, { hard: .25, tool: 'axe', snd: 'leaf', sway: 1, drop: LEAVES });
+def(PINEL, 'Pine needles', T.pineLeaf, 1, { hard: .25, tool: 'axe', snd: 'leaf', sway: 1, drop: LEAVES });
 const STICK = 100, PICK = 102, SAIL = 105, SEED = 106, BUN = 107, BISCUIT = 108;
 const I_NAME = { 100: 'Stick', 102: 'Pickaxe', 105: 'Sky sail', 106: 'Vineseed', 107: 'Flower bun', 108: 'Kit biscuit' };
 const itemName = id => id >= 100 ? I_NAME[id] : B_NAME[id];
@@ -766,7 +777,7 @@ const isBlockItem = id => id > 0 && id < 100;
 const FLOWERS = [ROSE, SUNF, BELL];
 
 /* ================= texture atlas (procedural pixels) ================= */
-const ATL = 256, EM = 204;
+const ATL = 512, EM = 204; // 16 x 16 cells of 32 px (16 px tiles with an 8 px wrap border)
 const atlasData = new Uint8Array(ATL * ATL * 4);
 const tileBuf = [];
 const rgb = h => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
@@ -783,7 +794,7 @@ function paint(tile, fn){
     buf[o] = c[0]; buf[o + 1] = c[1]; buf[o + 2] = c[2]; buf[o + 3] = c[3] === undefined ? 255 : c[3];
   }
   tileBuf[tile] = buf;
-  const cx = (tile % 8) * 32, cy = Math.floor(tile / 8) * 32;
+  const cx = (tile % 16) * 32, cy = Math.floor(tile / 16) * 32;
   for (let py = 0; py < 32; py++) for (let px = 0; px < 32; px++){
     const s = (((py - 8) & 15) * 16 + ((px - 8) & 15)) * 4, d = ((cy + py) * ATL + cx + px) * 4;
     atlasData[d] = buf[s]; atlasData[d + 1] = buf[s + 1]; atlasData[d + 2] = buf[s + 2]; atlasData[d + 3] = buf[s + 3];
@@ -877,6 +888,17 @@ function buildAtlas(){
   paint(T.deadBush, plant((x, y) => { for (let b = 0; b < 4; b++){ const bx = 3 + b * 3, lean = (pr(b, 2, 138) - .5) * 6; const xx = Math.round(bx + lean * (15 - y) / 15); if (x === xx && y > 4 + b) return shade(rgb(0x7a5a3c), .8 + pr(b, y, 139) * .3); if (y === 6 + b * 2 && Math.abs(x - xx) === 1 + (b & 1)) return rgb(0x6b4e34); } return null; }));
   paint(T.gshroom, plant((x, y) => { for (const m of [[5, 9, 2.2], [10, 11, 1.8]]) { if (Math.abs(x - m[0]) < .8 && y > m[1]) return rgb(0xd9d0c0); const r = Math.hypot(x - m[0], (y - m[1]) * 1.6); if (y <= m[1] && r < m[2] + .4) return A(r < 1 ? rgb(0xdafcff) : rgb(0x5fc0d2), EM); } return null; }));
   paint(T.frostLeaf, (x, y) => { if (pr(x, y, 140) > .78 && sm(x, y, 141, .5) > .45) return pick(SNOWP, pr(x, y, 142)); if (pr(x, y, 143) > .9) return rgb(0x2e4436); return pick(PAL([0x35503f, 0x3f5c48, 0x4a6852, 0x55745c]), pr(x, y, 144) * .6 + sm(x, y, 145, .45) * .4); });
+  // ---- richer islands
+  paint(T.roots, plant((x, y) => { for (let b = 0; b < 4; b++){ const bx = 2 + b * 4 + Math.floor(pr(b, 3, 150) * 2), len = 8 + Math.floor(pr(b, 4, 151) * 8), sw = (pr(b, 5, 152) - .5) * 3; const xx = Math.round(bx + sw * y / 15); if (x === xx && y < len) return shade(rgb(0x6a5038), .75 + pr(b, y, 153) * .35); if (y === len && Math.abs(x - xx) <= 1) return rgb(0x55402e); } return null; }));
+  paint(T.hvine, plant((x, y) => { for (let b = 0; b < 3; b++){ const bx = 3 + b * 5, xx = Math.round(bx + Math.sin(y * .5 + b) * 1.2); if (x === xx) return shade(rgb(0x4f6b3a), .85 + pr(b, y, 154) * .3); if (Math.abs(x - xx) === 1 && (y + b) % 3 === 0) return pick(LEAFP, pr(x, y, 155) * .6 + .4); if (Math.abs(x - xx) === 2 && (y + b) % 6 === 1) return rgb(0xd8c46e); } return null; }));
+  const BIRP = PAL([0xe6e1d6, 0xdcd6ca, 0xefeae0, 0xd2ccbf]);
+  paint(T.birchSide, (x, y) => { if ((y * 3 + Math.floor(pr(x >> 2, y >> 1, 156) * 9)) % 11 === 0 && pr(x, y, 157) > .25) return rgb(0x3a3532); return pick(BIRP, pr(x, y, 158) * .6 + sm(x, y * .2, 159, .8) * .4); });
+  paint(T.birchTop, (x, y) => { const r = Math.hypot(x - 7.5, y - 7.5); if (r > 6.6) return pick(BIRP, pr(x, y, 160)); return shade(rgb(r % 2.4 < 1.2 ? 0xd9c7a1 : 0xc8b48c), 1); });
+  paint(T.birchLeaf, (x, y) => { if (pr(x, y, 161) > .9) return rgb(0x6f8a45); if (pr(x, y, 162) < .06) return rgb(0xd7e39a); return pick(PAL([0x8eab58, 0x9cb864, 0xaac46f, 0xb8cf7b]), sm(x, y, 163, .45) * .6 + pr(x, y, 164) * .4); });
+  paint(T.fern, plant((x, y) => { for (let b = 0; b < 3; b++){ const a = -0.9 + b * .9; for (let t = 0; t < 14; t++){ const px = Math.round(7.5 + Math.sin(a) * t * .55), py = Math.round(15 - Math.cos(a) * t * .9 - t * t * .012); if (x === px && y === py) return shade(rgb(0x4d7a3e), .8 + t / 30); if (t > 2 && t % 2 === 0 && y === py && Math.abs(x - px) === 1 + (t > 8 ? 0 : 1)) return rgb(0x6a9a4f); } } return null; }));
+  paint(T.mushRed, plant((x, y) => { for (const m of [[6, 10, 3], [11, 12, 2]]){ if (Math.abs(x - m[0]) < .8 && y > m[1]) return rgb(0xe6dccb); const r = Math.hypot(x - m[0], (y - m[1]) * 1.7); if (y <= m[1] && r < m[2] + .3) return (x + y * 3) % 5 === 0 ? rgb(0xf4ece2) : rgb(r < m[2] - 1 ? 0xc94a3f : 0xa63a32); } return null; }));
+  paint(T.autumn, (x, y) => { const t = sm(x, y, 165, .45) * .6 + pr(x, y, 166) * .4; if (pr(x, y, 167) > .9) return rgb(0x8a4a2a); if (pr(x, y, 168) < .05) return rgb(0xf4cf72); return pick(PAL([0xb85a2e, 0xc9703a, 0xd98a45, 0xe4a352, 0xd47a3a]), t); });
+  paint(T.pineLeaf, (x, y) => { if ((x + y * 2) % 5 === 0 && pr(x, y, 169) > .4) return rgb(0x2b4232); return pick(PAL([0x335240, 0x3c5d48, 0x456a51, 0x507659]), pr(x, y, 170) * .6 + sm(x, y, 171, .5) * .4); });
   paint(T.water, (x, y) => pick(WATERP, .5 + .5 * Math.sin((x + y * .6) * .7 + sm(x, y, 73, .4) * 3)));
   paint(T.tgrass, plant((x, y) => { for (let b = 0; b < 5; b++){ const bx = 1 + b * 3 + Math.floor(pr(b, 0, 74) * 2), hgt = 6 + Math.floor(pr(b, 1, 75) * 8), lean = (pr(b, 2, 76) - .5) * 4; const xx = Math.round(bx + lean * (15 - y) / 15); if (x === xx && y > 15 - hgt) return shade(pick(GT, pr(b, y, 77)), .8 + (15 - y) / 15 * .35); } return null; }));
   const flower = (head, ctr) => plant((x, y) => { if ((x === 7 || x === 8) && y >= 8) return x === 7 ? rgb(0x557a43) : rgb(0x47693a); if (y >= 10 && y <= 11 && (x === 5 || x === 6 || x === 9 || x === 10) && ((x < 7) === (y === 10))) return rgb(0x5f8a4a); const r = Math.hypot(x - 7.5, y - 4.5); if (r < 1.3) return rgb(ctr); if (r < 3.6) return shade(rgb(head), .85 + pr(x, y, 78) * .25); return null; });
@@ -890,8 +912,8 @@ const B_COL = []; for (let i = 1; i < NB; i++) if (B_NAME[i]) B_COL[i] = tileAvg
 
 /* ================= world ================= */
 // the lore archipelago lives in [0, 200) x [0, 200); the Wilds fill the crescent beyond it (x >= 200 or z >= 200)
-const WX = 352, WY = 64, WZ = 352, CS = 16, NCX = 22, NCY = 1, NCZ = 22, LAYER = WX * WZ;
-const SAFE = 200; const inSafe = (x, z) => x < SAFE && z < SAFE;
+const WX = 512, WY = 96, WZ = 512, CS = 16, NCX = 32, NCY = 1, NCZ = 32, LAYER = WX * WZ;
+const SAFE = 320; const inSafe = (x, z) => x < SAFE && z < SAFE;
 const world = new Uint8Array(WX * WY * WZ), light = new Uint8Array(WX * WY * WZ);
 let baseWorld = null;
 const edits = new Map();
@@ -899,109 +921,117 @@ const wi = (x, y, z) => x + WX * (z + WZ * y);
 function getB(x, y, z){ if (x < 0 || y < 0 || z < 0 || x >= WX || y >= WY || z >= WZ) return 0; return world[x + WX * (z + WZ * y)]; }
 function solidAt(x, y, z){ return B_SOLID[getB(x, y, z)] === 1; }
 
-// ONE home island: the spawn, the safe zone's heart, and the Memory Engine that tells the story.
-// The inner ring of small islets stays as peaceful exploration (no lore on them; relics only).
+// ONE home island (the spawn, the safe zone's heart, the Memory Engine) and ten inner islets, each a different
+// archetype. All of them are sculpted by the shared island generator (WGEN, w1.js) in a worker at boot; the
+// hand-placed landmarks below are dressed on top.
+const HOMEC = { x: 160, z: 162 };
 const ISL = [
-  { id: 'home', name: 'Home Isle', x: 96, z: 98, r: 33, top: 32, depth: 26, amp: 4 },
-  { id: 'spire', name: 'The Spire', x: 30, z: 46, r: 6.5, top: 30, depth: 11, amp: 1, small: 1, disc: 1 },
-  { id: 'i2', name: 'Islet', x: 158, z: 44, r: 6, top: 24, depth: 9, amp: 2, small: 1 },
-  { id: 'i3', name: 'Islet', x: 32, z: 156, r: 4.5, top: 22, depth: 7, amp: 2, small: 1 },
-  { id: 'basin', name: 'Basin Isle', x: 162, z: 148, r: 8, top: 38, depth: 15, amp: 1, small: 1, disc: 1 },
-  { id: 'i5', name: 'Islet', x: 140, z: 58, r: 3.2, top: 47, depth: 6, amp: 1, small: 1 },
-  { id: 'i6', name: 'Islet', x: 52, z: 144, r: 3.4, top: 44, depth: 5, amp: 1, small: 1 },
-  { id: 'i7', name: 'Islet', x: 56, z: 58, r: 2.6, top: 26, depth: 4, amp: 1, small: 1 },
-  { id: 'i8', name: 'Islet', x: 134, z: 136, r: 2.8, top: 22, depth: 4, amp: 1, small: 1 },
-  { id: 'pool', name: 'Falls Pool', x: 163, z: 165, r: 5.5, top: 18, depth: 7, amp: 1, small: 1, disc: 1 },
-  { id: 'lookout', name: 'Lookout Rock', x: 96, z: 40, r: 4.5, top: 36, depth: 10, amp: 1, small: 1, disc: 1 }
+  { id: 'home', name: 'Home Isle', x: 160, z: 162, r: 50, top: 56, depth: 46, b: 6, ax: 1.08, arch: 'plain', caves: 3 },
+  { id: 'spire', name: 'The Spires', x: 62, z: 72, r: 14, top: 54, depth: 24, b: 5, arch: 'spires', small: 1, disc: 1 },
+  { id: 'i2', name: 'Arch Rock', x: 262, z: 66, r: 15, top: 50, depth: 22, b: 5, arch: 'arch', small: 1, disc: 1 },
+  { id: 'i3', name: 'Stepping Stones', x: 58, z: 262, r: 16, top: 46, depth: 14, b: 5, arch: 'archipelago', small: 1, disc: 1 },
+  { id: 'basin', name: 'Basin Isle', x: 266, z: 250, r: 20, top: 60, depth: 30, b: 5, arch: 'terrace', small: 1, disc: 1, caves: 2 },
+  { id: 'i5', name: 'High Table', x: 220, z: 100, r: 9, top: 72, depth: 22, b: 5, arch: 'mesa', small: 1, disc: 1 },
+  { id: 'i6', name: 'Hanging Isle', x: 110, z: 282, r: 10, top: 68, depth: 18, b: 5, arch: 'plain', small: 1, disc: 1 },
+  { id: 'i7', name: 'Mossy Knoll', x: 90, z: 96, r: 8, top: 50, depth: 14, b: 5, arch: 'plain', small: 1 },
+  { id: 'i8', name: 'Twin Rocks', x: 236, z: 232, r: 12, top: 44, depth: 16, b: 5, arch: 'bridged', small: 1, disc: 1 },
+  { id: 'pool', name: 'Falls Pool', x: 200, z: 290, r: 14, top: 40, depth: 18, b: 5, arch: 'atoll', small: 1, disc: 1 },
+  { id: 'lookout', name: 'Lookout Rock', x: 160, z: 52, r: 10, top: 64, depth: 22, b: 5, arch: 'mesa', small: 1, disc: 1 }
 ];
 const DISC = ISL.map((I, i) => i).filter(i => i === 0 || ISL[i].disc);
 const COLS = WX * WZ;
 const hTop = new Int16Array(COLS).fill(-1), hBot = new Int16Array(COLS), isl = new Int8Array(COLS).fill(-1), eArr = new Float32Array(COLS), cmask = new Uint8Array(COLS), wTop = new Int16Array(COLS).fill(-1);
 const M_PATH = 1, M_RES = 2, M_SAND = 4, M_GRAV = 8, M_BRICK = 16;
 const SHARDS = [], UPDRAFTS = [], SIGNS = [], LAMPS = [], FALLS = [], NETWORK = [], FIREFLY_SPOTS = [], BUTTERFLY_SPOTS = [], MOB_SPAWNS = [];
-const RINGS = [], PLAQUES = [], TREES = [], CUBES = [], SPIRE_LEDGES = [], BUOYS = [];
-let CAVE = null, SAIL_STAND = null, SPAWN = null, CRYSTAL_TOPS = [], EDEN_TREE = null, ENGINE = null;
+const RINGS = [], PLAQUES = [], TREES = [], CUBES = [], SPIRE_LEDGES = [], BUOYS = [], NOOKS = [], POIS = [], VISTAS = [], SAFE_LINKS = [];
+let CAVE = null, SAIL_STAND = null, SPAWN = null, CRYSTAL_TOPS = [], EDEN_TREE = null, ENGINE = null, HOOK_RACK = null;
+const GATES = [];
+// block ids handed to the generator worker
+const WGEN_B = () => ({ GRASS, DIRT, STONE, SAND, LOG, LEAVES, PLANKS, LANTERN, ORE, COBBLE, BRIDGE, STEP, CRYSTAL, JSTONE, WATER, TGRASS, ROSE, SUNF, BELL, DEEP, MOSS, GRAVEL, BRICK, BLOSSOM, EBARK, ELEAF,
+  SNOW, ICE, REDROCK, REDBAND, ASH, BASALT, EMBER, MYCEL, MSTEM, MCAPR, MCAPB, RUIN, RUINM, TENT, DEADB, GSHROOM, FROSTLEAF, CHEST, ROOTS, HVINE, BIRCH, BIRCHL, FERN, MUSHR, AUTUMN, PINEL });
+let wgenBoot = null;
+function wgenApi(){ if (!wgenBoot){ const f = { postMessage(m){ f.last = m; } }; WGEN(f); f.onmessage({ data: { type: 'init', B: WGEN_B(), WX, WZ, WY } }); wgenBoot = f; } return wgenBoot.api; }
+// generate the safe islands: in a worker when possible (the title keeps animating), inline otherwise
+function genSafeIslands(specs, done){
+  let w = null;
+  try { const url = URL.createObjectURL(new Blob(['(' + WGEN.toString() + ')(self);'], { type: 'text/javascript' })); w = new Worker(url); } catch (e){ w = null; }
+  const inline = () => { let i = 0; const step = () => { if (i >= specs.length) return; wgenApi().setSeed(4242); done(i, wgenApi().genIsland(specs[i])); i++; setTimeout(step, 0); }; step(); };
+  if (!w){ inline(); return; }
+  let got = 0, failed = false;
+  w.onmessage = e => { const r = e.data; done(r.tag, r); if (++got === specs.length) w.terminate(); };
+  w.onerror = () => { if (failed) return; failed = true; try { w.terminate(); } catch (x){} inline(); };
+  w.postMessage({ type: 'init', B: WGEN_B(), WX, WZ, WY });
+  specs.forEach((I, i) => w.postMessage({ type: 'gen', seed: 4242, ver: 0, tag: i, I }));
+}
+function homeSpec(){
+  const T = 57, x = HOMEC.x, z = HOMEC.z;
+  return { flats: [{ x, z, r: 12, h: T }, { x, z: z + 28, r: 5, h: T }, { x: x + 30, z: z + 30, r: 4, h: T - 1 }, { x: x - 30, z: z - 8, r: 5, h: T }, { x, z: z - 46, r: 3, h: T - 1 }, { x: x + 20, z: z + 36, r: 4, h: T }],
+    res: [[x - 13, z - 13, x + 13, z + 13], [x - 3, z + 24, x + 3, z + 32], [x + 26, z + 26, x + 34, z + 34], [x - 2, z - 48, x + 2, z - 42], [x + 17, z + 33, x + 23, z + 39]],
+    zones: [[x - 60, z - 70, x + 60, z - 24, 'glow'], [x - 75, z - 20, x - 24, z + 70, 'blossom'], [x + 28, z - 20, x + 80, z + 18, 'pine']],
+    spring: { x: x + 8, z: z - 34 }, riverDir: [-1, .4], ponds: [{ x: x - 34, z: z + 10, r: 4.5, l: T }], hl: 12, hlBias: -.05, poi: 'tree' };
+}
+function islandIndexAt(x, z){ const c = Math.floor(x) + Math.floor(z) * WX; return c >= 0 && c < COLS ? isl[c] : -1; }
+// the rim of island i, walking out from its centre toward (tx, tz): returns the last land cell plus `out` blocks
+function rimToward(i, tx, tz, out){
+  const I = ISL[i]; let dx = tx - I.x, dz = tz - I.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+  let x = I.x + .5, z = I.z + .5, lx = x, lz = z; for (let s = 0; s < 140; s++){ x += dx; z += dz; if (islandIndexAt(x, z) === i){ lx = x; lz = z; } }
+  return { x: lx + dx * (out || 0), z: lz + dz * (out || 0), dx, dz, top: hTop[Math.floor(lx) + Math.floor(lz) * WX] };
+}
 
-function generate(){ const it = generateSteps(); while (!it.next().done); }
+function generate(){ generate.sync = true; const it = generateSteps(); while (!it.next().done); generate.sync = false; }
 function* generateSteps(){
   world.fill(0); hTop.fill(-1); isl.fill(-1); cmask.fill(0); wTop.fill(-1);
-  SHARDS.length = 0; UPDRAFTS.length = 0; SIGNS.length = 0; LAMPS.length = 0; FALLS.length = 0; NETWORK.length = 0; FIREFLY_SPOTS.length = 0; BUTTERFLY_SPOTS.length = 0; MOB_SPAWNS.length = 0; CRYSTAL_TOPS = []; RINGS.length = 0; PLAQUES.length = 0; TREES.length = 0; CUBES.length = 0; SPIRE_LEDGES.length = 0; BUOYS.length = 0; CAVE = null; ENGINE = null;
+  for (const a of [SHARDS, UPDRAFTS, SIGNS, LAMPS, FALLS, NETWORK, FIREFLY_SPOTS, BUTTERFLY_SPOTS, MOB_SPAWNS, RINGS, PLAQUES, TREES, CUBES, SPIRE_LEDGES, BUOYS, NOOKS, POIS, VISTAS, SAFE_LINKS, GATES]) a.length = 0;
+  CRYSTAL_TOPS = []; CAVE = null; ENGINE = null; SAIL_STAND = null; HOOK_RACK = null;
   rs = 4242;
-  // ---- heightmaps (the home island gets a gentle terrace ring and a raised heart)
-  for (let i = 0; i < ISL.length; i++){ const I = ISL[i];
-    const R = Math.ceil(I.r * 1.5) + 2;
-    for (let z = I.z - R; z <= I.z + R; z++) for (let x = I.x - R; x <= I.x + R; x++){
-      if (x < 2 || z < 2 || x >= WX - 2 || z >= WZ - 2) continue;
-      const d = Math.hypot(x - I.x, (z - I.z) * (i === 0 ? 1.08 : 1)) / I.r;
-      const e = d + (fbm(x * .085 + i * 13.7, z * .085 - i * 5.1) - .5) * (I.small ? .45 : .5);
-      if (e >= 1) continue;
-      const c = x + z * WX;
-      let h = I.top + Math.round((fbm(x * .055 + i * 3, z * .055 + 7) - .5) * I.amp * 2 * (1 - sstep(.2, 1, e)));
-      if (i === 0){ h += e < .42 ? 1 : 0; if (e > .7) h -= 1; } // a raised heart, a lower rim terrace
-      if (e > .84) h--; if (e > .94) h--;
-      const dep = I.depth * Math.pow(1 - e, .55) * (.55 + .8 * fbm(x * .16 + 5, z * .16 - i));
-      let b = h - 2 - Math.round(dep);
-      if (h2(x * 5 + i, z * 3) < .06 && e < .8) b -= 2 + Math.floor(h2(z, x) * 6);
-      hTop[c] = h; hBot[c] = Math.max(1, Math.min(b, h - 1)); isl[c] = i; eArr[c] = e;
-    }
+  // ---- sculpt every safe island (worker), then copy them in
+  const specs = ISL.map((I, i) => Object.assign({ k: 100 + i, safe: 1 }, I, i === 0 ? homeSpec() : {}));
+  const results = new Array(ISL.length); let pending = ISL.length;
+  if (generate.sync){ wgenApi().setSeed(4242); specs.forEach((I, i) => { results[i] = wgenApi().genIsland(I); }); pending = 0; }
+  else genSafeIslands(specs, (i, r) => { results[i] = r; pending--; });
+  while (pending > 0) yield;
+  for (let i = 0; i < ISL.length; i++){
+    const r = results[i], { x0, z0, w, d, blk } = r;
+    for (let y = 0; y < WY; y++) for (let z = 0; z < d; z++){ const row = w * (z + d * y), wrow = x0 + WX * ((z + z0) + WZ * y); for (let x = 0; x < w; x++){ const id = blk[row + x]; if (id) world[wrow + x] = id; } }
+    for (let z = 0; z < d; z++) for (let x = 0; x < w; x++){ const k = x + z * w; if (r.top[k] < 0) continue; const c = (x + x0) + (z + z0) * WX; if (isl[c] >= 0) continue; isl[c] = i; hTop[c] = r.top[k]; hBot[c] = r.bot[k]; eArr[c] = r.ee[k]; wTop[c] = r.wat[k]; }
+    r.falls.forEach(f => FALLS.push(f)); r.trees.forEach(t => TREES.push(t)); r.ff.forEach(p => FIREFLY_SPOTS.push(p)); r.bf.forEach(p => BUTTERFLY_SPOTS.push(p));
+    r.nooks.forEach(n => NOOKS.push(Object.assign({ isle: i }, n))); r.pois.forEach(p => POIS.push(Object.assign({ isle: i }, p)));
     yield;
   }
   const ci = (x, z) => x + z * WX;
-  const inI = (i, x, z) => x >= 0 && z >= 0 && x < WX && z < WZ && isl[ci(x, z)] === i;
-  function edge(i, x, z, dx, dz){ while (inI(i, x + dx, z + dz)) { x += dx; z += dz; } return dx ? x : z; }
-  const home = ISL[0], HX = 96, HZ = 96, T = home.top + 1;
-  const hN = edge(0, 96, home.z, 0, -1), hS = edge(0, 96, home.z, 0, 1), hE = edge(0, home.x, 98, 1, 0), hW = edge(0, home.x, 98, -1, 0);
-  // ---- flats: the engine plaza, the spawn lawn, the sail stand, the north rim (causeway), the lighthouse point
-  const flats = []; const flat = (x, z, r, h) => flats.push({ x, z, r, h });
-  flat(HX, HZ, 11, T); flat(96, 117, 5, T); flat(84, 104, 3, T); flat(96, hN + 2, 3, T - 1); flat(118, 118, 4, T - 1); flat(70, 92, 5, T); flat(hE - 3, 100, 3, T - 1);
-  const PONDS = [{ i: 0, x: 74, z: 110, r: 4.2, dx: -1, dz: 0, L: T }, { i: 0, x: 116, z: 80, r: 2.6, dx: 1, dz: 0, L: T }, { i: 4, x: 163, z: 151, r: 2.4, dx: 0, dz: 1 }, { i: 9, x: 162, z: 166, r: 2, dx: -1, dz: 0 }];
-  PONDS.forEach(p => flat(p.x, p.z, p.r + 3, p.L || ISL[p.i].top));
-  for (let c = 0; c < COLS; c++){
-    if (isl[c] < 0) continue; const x = c % WX, z = (c / WX) | 0;
-    let h = hTop[c];
-    for (const f of flats){ const d = Math.hypot(x - f.x, z - f.z); if (d < f.r + 3){ const w = 1 - sstep(f.r, f.r + 3, d); h = Math.round(h * (1 - w) + f.h * w); } }
-    hTop[c] = h; if (hBot[c] >= h) hBot[c] = h - 1;
-  }
-  // ---- ponds & channels (the big pond spills a waterfall off the west rim)
-  PONDS.forEach(p => {
-    const L = p.L || ISL[p.i].top;
-    for (let z = Math.floor(p.z - p.r - 2); z <= p.z + p.r + 2; z++) for (let x = Math.floor(p.x - p.r - 2); x <= p.x + p.r + 2; x++){
-      if (!inI(p.i, x, z)) continue; const c = ci(x, z), d = Math.hypot(x - p.x, z - p.z);
-      if (d < p.r){ hTop[c] = d < p.r - 1.4 ? L - 2 : L - 1; wTop[c] = L; cmask[c] |= M_RES; }
-      else if (d < p.r + 1.6){ hTop[c] = L; cmask[c] |= M_SAND | M_RES; }
-    }
-    let x = Math.round(p.x + p.dx * p.r), z = Math.round(p.z + p.dz * p.r), last = null;
-    while (inI(p.i, x, z)){ const c = ci(x, z); hTop[c] = L - 1; wTop[c] = L; cmask[c] |= M_RES; for (const s of [-1, 1]){ const sx = x + p.dz * s, sz = z + p.dx * s; if (inI(p.i, sx, sz) && wTop[ci(sx, sz)] < 0){ hTop[ci(sx, sz)] = L; cmask[ci(sx, sz)] |= M_SAND | M_RES; } } last = [x, z]; x += p.dx; z += p.dz; }
-    if (last) FALLS.push({ x: last[0] + .5 + p.dx * .5, y: L + .86, z: last[1] + .5 + p.dz * .5, dx: p.dx, dz: p.dz });
-  });
-  // ---- paths: a brick ring round the engine, gravel spokes out to the rim
-  const path = (x0, z0, x1, z1) => { for (let z = Math.min(z0, z1); z <= Math.max(z0, z1); z++) for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++){ if (x < 0 || z < 0 || x >= WX || z >= WZ) continue; const c = ci(x, z); if (isl[c] < 0 || wTop[c] >= 0) continue; cmask[c] |= M_PATH | M_GRAV | M_RES; } };
-  path(95, hN + 1, 97, HZ); path(95, HZ, 97, hS - 1); path(HX, 95, hE - 1, 97); path(hW + 1, 95, HX, 97);
-  for (let z = HZ - 12; z <= HZ + 12; z++) for (let x = HX - 12; x <= HX + 12; x++){ const d = Math.hypot(x - HX, z - HZ), c = ci(x, z); if (d < 6.6) cmask[c] |= M_GRAV | M_PATH | M_RES; else if (d < 7.8){ cmask[c] |= M_BRICK | M_RES; cmask[c] &= ~M_GRAV; } else if (d < 10.5) cmask[c] |= M_RES; }
-  yield;
-  // ---- fill columns
-  for (let c = 0; c < COLS; c++){
-    if ((c & 4095) === 0) yield;
-    const i = isl[c]; if (i < 0) continue;
-    const x = c % WX, z = (c / WX) | 0, h = hTop[c], b = hBot[c], m = cmask[c], e = eArr[c];
-    let surf = GRASS;
-    if (m & M_BRICK) surf = BRICK; else if (m & M_GRAV) surf = GRAVEL; else if (m & M_SAND || wTop[c] >= 0) surf = SAND;
-    else if (i === 0 && e > .9 && fbm(x * .2, z * .2) > .55) surf = MOSS;
-    for (let y = b; y <= h; y++){
-      let id;
-      if (y === h) id = surf;
-      else if (h - y <= 3) id = (surf === SAND && h - y <= 1) ? SAND : DIRT;
-      else if (y < b + 3) id = DEEP;
-      else id = h3(x, y, z) < .028 ? ORE : STONE;
-      world[wi(x, y, z)] = id;
-    }
-    if (wTop[c] >= 0) for (let y = h + 1; y <= wTop[c]; y++) world[wi(x, y, z)] = WATER;
-  }
   const put = (x, y, z, id) => { if (x >= 0 && y >= 0 && z >= 0 && x < WX && y < WY && z < WZ) world[wi(x, y, z)] = id; };
   const res = (x0, z0, x1, z1) => { for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) if (x >= 0 && z >= 0 && x < WX && z < WZ) cmask[ci(x, z)] |= M_RES; };
   const gy = (x, z) => hTop[ci(x, z)];
   const lamp = (x, y, z) => { put(x, y, z, LAMP); LAMPS.push([x + .5, y + .5, z + .5]); };
+  const clearAbove = (x, z, y0, n) => { for (let y = y0; y < y0 + n; y++){ const b = world[wi(x, y, z)]; if (b && B_RT[b] === 3 || b === LEAVES || b === AUTUMN || b === BIRCHL || b === PINEL || b === HVINE) put(x, y, z, 0); } };
+  const HX = HOMEC.x, HZ = HOMEC.z, T = gy(HX, HZ);
+  // ---- paths: a brick ring round the engine, gravel spokes out across the island
+  const pave = (x, z, id) => { const c = ci(x, z); if (isl[c] !== 0 || wTop[c] >= 0) return; const h = hTop[c]; put(x, h, z, id); clearAbove(x, z, h + 1, 3); cmask[c] |= M_RES | M_PATH; };
+  for (let z = HZ - 13; z <= HZ + 13; z++) for (let x = HX - 13; x <= HX + 13; x++){ const dd = Math.hypot(x - HX, z - HZ); if (dd < 6.6) pave(x, z, GRAVEL); else if (dd < 7.8) pave(x, z, BRICK); else if (dd < 12) clearAbove(x, z, gy(x, z) + 1, 2); }
+  for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]){ for (let s = 8; s < 70; s++){ const x = HX + dx * s, z = HZ + dz * s; if (isl[ci(x, z)] !== 0) break; for (let k = -1; k <= 1; k++){ const X = x + (dz ? k : 0), Z = z + (dx ? k : 0); if (Math.abs(hTop[ci(X, Z)] - hTop[ci(x, z)]) <= 1) pave(X, Z, GRAVEL); } } }
   yield;
+  // ---- welcome marker by the spawn lawn: a small board that points at the engine
+  SPAWN = { x: HX + .5, y: gy(HX, HZ + 28) + 1, z: HZ + 28.5, yaw: 0 };
+  { const x = HX + 3, z = HZ + 25, T0 = gy(x, z); put(x, T0 + 1, z, SIGN); put(x, T0 + 2, z, SIGN); res(x - 1, z - 1, x + 1, z + 1); lamp(x, T0 + 3, z);
+    PLAQUES.push({ title: 'Memory Engine ▲', x: x + .5, y: T0 + 2.4, z: z + 1.03, rot: 0, w: 2.4, h: .6 }); PLAQUES.push({ title: 'Memory Engine ▲', x: x + .5, y: T0 + 2.4, z: z - .03, rot: Math.PI, w: 2.4, h: .6 }); }
+  // ---- the hook rack beside the plaza: an empty, locked display that teases the grappling hook (the Sky Vault in the Wilds holds it)
+  { const x = HX + 20, z = HZ + 36, T0 = gy(x, z); for (let dx = -1; dx <= 1; dx++) put(x + dx, T0 + 1, z, PBRICK); put(x - 1, T0 + 2, z, LOG); put(x + 1, T0 + 2, z, LOG); put(x - 1, T0 + 3, z, LOG); put(x + 1, T0 + 3, z, LOG); put(x, T0 + 4, z, PLANKS); put(x - 1, T0 + 4, z, PLANKS); put(x + 1, T0 + 4, z, PLANKS); lamp(x + 2, T0 + 1, z + 1);
+    res(x - 2, z - 2, x + 2, z + 2); HOOK_RACK = { x: x + .5, y: T0 + 2.6, z: z + .5 }; }
+  // ---- the lighthouse on the south-east point
+  { const r = rimToward(0, HX + 100, HZ + 100, -6), cx = Math.round(r.x), cz = Math.round(r.z), T0 = gy(cx, cz);
+    res(cx - 3, cz - 3, cx + 3, cz + 3);
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++){ put(cx + dx, T0 + 1, cz + dz, PBRICK); clearAbove(cx + dx, cz + dz, T0 + 2, 14); }
+    for (let y = T0 + 2; y <= T0 + 15; y++) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) put(cx + dx, y, cz + dz, ((y - T0) >> 1) % 2 ? JSTONE : PBRICK);
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) put(cx + dx, T0 + 16, cz + dz, Math.abs(dx) === 2 || Math.abs(dz) === 2 ? BRIDGE : JSTONE);
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) put(cx + dx, T0 + 17, cz + dz, dx || dz ? GLASS : LAMP);
+    LAMPS.push([cx + .5, T0 + 17.5, cz + .5]);
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) put(cx + dx, T0 + 18, cz + dz, PBRICK);
+    put(cx, T0 + 19, cz, PBRICK);
+    // a spiral of steps round the tower so the gallery is a climb, not a ladder
+    for (let k = 0; k < 14; k++){ const a = k * .9, x = Math.round(cx + Math.cos(a) * 2.6), z = Math.round(cz + Math.sin(a) * 2.6), y = T0 + 2 + k; if (!world[wi(x, y, z)]) put(x, y, z, STEP); }
+    POIS.push({ isle: 0, x: cx, y: T0 + 19, z: cz, kind: 'lighthouse' }); VISTAS.push({ x: cx + .5, y: T0 + 17, z: cz + 2.5, name: 'Lighthouse gallery' }); }
+  // lamp posts along the spokes
+  for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) for (const s of [16, 30]) for (const k of [-2, 2]){ const x = HX + dx * s + (dz ? k : 0), z = HZ + dz * s + (dx ? k : 0); if (isl[ci(x, z)] !== 0) continue; const T0 = gy(x, z); put(x, T0 + 1, z, SIGN); lamp(x, T0 + 2, z); res(x, z, x, z); }
   // ---- THE MEMORY ENGINE: an octagonal plinth, a banded monolith, crystal fins, a crown platform;
   //      the brass rings and the floating core are entity meshes (they turn, glow and wake for the film)
   {
@@ -1029,164 +1059,72 @@ function* generateSteps(){
     EDEN_TREE = { x: cx + .5, y: T0 + 1, z: cz + .5 };
     for (let k = 0; k < 12; k++) CUBES.push({ a: k / 12 * Math.PI * 2, r: 6 + (k % 3) * 1.6, y: T0 + 6 + (k % 5) * 2.2, s: .3 + (k % 3) * .1, sp: .16 + (k % 2) * .07 });
   }
-  // ---- welcome marker by the spawn lawn: a small board that points at the engine
-  SPAWN = { x: 96.5, y: gy(96, 120) + 1, z: 120.5, yaw: 0 };
-  { const x = 99, z = 117, T0 = gy(x, z); put(x, T0 + 1, z, SIGN); put(x, T0 + 2, z, SIGN); res(x - 1, z - 1, x + 1, z + 1); lamp(x, T0 + 3, z);
-    PLAQUES.push({ title: 'Memory Engine ▲', x: x + .5, y: T0 + 2.4, z: z + 1.03, rot: 0, w: 2.4, h: .6 }); PLAQUES.push({ title: 'Memory Engine ▲', x: x + .5, y: T0 + 2.4, z: z - .03, rot: Math.PI, w: 2.4, h: .6 }); }
-  // ---- the lighthouse on the south-east point
-  {
-    const cx = 118, cz = 118, T0 = gy(cx, cz);
-    res(cx - 3, cz - 3, cx + 3, cz + 3);
-    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) put(cx + dx, T0 + 1, cz + dz, PBRICK);
-    for (let y = T0 + 2; y <= T0 + 11; y++) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) put(cx + dx, y, cz + dz, ((y - T0) >> 1) % 2 ? JSTONE : PBRICK);
-    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) put(cx + dx, T0 + 12, cz + dz, Math.abs(dx) === 2 || Math.abs(dz) === 2 ? BRIDGE : JSTONE);
-    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) put(cx + dx, T0 + 13, cz + dz, dx || dz ? GLASS : LAMP);
-    LAMPS.push([cx + .5, T0 + 13.5, cz + .5]);
-    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) put(cx + dx, T0 + 14, cz + dz, PBRICK);
-    put(cx, T0 + 15, cz, PBRICK);
-  }
-  // ---- the orchard bench on the west lawn, a bridge over the pond's spillway
-  { const T0 = gy(70, 92); res(68, 90, 72, 94); for (let dz = -1; dz <= 1; dz++) put(69, T0 + 1, 92 + dz, PLANKS); lamp(71, T0 + 1, 94); }
-  // lamp posts along the spokes
-  [[93, HZ - 14], [99, HZ - 14], [93, HZ + 14], [99, HZ + 14], [HX - 14, 93], [HX - 14, 99], [HX + 14, 93], [HX + 14, 99]].forEach(p => { const T0 = gy(p[0], p[1]); if (T0 < 0) return; put(p[0], T0 + 1, p[1], SIGN); lamp(p[0], T0 + 2, p[1]); res(p[0], p[1], p[0], p[1]); });
-  // ---- The Spire: a stone needle ringed by a climbable spiral of ledges (each 2 up: jump + mantle)
-  let spireTop = null;
-  {
-    const I = ISL[1], cx = I.x, cz = I.z, T0 = gy(cx, cz), H = 20;
-    res(cx - 6, cz - 6, cx + 6, cz + 6);
-    for (let y = T0 - 2; y <= T0 + H; y++) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++){ if (dx * dx + dz * dz > 5.3) continue; put(cx + dx, y, cz + dz, h3(cx + dx, y, cz + dz) < .22 ? MOSS : STONE); }
-    for (let k = 0; k < 10; k++){
-      const a = k * .8 + .4, ly = T0 + 1 + 2 * k;
-      SPIRE_LEDGES.push([cx + .5 + Math.cos(a) * 3.4, ly, cz + .5 + Math.sin(a) * 3.4]);
-      for (let dz = -5; dz <= 5; dz++) for (let dx = -5; dx <= 5; dx++){ const r = Math.hypot(dx, dz); if (r < 2.4 || r > 4.5) continue; let da = Math.atan2(dz, dx) - a; da = Math.atan2(Math.sin(da), Math.cos(da)); if (Math.abs(da) * r > 1.25) continue;
-        const lx = cx + dx, lz = cz + dz; if (getB(lx, ly, lz) === 0) put(lx, ly, lz, STEP); if (k && getB(lx, ly - 1, lz) === 0) put(lx, ly - 1, lz, DEEP); }
-    }
-    lamp(cx + 1, T0 + H + 1, cz + 1); spireTop = [cx, cz, T0 + H];
-  }
-  // ---- Basin Isle: a spiral stair down into a crystal chamber; a tunnel runs out behind the waterfall, high above the Falls Pool
-  {
-    const I = ISL[4], T0 = I.top, fy = T0 - 7, IK = 4;
-    for (let z = 142; z <= 160; z++) for (let x = 154; x <= 168; x++){ const c = ci(x, z); if (isl[c] !== IK) continue; for (let y = fy - 3; y <= hTop[c]; y++) if (getB(x, y, z) === 0 || y < hBot[c]) put(x, y, z, y > hTop[c] - 3 ? DIRT : STONE); if (hBot[c] > fy - 3) hBot[c] = fy - 3; }
-    const sx = 157, sz = 147, ring = [[0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]];
-    res(sx - 2, sz - 2, sx + 2, sz + 2);
-    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++){ if (!dx && !dz) continue; const top = hTop[ci(sx + dx, sz + dz)]; for (let y = fy + 1; y <= top + 2; y++) put(sx + dx, y, sz + dz, 0); put(sx + dx, fy, sz + dz, STONE); }
-    for (let y = fy; y <= T0; y++) put(sx, y, sz, y === T0 ? MOSS : STONE);
-    lamp(sx, T0 + 1, sz);
-    ring.forEach((d, k) => put(sx + d[0], T0 - 1 - k, sz + d[1], k % 2 ? COBBLE : STONE));
-    for (let y = fy + 1; y <= fy + 3; y++) put(sx + 2, y, sz, 0);
-    for (let z = 144; z <= 150; z++) for (let x = 160; x <= 166; x++){ for (let y = fy + 1; y <= fy + 4; y++) put(x, y, z, 0); put(x, fy, z, (x + z) % 3 ? STONE : MOSS); cmask[ci(x, z)] |= M_RES; }
-    [[160, 144], [166, 144], [160, 150], [163, 144], [166, 147], [166, 150]].forEach((p, k) => { put(p[0], fy + 1, p[1], CRYSTAL); if (k < 3) put(p[0], fy + 2, p[1], CRYSTAL); });
-    lamp(163, fy + 4, 147);
-    for (let z = 151; z < 162; z++){ const open = isl[ci(161, z)] !== IK && isl[ci(162, z)] !== IK; for (let x = 161; x <= 162; x++){ for (let y = fy + 1; y <= fy + 3; y++) put(x, y, z, 0); if (!open) put(x, fy, z, z % 2 ? STONE : MOSS); cmask[ci(x, z)] |= M_RES; } if (open) break; }
-    lamp(160, fy + 3, 151);
-    CAVE = { x: 163.5, y: fy + 1.75, z: 146.5 };
-  }
-  // ---- Lookout Rock causeway: stepping pads off the home island's north rim, sprint-sized gaps
-  {
-    const LK = ISL[10], lkS = edge(10, LK.x, LK.z, 0, 1), y0 = gy(96, hN), y1 = LK.top;
-    let e = hN; const pads = []; while (e - lkS - 1 > 5){ const c = e - 6; pads.push(c); e = c - 1; }
-    pads.forEach((z, k) => { const y = Math.round(lerp(y0, y1, (k + 1) / (pads.length + 1))), x = 96 + (k % 2 ? 1 : -1);
-      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++){ put(x + dx, y, z + dz, STEP); if (Math.abs(dx) + Math.abs(dz) < 2) put(x + dx, y - 1, z + dz, DEEP); } put(x, y - 2, z, MOSS); });
-    const T0 = gy(96, LK.z); lamp(97, T0 + 1, LK.z - 2);
-  }
-  // ---- Ring course: launch from the east rim's draft, thread six rings toward Basin Isle
-  {
-    const pts = [[136, 45, 104], [141, 43.5, 109], [146, 42, 115], [150, 40.5, 121], [153, 39, 127], [156, 37.5, 133]];
-    pts.forEach((p, k) => { const q = pts[Math.min(k + 1, 5)], o = pts[Math.max(k - 1, 0)], dx = q[0] - o[0], dz = q[2] - o[2], L = Math.hypot(dx, dz); RINGS.push({ x: p[0] + .5, y: p[1], z: p[2] + .5, nx: dx / L, nz: dz / L, r: 2.6 }); });
-  }
   yield;
-  // ---- trees, flowers: the north lawn grows glowing trees, the west an orchard, the rest oaks
-  const occ = new Uint8Array(COLS);
-  const canTree = (x, z) => { for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++){ const c = ci(x + dx, z + dz); if (isl[c] < 0 || (cmask[c] & M_RES) || occ[c]) return false; } return true; };
-  function oak(x, y, z, leaf, bark){
-    const th = 3 + Math.floor(h2(x, z) * 3); TREES.push([x, y, z]);
-    for (let i = 0; i < th; i++) put(x, y + i, z, bark || LOG);
-    const cy = y + th, r = 2.1 + h2(z, x) * .8;
-    for (let dy = -2; dy <= 3; dy++) for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++){
-      const d = Math.hypot(dx, (dy - .3) * 1.25, dz); if (d <= r + (h3(x + dx, cy + dy, z + dz) - .5) * .9 && getB(x + dx, cy + dy, z + dz) === 0) put(x + dx, cy + dy, z + dz, leaf);
-    }
-    if (h2(x + 3, z) < .6) FIREFLY_SPOTS.push([x + .5, cy, z + .5]);
-  }
-  function pine(x, y, z){
-    const th = 2; TREES.push([x, y, z]); for (let i = 0; i < th + 4; i++) put(x, y + i, z, LOG);
-    const L = [[2, 2], [2, 3], [1, 4], [2, 5], [1, 6], [1, 7], [0, 8]];
-    for (const l of L) for (let dz = -l[0]; dz <= l[0]; dz++) for (let dx = -l[0]; dx <= l[0]; dx++){ if (Math.abs(dx) + Math.abs(dz) > l[0] + (l[0] > 1 ? 1 : 0)) continue; if (getB(x + dx, y + l[1], z + dz) === 0) put(x + dx, y + l[1], z + dz, LEAVES); }
-  }
-  for (let c = 0; c < COLS; c++){
-    const i = isl[c]; if (i < 0) continue;
-    const x = c % WX, z = (c / WX) | 0, h = hTop[c];
-    if (world[wi(x, h, z)] !== GRASS || (cmask[c] & M_RES) || getB(x, h + 1, z) !== 0) continue;
-    const e = eArr[c], r = h2(x * 7 + 3, z * 11 + 5);
-    const north = i === 0 && z < 84, west = i === 0 && x < 82, east = i === 0 && x > 112;
-    const dens = i === 0 ? .045 : .05;
-    if (e < .82 && r < dens && canTree(x, z)){
-      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) occ[ci(x + dx, z + dz)] = 1;
-      if (north && h2(x, z + 5) < .5) oak(x, h + 1, z, ELEAF, EBARK);
-      else if (west) oak(x, h + 1, z, BLOSSOM);
-      else if (east && h2(x + 1, z) < .6) pine(x, h + 1, z);
-      else oak(x, h + 1, z, LEAVES);
-      continue;
-    }
-    const f = h2(x * 3 + 1, z * 5 + 2);
-    if (f < .22){
-      const kind = fbm(x * .12 + 40, z * .12 + 40);
-      let id = TGRASS;
-      if (f < .08) id = kind < .42 ? ROSE : (kind < .58 ? SUNF : BELL);
-      if (west && f < .11) id = ROSE;
-      put(x, h + 1, z, id);
-      if (id !== TGRASS && h2(x, z + 77) < .25) BUTTERFLY_SPOTS.push([x + .5, h + 1, z + .5]);
-      if (h2(x + 9, z) < .08) FIREFLY_SPOTS.push([x + .5, h + 1.5, z + .5]);
-    }
-  }
+  // ---- Lookout Rock causeway: stepping pads off the home north rim (sprint-jump gaps, ascending)
+  { const LK = 10, a = rimToward(0, ISL[LK].x, ISL[LK].z, 0), b = rimToward(LK, HX, HZ, 0), y0 = a.top, y1 = b.top;
+    const L = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.floor(L / 5.5) - 1);
+    for (let k = 1; k <= n; k++){ const t = k / (n + 1), x = Math.round(a.x + (b.x - a.x) * t + (k % 2 ? 1 : -1)), z = Math.round(a.z + (b.z - a.z) * t), y = Math.round(y0 + (y1 - y0) * t);
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++){ put(x + dx, y, z + dz, STEP); if (Math.abs(dx) + Math.abs(dz) < 2) put(x + dx, y - 1, z + dz, DEEP); } put(x, y - 2, z, MOSS); if (k === n) lamp(x, y + 1, z); } }
+  // ---- the safe islands' glide network: a tree from home outward (nearest first); an updraft off each launch rim
+  { const inTree = new Set([0]), drafts = [];
+    for (let n = 1; n < ISL.length; n++){ let best = null, bd = 1e9;
+      for (let i = 1; i < ISL.length; i++){ if (inTree.has(i)) continue; for (const a of inTree){ const d = Math.hypot(ISL[a].x - ISL[i].x, ISL[a].z - ISL[i].z) - ISL[a].r * (a ? 1 : 1.1) - ISL[i].r; if (d < bd){ bd = d; best = [a, i]; } } }
+      if (!best) break; inTree.add(best[1]); SAFE_LINKS.push(best); }
+    const draft = (from, to) => { const r = rimToward(from, ISL[to].x, ISL[to].z, 3.5), gap = Math.max(0, Math.hypot(ISL[to].x - r.x, ISL[to].z - r.z) - ISL[to].r * .8);
+      UPDRAFTS.push({ x: Math.floor(r.x) + .5, z: Math.floor(r.z) + .5, r: 4, top: Math.round(clamp(Math.max(ISL[to].top + gap / 5.5 + 8, r.top + 10), 40, WY - 8)), from, to }); };
+    for (const [a, b] of SAFE_LINKS){ draft(a, b); draft(b, a); } }
+  // gates to the Wilds: east and south rims of home, Basin's east rim, the Falls Pool's south rim
+  for (const [i, tx, tz] of [[0, 999, HZ], [0, HX, 999], [4, 999, 250], [9, 200, 999]]){ const r = rimToward(i, tx, tz, 3); GATES.push({ x: Math.round(r.x), z: Math.round(r.z), top: r.top }); }
+  // ---- ring course: launch from home's east-rim updraft and thread six rings out toward Basin Isle
+  { const u = UPDRAFTS.find(q => q.from === 0 && (q.to === 4 || q.to === 8)) || UPDRAFTS[0], tgt = ISL[u.to];
+    const dx = tgt.x - u.x, dz = tgt.z - u.z, L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, px = -uz, pz = ux;
+    for (let k = 0; k < 6; k++){ const s = 8 + k * 6.5, w = Math.sin(k * 1.1) * 3; RINGS.push({ x: u.x + ux * s + px * w, y: u.top - 2 - k * 1.5, z: u.z + uz * s + pz * w, nx: ux, nz: uz, r: 2.6 }); } }
   yield;
-  // mob spawn spots: all on the home island
+  // ---- trees list for the tutorial, mob spawns on home
   { const I = ISL[0], pts = [];
-    for (let k = 0; k < 400 && pts.length < 30; k++){
-      const a = rnd() * Math.PI * 2, rr = 12 + rnd() * I.r * .55; const x = Math.round(I.x + Math.cos(a) * rr), z = Math.round(I.z + Math.sin(a) * rr);
-      const c = ci(x, z); if (isl[c] !== 0 || wTop[c] >= 0) continue; const h = hTop[c]; if (getB(x, h + 1, z) > 0 && B_RT[getB(x, h + 1, z)] !== 3) continue; if (getB(x, h + 2, z)) continue;
+    for (let k = 0; k < 600 && pts.length < 30; k++){
+      const a = rnd() * Math.PI * 2, rr = 14 + rnd() * I.r * .6; const x = Math.round(I.x + Math.cos(a) * rr), z = Math.round(I.z + Math.sin(a) * rr);
+      const c = ci(x, z); if (isl[c] !== 0 || wTop[c] >= 0 || (cmask[c] & M_RES)) continue; const h = hTop[c]; const ab = world[wi(x, h + 1, z)]; if (ab && B_RT[ab] !== 3) continue; if (world[wi(x, h + 2, z)]) continue; if (!B_SOLID[world[wi(x, h, z)]]) continue;
       pts.push([x + .5, h + 1, z + .5]);
     }
     MOB_SPAWNS[0] = pts; }
-  // ---- sky sail stand by the plaza (the first reward)
-  { const x = 84, z = 104, T0 = gy(x, z); res(x - 1, z - 1, x + 1, z + 1); SAIL_STAND = { x: x + .5, y: T0 + 2.9, z: z + .5, taken: false }; } // a crafted stand model sits here (see buildSailModels)
-  // ---- sky relics: no lore here (the story lives in the Memory Engine); they stitch upgrades into the sail
-  const stand = (x, z) => { for (let r = 0; r <= 4; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++){ if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue; const X = x + dx, Z = z + dz; if (X < 0 || Z < 0 || X >= WX || Z >= WZ) continue; const c = ci(X, Z); if (isl[c] < 0 || wTop[c] >= 0) continue; let y = hTop[c] + 2; while (y > 0 && !B_SOLID[world[wi(X, y, Z)]]) y--; if (getB(X, y + 1, Z) && B_RT[getB(X, y + 1, Z)] !== 3) continue; if (getB(X, y + 2, Z)) continue; return [X + .5, y + 1.75, Z + .5]; } return [x + .5, gy(x, z) + 1.75, z + .5]; };
+  // ---- sky relics: no lore (the story lives in the Memory Engine); they stitch upgrades into the sail.
+  //      Most hide in the generated nooks (cave chambers, behind waterfalls, on spire tops), so they reward curiosity.
+  const standAt = (x, z) => { for (let r = 0; r <= 5; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++){ if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue; const X = x + dx, Z = z + dz; const c = ci(X, Z); if (isl[c] < 0 || wTop[c] >= 0) continue; let y = hTop[c] + 2; while (y > 0 && !B_SOLID[world[wi(X, y, Z)]]) y--; if (!world[wi(X, y + 1, Z)] || B_RT[world[wi(X, y + 1, Z)]] === 3) return [X + .5, y + 1.75, Z + .5]; } return [x + .5, hTop[ci(x, z)] + 1.75, z + .5]; };
+  const nook = (i, kinds) => { for (const k of kinds){ const n = NOOKS.find(q => q.isle === i && q.kind === k && !q.used); if (n){ n.used = 1; return [n.x + .5, n.y + .75, n.z + .5]; } } return null; };
+  const poiTop = i => { const p = POIS.find(q => q.isle === i); return p ? [p.x + .5, p.y + 2.2, p.z + .5] : null; };
+  const lh = POIS.find(p => p.kind === 'lighthouse');
   const SH = [
-    [101, 119, 'Relic of first light. Pick up three and the sail flies further.'],
-    [66, 104, 'Relic of the orchard. Petals fall upward here at night.'],
-    [100, 70, 'Relic of the glow grove. The trees hum when nobody listens.'],
-    [118, 113, 'Relic of the lighthouse. It never warns ships; it welcomes them.'],
-    [spireTop[0], spireTop[1], 'Relic of the Spire. The wind remembers who climbs.', [spireTop[0] + .5, spireTop[2] + 1.75, spireTop[1] + .5]],
-    [0, 0, 'Relic of the deep chamber. Crystals keep time down here.', [CAVE.x, CAVE.y, CAVE.z]],
-    [96, ISL[10].z, 'Relic of the lookout. Every island, all at once.'],
-    [158, 44, 'Relic of the far islet. Quiet, and very proud of it.'],
-    [163, 166, 'Relic of the falls. Wet, cold, worth it.'],
-    [140, 58, 'Relic of the high stone. Updrafts know the way.'],
-    [52, 144, 'Relic of the hanging isle. Look down. No, actually, don’t.'],
-    [160, 140, 'Relic of the rings. You threaded the sky.', null, 1]
+    ['Relic of first light. Pick up three and the sail flies further.', standAt(HX - 4, HZ + 30)],
+    ['Relic of the orchard caves. Petals fall upward down here.', nook(0, ['cave']) || standAt(HX - 40, HZ + 10)],
+    ['Relic of the glow grove. The trees hum when nobody listens.', nook(0, ['falls', 'cave']) || standAt(HX, HZ - 40)],
+    ['Relic of the lighthouse. It never warns ships; it welcomes them.', lh ? [lh.x + .5, lh.y - 1.25, lh.z + 2.5] : standAt(HX + 30, HZ + 30)],
+    ['Relic of the Spires. The wind remembers who climbs.', nook(1, ['vista', 'cave']) || poiTop(1) || standAt(ISL[1].x, ISL[1].z)],
+    ['Relic of the deep chamber. Crystals keep time down here.', nook(4, ['cave']) || standAt(ISL[4].x, ISL[4].z)],
+    ['Relic of the lookout. Every island, all at once.', standAt(ISL[10].x, ISL[10].z)],
+    ['Relic of Arch Rock. Quiet, and very proud of its hole.', nook(2, ['cave']) || standAt(ISL[2].x, ISL[2].z)],
+    ['Relic of the falls. Wet, cold, worth it.', nook(9, ['falls', 'cave']) || standAt(ISL[9].x, ISL[9].z)],
+    ['Relic of the High Table. Updrafts know the way.', standAt(ISL[5].x, ISL[5].z)],
+    ['Relic of the hanging isle. Look down. No, actually, don’t.', nook(6, ['cave']) || standAt(ISL[6].x, ISL[6].z)],
+    ['Relic of the rings. You threaded the sky.', null, 1]
   ];
-  SH.forEach((s, i) => { const p = s[3] || stand(s[0], s[1]); SHARDS.push({ i, x: p[0], y: p[1], z: p[2], text: s[2], isle: islandIndexAt(p[0], p[2]), hidden: s[4] ? 1 : 0 }); });
-  // ---- updrafts: launches off the home rim to every islet, and onward
-  const ud = (x, z, r, top) => UPDRAFTS.push({ x: x + .5, z: z + .5, r, top });
-  ud(hE + 4, 102, 3, 47); // ring course start, east rim
-  ud(124, 124, 4, 50);    // south-east rim to Basin Isle
-  ud(hW - 4, 100, 4, 46); // west rim to the hanging isles
-  ud(70, 127, 4, 52);     // south-west rim, up to the high western islet
-  ud(88, 40, 4, 54);      // Lookout Rock's west side to the Spire
-  ud(124, 72, 4, 52);     // north-east rim to the high stone and the far islet
-  ud(150, 148, 3, 52); ud(157, 170, 3, 46); ud(156, 66, 4, 40);
+  const lastRing = RINGS[RINGS.length - 1];
+  SH.forEach((s, i) => { const p = s[1] || [lastRing.x + lastRing.nx * 10, lastRing.y - 2, lastRing.z + lastRing.nz * 10]; SHARDS.push({ i, x: p[0], y: p[1], z: p[2], text: s[0], isle: islandIndexAt(p[0], p[2]), hidden: s[2] ? 1 : 0 }); });
+  CAVE = NOOKS.find(n => n.kind === 'cave') || null;
+  // ---- vistas: spire tops, the lighthouse, the lookout; standing on one counts toward the journal
+  NOOKS.filter(n => n.kind === 'vista').forEach(n => VISTAS.push({ x: n.x + .5, y: n.y, z: n.z + .5, name: (ISL[n.isle] ? ISL[n.isle].name : 'Sky') + ' summit' }));
+  VISTAS.push({ x: ISL[10].x + .5, y: hTop[ci(ISL[10].x, ISL[10].z)] + 1, z: ISL[10].z + .5, name: 'Lookout Rock' });
   // ---- the threshold of the Wilds: floating buoys with wind banners along the edge of the safe skies
-  const buoy = (x, z) => { const y = 21 + Math.round(h2(x, z) * 4); // well below the glide lanes out of the gates
+  const buoy = (x, z) => { const y = 30 + Math.round(h2(x, z) * 5);
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++){ put(x + dx, y, z + dz, STEP); if (!(dx && dz)) put(x + dx, y - 1, z + dz, DEEP); } put(x, y - 2, z, MOSS);
     for (let yy = y + 1; yy <= y + 5; yy++) put(x, yy, z, SIGN); lamp(x, y + 6, z); BUOYS.push({ x: x + .5, y: y + 5.4, z: z + .5 }); };
-  for (let z = 14; z < SAFE; z += 30) buoy(SAFE - 4, z);
-  for (let x = 14; x < SAFE - 10; x += 30) buoy(x, SAFE - 4);
-  buoy(SAFE - 4, SAFE - 4);
+  for (let z = 16; z < SAFE; z += 34) buoy(SAFE - 5, z);
+  for (let x = 16; x < SAFE - 12; x += 34) buoy(x, SAFE - 5);
+  buoy(SAFE - 5, SAFE - 5);
 }
-function islandIndexAt(x, z){ const c = Math.floor(x) + Math.floor(z) * WX; return c >= 0 && c < COLS ? isl[c] : -1; }
 
 /* ================= light (block light flood fill) ================= */
-const LQN = 1 << 21, LQM = LQN - 1;
+const LQN = 1 << 22, LQM = LQN - 1;
 const lq = new Int32Array(LQN);
 function floodAll(){
   light.fill(0); let qt = 0;
@@ -1240,7 +1178,7 @@ function relight(px, py, pz, out){
 /* ================= mesher (runs in a Blob worker, or inline as a fallback) ================= */
 function MESHER(self){
   'use strict';
-  let RT, OPQ, TIL, SWY;
+  let RT, OPQ, TIL, SWY, WYM = 64;
   const P = 18, P2 = 324;
   const FN = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
   const FU = [[0,1,0],[0,0,1],[0,0,1],[1,0,0],[1,0,0],[0,1,0]];
@@ -1258,7 +1196,7 @@ function MESHER(self){
   const ao = [0,0,0,0], lv = [0,0,0,0];
   function mesh(b, l){
     S.nv = S.ni = Wt.nv = Wt.ni = 0;
-    for (let y = 0; y < 64; y++) for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++){
+    for (let y = 0; y < WYM; y++) for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++){
       const o = (x + 1) + (z + 1) * P + (y + 1) * P2, id = b[o];
       if (!id) continue;
       const rt = RT[id];
@@ -1319,7 +1257,7 @@ function MESHER(self){
   }
   self.onmessage = function(e){
     const d = e.data;
-    if (d.type === 'init'){ RT = d.RT; OPQ = d.OPQ; TIL = d.TIL; SWY = d.SWY; return; }
+    if (d.type === 'init'){ RT = d.RT; OPQ = d.OPQ; TIL = d.TIL; SWY = d.SWY; WYM = d.WY; return; }
     if (d.type === 'mesh'){
       const r = mesh(d.b, d.l);
       const msg = { key: d.key, ver: d.ver, s: r.s, w: r.w, b: d.b, l: d.l };
@@ -1393,9 +1331,9 @@ if (glOK){
 const ATLAS_FN = `
 vec4 atlas(float tileF, vec2 uv){
   float tile = floor(tileF + 0.5);
-  vec2 cell = vec2(tile - 8.0 * floor(tile / 8.0 + 0.01), floor(tile / 8.0 + 0.01));
+  vec2 cell = vec2(tile - 16.0 * floor(tile / 16.0 + 0.01), floor(tile / 16.0 + 0.01));
   vec2 l = clamp(uv, 0.0, 1.0);
-  return texture2D(uAtlas, (cell * 32.0 + 8.0 + vec2(l.x, 1.0 - l.y) * 16.0) / 256.0);
+  return texture2D(uAtlas, (cell * 32.0 + 8.0 + vec2(l.x, 1.0 - l.y) * 16.0) / 512.0);
 }`;
 const terrainMat = glOK ? new THREE.ShaderMaterial({
   uniforms: U,
@@ -1556,13 +1494,13 @@ function markBox(x0, y0, z0, x1, y1, z1){
   for (let y = c; y <= d; y++) for (let z = e; z <= f; z++) for (let x = a; x <= b; x++) markDirty(ckey(x, y, z));
 }
 function padded(c){
-  const b = new Uint8Array(21384), l = new Uint8Array(21384);
+  const b = new Uint8Array(324 * (WY + 2)), l = new Uint8Array(324 * (WY + 2));
   let o = 0; const bx = c.cx * 16, by = 0, bz = c.cz * 16;
-  for (let y = -1; y < 65; y++){ const wy = by + y; for (let z = -1; z < 17; z++){ const wz = bz + z; for (let x = -1; x < 17; x++, o++){ const wx = bx + x;
+  for (let y = -1; y < WY + 1; y++){ const wy = by + y; for (let z = -1; z < 17; z++){ const wz = bz + z; for (let x = -1; x < 17; x++, o++){ const wx = bx + x;
     if (wx < 0 || wy < 0 || wz < 0 || wx >= WX || wy >= WY || wz >= WZ) continue; const i = wx + WX * (wz + WZ * wy); b[o] = world[i]; l[o] = light[i]; } } }
   return [b, l];
 }
-const SPHERE_C = glOK ? new THREE.Vector3(8, 32, 8) : null;
+const SPHERE_C = glOK ? new THREE.Vector3(8, WY / 2, 8) : null;
 function applyMesh(key, ver, s, w){
   const c = chunks[key];
   if (ver !== c.ver) return;
@@ -1574,7 +1512,7 @@ function applyMesh(key, ver, s, w){
     g.setAttribute('uv', new THREE.BufferAttribute(data.u, 2));
     g.setAttribute('aux', new THREE.BufferAttribute(data.a, 4));
     g.setIndex(new THREE.BufferAttribute(data.i, 1));
-    g.boundingSphere = new THREE.Sphere(SPHERE_C, 34);
+    g.boundingSphere = new THREE.Sphere(SPHERE_C, WY / 2 + 6);
     if (old){ old.geometry.dispose(); old.geometry = g; return old; }
     const m = new THREE.Mesh(g, mat); m.position.set(c.cx * 16, 0, c.cz * 16); m.matrixAutoUpdate = false; m.updateMatrix();
     if (mat === waterMat) m.renderOrder = 2;
@@ -1586,7 +1524,7 @@ function applyMesh(key, ver, s, w){
 }
 function startMesher(){
   if (!glOK) return;
-  const init = { type: 'init', RT: B_RT, OPQ: B_OPQ, TIL: B_TILES, SWY: B_SWAY };
+  const init = { type: 'init', RT: B_RT, OPQ: B_OPQ, TIL: B_TILES, SWY: B_SWAY, WY };
   try {
     const url = URL.createObjectURL(new Blob(['(' + MESHER.toString() + ')(self);'], { type: 'text/javascript' }));
     worker = new Worker(url);
@@ -1605,14 +1543,20 @@ function startMesher(){
     chunks.forEach((c, k) => { if (c.sent !== c.ver && !c.dirty && (c.count || c.mesh)){ c.dirty = true; dirtyList.push(k); } });
   }
 }
+const meshRadius = () => (typeof state !== 'undefined' && state === 'title' ? 150 : renderDist * 1.3 + 28);
+const streamFocus = () => (typeof CINE !== 'undefined' && CINE.on) || (typeof state !== 'undefined' && state === 'title') ? camera.position : PL;
+// meshes far outside the view radius are released (GPU memory stays flat as the world grows); they re-mesh on approach
+function unloadFar(){ const px = streamFocus().x, pz = streamFocus().z, R = meshRadius() * 1.6; let n = 0;
+  for (let k = 0; k < chunks.length; k++){ const c = chunks[k]; if (!c.mesh && !c.wmesh) continue; if (Math.hypot(c.cx * 16 + 8 - px, c.cz * 16 + 8 - pz) < R) continue;
+    for (const m of [c.mesh, c.wmesh]) if (m){ scene.remove(m); m.geometry.dispose(); } c.mesh = c.wmesh = null; c.sent = -1; markDirty(k); n++; } return n; }
 function pumpMeshing(budgetMs){
   if (!dirtyList.length) return;
-  if (dirtyList.length > 6){
-    const px = camera.position.x, pz = camera.position.z;
-    dirtyList.sort((a, b) => { const A = chunks[a], B = chunks[b]; return (Math.hypot(B.cx * 16 + 8 - px, B.cz * 16 + 8 - pz)) - (Math.hypot(A.cx * 16 + 8 - px, A.cz * 16 + 8 - pz)); });
-  }
+  // streaming: only chunks within the view radius are meshed (nearest first); far ones wait until approached
+  const px = streamFocus().x, pz = streamFocus().z, RR = meshRadius();
+  if (dirtyList.length > 1) dirtyList.sort((a, b) => { const A = chunks[a], B = chunks[b]; return (Math.hypot(B.cx * 16 + 8 - px, B.cz * 16 + 8 - pz)) - (Math.hypot(A.cx * 16 + 8 - px, A.cz * 16 + 8 - pz)); });
   const t0 = performance.now();
   while (dirtyList.length){
+    { const c = chunks[dirtyList[dirtyList.length - 1]]; if (Math.hypot(c.cx * 16 + 8 - px, c.cz * 16 + 8 - pz) > RR) break; }
     if (worker && inflight >= 24) break;
     if (!worker && performance.now() - t0 > budgetMs) break;
     const k = dirtyList.pop(), c = chunks[k];
@@ -1691,12 +1635,12 @@ function buildSky(){
         gl_FragColor = vec4(grade(col), dens * 0.95);
       }`
   }));
-  cloudSea.position.set(96, 2, 96); cloudSea.renderOrder = 1; scene.add(cloudSea);
+  cloudSea.position.set(WX / 2, 2, WZ / 2); cloudSea.renderOrder = 1; scene.add(cloudSea);
   // drifting puffy clouds at island height (instanced soft boxes)
   const list = [];
-  for (let k = 0; k < 16; k++){
-    const cx = rnd() * 520 - 160, cy = 14 + rnd() * 36, cz = rnd() * 420 - 110;
-    if (Math.hypot(cx - 96, cz - 98) < 30) continue;
+  for (let k = 0; k < 30; k++){
+    const cx = rnd() * (WX + 240) - 120, cy = 26 + rnd() * 52, cz = rnd() * (WZ + 240) - 120;
+    if (Math.hypot(cx - HOMEC.x, cz - HOMEC.z) < 70) continue;
     const n = 4 + Math.floor(rnd() * 5);
     for (let i = 0; i < n; i++) list.push([cx + (rnd() - .5) * 14, cy + rnd() * 2.5, cz + (rnd() - .5) * 9, 5 + rnd() * 7, 2 + rnd() * 2.5, 4 + rnd() * 5, [.98, .96, .94]]);
   }
@@ -1792,7 +1736,7 @@ function buildSigns(){
       else plane(side ? s.x + 1.012 : s.x - .012, s.y + 3.5, s.z + .5, bw - .04, 2.96, side ? Math.PI / 2 : -Math.PI / 2, r);
     }
   });
-  const T0 = hTop[96 + 98 * WX];
+  const T0 = hTop[HOMEC.x + HOMEC.z * WX];
   const arrows = []; // the finger-post went with the old archipelago
   ax = 0; ay += rowH; rowH = 0;
   arrows.forEach(a => { for (const flip of [false, true]){ const r = alloc(384, 112); SIGN_REG.push({ r, title: a[0], arrow: { arrow: true, flip } });
@@ -1829,7 +1773,7 @@ function buildGlow(){
   halos.frustumCulled = false; scene.add(halos);
   // fireflies
   const nF = LOW ? 90 : 240, fp = new Float32Array(nF * 3), fa = new Float32Array(nF);
-  for (let i = 0; i < nF; i++){ const s = FIREFLY_SPOTS[Math.floor(rnd() * FIREFLY_SPOTS.length)] || [96, 34, 98]; fp[i * 3] = s[0] + (rnd() - .5) * 6; fp[i * 3 + 1] = s[1] + rnd() * 2.5; fp[i * 3 + 2] = s[2] + (rnd() - .5) * 6; fa[i] = rnd() * 100; }
+  for (let i = 0; i < nF; i++){ const s = FIREFLY_SPOTS[Math.floor(rnd() * FIREFLY_SPOTS.length)] || [HOMEC.x, 60, HOMEC.z]; fp[i * 3] = s[0] + (rnd() - .5) * 6; fp[i * 3 + 1] = s[1] + rnd() * 2.5; fp[i * 3 + 2] = s[2] + (rnd() - .5) * 6; fa[i] = rnd() * 100; }
   const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(fp, 3)); fg.setAttribute('aP', new THREE.BufferAttribute(fa, 1));
   fireflies = new THREE.Points(fg, pointsMat(true, [
     `attribute float aP; uniform float uScale; uniform float uTime; uniform float uNight; varying float vA;
@@ -2262,7 +2206,7 @@ const STEP_DT = 1 / 120, WALK = 5.5, SPRINT = 8.5, SNEAK = 2.2, G_ACCEL = 6.5, A
 const GRAV = 32, FALL_MULT = 1.55, HANG_MULT = .5, TERMINAL = 50, JUMP_V = 10.2, COYOTE = .11, JUMP_BUF = .13, SPRINT_JUMP_BOOST = 1.08;
 const SLIDE_T = .7, SLIDE_V = 11, DASH_V = 15, DASH_CD = .85;
 const GLIDE_BASE = 9.5, GLIDE_MAX = 24, GLIDE_MIN = 5.5, LIFT = 14, BOUNCE_V = 21, CATCH_Y = 12, CATCH_T = 1.1;
-const PL = { x: 96.5, y: 40, z: 108, px: 96.5, py: 40, pz: 108, vx: 0, vy: 0, vz: 0, hw: .3, h: 1.8, onGround: false, wasGround: false, inWater: false, yaw: 0, pitch: 0,
+const PL = { x: 160.5, y: 70, z: 190, px: 160.5, py: 70, pz: 190, vx: 0, vy: 0, vz: 0, hw: .3, h: 1.8, onGround: false, wasGround: false, inWater: false, yaw: 0, pitch: 0,
   stepOff: 0, sd: 0.5, md: 0.5, coyote: 0, jumpBuf: 0, air: 0, gliding: false, gs: 9.5, flaps: 0, sneak: false, slideT: 0, dashCD: 0, airDash: true, vault: 0, eyeOff: 0, mantleCD: 0, glideLock: 0, autoJT: 0, sailOpen: false,
   stable: 0, walk: 0, stepAcc: 0, stepPh: 0, stall: 0, landKick: 0, punch: 0, trailT: 0, safe: null, catching: false };
 const INP = { x: 0, z: 0, jump: false, jumpEdge: false, sprint: false, sneak: false, sneakEdge: false, dashEdge: false, dashX: 0, dashZ: 0, use: false };
@@ -2543,7 +2487,7 @@ function spawnMobs(){
       phase: rnd() * 6, spd: 0, squash: 0, heartT: 0, lod: 0, tickAcc: 0, i: 0, friend: false, pawT: 0, poof: 0, act: 0, actT: 0, actD: 0, react: 0, reactT: 0, sleep: false, zT: 0,
       A: { hy: Spr(), hp: Spr(), eL: Spr(), eR: Spr(), t1: Spr(), t2: Spr(), sq: Spr(1), lean: Spr(), blink: 1, blinkT: 2 + rnd() * 3, gait: 0, prevVy: 0, lastYaw: 0 } }); } };
   add('puffle', 0, 12); add('kit', 0, 10);
-  const jPts = [[70, 40, 70], [122, 44, 70], [128, 38, 128], [66, 42, 126], [96, 47, 126], [60, 48, 98], [134, 46, 98], [96, 50, 70]];
+  const jPts = []; for (let k = 0; k < 10; k++){ const a = k / 10 * Math.PI * 2 + .3, rr = 62 + (k % 3) * 9; jPts.push([HOMEC.x + Math.cos(a) * rr, 64 + (k % 4) * 3, HOMEC.z + Math.sin(a) * rr]); }
   jPts.forEach((p, k) => MOBS.push({ type: 'jelly', x: p[0], y: p[1], z: p[2], px: p[0], py: p[1], pz: p[2], vx: 0, vy: 0, vz: 0, hw: .55, h: .8, yaw: 0, pyaw: 0, headYaw: 0, headPitch: 0, st: MS.WANDER, timer: 0, phase: k * 1.7,
     home: { x: p[0], y: p[1], z: p[2], r: 12 }, tx: p[0], ty: p[1], tz: p[2], act: 0, actT: 0, actD: 0, react: 0, reactT: 0, sleep: false, zT: 0, A: { hy: Spr(), hp: Spr(), eL: Spr(), eR: Spr(), t1: Spr(), t2: Spr(), sq: Spr(1), lean: Spr(), blink: 1, blinkT: 2 + rnd() * 3, gait: 0, prevVy: 0, lastYaw: 0 }, squash: 0, heartT: 0, lod: 0, tickAcc: 0, i: 0, spd: 0, stepOff: 0, sd: 0.5, md: 0.5, isle: -1, fvx: 0, fvy: 0, fvz: 0, fleeT: 0 }));
   const cnt = { puffle: 0, kit: 0, jelly: 0 }; MOBS.forEach(m => m.i = cnt[m.type]++);
@@ -2638,7 +2582,7 @@ function tickGroundMob(m, dt){
   if (m.y < -4) teleportHome(m);
 }
 function groundBelow(x, y, z){ const fx = Math.floor(x), fz = Math.floor(z), fy = Math.floor(y + .01); return solidAt(fx, fy - 1, fz) || solidAt(fx, fy - 2, fz); }
-function teleportHome(m){ const p = (MOB_SPAWNS[m.isle] || [[96.5, 34, 98.5]])[0]; m.x = m.px = p[0]; m.y = m.py = p[1]; m.z = m.pz = p[2]; m.vx = m.vy = m.vz = 0; m.pathLen = 0; }
+function teleportHome(m){ const p = (MOB_SPAWNS[m.isle] || [[HOMEC.x + .5, 60, HOMEC.z + .5]])[0]; m.x = m.px = p[0]; m.y = m.py = p[1]; m.z = m.pz = p[2]; m.vx = m.vy = m.vz = 0; m.pathLen = 0; }
 function teleportNear(m){
   for (let r = 2; r <= 4; r++) for (let k = 0; k < 8; k++){ const a = k / 8 * 6.283 + PL.yaw + Math.PI; const x = Math.floor(PL.x + Math.sin(a) * r), z = Math.floor(PL.z + Math.cos(a) * r); const y = standY(x, Math.floor(PL.y + .01), z); if (y > -900 && boxFree(x + .5, y, z + .5, m.hw, m.h)){ sparkle(m.x, m.y + .5, m.z, 6, .95, .9, .8); m.x = m.px = x + .5; m.y = m.py = y; m.z = m.pz = z + .5; m.vx = m.vy = m.vz = 0; m.pathLen = 0; m.stuck = 0; sparkle(m.x, m.y + .5, m.z, 8, .95, .9, .8); return; } }
 }
@@ -2869,8 +2813,8 @@ function flierMat(color){
 function wingGeo(n){ const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, -.5, -1, 0, -.6, -1, 0, .4, 0, 0, .5, 0, 0, -.5, 1, 0, -.6, 1, 0, .4, 0, 0, .5]), 3)); g.setIndex([0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6]); const ph = new Float32Array(n); for (let i = 0; i < n; i++) ph[i] = rnd(); g.setAttribute('aPh', new THREE.InstancedBufferAttribute(ph, 1)); return g; }
 function buildFliers(){
   const nB = 10, nU = LOW ? 10 : 18;
-  for (let i = 0; i < nB; i++) BIRDS.push({ x: 96 + (rnd() - .5) * 30, y: 54 + rnd() * 4, z: 98 + (rnd() - .5) * 30, vx: rnd() - .5, vy: 0, vz: rnd() - .5 });
-  for (let i = 0; i < nU; i++){ const s = BUTTERFLY_SPOTS[Math.floor(rnd() * BUTTERFLY_SPOTS.length)] || [96, 33, 98]; BUGS.push({ ax: s[0], ay: s[1], az: s[2], x: s[0], y: s[1] + 1, z: s[2], vx: 0, vy: 0, vz: 0, ph: rnd() * 10, c: i % 5 }); }
+  for (let i = 0; i < nB; i++) BIRDS.push({ x: HOMEC.x + (rnd() - .5) * 30, y: 80 + rnd() * 4, z: HOMEC.z + (rnd() - .5) * 30, vx: rnd() - .5, vy: 0, vz: rnd() - .5 });
+  for (let i = 0; i < nU; i++){ const s = BUTTERFLY_SPOTS[Math.floor(rnd() * BUTTERFLY_SPOTS.length)] || [HOMEC.x, 58, HOMEC.z]; BUGS.push({ ax: s[0], ay: s[1], az: s[2], x: s[0], y: s[1] + 1, z: s[2], vx: 0, vy: 0, vz: 0, ph: rnd() * 10, c: i % 5 }); }
   birdMesh = new THREE.InstancedMesh(wingGeo(nB), flierMat([.22, .23, .28]), nB); birdMesh.material.uniforms.uRate.value = 5; birdMesh.frustumCulled = false; scene.add(birdMesh);
   bugMesh = new THREE.InstancedMesh(wingGeo(nU), flierMat([.93, .78, .5]), nU); bugMesh.material.uniforms.uRate.value = 17; bugMesh.frustumCulled = false; scene.add(bugMesh);
   const cols = [[.93, .78, .5], [.88, .6, .58], [.72, .78, .93], [.96, .94, .88], [.8, .62, .84]];
@@ -2881,7 +2825,7 @@ function stepFliers(dt, t){
   let cx = 0, cy = 0, cz = 0, ax = 0, ay = 0, az = 0; const n = BIRDS.length;
   for (const b of BIRDS){ cx += b.x; cy += b.y; cz += b.z; ax += b.vx; ay += b.vy; az += b.vz; }
   cx /= n; cy /= n; cz /= n; ax /= n; ay /= n; az /= n;
-  const ang = t * .05, gx = 96 + Math.cos(ang) * 46, gz = 98 + Math.sin(ang) * 46, gy = 56;
+  const ang = t * .05, gx = HOMEC.x + Math.cos(ang) * 64, gz = HOMEC.z + Math.sin(ang) * 64, gy = 82;
   for (let i = 0; i < n; i++){
     const b = BIRDS[i]; let fx = (cx - b.x) * .4 + (ax - b.vx) * .8 + (gx - b.x) * .12, fy = (cy - b.y) * .4 + (gy - b.y) * .4, fz = (cz - b.z) * .4 + (az - b.vz) * .8 + (gz - b.z) * .12;
     for (let j = 0; j < n; j++){ if (j === i) continue; const o = BIRDS[j], sx = b.x - o.x, sy = b.y - o.y, sz = b.z - o.z, d2 = sx * sx + sy * sy + sz * sz; if (d2 < 9 && d2 > 1e-3){ fx += sx / d2 * 6; fy += sy / d2 * 6; fz += sz / d2 * 6; } }
@@ -3372,13 +3316,12 @@ function updateStandSail(t){
   standSail.grp.visible = !!on; if (!on) return;
   standSail.grp.position.set(SAIL_STAND.x, SAIL_STAND.y - .5 + .62 + Math.sin(t * 1.6) * .04, SAIL_STAND.z); standSail.grp.rotation.set(Math.sin(t * 1.1) * .04, t * .35, Math.sin(t * 1.3) * .05);
 }
-
 /* =====================================================================
-   THE WILDS: a seeded crescent of procedural islands beyond the lore archipelago.
-   The lore zone [0,200)^2 stays hand-authored and peaceful. Out here: five biomes,
-   structures from templates with procedural variation, enemies, loot chests, weapons.
-   Islands are voxelised lazily (in a worker) as the player approaches; until then a
-   one-draw-call silhouette keeps the horizon populated.
+   THE WILDS: a seeded crescent of procedural islands beyond the safe skies.
+   The safe zone [0,320)^2 holds Home Isle and the inner islets. Out here: five biomes, nine island
+   archetypes, structures from templates with procedural variation, enemies, loot chests, weapons,
+   and one guarded Sky Vault that holds the grappling hook. Islands are voxelised lazily (in a worker)
+   as the player approaches; until then a one-draw-call silhouette keeps the horizon populated.
    ===================================================================== */
 const BIOMES = [
   { id: 'ruins', name: 'Mossy Ruins', top: [.42, .55, .33], rock: [.46, .44, .42], fog: [.62, .7, .62], structs: [0, 1], wild: [0, 0, 1], syl: ['Moss', 'Old', 'Fern', 'Grey', 'Hollow'], suf: ['fall', 'hold', 'stead', 'reach', 'mere'] },
@@ -3389,93 +3332,298 @@ const BIOMES = [
 ];
 const STRUCT_NAMES = ['Ruined watchtower', 'Sunken shrine', 'Goblin camp', 'Crystal vault', 'Sky-wreck'], STRUCT_TIER = [1, 2, 1, 3, 2];
 
-/* ---- the generator: pure, deterministic, runs in a worker (or inline as a fallback) ---- */
+/* =====================================================================
+   ISLAND GENERATOR (shared by Home Isle, the inner islets and the Wilds; runs in a worker)
+   ---------------------------------------------------------------------
+   Every island is sculpted the same way, then dressed per biome:
+     1 silhouette: an organic outline (two noise octaves, optional aspect), terraced highlands
+       with 5-block cliff steps, rim terraces, a tapered keel underneath (rock strata on the sides).
+     2 3D carving: eroded undercuts and overhang lips near the rim, worm caves and through-tunnels
+       that swell into chambers (each chamber is a hidden nook), lit by glowcaps and crystals.
+     3 underside: stalactites, hanging roots, small floating debris rocks.
+     4 water: a spring on the high ground feeds a river that steps down terraces as waterfalls,
+       pools at the bottom of each drop, and leaves the island as a curtain waterfall off the rim.
+     5 dressing: several tree species (oak, birch, pine, autumn, willow, a giant canopy tree),
+       bushes, meadows of tall grass, flower drifts, ferns, mushrooms, vines on cliff faces,
+       boulders, standing stones, rock spires, arches, ruins and props.
+     6 landmarks: each island gets one tall point of interest that reads from far away.
+   Biomes: 0 ruins, 1 mesa, 2 frost, 3 grove, 4 ash (the Wilds); 5 temperate islet; 6 Home Isle.
+   ===================================================================== */
 function WGEN(self){
-  let B = null, SEED = 1, WXg = 352, WZg = 352;
+  let B = null, SEED = 1, WXg = 512, WZg = 512, H = 96;
   function h2(x, z){ let h = (Math.imul(x | 0, 374761393) + Math.imul(z | 0, 668265263) + SEED) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
   function h3(x, y, z){ let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 1103515245) + Math.imul(z | 0, 668265263) + SEED) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
   function vn(x, z){ const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi; const u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
     const a = h2(xi, zi), b = h2(xi + 1, zi), c = h2(xi, zi + 1), d = h2(xi + 1, zi + 1); return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; }
+  function vn3(x, y, z){ const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), xf = x - xi, yf = y - yi, zf = z - zi; const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+    const a = h3(xi, yi, zi), b = h3(xi + 1, yi, zi), c = h3(xi, yi + 1, zi), d = h3(xi + 1, yi + 1, zi), e = h3(xi, yi, zi + 1), f = h3(xi + 1, yi, zi + 1), g = h3(xi, yi + 1, zi + 1), k = h3(xi + 1, yi + 1, zi + 1);
+    const x1 = a + (b - a) * u, x2 = c + (d - c) * u, x3 = e + (f - e) * u, x4 = g + (k - g) * u, y1 = x1 + (x2 - x1) * v, y2 = x3 + (x4 - x3) * v; return y1 + (y2 - y1) * w; }
   function fbm(x, z){ let s = 0, a = .5, f = 1; for (let i = 0; i < 4; i++){ s += a * vn(x * f, z * f); f *= 2.03; a *= .5; } return s / .9375; }
   const ridge = (x, z) => 1 - Math.abs(fbm(x, z) * 2 - 1);
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v, sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
   function mulberry(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  const temperate = I => I.b >= 5;
 
+  // archetypes: plain, mesa, atoll (ring + central lake), spires (a cluster of needles), arch (a hole through, spanned
+  // by a rock arch), terrace (stepped cliffs), ruins (overgrown), bridged (lobes joined by natural rock bridges),
+  // archipelago (tiny rock-hopping islets)
+  function archData(I){
+    if (I._ad) return I._ad; const r = mulberry(((SEED * 7) ^ Math.imul(I.k + 11, 40503)) >>> 0), A = {};
+    if (I.arch === 'bridged'){ const n = I.r > 18 ? 3 : 2; A.lobes = []; A.bridges = []; const a0 = r() * 6.283;
+      for (let k = 0; k < n; k++){ const a = a0 + k / n * 6.283 + (r() - .5) * .5, dist = I.r * (.62 + r() * .1); A.lobes.push({ x: I.x + Math.cos(a) * dist, z: I.z + Math.sin(a) * dist, r: I.r * (.42 + r() * .12), dh: Math.round((r() - .5) * 8) }); }
+      for (let k = 0; k < n - (n === 2 ? 1 : 0); k++) A.bridges.push([A.lobes[k], A.lobes[(k + 1) % n]]); }
+    else if (I.arch === 'archipelago'){ const n = 5 + Math.floor(r() * 4); A.lobes = [];
+      for (let t = 0; t < 60 && A.lobes.length < n; t++){ const a = r() * 6.283, dist = Math.sqrt(r()) * I.r * .8, lr = Math.max(2.6, I.r * (.17 + r() * .12)), L = { x: I.x + Math.cos(a) * dist, z: I.z + Math.sin(a) * dist, r: lr, dh: Math.round((r() - .5) * 14) };
+        if (A.lobes.some(o => Math.hypot(o.x - L.x, o.z - L.z) < (o.r + L.r) * 1.25 + 2)) continue; A.lobes.push(L); } }
+    else if (I.arch === 'spires'){ A.spires = []; const n = 3 + Math.floor(r() * 4); for (let k = 0; k < n; k++){ const a = r() * 6.283, dist = (.15 + r() * .5) * I.r; A.spires.push({ x: I.x + Math.cos(a) * dist, z: I.z + Math.sin(a) * dist, r: 2.4 + r() * 2, h: 10 + r() * 16 }); } }
+    else if (I.arch === 'arch'){ A.hole = { x: I.x + (r() - .5) * I.r * .2, z: I.z + (r() - .5) * I.r * .2, r: Math.max(3, I.r * .22), ang: r() * 3.14 }; }
+    I._ad = A; return A;
+  }
   // column shape: shared by the voxel generator and the far silhouettes, so they always agree
+  function shapeE(I, x, z, out){ const s = I.k * 17.3 + 5, AD = archData(I); let base, lobe = null;
+    if (AD.lobes){ base = 9; for (const L of AD.lobes){ const v = Math.hypot(x - L.x, z - L.z) / L.r; if (v < base){ base = v; lobe = L; } } }
+    else { const dx = (x - I.x) / (I.ax || 1), dz = (z - I.z) / (I.az || 1); base = Math.sqrt(dx * dx + dz * dz) / I.r; }
+    if (out) out.lobe = lobe;
+    let e = base + (fbm(x * .045 + s, z * .045 - s) - .5) * (AD.lobes ? .45 : .62) + (fbm(x * .15 - s, z * .15 + s) - .5) * .16;
+    if (AD.hole){ const hd = Math.hypot(x - AD.hole.x, z - AD.hole.z) / AD.hole.r; if (hd < 1) e = Math.max(e, 1 + (1 - hd)); }
+    return e; }
   function col(I, x, z, out){
-    const dx = x - I.x, dz = z - I.z, d = Math.sqrt(dx * dx + dz * dz) / I.r, s = I.k * 17.3 + 5;
-    const e = d + (fbm(x * .07 + s, z * .07 - s) - .5) * .7 + (fbm(x * .21 - s, z * .21 + s) - .5) * .18;
+    const e = shapeE(I, x, z, out);
     if (e >= 1){ out.in = 0; return out; }
-    const edge = 1 - sstep(.55, 1, e), n1 = fbm(x * .05 + s * 2, z * .05 + 3);
+    const AD = archData(I), arch = I.arch || 'plain';
+    const s = I.k * 17.3 + 5, edge = 1 - sstep(.55, 1, e), n1 = fbm(x * .035 + s * 2, z * .035 + 3);
     let h = I.top;
-    if (I.b === 0) h += Math.round((n1 - .5) * 6 * edge);
-    else if (I.b === 1){ h = Math.floor((I.top + (n1 - .35) * 12 * edge) / 3) * 3; }
-    else if (I.b === 2){ h += Math.round((n1 - .5) * 4 * edge); const r = ridge(x * .11 + s, z * .11 - s); if (r > .8 && e < .72) h += Math.round((r - .8) / .2 * 13 * edge); }
-    else if (I.b === 3) h += Math.round(Math.sin(n1 * 3.1) * 3 * edge + (n1 - .5) * 3);
-    else { const r = ridge(x * .09 + s, z * .09); h += Math.round((r - .5) * 8 * edge); }
-    if (e > .86) h--; if (e > .95) h--;
-    const dep = I.depth * Math.pow(1 - e, .55) * (.55 + .8 * fbm(x * .16 + 5 + s, z * .16 - s));
-    let b = h - 2 - Math.round(dep);
-    if (h2(x * 5 + I.k, z * 3) < .07 && e < .8) b -= 2 + Math.floor(h2(z, x) * 6);
-    out.in = 1; out.e = e; out.top = Math.min(h, 58); out.bot = Math.max(2, Math.min(b, out.top - 1)); return out;
+    if (arch === 'mesa'){ h = I.top + Math.round((n1 - .5) * 3) + (e < .82 ? 0 : -Math.round((e - .82) * 6)); }
+    else if (arch === 'terrace'){ const tv = sstep(.2, .85, fbm(x * .02 + s, z * .02)) * 22 * (1 - sstep(.5, .95, e)); h += Math.floor(tv / 5) * 5 + Math.round((n1 - .5) * 3); }
+    else if (temperate(I)){
+      const hm = fbm(x * .016 + s * 3, z * .016 - s) + (I.hlBias || 0), tv = sstep(.45, .8, hm) * (I.hl === undefined ? 10 : I.hl) * (1 - sstep(.45, .9, e)), st = 5;
+      const q = Math.floor(tv / st) * st + sstep(.72, 1, (tv / st) % 1) * st; // terraces: flat benches, 5-high cliff steps
+      h += Math.round((n1 - .5) * 6 * edge + q);
+    }
+    else if (I.b === 0) h += Math.round((n1 - .5) * 9 * edge);
+    else if (I.b === 1){ h = Math.floor((I.top + (n1 - .35) * 18 * edge) / 4) * 4; }
+    else if (I.b === 2){ h += Math.round((n1 - .5) * 6 * edge); const r = ridge(x * .08 + s, z * .08 - s); if (r > .8 && e < .72) h += Math.round((r - .8) / .2 * 19 * edge); }
+    else if (I.b === 3) h += Math.round(Math.sin(n1 * 3.1) * 4 * edge + (n1 - .5) * 4);
+    else { const r = ridge(x * .065 + s, z * .065); h += Math.round((r - .5) * 12 * edge); }
+    if (out.lobe) h += out.lobe.dh;
+    if (arch === 'atoll'){ const d0 = Math.hypot(x - I.x, z - I.z) / I.r; h += Math.round(sstep(.35, .62, d0) * 4 - sstep(.7, 1, e) * 2); }
+    if (AD.spires) for (const sp of AD.spires){ const dd = Math.hypot(x - sp.x, z - sp.z) / sp.r; if (dd < 1) h = Math.max(h, I.top + Math.round(Math.pow(1 - dd, .35) * sp.h)); }
+    if (I.flats) for (const f of I.flats){ const d = Math.hypot(x - f.x, z - f.z); if (d < f.r + 5){ const w = 1 - sstep(f.r, f.r + 5, d); h = Math.round(h * (1 - w) + f.h * w); } }
+    if (e > .88) h--; if (e > .96) h--;
+    // underside profile varies with the archetype: mesas are blunt and deep, archipelago rocks are short cones, the rest taper
+    const kp = arch === 'mesa' ? .22 : arch === 'archipelago' ? .8 : arch === 'atoll' ? .4 : .5;
+    const dep = I.depth * (out.lobe ? out.lobe.r / I.r * 1.4 : 1) * Math.pow(1 - e, kp) * (.55 + .8 * fbm(x * .09 + 5 + s, z * .09 - s));
+    const b = h - 3 - Math.round(dep);
+    out.in = 1; out.e = e; out.top = Math.min(h, H - 10); out.bot = Math.max(3, Math.min(b, out.top - 2)); return out;
   }
 
   function genIsland(I){
     const rnd = mulberry((SEED ^ Math.imul(I.k + 1, 2654435761)) >>> 0);
-    const R = Math.ceil(I.r * 1.65) + 4;
+    const R = Math.ceil(I.r * 1.75 * Math.max(I.ax || 1, I.az || 1)) + 6;
     const x0 = Math.max(2, I.x - R), z0 = Math.max(2, I.z - R), x1 = Math.min(WXg - 3, I.x + R), z1 = Math.min(WZg - 3, I.z + R);
-    const w = x1 - x0 + 1, d = z1 - z0 + 1, H = 64;
-    const blk = new Uint8Array(w * d * H), top = new Int16Array(w * d).fill(-1), bot = new Int16Array(w * d), ee = new Float32Array(w * d), res = new Uint8Array(w * d);
+    const w = x1 - x0 + 1, d = z1 - z0 + 1;
+    const blk = new Uint8Array(w * d * H), top = new Int16Array(w * d).fill(-1), bot = new Int16Array(w * d), ee = new Float32Array(w * d), res = new Uint8Array(w * d), wat = new Int16Array(w * d).fill(-1);
     const ci = (x, z) => (x - x0) + (z - z0) * w, inb = (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
     const at = (x, y, z) => (x - x0) + w * ((z - z0) + d * y);
-    const put = (x, y, z, id) => { if (!inb(x, z) || y < 1 || y > 62) return; blk[at(x, y, z)] = id; };
-    const get = (x, y, z) => (!inb(x, z) || y < 0 || y > 63) ? 0 : blk[at(x, y, z)];
+    const put = (x, y, z, id) => { if (!inb(x, z) || y < 1 || y > H - 2) return; blk[at(x, y, z)] = id; };
+    const get = (x, y, z) => (!inb(x, z) || y < 0 || y > H - 1) ? 0 : blk[at(x, y, z)];
     const isIn = (x, z) => inb(x, z) && top[ci(x, z)] >= 0;
-    const o = {};
+    const o = {}, safe = !!I.safe, T5 = temperate(I);
+    const nooks = [], pois = [], falls = [], trees = [], ff = [], bf = [];
     for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++){ col(I, x, z, o); if (!o.in) continue; const c = ci(x, z); top[c] = o.top; bot[c] = o.bot; ee[c] = o.e; }
-    // ---- structure sites (flattened pads well inside the island)
-    const BS = [[0, 1], [2, 0], [3, 1], [1, 4], [2, 3]][I.b];
-    const want = I.r > 10.5 ? 2 : 1, sites = [];
-    for (let t = 0; t < 60 && sites.length < want; t++){
-      const a = rnd() * 6.283, rr = rnd() * I.r * .38, x = Math.round(I.x + Math.cos(a) * rr), z = Math.round(I.z + Math.sin(a) * rr);
-      if (!isIn(x, z) || ee[ci(x, z)] > .5) continue;
-      if (sites.some(s => Math.hypot(s.x - x, s.z - z) < 13)) continue;
-      const type = BS[sites.length % BS.length];
-      sites.push({ x, z, type, rad: type === 2 ? 6 : type === 4 ? 6 : 5 });
+    if (I.arch === 'atoll'){ const lr = I.r * .4, lvl = I.top - 1; for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++){ const c = ci(x, z); if (top[c] < 0) continue; const d0 = Math.hypot(x - I.x, z - I.z) - (fbm(x * .1, z * .1) - .5) * 3; if (d0 < lr){ top[c] = Math.min(top[c], lvl - 1 - Math.round(sstep(lr, 0, d0) * 3)); wat[c] = lvl; res[c] = 1; } else if (d0 < lr + 1.5 && top[c] >= lvl){ top[c] = lvl; } } }
+    if (I.res) for (const r of I.res) for (let z = r[1]; z <= r[3]; z++) for (let x = r[0]; x <= r[2]; x++) if (inb(x, z)) res[ci(x, z)] = 2;
+    // ---- stalactites (part of the keel: computed on the column bottoms, so the fill makes them)
+    const nSp = Math.round(I.r * (I.b === 2 ? 1.6 : 1.1));
+    for (let k = 0; k < nSp; k++){
+      const a = rnd() * 6.283, rr = Math.sqrt(rnd()) * I.r * .8, cx = Math.round(I.x + Math.cos(a) * rr), cz = Math.round(I.z + Math.sin(a) * rr); if (!isIn(cx, cz)) continue;
+      const len = 3 + rnd() * (6 + 10 * (1 - ee[ci(cx, cz)])), rad = 1.2 + rnd() * 1.6;
+      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++){ const X = cx + dx, Z = cz + dz; if (!isIn(X, Z)) continue; const dd = Math.hypot(dx, dz) / rad; if (dd >= 1) continue; const c = ci(X, Z); bot[c] = Math.max(2, Math.min(bot[c], bot[ci(cx, cz)] - Math.round(len * (1 - dd) * (1 - dd * .3)))); }
     }
+    // ---- water first, so terrain fill knows the channel: a spring on the high ground, a river stepping down to the rim
+    const waterRun = (sx, sz, bias) => {
+      let x = sx, z = sz, L = top[ci(x, z)], dirx = bias ? bias[0] : 0, dirz = bias ? bias[1] : 0, steps = 0, lastDrop = -9;
+      const seen = new Set();
+      const mark = (X, Z, lvl) => { if (!isIn(X, Z)) return; const c = ci(X, Z); if (top[c] >= lvl - 1 || wat[c] < 0){ if (top[c] > lvl - 1 || wat[c] < 0){ top[c] = lvl - 1; if (bot[c] > top[c] - 3) bot[c] = top[c] - 3; } wat[c] = Math.max(wat[c], lvl); res[c] = res[c] || 1; } };
+      while (steps++ < 260){
+        seen.add(x + ',' + z);
+        // pool at the foot of a drop
+        if (steps - lastDrop === 2){ for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) if (dx * dx + dz * dz <= 5 && isIn(x + dx, z + dz) && top[ci(x + dx, z + dz)] >= L - 1) mark(x + dx, z + dz, L); }
+        mark(x, z, L); if (Math.abs(dirz) >= Math.abs(dirx)) { mark(x + 1, z, L); } else mark(x, z + 1, L);
+        // next cell: prefer downhill, keep heading outward, a little meander
+        let best = null, bs = -1e9;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const X = x + dx, Z = z + dz; if (seen.has(X + ',' + Z)) continue;
+          if (!isIn(X, Z)){ const sc = 50 + (dx * dirx + dz * dirz) * 4; if (sc > bs){ bs = sc; best = [X, Z, dx, dz, true]; } continue; }
+          const c = ci(X, Z), hh = wat[c] >= 0 ? L - 1 : top[c];
+          const sc = -(hh - L) * 2.2 + (ee[c] - ee[ci(x, z)]) * 30 + (dx * dirx + dz * dirz) * 1.6 + (h2(X * 3 + steps, Z) - .5) * 1.4 - (res[c] === 2 ? 40 : 0);
+          if (sc > bs){ bs = sc; best = [X, Z, dx, dz, false]; } }
+        if (!best) break;
+        const [X, Z, dx, dz, out] = best; dirx = dirx * .6 + dx * .4; dirz = dirz * .6 + dz * .4;
+        if (out){ falls.push({ x: x + .5 + dx * .5, y: L + .86, z: z + .5 + dz * .5, dx, dz, rim: 1 });
+          for (let k = 1; k <= 5; k++) put(x + dx, L - k + 1, z + dz, 0); // the curtain falls into open air; the rim keeps a lip
+          break; }
+        const nh = top[ci(X, Z)];
+        if (nh < L - 2){ // a terrace drop: the river falls as a waterfall to the lower level
+          const nL = nh + 1; falls.push({ x: x + .5 + dx * .5, y: L + .86, z: z + .5 + dz * .5, dx, dz, h: L - nL });
+          for (let y = nL; y <= L; y++) wfall.push([X, y, Z]);
+          L = nL; lastDrop = steps;
+        }
+        x = X; z = Z;
+      }
+    };
+    const wfall = [];
+    if ((T5 || I.b === 0 || I.b === 3) && I.r >= 11 && I.river !== false){
+      let sx = I.spring ? I.spring.x : -1, sz = I.spring ? I.spring.z : -1;
+      if (sx < 0){ let bh = -1; for (let t = 0; t < 80; t++){ const a = rnd() * 6.283, rr = rnd() * I.r * .45, X = Math.round(I.x + Math.cos(a) * rr), Z = Math.round(I.z + Math.sin(a) * rr); if (!isIn(X, Z) || res[ci(X, Z)] === 2) continue; if (top[ci(X, Z)] > bh){ bh = top[ci(X, Z)]; sx = X; sz = Z; } } }
+      if (sx >= 0) waterRun(sx, sz, I.riverDir);
+    }
+    if (I.ponds) for (const p of I.ponds){ for (let dz = -Math.ceil(p.r) - 2; dz <= p.r + 2; dz++) for (let dx = -Math.ceil(p.r) - 2; dx <= p.r + 2; dx++){ const X = p.x + dx, Z = p.z + dz; if (!isIn(X, Z)) continue; const dd = Math.hypot(dx, dz), c = ci(X, Z); if (dd < p.r){ top[c] = dd < p.r - 1.4 ? p.l - 3 : p.l - 1; wat[c] = p.l; res[c] = res[c] || 1; } else if (dd < p.r + 1.6){ top[c] = p.l; res[c] = res[c] || 1; } } }
+    // ---- fill columns: layered rock with strata, biome surfaces, edge transitions
+    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++){
+      const c = ci(x, z); const h = top[c]; if (h < 0) continue; const b = bot[c], e = ee[c];
+      // a cliff edge: any neighbour more than 2 lower (gets moss / snow caps / exposed strata)
+      let drop = 0; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const X = x + dx, Z = z + dz; const nh = isIn(X, Z) ? top[ci(X, Z)] : b; drop = Math.max(drop, h - nh); }
+      const so = Math.floor(fbm(x * .05, z * .05) * 4), mossy = (e > .9 && fbm(x * .2, z * .2) > .55);
+      for (let y = b; y <= h; y++){
+        const depth = h - y; let id;
+        const strata = ((y + so) % 7);
+        if (T5){
+          if (depth === 0) id = wat[c] >= 0 ? (h3(x, y, z) < .5 ? B.SAND : B.GRAVEL) : ((drop > 3 && h3(x, 1, z) < .5) || mossy ? B.MOSS : B.GRASS);
+          else if (depth <= 3 - (drop > 4 ? 1 : 0)) id = wat[c] >= 0 && depth <= 1 ? B.SAND : B.DIRT;
+          else id = strata === 0 ? B.COBBLE : strata === 4 && depth > 6 ? B.DEEP : B.STONE;
+        }
+        else if (I.b === 0){ id = depth === 0 ? (h3(x, y, z) < .12 && e > .6 ? B.MOSS : B.GRASS) : depth <= 3 ? B.DIRT : (strata === 0 ? B.MOSS : B.STONE); }
+        else if (I.b === 1){ id = depth === 0 ? (fbm(x * .2, z * .2) > .62 ? B.SAND : B.REDROCK) : (y % 4 === 0 ? B.REDBAND : B.REDROCK); }
+        else if (I.b === 2){ id = depth === 0 ? (fbm(x * .15 + 9, z * .15) > .66 ? B.ICE : B.SNOW) : depth <= 2 ? B.SNOW : (strata === 2 ? B.ICE : B.STONE); if (depth > 0 && depth <= 4 && drop > 3) id = B.SNOW; }
+        else if (I.b === 3){ id = depth === 0 ? B.MYCEL : depth <= 3 ? B.DIRT : (strata === 3 ? B.DEEP : B.STONE); }
+        else { id = depth === 0 ? (h3(x, y, z) < .05 ? B.EMBER : B.ASH) : depth <= 2 ? B.ASH : (h3(x, y, z) < .05 ? B.EMBER : B.BASALT); }
+        if (y < b + 3 && depth > 3) id = I.b === 4 ? B.BASALT : B.DEEP;
+        else if (depth > 4 && h3(x * 3, y, z) < .022) id = I.b === 4 ? B.EMBER : I.b === 2 ? B.ICE : B.ORE;
+        put(x, y, z, id);
+      }
+      if (wat[c] >= 0) for (let y = h + 1; y <= wat[c]; y++) put(x, y, z, B.WATER);
+    }
+    for (const [X, y, Z] of wfall) if (!get(X, y, Z)) put(X, y, Z, B.WATER);
+    // ---- erosion: undercuts and overhang lips near the rim (top two layers stay, so nothing floats)
+    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++){
+      const c = ci(x, z), h = top[c]; if (h < 0 || ee[c] < .66 || res[c] === 2 || wat[c] >= 0) continue; const thr = .7 - (ee[c] - .66) * 1.15;
+      for (let y = Math.max(bot[c] + 2, h - 10); y <= h - 3; y++) if (vn3(x * .13, y * .19, z * .13) > thr) put(x, y, z, 0);
+    }
+    // ---- caves: worm tunnels from the cliffs inward, swelling into chambers (hidden nooks)
+    const carve = (cx, cy, cz, r, ry, floor) => {
+      const R = Math.ceil(r);
+      for (let dy = -Math.ceil(ry); dy <= Math.ceil(ry); dy++) for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++){
+        if (dy < -ry * floor) continue; if ((dx * dx + dz * dz) / (r * r) + (dy * dy) / (ry * ry) > 1) continue;
+        const X = Math.round(cx) + dx, Y = Math.round(cy) + dy, Z = Math.round(cz) + dz; if (!isIn(X, Z)) continue; const c = ci(X, Z);
+        if (Y > top[c] - 3 && ee[c] < .9) continue; if (res[c] === 2 && Y > top[c] - 6) continue; const g = get(X, Y, Z); if (g === B.WATER) continue; if (g) put(X, Y, Z, 0);
+      }
+    };
+    const nCave = I.caves !== undefined ? I.caves : (I.r >= 15 ? 2 : I.r >= 10 ? 1 : 0), cavePts = [];
+    for (let k = 0; k < nCave; k++){
+      const a0 = (k / Math.max(1, nCave)) * 6.283 + rnd() * 1.5; let ex = I.x + Math.cos(a0) * I.r * 1.2, ez = I.z + Math.sin(a0) * I.r * 1.2;
+      for (let t = 0; t < 60 && !isIn(Math.round(ex), Math.round(ez)); t++){ ex -= Math.cos(a0) * .8; ez -= Math.sin(a0) * .8; }
+      const ec = ci(Math.round(ex), Math.round(ez)); if (top[ec] < 0) continue;
+      let px = ex, pz = ez, py = top[ec] - 5 - rnd() * 5, yaw = a0 + Math.PI + (rnd() - .5) * .8, pitch = 0;
+      const L = I.r * (1.3 + rnd() * .7), chamberAt = L * (.45 + rnd() * .2), rad0 = 1.7 + rnd() * .5;
+      let chamber = null;
+      for (let s = 0; s < L; s++){
+        yaw += (vn(s * .15, k * 7 + 3) - .5) * .5; pitch = (vn(s * .2 + 9, k) - .5) * .5;
+        px += Math.cos(yaw); pz += Math.sin(yaw); py = clamp(py + pitch * .6, 8, H - 12);
+        const X = Math.round(px), Z = Math.round(pz); if (!isIn(X, Z)){ if (s > 6) break; else continue; }
+        if (py > top[ci(X, Z)] - 4) py = top[ci(X, Z)] - 4; if (py < bot[ci(X, Z)] + 3) py = bot[ci(X, Z)] + 3;
+        const rr = rad0 + (vn(s * .3, k * 3) - .5) * .7;
+        if (!chamber && s >= chamberAt){ const cr = I.r >= 15 ? 4.5 : 3.6; carve(px, py, pz, cr, cr * .75, .35); chamber = [Math.round(px), Math.round(py - cr * .35 * .75), Math.round(pz)]; }
+        else carve(px, py, pz, rr, rr * .85, .45);
+        if (s % 7 === 3) cavePts.push([Math.round(px), Math.round(py), Math.round(pz)]);
+      }
+      if (chamber){ let [cx, cy, cz] = chamber; while (cy > 2 && !get(cx, cy - 1, cz)) cy--; nooks.push({ x: cx, y: cy, z: cz, kind: 'cave' }); }
+    }
+    // cave light: glowcaps on the floor, crystals in the chambers
+    for (const [px, py, pz] of cavePts){ let y = py; while (y > 2 && !get(px, y - 1, pz)) y--; if (!get(px, y, pz) && get(px, y - 1, pz) && get(px, y - 1, pz) !== B.WATER) put(px, y, pz, B.GSHROOM); }
+    for (const n of nooks) if (n.kind === 'cave'){ for (const [dx, dz] of [[2, 1], [-2, 0], [1, -2], [-1, 2]]){ let y = n.y; while (y > 2 && !get(n.x + dx, y - 1, n.z + dz)) y--; if (!get(n.x + dx, y, n.z + dz) && get(n.x + dx, y - 1, n.z + dz)){ put(n.x + dx, y, n.z + dz, B.CRYSTAL); if (h3(dx, n.y, dz) < .5 && !get(n.x + dx, y + 1, n.z + dz)) put(n.x + dx, y + 1, n.z + dz, B.CRYSTAL); } } }
+    // ---- a waterfall alcove: a dry nook behind the first big curtain
+    for (const f of falls) if (f.h >= 4){ const bx = Math.round(f.x - .5 - f.dx * .5), bz = Math.round(f.z - .5 - f.dz * .5), y0 = Math.round(f.y - .86) - f.h + 1;
+      for (let k = 1; k <= 3; k++) for (let y = y0; y <= y0 + 2; y++) for (let s2 = -1; s2 <= 1; s2++){ const X = bx - f.dx * (k - 1) + f.dz * s2, Z = bz - f.dz * (k - 1) + f.dx * s2; if (get(X, y, Z) !== B.WATER) put(X, y, Z, 0); }
+      nooks.push({ x: bx - f.dx, y: y0, z: bz - f.dz, kind: 'falls' }); break; }
+    const surf = (x, z) => isIn(x, z) ? top[ci(x, z)] : -1;
+    // ---- shared dressing helpers
+    const free = (x, z, r) => { for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++){ const X = x + dx, Z = z + dz; if (!isIn(X, Z) || res[ci(X, Z)]) return false; } return true; };
+    const mark = (x, z, r) => { for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (inb(x + dx, z + dz) && !res[ci(x + dx, z + dz)]) res[ci(x + dx, z + dz)] = 1; };
+    const blob = (cx, cy, cz, r, fy, id, keep) => { const R = Math.ceil(r); for (let y = -R; y <= R; y++) for (let z = -R; z <= R; z++) for (let x = -R; x <= R; x++){ if (Math.hypot(x, y * fy, z) <= r + (h3(cx + x, cy + y, cz + z) - .5) * .9 && (!keep || !get(cx + x, cy + y, cz + z))) put(cx + x, cy + y, cz + z, id); } };
+    const chests = [], spawns = [], structs = [];
+    const fillDown = (x, y, z, id) => { if (!isIn(x, z)) return false; let yy = y; const b = bot[ci(x, z)]; while (yy > b && !get(x, yy, z)) { put(x, yy, z, id); yy--; } return true; };
+    const PLANT = id => id === B.TGRASS || id === B.ROSE || id === B.SUNF || id === B.BELL || id === B.FERN || id === B.MUSHR || id === B.GSHROOM || id === B.DEADB;
+    const standable = (x, y, z) => { const a = get(x, y, z), b2 = get(x, y - 1, z), c2 = get(x, y + 1, z); return (!a || PLANT(a)) && b2 && !PLANT(b2) && b2 !== B.WATER && b2 !== B.LEAVES && (!c2 || PLANT(c2)); };
+    const spawnNear = (x, z, y, type, guard, rmin) => { for (let r = rmin || 2; r <= 9; r++) for (let k = 0; k < 12; k++){ const a = k / 12 * 6.283 + rnd(), X = Math.round(x + Math.cos(a) * r), Z = Math.round(z + Math.sin(a) * r); if (!isIn(X, Z)) continue; const yy = surf(X, Z) + 1; if (standable(X, yy, Z)){ spawns.push({ x: X + .5, y: yy, z: Z + .5, type, guard }); return; } } };
+    const chest = (x, y, z, tier, si) => { put(x, y, z, B.CHEST); chests.push({ x, y, z, tier, s: si }); };
+    // ---- trees: oak, birch, pine, autumn, willow, blossom/glow (home), a giant canopy tree (landmark)
+    const canopy = (x, cy, z, r, leaf, squash) => { const R = Math.ceil(r) + 1; for (let dy = -R; dy <= R; dy++) for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++){ const dd = Math.hypot(dx, (dy - .3) * (squash || 1.25), dz); if (dd <= r + (h3(x + dx, cy + dy, z + dz) - .5) * 1.1 && !get(x + dx, cy + dy, z + dz)) put(x + dx, cy + dy, z + dz, leaf); } };
+    const TREE = {
+      oak(x, y, z, leaf, bark){ const th = 3 + Math.floor(h2(x, z) * 3); for (let i = 0; i < th; i++) put(x, y + i, z, bark || B.LOG);
+        const br = h2(z, x) < .5; if (br){ const q = [[1, 0], [0, 1], [-1, 0], [0, -1]][Math.floor(h2(x + 1, z) * 4)]; put(x + q[0], y + th - 1, z + q[1], bark || B.LOG); canopy(x + q[0] * 2, y + th, z + q[1] * 2, 1.7, leaf || B.LEAVES); }
+        canopy(x, y + th, z, 2.2 + h2(z, x) * .9, leaf || B.LEAVES); return y + th; },
+      birch(x, y, z){ const th = 5 + Math.floor(h2(x, z) * 3); for (let i = 0; i < th; i++) put(x, y + i, z, B.BIRCH); canopy(x, y + th - 1, z, 1.7, B.BIRCHL, .8); canopy(x, y + th + 1, z, 1.2, B.BIRCHL, 1); return y + th; },
+      pine(x, y, z, leaf){ const th = 7 + Math.floor(h2(x, z) * 4); for (let i = 0; i < th; i++) put(x, y + i, z, B.LOG);
+        for (let k = 0; k < th - 1; k++){ const r = Math.max(0, Math.round((th - k) * .38 - (k % 2) * .6)), yy = y + 2 + k; if (k < 1) continue; for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++){ if (Math.abs(dx) + Math.abs(dz) > r + (r > 1 ? 1 : 0)) continue; if (!get(x + dx, yy, z + dz)) put(x + dx, yy, z + dz, leaf || B.PINEL); } }
+        put(x, y + th, z, leaf || B.PINEL); put(x, y + th + 1, z, leaf || B.PINEL); return y + th; },
+      willow(x, y, z){ const th = 4 + Math.floor(h2(x, z) * 2); for (let i = 0; i < th; i++) put(x, y + i, z, B.LOG); canopy(x, y + th, z, 2.6, B.LEAVES, 1.6);
+        for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++){ const dd = Math.hypot(dx, dz); if (dd < 2.2 || dd > 3.4 || h2(x + dx, z + dz) < .35) continue; let yy = y + th; while (yy > y + 1 && get(x + dx, yy, z + dz)) yy--; const L = 2 + Math.floor(h2(x - dx, z - dz) * 3); for (let k = 0; k < L && yy - k > y; k++) if (!get(x + dx, yy - k, z + dz)) put(x + dx, yy - k, z + dz, B.HVINE); } return y + th; },
+      giant(x, y, z, leaf, bark){ // the landmark tree: 2x2 trunk, flared roots, three branch arms, a layered crown
+        const th = 11 + Math.floor(h2(x, z) * 5), bk = bark || B.LOG, lf = leaf || B.LEAVES;
+        for (let i = -2; i < th; i++) for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) put(x + dx, y + i, z + dz, bk);
+        for (const [dx, dz] of [[-1, 0], [2, 1], [0, 2], [1, -1], [-1, 1], [2, 0]]) { put(x + dx, y, z + dz, bk); if (h2(x + dx, z + dz) < .5) put(x + dx, y + 1, z + dz, bk); }
+        const arms = [[1, 0], [-1, .3], [.2, -1], [-.3, 1]];
+        arms.forEach((a, k) => { const L = 4 + Math.floor(h2(x + k, z) * 3), by = y + th - 4 + k % 2 * 2; for (let s = 1; s <= L; s++) put(x + Math.round(a[0] * s) + (a[0] > 0 ? 1 : 0), by + Math.floor(s / 2), z + Math.round(a[1] * s) + (a[1] > 0 ? 1 : 0), bk); canopy(x + Math.round(a[0] * L) + (a[0] > 0 ? 1 : 0), by + Math.floor(L / 2) + 1, z + Math.round(a[1] * L) + (a[1] > 0 ? 1 : 0), 3.2, lf, 1.5); });
+        canopy(x, y + th + 1, z, 4.6, lf, 1.5); canopy(x + 1, y + th + 4, z + 1, 3, lf, 1.3);
+        return y + th + 6; }
+    };
+    const plantTree = (kind, x, y, z, leaf, bark) => { trees.push([x, y, z]); const ty = TREE[kind](x, y, z, leaf, bark); if (h2(x + 3, z) < .5) ff.push([x + .5, ty, z + .5]); return ty; };
+    // ---- rock formations
+    const boulder = (x, z, r) => { const y = surf(x, z); if (y < 0) return; blob(x, y + Math.round(r * .4), z, r, 1.25, I.b === 4 ? B.BASALT : I.b === 1 ? B.REDROCK : h2(x, z) < .5 ? B.MOSS : B.STONE); };
+    const rockSpire = (x, z, hgt, rad) => { const y0 = surf(x, z); for (let y = y0 - 2; y <= y0 + hgt; y++){ const t = (y - y0) / hgt, r = rad * (1 - t * .7) + (vn(y * .3, x) - .5) * .7; for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) if (Math.hypot(dx, dz) <= r) put(x + dx, y, z + dz, I.b === 1 ? (y % 4 === 0 ? B.REDBAND : B.REDROCK) : I.b === 4 ? B.BASALT : I.b === 2 ? (t > .8 ? B.SNOW : B.STONE) : (h3(x + dx, y, z + dz) < .25 ? B.MOSS : B.STONE)); } return y0 + hgt; };
+    const standingStones = (x, z) => { const y = surf(x, z); for (let k = 0; k < 6; k++){ const a = k / 6 * 6.283, X = Math.round(x + Math.cos(a) * 4), Z = Math.round(z + Math.sin(a) * 4); if (!isIn(X, Z)) continue; const yy = surf(X, Z), hh = 2 + Math.floor(h2(X, Z) * 3); for (let i = 1; i <= hh; i++) put(X, yy + i, Z, h2(X, i) < .4 ? B.MOSS : B.COBBLE); } put(x, y + 1, z, B.JSTONE); };
+    const ruinWall = (x, z, len, dir) => { const y = surf(x, z); for (let s = 0; s < len; s++){ const X = x + dir[0] * s, Z = z + dir[1] * s; if (!isIn(X, Z)) continue; const yy = surf(X, Z), hh = 1 + Math.floor(h2(X, Z) * 4 * (1 - Math.abs(s - len / 2) / len)); fillDown(X, yy, Z, B.RUIN); for (let i = 1; i <= hh; i++) put(X, yy + i, Z, h3(X, i, Z) < .45 ? B.RUINM : B.RUIN); if (h2(X, Z) < .3) put(X, yy + hh + 1, Z, B.HVINE); } };
+    const column = (x, z, hh, cap) => { const y = surf(x, z); for (let i = 1; i <= hh; i++) put(x, y + i, z, i === hh && cap ? B.JSTONE : B.RUIN); };
+    const campfire = (x, z) => { const y = surf(x, z); for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) put(x + dx, y + 1, z + dz, B.COBBLE); put(x, y, z, B.EMBER); for (const [dx, dz] of [[3, 0], [-3, 1], [0, -3]]) if (isIn(x + dx, z + dz)) put(x + dx, surf(x + dx, z + dz) + 1, z + dz, B.LOG); };
+    const crate = (x, z) => { const y = surf(x, z); put(x, y + 1, z, B.PLANKS); if (h2(x, z) < .4) put(x, y + 2, z, B.PLANKS); };
+    const naturalArch = (x, z, ang, span) => { // a rock arch over the turf
+      const ux = Math.cos(ang), uz = Math.sin(ang), y0 = surf(x, z);
+      for (let s = -span; s <= span; s++){ const t = s / span, yy = y0 + Math.round(Math.cos(t * Math.PI / 2) * span * .9), X = Math.round(x + ux * s), Z = Math.round(z + uz * s); if (!isIn(X, Z)) continue;
+        for (let k = -1; k <= 1; k++) for (let dy = 0; dy <= 1; dy++) put(X + Math.round(-uz * k), yy + dy, Z + Math.round(ux * k), h3(X, yy, Z) < .3 ? B.MOSS : B.STONE);
+        if (Math.abs(t) > .8) for (let y = surf(X, Z); y < yy; y++) for (let k = -1; k <= 1; k++) put(X + Math.round(-uz * k), y, Z + Math.round(ux * k), B.STONE); } return y0 + span; };
+    // ---- the archetype's own set pieces (rock bridges, the arch over the hole, atoll lake, spire caps)
+    const AD = archData(I);
+    if (AD.bridges) for (let [A, Bq] of AD.bridges){ // a natural rock bridge between two lobes, sagging, two wide
+      const ux0 = Bq.x - A.x, uz0 = Bq.z - A.z, L0 = Math.hypot(ux0, uz0) || 1; let ax = A.x, az = A.z, bx = Bq.x, bz = Bq.z;
+      for (let t = 0; t < 80 && isIn(Math.round(ax + ux0 / L0), Math.round(az + uz0 / L0)); t++){ ax += ux0 / L0; az += uz0 / L0; }
+      for (let t = 0; t < 80 && isIn(Math.round(bx - ux0 / L0), Math.round(bz - uz0 / L0)); t++){ bx -= ux0 / L0; bz -= uz0 / L0; }
+      A = { x: ax, z: az }; Bq = { x: bx, z: bz };
+      const n = Math.ceil(Math.hypot(Bq.x - A.x, Bq.z - A.z)); const ya = surf(Math.round(A.x), Math.round(A.z)), yb = surf(Math.round(Bq.x), Math.round(Bq.z)); if (ya < 0 || yb < 0 || n < 2) continue;
+      for (let k = 0; k <= n; k++){ const t = k / n, x = A.x + (Bq.x - A.x) * t, z = A.z + (Bq.z - A.z) * t, y = Math.round(ya + (yb - ya) * t - Math.sin(Math.PI * t) * 2), ux = (Bq.z - A.z) / n, uz = -(Bq.x - A.x) / n;
+        for (let s2 = -1; s2 <= 1; s2++){ const X = Math.round(x + ux * s2), Z = Math.round(z + uz * s2); if (!inb(X, Z)) continue; for (let dy = -2 - Math.round(Math.sin(Math.PI * t) * 2); dy <= 0; dy++) if (!get(X, y + dy, Z)) put(X, y + dy, Z, dy === 0 ? (I.b === 2 ? B.SNOW : T5 || I.b === 0 ? B.MOSS : I.b === 1 ? B.REDROCK : I.b === 3 ? B.MYCEL : B.ASH) : B.STONE); if (top[ci(X, Z)] < 0){ top[ci(X, Z)] = y; ee[ci(X, Z)] = .95; bot[ci(X, Z)] = y - 3; res[ci(X, Z)] = 1; } } } }
+    if (AD.hole){ const hx = AD.hole.x, hz = AD.hole.z, hr = AD.hole.r; let y0 = -1; for (let a = 0; a < 6.283; a += .4){ const X = Math.round(hx + Math.cos(a) * (hr + 2)), Z = Math.round(hz + Math.sin(a) * (hr + 2)); if (isIn(X, Z)) y0 = Math.max(y0, top[ci(X, Z)]); }
+      if (y0 > 0){ const ang = AD.hole.ang; for (let s = -hr - 2; s <= hr + 2; s++){ const X = Math.round(hx + Math.cos(ang) * s), Z = Math.round(hz + Math.sin(ang) * s), yy = y0 - 1 + Math.round(Math.cos(s / (hr + 2) * Math.PI / 2) * 2); for (let k = -1; k <= 1; k++) for (let dy = -2; dy <= 0; dy++){ const XX = X + Math.round(-Math.sin(ang) * k), ZZ = Z + Math.round(Math.cos(ang) * k); if (inb(XX, ZZ) && !get(XX, yy + dy, ZZ)) put(XX, yy + dy, ZZ, dy === 0 ? (T5 || I.b === 0 ? B.GRASS : B.STONE) : B.STONE); } }
+        pois.push({ x: hx, y: y0, z: hz, kind: 'arch' }); } }
+    // ---- structures (the Wilds only; sites well inside the island, flattened pads)
+    const BS = [[0, 1], [2, 0], [3, 1], [1, 4], [2, 3]][I.b] || [];
+    const sites = [];
+    if (!safe){ const want = I.forceVault ? 1 : I.r > 20 ? 3 : I.r > 13 ? 2 : 1;
+      for (let t = 0; t < 120 && sites.length < want; t++){
+        const a = rnd() * 6.283, rr = rnd() * I.r * .4, x = Math.round(I.x + Math.cos(a) * rr), z = Math.round(I.z + Math.sin(a) * rr);
+        if (!isIn(x, z) || ee[ci(x, z)] > .55 || wat[ci(x, z)] >= 0 || res[ci(x, z)]) continue;
+        if (sites.some(s => Math.hypot(s.x - x, s.z - z) < 15)) continue;
+        const type = I.forceVault ? 3 : BS[sites.length % BS.length];
+        sites.push({ x, z, type, rad: type === 2 ? 6 : type === 4 ? 6 : 5, grapple: I.forceVault ? 1 : 0 });
+      } }
     for (const s of sites){
       let sum = 0, n = 0; for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++){ if (isIn(s.x + dx, s.z + dz)){ sum += top[ci(s.x + dx, s.z + dz)]; n++; } }
       s.y = Math.round(sum / Math.max(1, n));
       for (let z = s.z - s.rad - 3; z <= s.z + s.rad + 3; z++) for (let x = s.x - s.rad - 3; x <= s.x + s.rad + 3; x++){
-        if (!isIn(x, z)) continue; const dd = Math.max(Math.abs(x - s.x), Math.abs(z - s.z)), wgt = 1 - sstep(s.rad, s.rad + 3, dd), c = ci(x, z);
-        top[c] = Math.round(top[c] * (1 - wgt) + s.y * wgt); if (bot[c] >= top[c] - 3) bot[c] = top[c] - 4; if (dd <= s.rad + 1) res[c] = 1;
+        if (!isIn(x, z)) continue; const dd = Math.max(Math.abs(x - s.x), Math.abs(z - s.z)), wgt = 1 - sstep(s.rad, s.rad + 3, dd), c = ci(x, z), nt = Math.round(top[c] * (1 - wgt) + s.y * wgt);
+        if (nt > top[c]) for (let y = top[c] + 1; y <= nt; y++) put(x, y, z, I.b === 4 ? B.ASH : I.b === 1 ? B.REDROCK : B.DIRT); else for (let y = nt + 1; y <= top[c] + 8; y++) if (get(x, y, z) !== B.WATER) put(x, y, z, 0);
+        const sid = get(x, top[c], z); top[c] = nt; if (nt !== top[c] || true) put(x, nt, z, sid || get(x, nt, z) || B.DIRT); if (dd <= s.rad + 1) res[c] = 1;
       }
     }
-    // ---- fill columns: biome layers + ore
-    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++){
-      const c = ci(x, z); const h = top[c]; if (h < 0) continue; const b = bot[c], e = ee[c];
-      for (let y = b; y <= h; y++){
-        const depth = h - y; let id;
-        if (I.b === 0){ id = depth === 0 ? (h3(x, y, z) < .12 && e > .6 ? B.MOSS : B.GRASS) : depth <= 3 ? B.DIRT : B.STONE; }
-        else if (I.b === 1){ id = depth === 0 ? (fbm(x * .2, z * .2) > .62 ? B.SAND : B.REDROCK) : (y % 4 === 0 ? B.REDBAND : B.REDROCK); }
-        else if (I.b === 2){ id = depth === 0 ? (fbm(x * .15 + 9, z * .15) > .66 ? B.ICE : B.SNOW) : depth <= 2 ? B.SNOW : B.STONE; }
-        else if (I.b === 3){ id = depth === 0 ? B.MYCEL : depth <= 3 ? B.DIRT : B.STONE; }
-        else { id = depth === 0 ? (h3(x, y, z) < .05 ? B.EMBER : B.ASH) : depth <= 2 ? B.ASH : (h3(x, y, z) < .05 ? B.EMBER : B.BASALT); }
-        if (y < b + 3 && depth > 3) id = I.b === 4 ? B.BASALT : B.DEEP;
-        else if (depth > 3 && h3(x * 3, y, z) < .03) id = B.ORE;
-        put(x, y, z, id);
-      }
-    }
-    const surf = (x, z) => isIn(x, z) ? top[ci(x, z)] : -1;
-    const free = (x, z, r) => { for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++){ const X = x + dx, Z = z + dz; if (!isIn(X, Z) || res[ci(X, Z)]) return false; } return true; };
-    const mark = (x, z, r) => { for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (inb(x + dx, z + dz)) res[ci(x + dx, z + dz)] = 1; };
-    const blob = (cx, cy, cz, r, fy, id) => { for (let y = -Math.ceil(r); y <= Math.ceil(r); y++) for (let z = -Math.ceil(r); z <= Math.ceil(r); z++) for (let x = -Math.ceil(r); x <= Math.ceil(r); x++){ if (Math.hypot(x, y * fy, z) <= r + (h3(cx + x, cy + y, cz + z) - .5) * .9 && !get(cx + x, cy + y, cz + z)) put(cx + x, cy + y, cz + z, id); } };
-    // ---- structures (foundations always reach the ground; doorways face outward)
-    const chests = [], spawns = [], structs = [];
-    const fillDown = (x, y, z, id) => { if (!isIn(x, z)) return false; let yy = y; const b = bot[ci(x, z)]; while (yy > b && !get(x, yy, z)) { put(x, yy, z, id); yy--; } return true; }; // foundations only ever reach down into the island
-    const standable = (x, y, z) => { const a = get(x, y, z), b2 = get(x, y - 1, z), c2 = get(x, y + 1, z); return (!a || a === B.TGRASS) && b2 && b2 !== B.TGRASS && b2 !== B.WATER && !c2; };
-    const spawnNear = (x, z, y, type, guard, rmin) => { for (let r = rmin || 2; r <= 8; r++) for (let k = 0; k < 12; k++){ const a = k / 12 * 6.283 + rnd(), X = Math.round(x + Math.cos(a) * r), Z = Math.round(z + Math.sin(a) * r); if (!isIn(X, Z)) continue; const yy = surf(X, Z) + 1; if (standable(X, yy, Z)){ spawns.push({ x: X + .5, y: yy, z: Z + .5, type, guard }); return; } } };
-    const chest = (x, y, z, tier, si) => { put(x, y, z, B.CHEST); chests.push({ x, y, z, tier, s: si }); };
     sites.forEach((s, si) => {
       const { x: cx, z: cz, y: Y } = s, T = s.type, tier = [1, 2, 1, 3, 2][T];
       structs.push({ type: T, x: cx, y: Y, z: cz, tier });
@@ -3537,43 +3685,98 @@ function WGEN(self){
         chest(cx + 2, hullY + 1, cz, tier, si); put(cx + 4, hullY + 1, cz - 1, B.LANTERN);
         spawnNear(cx, cz, Y, 1, si, 5); spawnNear(cx, cz, Y, 4, si, 6); spawnNear(cx, cz, Y, 0, si, 6);
       }
-      mark(cx, cz, s.rad + 1);
+      mark(cx, cz, s.rad + 1); if (s.grapple) structs[structs.length - 1].grapple = 1;
     });
-    // ---- vegetation per biome
+    // the Sky Vault: its chest holds the grappling hook, and it is properly guarded
+    if (I.forceVault && sites[0]){ chests.forEach(c => { if (c.s === 0) c.grapple = 1; }); const v = sites[0]; spawnNear(v.x, v.z + 7, v.y, 4, 0, 3); spawnNear(v.x, v.z - 7, v.y, 4, 0, 3); spawnNear(v.x + 7, v.z, v.y, 1, 0, 3); spawnNear(v.x - 7, v.z, v.y, 1, 0, 3); }
+    // ---- vegetation and ground cover (per biome, varied by forest density and height)
+    const cx0 = I.x, cz0 = I.z, s0 = I.k * 7.7;
+    const zoneAt = (x, z) => { if (I.zones) for (const zn of I.zones) if (x >= zn[0] && x <= zn[2] && z >= zn[1] && z <= zn[3]) return zn[4]; return ''; };
+    const waterNear = (x, z, r) => { for (let dz = -r; dz <= r; dz += 2) for (let dx = -r; dx <= r; dx += 2) if (isIn(x + dx, z + dz) && wat[ci(x + dx, z + dz)] >= 0) return true; return false; };
+    // the landmark first, so it gets the best spot
+    { let best = null, bs = -1e9; for (let t = 0; t < 70; t++){ const a = rnd() * 6.283, rr = (.2 + rnd() * .45) * I.r, x = Math.round(I.x + Math.cos(a) * rr), z = Math.round(I.z + Math.sin(a) * rr); if (!isIn(x, z) || !free(x, z, 3) || wat[ci(x, z)] >= 0) continue; const sc = top[ci(x, z)] + rnd() * 4; if (sc > bs){ bs = sc; best = [x, z]; } }
+      if (best && I.r >= 9 && !I.noPoi){ const [x, z] = best, y = surf(x, z) + 1; let ty = y, kind = 'tree';
+        if (T5){ if (I.poi === 'spire' || (I.poi !== 'tree' && h2(x, z) < .35)){ ty = rockSpire(x, z, 12 + Math.floor(rnd() * 8), 2.6); kind = 'spire'; put(x, ty + 1, z, B.LANTERN); nooks.push({ x, y: ty + 2, z, kind: 'vista' }); } else ty = plantTree('giant', x, y, z, zoneAt(x, z) === 'glow' ? B.ELEAF : zoneAt(x, z) === 'blossom' ? B.BLOSSOM : h2(z, x) < .3 ? B.AUTUMN : B.LEAVES, zoneAt(x, z) === 'glow' ? B.EBARK : B.LOG); }
+        else if (I.b === 0) ty = plantTree('giant', x, y, z, B.LEAVES);
+        else if (I.b === 1){ ty = rockSpire(x, z, 14 + Math.floor(rnd() * 8), 3.2); kind = 'hoodoo'; put(x, ty + 1, z, B.LANTERN); }
+        else if (I.b === 2){ ty = rockSpire(x, z, 16 + Math.floor(rnd() * 8), 2.8); kind = 'icespire'; for (let k = 0; k < 4; k++) put(x, ty - k, z, B.ICE); put(x, ty + 1, z, B.LANTERN); }
+        else if (I.b === 3){ const th = 12 + Math.floor(rnd() * 5); for (let i = 0; i < th; i++) for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) put(x + dx, y + i, z + dz, B.MSTEM); for (let dz = -6; dz <= 7; dz++) for (let dx = -6; dx <= 7; dx++){ const dd = Math.hypot(dx - .5, dz - .5); if (dd > 6.5) continue; put(x + dx, y + th, z + dz, B.MCAPB); if (dd < 5) put(x + dx, y + th + 1, z + dz, B.MCAPB); if (dd < 3) put(x + dx, y + th + 2, z + dz, B.MCAPB); if (dd > 5.6) put(x + dx, y + th - 1, z + dz, B.MCAPB); } ty = y + th + 2; kind = 'bigcap'; }
+        else { ty = rockSpire(x, z, 14 + Math.floor(rnd() * 6), 3); kind = 'ashspire'; for (let k = 0; k < 3; k++) put(x, ty - k, z, B.EMBER); }
+        mark(x, z, 4); pois.push({ x, y: ty, z, kind }); } }
+    if (AD.spires) for (const sp of AD.spires){ const x = Math.round(sp.x), z = Math.round(sp.z); if (!isIn(x, z)) continue; const ty = surf(x, z); put(x, ty + 1, z, h2(x, z) < .5 ? B.LANTERN : B.TGRASS); }
+    // set pieces scattered over the island: boulders, stones, arches, ruins, props
+    const nSet = Math.round(I.r / 5) * (I.arch === 'ruins' ? 2 : 1);
+    for (let k = 0; k < nSet; k++){ const a = rnd() * 6.283, rr = Math.sqrt(rnd()) * I.r * .75, x = Math.round(I.x + Math.cos(a) * rr), z = Math.round(I.z + Math.sin(a) * rr);
+      if (!isIn(x, z) || !free(x, z, 2) || wat[ci(x, z)] >= 0) continue; const r = rnd();
+      if (r < .3) boulder(x, z, 1.4 + rnd() * 1.4);
+      else if (r < .42 && T5 && I.r > 12) standingStones(x, z);
+      else if (r < .52 && ee[ci(x, z)] > .5) naturalArch(x, z, rnd() * 3.14, 3 + Math.floor(rnd() * 2));
+      else if (r < .72 && (T5 || I.b === 0 || I.arch === 'ruins')){ ruinWall(x, z, 4 + Math.floor(rnd() * 5), [[1, 0], [0, 1]][k % 2]); if (rnd() < .6) column(x + 2, z + 2, 2 + Math.floor(rnd() * 3), rnd() < .5); }
+      else if (r < .82) campfire(x, z);
+      else crate(x, z);
+      mark(x, z, 3); }
     for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++){
-      const c = ci(x, z), h = top[c]; if (h < 0 || res[c] || ee[c] > .88 || get(x, h + 1, z)) continue;
-      const r = h2(x * 7 + 3 + I.k, z * 11 + 5), f = h2(x * 3 + 1, z * 5 + 2 + I.k), g = get(x, h, z);
-      if (I.b === 0){
-        if (r < .03 && free(x, z, 2)){ mark(x, z, 3); const th = 3 + Math.floor(h2(x, z) * 3); for (let i = 1; i <= th; i++) put(x, h + i, z, B.LOG); blob(x, h + th + 1, z, 2.3, 1.2, B.LEAVES); }
-        else if (r < .045 && free(x, z, 1)){ const hh = 1 + Math.floor(h2(z, x) * 3); for (let i = 1; i <= hh; i++) put(x, h + i, z, h3(x, i, z) < .5 ? B.RUINM : B.RUIN); }
-        else if (f < .14) put(x, h + 1, z, f < .03 ? B.ROSE : B.TGRASS);
+      const c = ci(x, z), h = top[c]; if (h < 0 || res[c] || ee[c] > .9 || get(x, h + 1, z)) continue;
+      const g = get(x, h, z); if (!g || g === B.WATER || g === B.SAND && T5) continue;
+      const r = h2(x * 7 + 3 + I.k, z * 11 + 5), f = h2(x * 3 + 1, z * 5 + 2 + I.k), forest = fbm(x * .04 + s0, z * .04 - s0), zn = zoneAt(x, z), high = h > I.top + 6;
+      if (T5){
+        const dens = zn ? .05 : forest > .56 ? .085 : forest > .46 ? .03 : .008;
+        if (r < dens && free(x, z, 2) && g !== B.GRAVEL && g !== B.BRICK){ mark(x, z, 2);
+          if (zn === 'glow') plantTree('oak', x, h + 1, z, B.ELEAF, B.EBARK);
+          else if (zn === 'blossom') plantTree('oak', x, h + 1, z, B.BLOSSOM);
+          else if (zn === 'pine' || high && h2(x, z) < .7) plantTree(h2(z, x) < .7 ? 'pine' : 'birch', x, h + 1, z);
+          else if (waterNear(x, z, 4) && h2(x + 5, z) < .6) plantTree('willow', x, h + 1, z);
+          else { const q = h2(x + 9, z + 3); if (q < .45) plantTree('oak', x, h + 1, z); else if (q < .7) plantTree('birch', x, h + 1, z); else if (q < .85) plantTree('oak', x, h + 1, z, B.AUTUMN); else plantTree('pine', x, h + 1, z); }
+          continue; }
+        if (r < dens + .02 && free(x, z, 1)){ const lf = zn === 'blossom' ? B.BLOSSOM : h2(x, z) < .25 ? B.AUTUMN : B.LEAVES; put(x, h + 1, z, lf); if (h2(z, x) < .5) put(x + 1, h + 1, z, lf); if (h2(x, z + 1) < .4) put(x, h + 2, z, lf); continue; } // bushes
+        const meadow = fbm(x * .07 + 40 + s0, z * .07 + 40), drift = fbm(x * .11 - s0, z * .11 + 9);
+        if (forest > .55 && f < .16) put(x, h + 1, z, f < .05 ? B.MUSHR : B.FERN);
+        else if (f < (meadow > .55 ? .5 : .14)){ let id = B.TGRASS; if (f < .1 && drift > .58) id = drift > .66 ? B.ROSE : B.SUNF; else if (f < .06 && drift < .38) id = B.BELL; if (zn === 'blossom' && f < .12) id = B.ROSE; put(x, h + 1, z, id); if (id !== B.TGRASS && h2(x, z + 77) < .2) bf.push([x + .5, h + 1, z + .5]); if (h2(x + 9, z) < .03) ff.push([x + .5, h + 1.5, z + .5]); }
+      } else if (I.b === 0){
+        if (r < .045 * (forest > .5 ? 1.6 : .7) && free(x, z, 2)){ mark(x, z, 2); plantTree(h2(x, z) < .6 ? 'oak' : 'birch', x, h + 1, z); }
+        else if (r < .06 && free(x, z, 1)){ const hh = 1 + Math.floor(h2(z, x) * 3); for (let i = 1; i <= hh; i++) put(x, h + i, z, h3(x, i, z) < .5 ? B.RUINM : B.RUIN); if (h2(x, z) < .5) put(x, h + hh + 1, z, B.HVINE); }
+        else if (f < .22) put(x, h + 1, z, f < .03 ? B.ROSE : f < .07 ? B.FERN : B.TGRASS);
       } else if (I.b === 1){
-        if (r < .02 && free(x, z, 1)){ const hh = 2 + Math.floor(h2(z, x) * 4); for (let i = 1; i <= hh; i++) put(x, h + i, z, i % 2 ? B.REDBAND : B.REDROCK); }
-        else if (f < .07 && g !== B.SAND) put(x, h + 1, z, B.DEADB);
+        if (r < .025 && free(x, z, 1)){ const hh = 2 + Math.floor(h2(z, x) * 5); for (let i = 1; i <= hh; i++) put(x, h + i, z, i % 2 ? B.REDBAND : B.REDROCK); }
+        else if (f < .08 && g !== B.SAND) put(x, h + 1, z, B.DEADB);
       } else if (I.b === 2){
-        if (r < .03 && free(x, z, 2) && g === B.SNOW){ mark(x, z, 3); const th = 2; for (let i = 1; i <= th + 4; i++) put(x, h + i, z, B.LOG); const Ls = [[2, 2], [2, 3], [1, 4], [2, 5], [1, 6], [1, 7], [0, 8]]; for (const l of Ls) for (let dz = -l[0]; dz <= l[0]; dz++) for (let dx = -l[0]; dx <= l[0]; dx++){ if (Math.abs(dx) + Math.abs(dz) > l[0] + (l[0] > 1 ? 1 : 0)) continue; if (!get(x + dx, h + l[1], z + dz)) put(x + dx, h + l[1], z + dz, B.FROSTLEAF); } }
-        else if (r < .05 && free(x, z, 1)){ const hh = 2 + Math.floor(h2(z, x) * 5); for (let i = 1; i <= hh; i++) put(x, h + i, z, B.ICE); }
+        if (r < .04 && free(x, z, 2) && g === B.SNOW){ mark(x, z, 2); plantTree('pine', x, h + 1, z, B.FROSTLEAF); }
+        else if (r < .06 && free(x, z, 1)){ const hh = 2 + Math.floor(h2(z, x) * 5); for (let i = 1; i <= hh; i++) put(x, h + i, z, B.ICE); }
       } else if (I.b === 3){
-        if (r < .055 && free(x, z, 2)){ mark(x, z, 2); const th = 4 + Math.floor(h2(x, z) * 4), cap = h2(z, x) < .45 ? B.MCAPB : B.MCAPR, cr = 2 + (th > 6 ? 1 : 0);
+        if (r < .06 && free(x, z, 2)){ mark(x, z, 2); const th = 4 + Math.floor(h2(x, z) * 5), cap = h2(z, x) < .45 ? B.MCAPB : B.MCAPR, cr = 2 + (th > 6 ? 1 : 0);
           for (let i = 1; i <= th; i++) put(x, h + i, z, B.MSTEM);
           for (let dz = -cr; dz <= cr; dz++) for (let dx = -cr; dx <= cr; dx++){ const dd = Math.hypot(dx, dz); if (dd > cr + .4) continue; put(x + dx, h + th + 1, z + dz, cap); if (dd < cr - .6) put(x + dx, h + th + 2, z + dz, cap); if (Math.abs(dd - cr) < .7) put(x + dx, h + th, z + dz, cap); } }
-        else if (f < .08) put(x, h + 1, z, f < .035 ? B.GSHROOM : B.TGRASS);
+        else if (f < .14) put(x, h + 1, z, f < .05 ? B.GSHROOM : f < .08 ? B.MUSHR : B.TGRASS);
       } else {
-        if (r < .025 && free(x, z, 2)){ mark(x, z, 2); const th = 3 + Math.floor(h2(x, z) * 3); for (let i = 1; i <= th; i++) put(x, h + i, z, B.LOG); const q = [[1, 0], [0, 1], [-1, 0], [0, -1]][Math.floor(h2(z, x) * 4)]; put(x + q[0], h + th, z + q[1], B.LOG); put(x - q[0], h + th - 1, z - q[1], B.LOG); } // branches stay face-attached
-        else if (r < .04 && free(x, z, 1)){ const hh = 2 + Math.floor(h2(z, x) * 3); for (let i = 1; i <= hh; i++) put(x, h + i, z, B.BASALT); }
-        else if (f < .04) put(x, h + 1, z, B.DEADB);
+        if (r < .025 && free(x, z, 2)){ mark(x, z, 2); const th = 3 + Math.floor(h2(x, z) * 3); for (let i = 1; i <= th; i++) put(x, h + i, z, B.LOG); const q = [[1, 0], [0, 1], [-1, 0], [0, -1]][Math.floor(h2(z, x) * 4)]; put(x + q[0], h + th, z + q[1], B.LOG); put(x - q[0], h + th - 1, z - q[1], B.LOG); }
+        else if (r < .045 && free(x, z, 1)){ const hh = 2 + Math.floor(h2(z, x) * 3); for (let i = 1; i <= hh; i++) put(x, h + i, z, B.BASALT); }
+        else if (f < .05) put(x, h + 1, z, B.DEADB);
       }
     }
+    // ---- vines down cliff faces, hanging roots under the rim, ivy on ruins
+    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++){
+      const c = ci(x, z), h = top[c]; if (h < 0) continue;
+      if (I.b !== 1 && I.b !== 4 && I.b !== 2) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const X = x + dx, Z = z + dz; const nh = isIn(X, Z) ? top[ci(X, Z)] : -99; if (nh > h - 4) continue; if (h2(x * 5 + dx, z * 3 + dz) > .28) continue;
+        const L = 2 + Math.floor(h2(z, x * 3) * (Math.min(9, h - nh - 1))); for (let k = 0; k < L; k++){ const y = h - k; if (get(X, y, Z)) break; put(X, y, Z, B.HVINE); } }
+      // under the island: roots dangle from the keel near the rim
+      const b = bot[c]; if (ee[c] > .5 && h2(x * 9, z * 7) < (I.b === 3 ? .22 : .16) && I.b !== 4 && I.b !== 1){ const L = 1 + Math.floor(h2(x, z * 9) * 5); for (let k = 1; k <= L; k++){ if (get(x, b - k, z)) break; put(x, b - k, z, I.b === 2 ? B.ICE : B.ROOTS); if (I.b === 2) break; } }
+    }
+    // ---- floating debris: a few small rocks drifting just off the rim (deliberate; tagged so bots don't flag them)
+    const debris = [];
+    for (let k = 0; k < Math.round(I.r / 6); k++){ const a = rnd() * 6.283, rr = I.r * (1.15 + rnd() * .35), x = Math.round(I.x + Math.cos(a) * rr), z = Math.round(I.z + Math.sin(a) * rr); if (!inb(x, z) || isIn(x, z)) continue;
+      const y = I.top - 6 - Math.floor(rnd() * 14), r = .9 + rnd() * 1.1; blob(x, y, z, r, 1.4, I.b === 4 ? B.BASALT : I.b === 1 ? B.REDROCK : B.STONE, true); if (T5 || I.b === 0) put(x, y + Math.ceil(r), z, B.MOSS); debris.push([x, y, z, Math.ceil(r) + 1]); }
+    // nooks in the Wilds hold chests (tier 2); on the safe islands they hold relics (placed by the main thread)
+    if (!safe) nooks.forEach((n, i) => { if (n.kind === 'cave' && !get(n.x, n.y, n.z)){ chest(n.x, n.y, n.z, 2, -1); spawnNear(n.x, n.z, n.y, 0, -1, 3); } });
     // ---- wandering enemies away from the structures
-    const wild = [[0, 0, 1], [1, 4, 1], [3, 2, 0], [0, 0, 3], [3, 1, 2]][I.b], nw = 1 + (I.r > 10 ? 2 : 1);
-    for (let k = 0; k < nw; k++){ const a = rnd() * 6.283, rr = I.r * (.35 + rnd() * .3); spawnNear(Math.round(I.x + Math.cos(a) * rr), Math.round(I.z + Math.sin(a) * rr), 0, wild[k % wild.length], -1, 0); }
-    return { k: I.k, x0, z0, w, d, blk, top, chests, spawns, structs };
+    if (!safe){ const wild = [[0, 0, 1], [1, 4, 1], [3, 2, 0], [0, 0, 3], [3, 1, 2]][I.b], nw = 1 + Math.round(I.r / 9);
+      for (let k = 0; k < nw; k++){ const a = rnd() * 6.283, rr = I.r * (.35 + rnd() * .3); spawnNear(Math.round(I.x + Math.cos(a) * rr), Math.round(I.z + Math.sin(a) * rr), 0, wild[k % wild.length], -1, 0); } }
+    return { k: I.k, x0, z0, w, d, blk, top, bot, ee, wat, chests, spawns, structs, nooks, pois, falls, trees, ff, bf, debris, arch: I.arch };
   }
-  self.api = { col, genIsland, setSeed: s => { SEED = s | 0; }, mulberry };
+  self.api = { col, genIsland, archData, setSeed: s => { SEED = s | 0; }, mulberry };
   self.onmessage = e => {
     const m = e.data;
-    if (m.type === 'init'){ B = m.B; WXg = m.WX; WZg = m.WZ; return; }
-    if (m.type === 'gen'){ SEED = m.seed | 0; const r = genIsland(m.I); r.ver = m.ver; self.postMessage(r, [r.blk.buffer, r.top.buffer]); }
+    if (m.type === 'init'){ B = m.B; WXg = m.WX; WZg = m.WZ; H = m.WY || 96; return; }
+    if (m.type === 'gen'){ SEED = m.seed | 0; const r = genIsland(m.I); r.ver = m.ver; r.tag = m.tag; self.postMessage(r, [r.blk.buffer, r.top.buffer, r.bot.buffer, r.ee.buffer, r.wat.buffer]); }
   };
 }
 
@@ -3581,35 +3784,45 @@ function WGEN(self){
 const OUT = [], WILD_UD = [], WILD_LINKS = [], WILD_BRIDGES = [];
 let OUT_SEED = 0, outVer = 0, wgen = null, wgenInline = null, wgenBusy = false;
 const OUT_ISL0 = 20; // isl[] values for outer islands start here
-const GATES = [ // launch points just off the safe islands (always reachable): home east and south rims, Basin east, Falls Pool south
-  { x: 134, z: 98, top: 32 }, { x: 96, z: 136, top: 32 }, { x: 176, z: 150, top: 38 }, { x: 168, z: 176, top: 18 }
-];
+const ARCH_BY_BIOME = [['ruins', 'terrace', 'bridged', 'atoll', 'plain'], ['mesa', 'spires', 'arch', 'archipelago', 'mesa'], ['spires', 'terrace', 'arch', 'plain', 'spires'], ['atoll', 'bridged', 'plain', 'archipelago', 'ruins'], ['mesa', 'spires', 'archipelago', 'arch', 'terrace']];
+const SIZE_PLAN = [28, 24, 19, 18, 16, 16, 14, 14, 12, 11, 10, 10, 9, 8, 6, 6, 5, 5];
 function wildNamer(rand, b){ const B = BIOMES[b]; return B.syl[Math.floor(rand() * B.syl.length)] + B.suf[Math.floor(rand() * B.suf.length)]; }
+// the land's edge of an island spec, walking out from its centre toward (tx, tz) through the shared column shape
+function specRim(I, tx, tz, out){ const o = {}; let dx = tx - I.x, dz = tz - I.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L; let lx = I.x, lz = I.z, top = I.top;
+  for (let s = 0; s < I.r * 2.2; s++){ const x = Math.round(I.x + dx * s), z = Math.round(I.z + dz * s); wgenInline.api.col(I, x, z, o); if (o.in){ lx = x; lz = z; top = o.top; } }
+  return { x: lx + dx * (out || 0), z: lz + dz * (out || 0), top }; }
 function layoutWilds(seed){
   OUT_SEED = seed >>> 0; OUT.length = 0; WILD_UD.length = 0; WILD_LINKS.length = 0; WILD_BRIDGES.length = 0;
+  wgenInline.api.setSeed(OUT_SEED);
   const rand = wgenInline.api.mulberry(OUT_SEED ^ 0x9e3779b9), names = new Set();
-  for (let t = 0; t < 900 && OUT.length < 16; t++){
-    const r = 7 + rand() * 6.5, side = rand();
-    let x, z; if (side < .55){ x = 214 + rand() * 120; z = 14 + rand() * 322; } else { x = 14 + rand() * 186; z = 214 + rand() * 122; }
-    x = Math.round(x); z = Math.round(z);
-    if (x - r * 1.65 < 4 || z - r * 1.65 < 4 || x + r * 1.65 > WX - 5 || z + r * 1.65 > WZ - 5) continue;
-    if (x - r * 1.65 - 6 < SAFE && z - r * 1.65 - 6 < SAFE) continue; // never overlaps the safe square
-    if (OUT.some(o => Math.hypot(o.x - x, o.z - z) < (o.r + r) * 1.55 + 9)) continue;
-    const b = Math.floor(rand() * 5); let nm = wildNamer(rand, b), g = 0; while (names.has(nm) && g++ < 8) nm = wildNamer(rand, b); names.add(nm);
-    OUT.push({ k: OUT.length, x, z, r, top: Math.round(24 + rand() * 18), depth: Math.round(10 + r * .8), b, name: nm, gen: 0, data: null, seen: false, meshed: false });
+  for (const r0 of SIZE_PLAN){
+    for (let t = 0; t < 400; t++){
+      const r = r0 * (.9 + rand() * .2), side = rand(), m = r * 1.45 + 8;
+      let x, z; if (side < .55){ x = SAFE + m + rand() * (WX - SAFE - 2 * m); z = m + rand() * (WZ - 2 * m); } else { x = m + rand() * (SAFE - m); z = SAFE + m + rand() * (WZ - SAFE - 2 * m); }
+      x = Math.round(x); z = Math.round(z);
+      if (x - m < 4 || z - m < 4 || x + m > WX - 4 || z + m > WZ - 4) continue;
+      if (x - m < SAFE && z - m < SAFE) continue; // never overlaps the safe square
+      if (OUT.some(o => Math.hypot(o.x - x, o.z - z) < (o.r + r) * 1.35 + 12)) continue;
+      const b = Math.floor(rand() * 5); let nm = wildNamer(rand, b), g = 0; while (names.has(nm) && g++ < 8) nm = wildNamer(rand, b); names.add(nm);
+      const arch = r <= 7 ? (rand() < .5 ? 'plain' : 'spires') : ARCH_BY_BIOME[b][Math.floor(rand() * 5)];
+      OUT.push({ k: OUT.length, x, z, r: Math.round(r * 10) / 10, top: Math.round(40 + rand() * 24), depth: Math.round(14 + r * .9), b, arch, name: nm, gen: 0, data: null, seen: false, meshed: false });
+      break;
+    }
   }
   // links: a tree grown outward from the rim gates, nearest-first (Prim), so every island is reachable
-  const inTree = new Uint8Array(OUT.length), nodes = GATES.map(g => ({ x: g.x, z: g.z, top: g.top, r: 2, gate: true }));
+  const inTree = new Uint8Array(OUT.length), nodes = GATES.map(g => ({ x: g.x, z: g.z, top: g.top, r: 2, gate: true, depth: 0 }));
   for (let n = 0; n < OUT.length; n++){
     let best = null, bd = 1e9;
     for (let i = 0; i < OUT.length; i++){ if (inTree[i]) continue; const I = OUT[i]; for (const a of nodes){ const d = Math.hypot(a.x - I.x, a.z - I.z) - (a.r + I.r); if (d < bd){ bd = d; best = [a, I]; } } }
-    if (!best) break; const [a, I] = best; inTree[I.k] = 1; nodes.push(I); WILD_LINKS.push([a, I, bd]);
+    if (!best) break; const [a, I] = best; inTree[I.k] = 1; I.depthL = (a.depthL || 0) + 1; nodes.push(I); WILD_LINKS.push([a, I, bd]);
   }
+  // the Sky Vault (holds the grappling hook): the deepest well-sized island in the tree, so it is a real expedition
+  { let best = null; for (const I of OUT) if (I.r >= 12 && I.arch !== 'archipelago' && (!best || I.depthL > best.depthL || (I.depthL === best.depthL && I.r > best.r))) best = I; if (best){ best.forceVault = true; best.arch = best.arch === 'spires' || best.arch === 'atoll' ? 'plain' : best.arch; } }
   // an updraft off the launch edge of each link, both ways, high enough to clear the gap with a plain sail
   const draft = (from, to) => {
-    const dx = to.x - from.x, dz = to.z - from.z, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L, off = from.gate ? 4 : from.r * 1.05 + 3;
-    const x = Math.round(from.x + ux * off), z = Math.round(from.z + uz * off), gap = Math.max(0, L - off - to.r * .9);
-    WILD_UD.push({ x: x + .5, z: z + .5, r: 4.5, top: Math.round(clamp(Math.max(to.top + gap / 5.5 + 7, from.top + 9), 30, 60)) });
+    const rim = from.gate ? { x: from.x, z: from.z, top: from.top } : specRim(from, to.x, to.z, 0), dx = to.x - rim.x, dz = to.z - rim.z, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L;
+    const x = Math.round(rim.x + ux * (from.gate ? 0 : 3.5)), z = Math.round(rim.z + uz * (from.gate ? 0 : 3.5)), toRim = specRim(to, rim.x, rim.z, 0), gap = Math.max(0, Math.hypot(toRim.x - x, toRim.z - z));
+    WILD_UD.push({ x: x + .5, z: z + .5, r: 4.5, top: Math.round(clamp(Math.max(toRim.top + gap / 5.5 + 7, rim.top + 9), 36, WY - 6)) });
   };
   for (const [a, I, d] of WILD_LINKS){ draft(a, I); if (!a.gate) draft(I, a); if (!a.gate && d < 15 && Math.abs(a.top - I.top) <= 5) WILD_BRIDGES.push({ a: a.k, b: I.k, built: false }); }
   outVer++;
@@ -3620,7 +3833,7 @@ function outerIsle(x, z){ const fx = Math.floor(x), fz = Math.floor(z); if (fx <
 /* ---- streaming: voxelise islands as the player approaches; one job in flight ---- */
 const wgenQueue = [];
 function startWildGen(){
-  const init = { type: 'init', B: { GRASS, DIRT, STONE, SAND, LOG, LEAVES, PLANKS, LANTERN, ORE, COBBLE, BRIDGE, STEP, CRYSTAL, JSTONE, WATER, TGRASS, ROSE, DEEP, MOSS, SNOW, ICE, REDROCK, REDBAND, ASH, BASALT, EMBER, MYCEL, MSTEM, MCAPR, MCAPB, RUIN, RUINM, TENT, DEADB, GSHROOM, FROSTLEAF, CHEST }, WX, WZ };
+  const init = { type: 'init', B: WGEN_B(), WX, WZ, WY };
   const fake = { postMessage(m){ fake.last = m; } }; WGEN(fake); fake.onmessage({ data: init }); wgenInline = fake;
   try {
     const url = URL.createObjectURL(new Blob(['(' + WGEN.toString() + ')(self);'], { type: 'text/javascript' }));
@@ -3629,7 +3842,7 @@ function startWildGen(){
 }
 function requestIsland(I){
   if (I.gen) return; I.gen = 1;
-  const msg = { type: 'gen', seed: OUT_SEED, ver: outVer, I: { k: I.k, x: I.x, z: I.z, r: I.r, top: I.top, depth: I.depth, b: I.b } };
+  const msg = { type: 'gen', seed: OUT_SEED, ver: outVer, I: { k: I.k, x: I.x, z: I.z, r: I.r, top: I.top, depth: I.depth, b: I.b, arch: I.arch, forceVault: !!I.forceVault } };
   if (wgen){ wgenBusy = true; wgen.postMessage(msg); }
   else { wgenInline.api.setSeed(OUT_SEED); const r = wgenInline.api.genIsland(msg.I); r.ver = outVer; applyIsland(r); }
 }
@@ -3643,10 +3856,10 @@ let wildDirtyMap = false;
 function applyIsland(r){
   if (r.ver !== outVer) return; // a stale job from before a reseed
   const I = OUT[r.k]; if (!I) return;
-  const { x0, z0, w, d, blk, top } = r, H = 64;
+  const { x0, z0, w, d, blk, top } = r, H = WY;
   for (let y = 0; y < H; y++) for (let z = 0; z < d; z++){ const row = w * (z + d * y), wrow = x0 + WX * ((z + z0) + WZ * y);
     for (let x = 0; x < w; x++){ const id = blk[row + x]; if (id){ world[wrow + x] = id; baseWorld[wrow + x] = id; } } }
-  for (let z = 0; z < d; z++) for (let x = 0; x < w; x++){ const t = top[x + z * w]; if (t < 0) continue; const c = (x + x0) + (z + z0) * WX; isl[c] = OUT_ISL0 + I.k; hTop[c] = t; }
+  for (let z = 0; z < d; z++) for (let x = 0; x < w; x++){ const k = x + z * w, t = top[k]; if (t < 0) continue; const c = (x + x0) + (z + z0) * WX; isl[c] = OUT_ISL0 + I.k; hTop[c] = t; hBot[c] = r.bot[k]; eArr[c] = r.ee[k]; wTop[c] = r.wat[k]; }
   // edits the player made out here earlier, loaded with the save
   edits.forEach((v, k) => { const x = k % WX, zz = (k / WX) | 0, z = zz % WZ; if (x >= x0 && x < x0 + w && z >= z0 && z < z0 + d) world[k] = v; });
   floodBox(x0 - 2, 0, z0 - 2, x0 + w + 1, WY - 1, z0 + d + 1);
@@ -3681,7 +3894,7 @@ function buildBridge(br){
 }
 
 /* ---- far silhouettes: one merged mesh, faded per island by a uniform array ---- */
-let silMesh = null; const silVis = new Float32Array(24);
+let silMesh = null; const silVis = new Float32Array(32); // 0..19 the Wilds, 20..30 the safe islands
 function buildSilhouettes(){
   if (silMesh){ scene.remove(silMesh); silMesh.geometry.dispose(); silMesh = null; }
   const pos = [], col = [], idx = [], isw = [], o = {}, S = 3;
@@ -3689,13 +3902,17 @@ function buildSilhouettes(){
     for (const p of P){ pos.push(p[0], p[1], p[2]); const c = p[1] === y1 ? ct : cs; col.push(c[0], c[1], c[2]); isw.push(k); }
     idx.push(b + 4, b + 6, b + 5, b + 4, b + 7, b + 6, b, b + 1, b + 5, b, b + 5, b + 4, b + 1, b + 2, b + 6, b + 1, b + 6, b + 5, b + 2, b + 3, b + 7, b + 2, b + 7, b + 6, b + 3, b, b + 4, b + 3, b + 4, b + 7); };
   wgenInline.api.setSeed(OUT_SEED);
-  for (const I of OUT){ const Bm = BIOMES[I.b], R = Math.ceil(I.r * 1.6);
+  for (const I of OUT){ const Bm = BIOMES[I.b], R = Math.ceil(I.r * 1.9);
     for (let z = I.z - R; z <= I.z + R; z += S) for (let x = I.x - R; x <= I.x + R; x += S){ wgenInline.api.col(I, x + 1, z + 1, o); if (!o.in) continue; const sh = .85 + h2(x, z) * .3;
       box(x, o.bot, z, x + S, o.top + 1, z + S, [Bm.top[0] * sh, Bm.top[1] * sh, Bm.top[2] * sh], [Bm.rock[0] * sh, Bm.rock[1] * sh, Bm.rock[2] * sh], I.k); } }
+  // the safe islands too (from the real column data), so the far horizon is never empty
+  ISL.forEach((I, i) => { const R = Math.ceil(I.r * 1.9 * (I.ax || 1));
+    for (let z = I.z - R; z <= I.z + R; z += S) for (let x = I.x - R; x <= I.x + R; x += S){ const c = (x + 1) + (z + 1) * WX; if (x < 0 || z < 0 || x >= WX - 2 || z >= WZ - 2 || isl[c] !== i) continue; const sh = .85 + h2(x, z) * .3;
+      box(x, hBot[c], z, x + S, hTop[c] + 1, z + S, [.42 * sh, .56 * sh, .34 * sh], [.5 * sh, .48 * sh, .46 * sh], 20 + i); } });
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aCol', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('aK', new THREE.Float32BufferAttribute(isw, 1)); g.setIndex(idx); g.computeVertexNormals();
   const m = new THREE.ShaderMaterial({ uniforms: Object.assign({ uVis: { value: silVis } }, U),
-    vertexShader: `attribute vec3 aCol; attribute float aK; uniform float uVis[24]; varying vec3 vC; varying vec3 vW; varying float vV;
-      void main(){ float v = 0.0; for (int i = 0; i < 24; i++){ if (abs(float(i) - aK) < 0.5) v = uVis[i]; } vV = v; vC = aCol; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = v < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix * viewMatrix * w; }`,
+    vertexShader: `attribute vec3 aCol; attribute float aK; uniform float uVis[32]; varying vec3 vC; varying vec3 vW; varying float vV;
+      void main(){ float v = 0.0; for (int i = 0; i < 32; i++){ if (abs(float(i) - aK) < 0.5) v = uVis[i]; } vV = v; vC = aCol; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = v < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix * viewMatrix * w; }`,
     fragmentShader: `${GL_COMMON} varying vec3 vC; varying vec3 vW; varying float vV;
       void main(){ vec3 n = normalize(cross(dFdx(vW), dFdy(vW))); vec3 c = litCol(vC, n, 0.9, 0.0); float d = length(vW - cameraPosition); float f = smoothstep(60.0, 520.0, d) * 0.85; vec3 hz = skyCol(normalize(vW - cameraPosition)); c = mix(c, hz, f); c = mix(hz, c, vV); gl_FragColor = vec4(grade(c), 1.0); }`,
     extensions: { derivatives: true } });
@@ -3706,6 +3923,7 @@ function updateSilhouettes(dt){
   const px = camera.position.x, pz = camera.position.z, near = renderDist * .95, far = renderDist * 1.25;
   for (const I of OUT){ if (I.gen === 2 && !I.meshed){ const b = I.bbox; let ok = true; for (let cz = b[1] >> 4; cz <= b[3] >> 4 && ok; cz++) for (let cx = b[0] >> 4; cx <= b[2] >> 4; cx++){ const c = chunks[ckey(cx, 0, cz)]; if (c.dirty || (c.count && c.sent !== c.ver)){ ok = false; break; } } I.meshed = ok; }
     const d = Math.hypot(I.x - px, I.z - pz) - I.r; const real = I.gen === 2 && I.meshed; const want = real ? sstep(near, far, d) : 1; silVis[I.k] += (want - silVis[I.k]) * Math.min(1, dt * 3); }
+  ISL.forEach((I, i) => { const d = Math.hypot(I.x - px, I.z - pz) - I.r * 1.2, want = sstep(near, far, d); silVis[20 + i] += (want - silVis[20 + i]) * Math.min(1, dt * 3); });
 }
 
 /* ---- the threshold: wind banners on floating buoys, a colour shift, a "Wilds" label ---- */
@@ -5567,8 +5785,8 @@ function frame(now){
   updateSky();
   if (state === 'title'){
     titleA += dt * (REDUCED ? .015 : .045);
-    camera.position.set(96 + Math.cos(titleA) * 74, 60 + Math.sin(titleA * .7) * 4, 96 + Math.sin(titleA) * 74);
-    const off = innerWidth >= 760 ? 24 : 0; camera.lookAt(96 - Math.sin(titleA) * off, 33, 94 + Math.cos(titleA) * off);
+    camera.position.set(HOMEC.x + Math.cos(titleA) * 112, 92 + Math.sin(titleA * .7) * 5, HOMEC.z + Math.sin(titleA) * 112);
+    const off = innerWidth >= 760 ? 34 : 0; camera.lookAt(HOMEC.x - Math.sin(titleA) * off, 58, HOMEC.z - 2 + Math.cos(titleA) * off);
     if (camera.fov !== 60){ camera.fov = 60; camera.updateProjectionMatrix(); }
     const lb = $('#loadbar'); if (totalToMesh && !lb._done){ const p = Math.min(1, meshedOnce / totalToMesh); lb.firstChild.style.width = Math.round(p * 30) / 30 * 100 + '%'; if (p >= 1){ lb._done = true; lb.style.visibility = 'hidden'; } }
   } else if (state === 'play'){
@@ -5615,7 +5833,7 @@ function frame(now){
   if (state === 'play'){ stepRings(dt); stepRegrow(dt); }
   renderMobs(tAcc, dt); renderEnemies(tAcc, dt);
   pumpMeshing(state === 'play' ? 3 : 8);
-  visT -= dt; if (visT <= 0){ visT = .25; const cx = camera.position.x, cz = camera.position.z, R = (state === 'title' ? 300 : renderDist * 1.3) + 10; for (const c of chunks){ if (!c.mesh && !c.wmesh) continue; const v = hyp2(c.cx * 16 + 8 - cx, c.cz * 16 + 8 - cz) < R; if (c.mesh) c.mesh.visible = v; if (c.wmesh) c.wmesh.visible = v; } }
+  visT -= dt; if (visT <= 0){ visT = .25; if ((tAcc | 0) % 4 === 0) unloadFar(); const cx = camera.position.x, cz = camera.position.z, R = (state === 'title' ? 300 : renderDist * 1.3) + 10; for (const c of chunks){ if (!c.mesh && !c.wmesh) continue; const v = hyp2(c.cx * 16 + 8 - cx, c.cz * 16 + 8 - cz) < R; if (c.mesh) c.mesh.visible = v; if (c.wmesh) c.wmesh.visible = v; } }
   sky.position.copy(camera.position);
   U.uReveal.value = Math.min(1, U.uReveal.value + dt * 1.5);
   if (CINE.on) cineRender(); else { renderer.render(scene, camera); renderHandPass(); }
@@ -5645,7 +5863,7 @@ function boot(){
   setState('title');
   if (!glOK){ hudEl.hidden = true; $('#bPlay').disabled = true; openIndex(); return; }
   buildSky(); onResize(); updateSky();
-  camera.position.set(170, 60, 96); camera.lookAt(96, 33, 94);
+  camera.position.set(HOMEC.x + 110, 92, HOMEC.z); camera.lookAt(HOMEC.x, 58, HOMEC.z);
   renderer.render(scene, camera);
   const gen = generateSteps(); let done = false;
   const steps = [];
@@ -5665,7 +5883,7 @@ function finishBoot(){
   PL.px = PL.x; PL.py = PL.y; PL.pz = PL.z;
   floodAll(); countChunks();
   chunks.forEach((c, k) => { if (c.count) markDirty(k); });
-  totalToMesh = dirtyList.length;
+  totalToMesh = dirtyList.filter(k => { const c = chunks[k]; return Math.hypot(c.cx * 16 + 8 - camera.position.x, c.cz * 16 + 8 - camera.position.z) < 150; }).length;
   startWildGen(); layoutWilds(savedSeed || ((Math.random() * 4294967295) >>> 0)); for (const k of savedSeen) if (OUT[k]) OUT[k].seen = true; $('#vSeed').textContent = '#' + (OUT_SEED % 100000);
   buildSigns(); buildGlow(); buildParticles(); buildFliers(); buildUpdrafts(); buildWildDrafts(); buildSilhouettes(); buildChestMeshes(); buildEnemyMeshes(); buildHearts(); buildMobs(); buildShards(); buildRings(); buildCubes(); buildEngine(); buildBanners(); buildDrops(); buildHand(); buildOutline(); buildAvatar(); buildMapStatic();
   if (pendingComp >= 0 && MOBS[pendingComp] && MOBS[pendingComp].type !== 'jelly'){ companion = MOBS[pendingComp]; companion.friend = true; }
