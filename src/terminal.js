@@ -1481,7 +1481,15 @@ M.createTerminal = function createTerminal(opts){
   }
   /* a tap on the canvas (x, y as 0..1 fractions): a card row acts as if chosen with enter */
   function handleTap(fx, fy){
-    if (booting || app) return false;
+    if (booting) return false;
+    if (app){                                   // an app with tap(col, row) gets the grid cell (the editor's shortcut bar, cursor placement)
+      const st = app;
+      if (!st.inst || typeof st.inst.tap !== 'function') return false;
+      const col = clamp(Math.floor((fx * W - PADX) / cw), 0, COLS - 1), row = clamp(Math.floor((fy * H - PADY) / ch), 0, ROWS - 1);
+      const r = appCall('tap', col, row);
+      if (r && app === st) st.dirty = true;
+      return !!r;
+    }
     const px = fx * W, py = fy * H;
     if (px < X(1) || px > X(COLS - 1)) return false;
     for (const r of drawnCards){
