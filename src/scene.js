@@ -243,42 +243,55 @@ M.createScene = function createScene(container){
       float luma(vec3 c){ return dot(c, vec3(.299, .587, .114)); }
       vec3 phos(vec3 c){ float l = luma(c); vec3 m = uPhos * l + vec3(pow(l, 3.)) * .32; return mix(c, m, uMono); }
       float rr(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q, 0.)) + min(max(q.x, q.y), 0.) - r; }
+      vec3 S(vec2 t){ return texture2D(uTex, t).rgb; }
       void main(){
         // gentle barrel distortion: the image bows with the glass
-        vec2 c = vUv - .5; c *= 1. + .075 * dot(c, c); vec2 uv = c + .5;
+        vec2 c = vUv - .5; c *= 1. + .055 * dot(c, c); vec2 uv = c + .5;
         vec2 t = (uv - uInset) / (1. - 2. * uInset);
-        float edge = rr(t - .5, vec2(.5), .035);
-        float inside = 1. - smoothstep(-.004, .002, edge);
+        float edge = rr(t - .5, vec2(.5), .03), ea = max(fwidth(edge), 1e-4);
+        float inside = 1. - smoothstep(-ea, ea * .5, edge);
         vec3 col = vec3(0.);
         if (uHas > .5 && inside > 0.){
-          vec3 s = texture2D(uTex, t).rgb;
-          vec3 g1 = texture2D(uTex, t, 2.5).rgb, g2 = texture2D(uTex, t, 4.5).rgb; // mip blur = cheap phosphor bloom
-          col = phos(s) + phos(g1) * .22 + phos(g2) * .11;
-          // scanlines every 3 canvas px; they fade out before they can alias when the tube is small on screen
-          float y = t.y * uRes.y / 3.; float fw = fwidth(y);
-          float sAmt = .2 * clamp(1. - (fw - .3) * 2.5, 0., 1.) * (1. - .5 * luma(s));
+          // the canvas is sampled without mipmaps (no blur); a 4-tap box over this pixel's footprint keeps
+          // strokes crisp when magnified and stops them shimmering when the tube is minified
+          vec2 dx = dFdx(t) * .25, dy = dFdy(t) * .25;
+          vec3 s = .25 * (S(t + dx + dy) + S(t - dx + dy) + S(t + dx - dy) + S(t - dx - dy));
+          // phosphor halation: a soft ring of taps, added under the text, never replacing it
+          vec2 px = 1. / uRes; vec3 g = vec3(0.);
+          for (int i = 0; i < 8; i++){ float a = float(i) * .7853982 + .3927; vec2 o = vec2(cos(a), sin(a)) * px;
+            g += S(t + o * 2.2) + .55 * S(t + o * 5.5); }
+          g /= 12.4;
+          vec3 ps = phos(s), pg = phos(g);
+          col = ps + pg * .2 * (1. - .6 * luma(ps));
+          // scanlines (one per 4 canvas rows); strongest in the dark gaps, fading out before they can alias
+          float y = t.y * uRes.y / 4.; float fw = fwidth(y);
+          float sAmt = .2 * clamp(1.6 - fw * 2.2, 0., 1.) * (1. - .55 * luma(s));
           col *= 1. - sAmt * (.5 - .5 * cos(y * 6.2831853));
-          // aperture-grille stripes, very faint
-          float x = t.x * uRes.x / 3.; float fx = fwidth(x); float mAmt = .07 * clamp(1. - (fx - .3) * 2.5, 0., 1.);
-          float ph = fract(x); vec3 mask = vec3(ph < .333 ? 1. : 0., ph >= .333 && ph < .666 ? 1. : 0., ph >= .666 ? 1. : 0.);
-          col *= 1. - mAmt + mAmt * 3. * mask * .5 + mAmt * .5;
-          // vignette, flicker and a slow rolling refresh band
-          float v = 16. * t.x * t.y * (1. - t.x) * (1. - t.y); col *= mix(.68, 1., pow(clamp(v, 0., 1.), .3));
-          col *= uFlicker * (1. + uRoll * .022 * smoothstep(.0, .5, .5 - abs(fract(t.y - uTime * .07) - .5) * 6.));
+          // shadow mask: soft RGB triads, only when there are enough device pixels to show them
+          float x = t.x * uRes.x / 3.; float fx = fwidth(x); float mAmt = .07 * clamp(1.3 - fx * 1.7, 0., 1.);
+          vec3 mask = .5 + .5 * cos(6.2831853 * (x - vec3(0., .3333, .6667)));
+          col *= 1. - mAmt + 2. * mAmt * mask;
+          // vignette, flicker and a slow, barely-there refresh band
+          float v = 16. * t.x * t.y * (1. - t.x) * (1. - t.y); col *= mix(.74, 1., pow(clamp(v, 0., 1.), .3));
+          col *= uFlicker * (1. + uRoll * .012 * smoothstep(.0, .5, .5 - abs(fract(t.y - uTime * .06) - .5) * 6.));
           col *= inside * uBright;
         }
         // the unlit tube is a dark grey-green, slightly lighter in the middle where the glass is thickest
-        vec3 base = vec3(.020, .027, .023) * (1. - .45 * length(vUv - .5));
-        col += base;
-        // glass: a soft lamp highlight and a little Fresnel sheen from the room
+        vec3 base = vec3(.018, .024, .021) * (1. - .45 * length(vUv - .5));
+        // the bezel lip shades the glass: deepest along the top and the lamp-side (left) edge
+        float sh = smoothstep(0., .09, 1. - vUv.y) * smoothstep(0., .075, vUv.x) * smoothstep(0., .04, 1. - vUv.x) * smoothstep(0., .035, vUv.y);
+        float occ = mix(.2, 1., sh);
+        // glass: the lamp as a soft warm bloom and a tight glint, room sheen at grazing angles
         vec3 V = normalize(cameraPosition - vW), N = normalize(vN);
         vec3 L = normalize(uLamp - vW), R = reflect(-V, N);
         float rl = max(dot(R, L), 0.);
-        col += vec3(1., .74, .48) * (pow(rl, 160.) * .55 + pow(rl, 14.) * .035);
-        col += vec3(.035, .04, .05) * pow(1. - max(dot(N, V), 0.), 3.);
-        // the tube's outer rim falls into the bezel's shadow
-        float rim = smoothstep(.0, .06, min(min(vUv.x, 1. - vUv.x), min(vUv.y, 1. - vUv.y)));
-        gl_FragColor = vec4(col * mix(.35, 1., rim), 1.);
+        vec3 refl = vec3(1., .74, .48) * (pow(rl, 220.) * .5 + pow(rl, 18.) * .05 + pow(rl, 4.) * .018);
+        refl += vec3(1., .78, .55) * .03 * smoothstep(.5, 0., length((vUv - vec2(.05, .9)) * vec2(1., 1.4)));  // lamp-lit room, top left
+        refl += vec3(.03, .036, .045) * pow(1. - max(dot(N, V), 0.), 3.);
+        refl += vec3(.006, .007, .009) * smoothstep(.2, 1., vUv.y);   // a hint of the dark room above
+        // the outer rim of the image falls off where the beam lands at a steep angle
+        float rim = smoothstep(.0, .05, min(min(vUv.x, 1. - vUv.x), min(vUv.y, 1. - vUv.y)));
+        gl_FragColor = vec4(col * mix(.55, 1., rim) + (base + refl) * occ, 1.);
       }`,
   });
   const glass = new THREE.Mesh(glassGeo, screenMat);
@@ -402,7 +415,7 @@ M.createScene = function createScene(container){
   const kb = new THREE.Group();
   {
     // legend atlas: one canvas, one cell per key, cap colour baked in
-    const AW = 1024, AH = 512, CPX = 64;
+    const AW = 2048, AH = 1024, CPX = 128; // 2x: legends stay sharp when the typist looks down at the board
     const [ac, ax] = cnv(AW, AH);
     const ALPHA_C = [222, 212, 190], MOD_C = [170, 160, 146];
     let cx = 0, cy = 0; const cells = {};
@@ -410,15 +423,15 @@ M.createScene = function createScene(container){
     for (const row of ROWS) for (const [code, w, a, b, mod] of row){
       const cw = Math.round(w * CPX); if (cx + cw > AW){ cx = 0; cy += CPX; }
       const col = mod ? MOD_C : ALPHA_C;
-      const g = ax.createRadialGradient(cx + cw / 2, cy + CPX * .45, 2, cx + cw / 2, cy + CPX * .45, Math.max(cw, CPX) * .7);
+      const g = ax.createRadialGradient(cx + cw / 2, cy + CPX * .45, 4, cx + cw / 2, cy + CPX * .45, Math.max(cw, CPX) * .7);
       g.addColorStop(0, `rgb(${col[0] + 6},${col[1] + 6},${col[2] + 5})`); g.addColorStop(1, `rgb(${col[0] - 10},${col[1] - 11},${col[2] - 12})`);
       ax.fillStyle = g; ax.fillRect(cx, cy, cw, CPX);
       ax.fillStyle = mod ? 'rgba(46,40,33,.85)' : 'rgba(52,45,37,.92)'; ax.textBaseline = 'alphabetic';
-      const lx = cx + 13;
-      if (a && a.length === 1 && b){ ax.font = `500 15px ${FONT}`; ax.fillText(a, lx, cy + 25); ax.fillText(b, lx, cy + 48); }
-      else if (/^[A-Z]$/.test(a)){ ax.font = `500 19px ${FONT}`; ax.fillText(a, lx, cy + 30); }
-      else if (/^[←-↓◆]$/.test(a)){ ax.font = `500 18px ${FONT}`; ax.textAlign = 'center'; ax.fillText(a, cx + cw / 2, cy + 38); ax.textAlign = 'left'; }
-      else if (a){ ax.font = `500 11px ${FONT}`; ax.fillText(a, lx, cy + 49); }
+      const lx = cx + 26;
+      if (a && a.length === 1 && b){ ax.font = `500 30px ${FONT}`; ax.fillText(a, lx, cy + 50); ax.fillText(b, lx, cy + 96); }
+      else if (/^[A-Z]$/.test(a)){ ax.font = `500 38px ${FONT}`; ax.fillText(a, lx, cy + 60); }
+      else if (/^[←-↓◆]$/.test(a)){ ax.font = `500 36px ${FONT}`; ax.textAlign = 'center'; ax.fillText(a, cx + cw / 2, cy + 76); ax.textAlign = 'left'; }
+      else if (a){ ax.font = `500 22px ${FONT}`; ax.fillText(a, lx, cy + 98); }
       cells[code] = [cx / AW, (cx + cw) / AW, 1 - (cy + CPX) / AH, 1 - cy / AH];
       cx += cw;
     }
@@ -670,43 +683,65 @@ M.createScene = function createScene(container){
     ch.position.copy(SEAT); ch.rotation.y = -.04; scene.add(ch);
   }
 
-  /* ================= CAMERA ================= */
-  const pose = (pos, target, fov) => ({ pos, target, fov });
-  let aspect = 16 / 10, view = 'pov';
-  function viewPose(name){
-    if (name === 'pov'){
-      // the typist's eyes: a little above the tube, looking slightly down at it, framed so the screen
-      // (plus a sliver of bezel) fills most of the view. Never closer than a seated viewer would be.
-      const fill = aspect < 1 ? .94 : .8;
-      let fov = 32; const tv = Math.tan(fov * Math.PI / 360);
-      let d = Math.max((GH * .5) / (tv * fill), (GW * .5) / (tv * aspect * fill));
-      if (d < .42){ d = .42; }
-      if (d > .62){ d = .62; fov = 2 * Math.atan(Math.max((GH * .5) / (fill * d), (GW * .5) / (fill * d * aspect))) * 180 / Math.PI; }
-      const eye = screenCenter.clone().addScaledVector(screenNormal, d); eye.y += d * .12;
-      return pose(eye, screenCenter.clone().add(new V3(0, -.006, 0)), fov);
-    }
-    if (name === 'screen'){
-      // fill ~88% of the frame; on tall phones the dolly stops short of the typist's head and widens instead
-      let fov = 30; const tv = Math.tan(fov * Math.PI / 360);
-      let d = Math.max((GH * .5) / (tv * .88), (GW * .5) / (tv * aspect * .94));
-      if (d > .4){ d = .4; fov = 2 * Math.atan((GW * .5) / (.94 * d * aspect)) * 180 / Math.PI; }
-      return pose(screenCenter.clone().addScaledVector(screenNormal, d), screenCenter.clone(), fov);
-    }
-    // wide: three-quarter, over the right shoulder; portrait: closer and lower, the tube in the upper middle
-    const p = clamp((1.15 - aspect) / .6, 0, 1);
-    const wide = pose(new V3(2.35, 1.95, 3.1), new V3(-.04, .9, .06), 15.5 * clamp(1.55 / aspect, 1, 1.25));   // long lens: the typist and the machine read at a similar scale
-    const tall = pose(new V3(.34, 1.27, 1.06), new V3(-.01, .9, -.06), 50);
-    return pose(wide.pos.clone().lerp(tall.pos, p), wide.target.clone().lerp(tall.target, p), lerp(wide.fov, tall.fov, p));
+  /* ================= CAMERA: the typist's own eyes ================= */
+  /* One view. The eye sits square-on to the tube, ~0.6 m from the glass and a little above it, so a seated
+     person reads it without craning. The lens is long-ish so the tube fills the frame at that distance.
+     The head turns about a neck pivot below and behind the eyes: looking down carries the eyes forward and
+     down a little, the way a real head does, and the lens widens as it goes so the whole keyboard fits. */
+  const D2R = Math.PI / 180;
+  const LOOK = { yaw: 15 * D2R, down: 35 * D2R, up: 7 * D2R };
+  const flatN = new V3(screenNormal.x, 0, screenNormal.z).normalize();
+  const EYE_D = .6, EYE_UP = .125;
+  const eyeRest = screenCenter.clone().addScaledVector(flatN, EYE_D); eyeRest.y = screenCenter.y + EYE_UP;
+  const aimRest = screenCenter.clone().add(new V3(0, -.003, 0));
+  const restDir = new V3().subVectors(aimRest, eyeRest).normalize();
+  const YAW0 = Math.atan2(-restDir.x, -restDir.z), PITCH0 = Math.asin(restDir.y);
+  const qRest = new THREE.Quaternion().setFromEuler(new THREE.Euler(PITCH0, YAW0, 0, 'YXZ'));
+  const pivot = eyeRest.clone().add(new V3(0, -.11, 0)).addScaledVector(flatN, .075); // top of the neck
+  const eyeArm = new V3().subVectors(eyeRest, pivot);
+  let aspect = 16 / 10, fovRest = 18, fovDown = 30;
+  function frameLens(){
+    // rest: the glass is ~76% of the frame height, and never wider than ~90% of the frame width (portrait phones)
+    const d = eyeRest.distanceTo(screenCenter);
+    const tv = Math.max((GH * .5) / (d * .76), (GW * .5) / (d * .9 * aspect));
+    fovRest = 2 * Math.atan(tv) / D2R;
+    // looking down at the keyboard (~0.45 m away): wide enough to take in the whole board and both hands
+    const tvd = Math.max(Math.tan(15 * D2R), .3 / aspect);
+    fovDown = Math.min(72, Math.max(fovRest, 2 * Math.atan(tvd) / D2R));
   }
-  const cur = viewPose('pov'), from = pose(new V3(), new V3(), 33); let to = cur, tween = 1;
-  const ptr = new THREE.Vector2(), ptrS = new THREE.Vector2();
-  const easeIO = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  function applyCamera(){
-    const fwd = new V3().subVectors(cur.target, cur.pos), dist = fwd.length(); fwd.normalize();
-    const right = new V3().crossVectors(fwd, new V3(0, 1, 0)).normalize(), up = new V3().crossVectors(right, fwd);
-    const amt = (view === 'screen' ? .012 : view === 'pov' ? .006 : .045) * dist;
-    camera.position.copy(cur.pos).addScaledVector(right, ptrS.x * amt).addScaledVector(up, -ptrS.y * amt * .6);
-    camera.lookAt(cur.target); if (camera.fov !== cur.fov){ camera.fov = cur.fov; camera.updateProjectionMatrix(); }
+  // critically damped springs (x, v) for yaw/pitch; an underdamped one for the lean-in
+  const yawS = { x: 0, v: 0, t: 0 }, pitchS = { x: 0, v: 0, t: 0 }, leanS = { x: 0, v: 0 };
+  const crit = (s, w, dt) => { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h;
+    s.v += (w * w * (s.t - s.x) - 2 * w * s.v) * h; s.x += s.v * h; } };
+  const curve = n => { const a = Math.abs(n), t = clamp((a - .12) / .88, 0, 1); return Math.sign(n) * t * t * (3 - 2 * t); };
+  const qLook = new THREE.Quaternion(), qDelta = new THREE.Quaternion(), eLook = new THREE.Euler(0, 0, 0, 'YXZ');
+  const eyeNow = eyeRest.clone(), fwdNow = new V3();
+  let breathT = 0;
+  function applyCamera(t){
+    const br = REDUCED ? 0 : Math.sin(breathT * Math.PI * 2 * .21), br2 = REDUCED ? 0 : Math.sin(breathT * Math.PI * 2 * .21 - 1.1);
+    const drift = REDUCED ? 0 : (Math.sin(t * .23) * .6 + Math.sin(t * .071 + 2) * .4);
+    const yaw = YAW0 + yawS.x + .0016 * drift, pitch = PITCH0 + pitchS.x + .0022 * br2 - .02 * leanS.x;
+    eLook.set(pitch, yaw, .0012 * drift); qLook.setFromEuler(eLook);
+    qDelta.copy(qRest).invert().premultiply(qLook);
+    eyeNow.copy(pivot).add(eyeArm.clone().applyQuaternion(qDelta));
+    eyeNow.y += .0016 * br;
+    fwdNow.set(0, 0, -1).applyQuaternion(qLook);
+    eyeNow.addScaledVector(new V3(fwdNow.x, 0, fwdNow.z).normalize(), .012 * leanS.x);
+    camera.position.copy(eyeNow); camera.quaternion.copy(qLook);
+    const down = sstep(0, 1, clamp(-pitchS.x / LOOK.down, 0, 1));
+    const fov = lerp(fovRest, fovDown, down);
+    if (Math.abs(camera.fov - fov) > 1e-4){ camera.fov = fov; camera.updateProjectionMatrix(); }
+  }
+  /* never see inside the typist's head: anything added to the scene whose bounds wrap the eye is hidden */
+  const added = [], hidden = new Set(), _sph = new THREE.Sphere();
+  function hideNearEye(){
+    for (const m of hidden){ m.visible = true; } hidden.clear();
+    for (const root of added) root.traverse(m => {
+      if (!m.isMesh || !m.visible || !m.geometry) return;
+      if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+      _sph.copy(m.geometry.boundingSphere).applyMatrix4(m.matrixWorld);
+      if (_sph.distanceToPoint(camera.position) < camera.near + .045){ m.visible = false; hidden.add(m); }
+    });
   }
 
   /* ================= SCREEN TEXTURE & GLOW ================= */
@@ -725,7 +760,9 @@ M.createScene = function createScene(container){
       screenCanvas = c;
       if (screenTex) screenTex.dispose();
       screenTex = new THREE.CanvasTexture(c);
-      screenTex.minFilter = THREE.LinearMipmapLinearFilter; screenTex.magFilter = THREE.LinearFilter; screenTex.anisotropy = ANISO; screenTex.generateMipmaps = true;
+      // read up close: no mipmaps (they blur text at mild minification); the shader box-filters per pixel instead
+      screenTex.minFilter = THREE.LinearFilter; screenTex.magFilter = THREE.LinearFilter; screenTex.generateMipmaps = false; screenTex.anisotropy = 1;
+      screenTex.encoding = THREE.LinearEncoding; screenTex.wrapS = screenTex.wrapT = THREE.ClampToEdgeWrapping;
       screenU.uTex.value = screenTex; screenU.uHas.value = 1; screenU.uRes.value.set(c.width, c.height); lumDirty = true;
     },
     markScreenDirty(){ if (screenTex){ screenTex.needsUpdate = true; lumDirty = true; } },
@@ -736,21 +773,27 @@ M.createScene = function createScene(container){
       press(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = -TRAVEL; activeKeys.add(k); } },
       release(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = 0; activeKeys.add(k); } },
     },
-    rig: { seat: SEAT.clone(), keyboardCenter, keyboardNormal, screenCenter: screenCenter.clone(), screenNormal: screenNormal.clone(), lampPosition: bulbPos.clone(), keySpacing: U },
-    add(o){ scene.add(o); o.traverse(m => { if (m.isMesh && !m.userData.noShadow) m.castShadow = true; }); },
-    setView(name){
-      if (name !== 'scene' && name !== 'screen' && name !== 'pov') return; view = name;
-      from.pos.copy(cur.pos); from.target.copy(cur.target); from.fov = cur.fov; to = viewPose(name); tween = REDUCED ? 1 : 0;
-      if (REDUCED){ cur.pos.copy(to.pos); cur.target.copy(to.target); cur.fov = to.fov; }
+    rig: { seat: SEAT.clone(), keyboardCenter, keyboardNormal, screenCenter: screenCenter.clone(), screenNormal: screenNormal.clone(), lampPosition: bulbPos.clone(), keySpacing: U,
+      eye: eyeRest.clone(),          // where the camera (the typist's eyes) sits at rest, world space
+      eyeLive: eyeNow,               // the camera's current position (updated in place every frame)
+      neck: pivot.clone() },         // the head turns about this point
+    add(o){ scene.add(o); added.push(o); o.traverse(m => { if (m.isMesh && !m.userData.noShadow) m.castShadow = true; }); },
+    setView(){ /* v2: one view only; kept so old callers don't break */ },
+    /* nx, ny in -1..1 from the pointer (0,0 = the screen). ny > 0 looks down toward the keyboard. */
+    setLook(nx, ny){
+      nx = clamp(+nx || 0, -1, 1); ny = clamp(+ny || 0, -1, 1);
+      yawS.t = -curve(nx) * LOOK.yaw;
+      const cy = curve(ny); pitchS.t = cy > 0 ? -cy * LOOK.down : -cy * LOOK.up;
     },
-    setPointer(nx, ny){ if (!REDUCED) ptr.set(clamp(nx, -1, 1), clamp(ny, -1, 1)); },
+    setPointer(nx, ny){ api.setLook(nx, ny); },
+    /* a keystroke: the head dips toward the work for a moment */
+    nudge(amount = 1){ if (!REDUCED) leanS.v += 7 * clamp(amount, 0, 2); },
     update(dt, t){
-      // camera dolly
-      if (tween < 1){ tween = Math.min(1, tween + dt / 1.2); const e = easeIO(tween);
-        cur.pos.lerpVectors(from.pos, to.pos, e); cur.target.lerpVectors(from.target, to.target, e); cur.fov = lerp(from.fov, to.fov, e);
-        // arc slightly upward mid-move so the dolly clears the typist's head
-        cur.pos.y += Math.sin(e * Math.PI) * .06; }
-      ptrS.lerp(ptr, 1 - Math.exp(-dt * 3)); applyCamera();
+      breathT += dt;
+      crit(yawS, 6.5, dt); crit(pitchS, 6, dt);
+      { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h; leanS.v += (-110 * leanS.x - 2 * .75 * 10.5 * leanS.v) * h; leanS.x += leanS.v * h; } }
+      leanS.x = clamp(leanS.x, -.3, 1);
+      applyCamera(t);
       // keys: a stiff spring down, a looser one back up with a small overshoot
       for (const k of activeKeys){
         const down = k.target < 0, w = down ? 75 : 62, z = down ? 1 : .5;
@@ -762,7 +805,7 @@ M.createScene = function createScene(container){
       }
       // tube: flicker, roll, and how much light the text throws into the room
       screenU.uTime.value = t;
-      screenU.uFlicker.value = REDUCED ? 1 : 1 + .01 * Math.sin(t * 2 * Math.PI * 7.7) + .006 * (Math.random() - .5);
+      screenU.uFlicker.value = REDUCED ? 1 : 1 + .0045 * Math.sin(t * 2 * Math.PI * 7.7) + .003 * Math.sin(t * 2 * Math.PI * 1.3) + .002 * (Math.random() - .5);
       lumTimer -= dt; if (lumDirty && lumTimer <= 0){ lumDirty = false; lumTimer = .25; sampleLum(); }
       lum += (lumTarget - lum) * (1 - Math.exp(-dt * 4));
       glow.intensity = (.2 + .6 * Math.min(lum, .6)) * (screenU.uHas.value ? 1 : .4) * screenU.uFlicker.value;
@@ -772,11 +815,11 @@ M.createScene = function createScene(container){
       if (perfT > 2.5){ if (slowAcc / frames > .5 && pixelRatio > 1){ pixelRatio = Math.max(1, pixelRatio - .25); renderer.setPixelRatio(pixelRatio); dustU.uPR.value = pixelRatio;
           const s = renderer.getSize(new THREE.Vector2()); renderer.setSize(s.x, s.y, false); } perfT = 0; frames = 0; slowAcc = 0; }
     },
-    render(){ renderer.render(scene, camera); },
+    render(){ scene.updateMatrixWorld(); hideNearEye(); renderer.render(scene, camera); },
     resize(w, h){
       renderer.setSize(w, h, false); aspect = w / Math.max(1, h); camera.aspect = aspect; camera.updateProjectionMatrix();
       dustU.uScale.value = h;
-      to = viewPose(view); if (tween >= 1){ cur.pos.copy(to.pos); cur.target.copy(to.target); cur.fov = to.fov; } applyCamera();
+      frameLens(); camera.fov = -1; applyCamera(breathT);
     },
   };
   api.resize(container.clientWidth || innerWidth, container.clientHeight || innerHeight);
