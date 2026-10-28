@@ -2141,7 +2141,7 @@ M.createTerminal = function createTerminal(opts){
       g.fillStyle = P.faint; g.fillRect(railX, railTop, 2, railH);
       const th = Math.max(24, railH * ROWS / total), ty = railTop + (railH - th) * (first / Math.max(1, total - ROWS));
       g.fillStyle = P.dim; g.fillRect(railX - 2, ty, 6, th);
-      const note = ' ' + scrollOff + ' more below  pgdn ';
+      const note = '  ' + scrollOff + ' more below' + (COLS >= 46 ? '  pgdn ' : ' ');
       const nx = COLS - note.length, top = PADY + (ROWS - 1) * ch;
       g.fillStyle = P.bg; g.fillRect(X(nx) - 8, top - 4, note.length * cw + 8, ch + 8);
       g.font = font(); g.fillStyle = P.dim; g.fillText(note, X(nx), top + fs * 0.68);
