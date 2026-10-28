@@ -151,8 +151,8 @@ function frame(now){
   try { typist.update(dt, T); } catch (e){ oops(e); }
   try { if (sound && sound.update) sound.update(dt); } catch (e){ oops(e); }
   if (gl.isContextLost()) return;   // the contextlost event is on its way (see above)
-  try { api.update(dt, T); api.render(); bad = 0; } catch (e){ oops(e); if (++bad > 30) toFlat('the 3D view kept failing'); }
-  if ((runT += raw) > 2){ spanT += raw; if (raw > .06) slowT += raw; if (spanT > 5){ if (slowT / spanT > .5) degrade(); spanT = slowT = 0; } }
+  try { api.update(dt, T); api.render(); } catch (e){ oops(e); if (++bad > 20) toFlat('the 3D view kept failing'); }
+  if ((runT += raw) > 2){ spanT += raw; if (raw > .06) slowT += raw; if (spanT > 5){ if (slowT / spanT > .5) degrade(); spanT = slowT = bad = 0; } }
 }
 on(D, 'visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });
 const fromHash = deepLinks(() => term, ac.signal);
@@ -174,7 +174,7 @@ function flat(){
     const probe = D.createElement('div'); probe.className = 'phone-term'; probe.style.cssText = 'visibility:hidden;padding-bottom:env(safe-area-inset-bottom, 0px)';
     stage.appendChild(probe);
     const top = probe.offsetTop, inset = parseFloat(getComputedStyle(probe).paddingBottom) || 0; probe.remove();
-    const W = TOUCH ? innerWidth : Math.max(200, Math.min(innerWidth - 32, 880)), H = Math.max(200, innerHeight - top - inset - (TOUCH ? 0 : 16));
+    const W = TOUCH ? innerWidth : Math.max(200, Math.min(innerWidth - 32, 760)), H = Math.max(200, innerHeight - top - inset - (TOUCH ? 0 : 16));
     term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols: W < 420 ? 40 : W < 600 ? 46 : 54 });
     if (cv) cv.remove();
     cv = term.canvas; cv.className = 'phone-term'; cv.style.width = W + 'px'; cv.style.height = H + 'px'; stage.appendChild(cv);
