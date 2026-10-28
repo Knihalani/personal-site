@@ -31,9 +31,9 @@ MAC.createScene(container: HTMLElement) -> {
     seat: THREE.Vector3,        // centre of the chair seat, world space
     keyboardCenter: THREE.Vector3,
     keyboardNormal: THREE.Vector3,   // up direction of the key surface
-    screenCenter, screenNormal, lampPosition, keySpacing,
-    eye, eyeLive, neck,         // camera rest position, live position (updated in place), head pivot
-    floorY, deskTop, deskBounds, wallZ, windowRect,   // for room.js (MAC.dressRoom(api))
+    screenCenter, lampPosition, keySpacing,
+    eye,                        // camera rest position (the typist's eyes)
+    deskTop, wallZ, windowRect, // for room.js (MAC.dressRoom(api))
   },
   add(obj3d),                    // also turns on castShadow for its meshes, unless mesh.userData.noShadow
   setLook(nx, ny),              // pointer in -1..1 (0,0 = the screen); ny > 0 leans back toward the desk and hands
@@ -90,13 +90,12 @@ Build into your own scratch folder: `python3 build.py --out <dir>`. Add `--dev` 
 stubs missing modules so each can be tested alone (production builds leave it out).
 
 ---------------------------------------------------------------------------------------------------
-# v2 additions (POV-only, full terminal, sound)
+# View, sound, terminal extensions, reader
 
 ## View
 There is ONE view: the typist's own eyes (first person). At rest the CRT fills most of the frame and is fully
 legible. Moving the pointer looks around like a seated head would: down (up to ~35°) leans back to the
-whole desk and the hands, a little left/right/up. `setLook(nx, ny)` is the only view control (`setView`/`setPointer`
-are gone). The typist has no head or torso meshes (the camera is the head); hips/legs never cast shadows.
+whole desk and the hands, a little left/right/up. `setLook(nx, ny)` is the only view control. The typist has no head or torso meshes (the camera is the head); hips/legs never cast shadows.
 The visible parts are the forearms, sleeves and hands, so they must look great from above and behind.
 
 ## Sound: src/sound.js
@@ -106,13 +105,12 @@ MAC.sound = {
   key(code, down),          // mechanical key sound for KeyboardEvent.code, on press and release (varies per key, Space/Enter/Shift heavier)
   event(name),              // 'disk' (floppy seek), 'beep' (terminal bell), 'error'
   setMuted(bool), muted,    // remembered in localStorage
-  update(dt),               // a no-op, kept for callers (no ambience: the owner removed it on purpose)
 }
 ```
 The typist calls `MAC.sound.key(code, true)` at finger contact and `(code, false)` at release (if MAC.sound exists).
 The terminal calls `MAC.sound.event('disk' | 'beep' | 'error')` where it makes sense.
 
-## Terminal extension API (terminal.js implements it; apps.js uses it)
+## Terminal extension API (terminal.js implements it; apps.js, extras.js and editor.js use it)
 ```js
 MAC.TERM = { cmds: {}, apps: {} };   // created by terminal.js if missing; apps.js may load after and register
 
@@ -134,7 +132,7 @@ MAC.TERM.apps[name] = { desc, usage, start(api, argv) -> { key(e) -> bool, tick(
 //        list(p) -> [{ name, dir, size, mtime }], mkdir(p), rm(p, recursive), mv(a, b), cp(a, b), stat(p) }
 ```
 
-## reader.js (v9)
+## reader.js
 ```js
 MAC.reader = { open(slugOrId) -> bool, close(), isOpen, current /* slug */, posts(), find(q), slugOf(p), sanitize(html) }
 ```

@@ -231,7 +231,6 @@ const net = {
 };
 const HTTP_TEXT = { 200: 'OK', 201: 'Created', 204: 'No Content', 301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified', 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 405: 'Method Not Allowed', 429: 'Too Many Requests', 500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable' };
 const host = u => { try { return new URL(u).host; } catch (e){ return String(u); } };
-M.net = net;
 T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usage: 'weather [-c | -f] [city]',
   opts: [['-c', 'Celsius'], ['-f', 'Fahrenheit']], ex: ['weather', 'weather tokyo', 'weather -f new york'],
   complete: () => ['london', 'tokyo', 'paris', 'mumbai', 'sydney', 'singapore', 'berlin', 'dubai', 'toronto', 'nairobi', 'seoul', 'reykjavik'],
@@ -747,7 +746,6 @@ const QR = (() => {
   }
   return { encode };
 })();
-M.qr = QR;
 T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] text...', opts: [['-l', 'low error correction: room for more text']],
   ex: ['qr risingfounder.net', 'qr kaiav.pages.dev', 'echo hello | qr'],
   more: 'draws a QR code your phone camera can read. up to about 200 characters (270 with -l). piped or redirected, it comes out as text blocks.',
@@ -943,10 +941,10 @@ async function vDerive(pass, salt, iter){
   return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 async function vSeal(){
-  const old = vRead(); const iv = crypto.getRandomValues(new Uint8Array(12));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, V.key, new TextEncoder().encode(JSON.stringify({ items: V.items }))));
   const blob = { v: 1, kdf: 'PBKDF2-SHA256', iter: V.iter, salt: V.salt, iv: b64(iv), ct: b64(ct) };
-  try { localStorage.setItem(VKEY, JSON.stringify(blob)); return true; } catch (e){ if (old) {} return false; }
+  try { localStorage.setItem(VKEY, JSON.stringify(blob)); return true; } catch (e){ return false; }
 }
 /* resolves true when the vault is open (setting it up on first use) */
 async function vUnlock(io){

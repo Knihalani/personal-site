@@ -1,5 +1,5 @@
 /* terminal.js: the CRT terminal, the whole interface of the site.
-   MAC.createTerminal({ content, aspect }) -> { canvas, handleKey, insertText, update, run, scroll }
+   MAC.createTerminal({ content, aspect, cols? }) -> { canvas, handleKey, handleTap, insertText, update, run, scroll, ... } (see CONTRACT.md)
    Also implements MAC.TERM (cmds, apps, io, api, scr, fs): see CONTRACT.md "Terminal extension API".
    A small shell: a virtual filesystem kept in localStorage, pipes, redirection, globs, aliases, history.
 
@@ -59,8 +59,8 @@ function copyText(t){
   return fallback();
 }
 M.TERM.copy = copyText;
-/* small preferences: JSON in localStorage, quietly absent in private windows */
-M.TERM.store = {
+/* JSON in localStorage (the filesystem, history, aliases, small preferences); quietly absent when storage is blocked */
+const store = M.TERM.store = {
   get(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e){ return d; } },
   set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e){} },
 };
@@ -168,7 +168,7 @@ const HOME = '/home/kaiav';
 const FS_KEY = 'kaiav.term.fs.v1';
 function createFS(getCwd, onWrite){
   let root = null;
-  try { const s = JSON.parse(localStorage.getItem(FS_KEY) || 'null'); if (s && s.c && typeof s.c === 'object') root = s; } catch (e){}
+  { const s = store.get(FS_KEY, null); if (s && s.c && typeof s.c === 'object') root = s; }
   const mk = () => ({ c: {}, m: Date.now() });
   const isD = n => !!(n && n.c);
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
@@ -187,7 +187,7 @@ function createFS(getCwd, onWrite){
   function get(abs){ let n = root; for (const s of segs(abs)){ if (!isD(n) || !own(n.c, s)) return null; n = n.c[s]; } return n; }
   function parent(abs){ const s = segs(abs); const name = s.pop(); return { dir: get('/' + s.join('/')), name }; }
   let tSave = 0;
-  const persist = () => { try { localStorage.setItem(FS_KEY, JSON.stringify(root)); } catch (e){} };
+  const persist = () => store.set(FS_KEY, root);
   function changed(quiet){ clearTimeout(tSave); tSave = setTimeout(persist, 200); if (onWrite && !quiet) onWrite(); }
   const R = p => resolve(p, getCwd());
   const info = (name, n) => ({ name, dir: isD(n), size: isD(n) ? 0 : n.t.length, mtime: n.m || 0, locked: !isD(n) && n.g === 1 });
@@ -439,7 +439,7 @@ M.createTerminal = function createTerminal(opts){
   let shown = 0, partial = 0, carry = 0;   // typing-out progress
   let input = '', cur = 0;
   let scrollOff = 0, wheelAcc = 0;
-  let booting = !M.TERM.store.get(BOOT_KEY, 0), bootT = 0, bootLastDraw = -1;
+  let booting = !store.get(BOOT_KEY, 0), bootT = 0, bootLastDraw = -1;
   let now = 0, blinkT0 = 0, blinkOn = true, dirty = true;
   let animFps = 0, lastAnim = 0;
   let rate = RATE, rateRows = -1, rateShown = 0;   // the typing-out speed for what is pending (see update)
@@ -450,8 +450,8 @@ M.createTerminal = function createTerminal(opts){
   let nudgeOff = false, lastNudge = false, idleT0 = -1;   // the first-visit nudge under the prompt: after ~8s idle, until something works
   let runQueued = false;    // a whole line came in with the type-ahead: run it on the next frame
   let rs = null;            // ctrl+r search: { q, i, draft, dcur }
-  let history = [];
-  try { const h = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); if (Array.isArray(h)) history = h.filter(s => typeof s === 'string').slice(-200); } catch (e){}
+  let history = store.get(HIST_KEY, []);
+  history = Array.isArray(history) ? history.filter(s => typeof s === 'string').slice(-200) : [];
   let hIdx = history.length, hDraft = '', hPrefix = '';
   const fresh = !history.length;     // a first-time visitor (nothing typed here before)
   let ran = 0;
@@ -467,8 +467,8 @@ M.createTerminal = function createTerminal(opts){
     PWD: HOME, LANG: 'en_US.UTF-8', COLUMNS: String(COLS), LINES: String(ROWS) };
   const ALIAS_KEY = 'kaiav.term.alias';
   let ALIASES = { ll: 'ls -l', la: 'ls -a', l: 'ls', dir: 'ls', cls: 'clear', less: 'cat', more: 'cat', quit: 'exit', logout: 'exit', '?': 'help', home: 'welcome' };
-  try { const a = JSON.parse(localStorage.getItem(ALIAS_KEY) || 'null'); if (a && typeof a === 'object') ALIASES = Object.assign(Object.create(null), a); } catch (e){}
-  const saveAliases = () => { try { localStorage.setItem(ALIAS_KEY, JSON.stringify(ALIASES)); } catch (e){} };
+  { const a = store.get(ALIAS_KEY, null); if (a && typeof a === 'object') ALIASES = Object.assign(Object.create(null), a); }
+  const saveAliases = () => store.set(ALIAS_KEY, ALIASES);
   const hasAlias = n => Object.prototype.hasOwnProperty.call(ALIASES, n);
   function setCwd(p){ ENV.OLDPWD = cwd; cwd = p; ENV.PWD = p; }
   const tildify = p => p === HOME ? '~' : p.startsWith(HOME + '/') ? '~' + p.slice(HOME.length) : p;
@@ -678,7 +678,7 @@ M.createTerminal = function createTerminal(opts){
   }
 
   /* ---- content ---- */
-  const L = C.links || {}, J = C.j || {}, E = C.eden || {}, A = C.about || {}, Wr = C.writing || {};
+  const L = C.links || {}, J = C.j || {}, E = C.eden || {}, A = C.about || {};
   const bare = u => String(u || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
   const URLS = {
     linkedin: L.linkedin || 'https://www.linkedin.com/in/kaiav-nihalani-594703356/',
@@ -698,9 +698,9 @@ M.createTerminal = function createTerminal(opts){
   ];
   const LINKLIST = () => OPEN.filter(o => o.name !== 'j');
   const wrapT = (t, w = 50) => wrap(t, w).join('\n');
-  const slugify = t => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const slugOf = p => p.slug || slugify(p.title) || String(p.id || '');
-  const posts = () => (Wr.posts || []).filter(p => p && (p.status == null || p.status === 'published')).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  // reader.js owns the post list (published only, newest first) and the slugs, so both always agree
+  const R = M.reader || { posts: () => [], slugOf: p => String(p.slug || p.id || '') };
+  const posts = () => R.posts(), slugOf = p => R.slugOf(p);
   const POSTITEMS = posts().map(p => ({ name: slugOf(p), kw: p.title ? [String(p.title).toLowerCase()] : [] }));
   /* a post by slug, id, title or list number (1 = newest) */
   const findPost = q => {
@@ -1199,7 +1199,7 @@ M.createTerminal = function createTerminal(opts){
     io.rich(o);
   } });
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
-    if (argv[1] === '-c'){ history = []; hIdx = 0; try { localStorage.setItem(HIST_KEY, '[]'); } catch (e){} return; }
+    if (argv[1] === '-c'){ history = []; hIdx = 0; store.set(HIST_KEY, []); return; }
     if (!history.length){ io.write('no history yet\n', 'dim'); return; }
     history.forEach((s, i) => { io.write(String(i + 1).padStart(5, ' ') + '  ', 'faint'); io.write(s + '\n'); });
   } });
@@ -1338,7 +1338,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function record(line, noHist){
     line = line.trim(); if (!line) return;
-    if (!noHist && history[history.length - 1] !== line){ history.push(line); if (history.length > 200) history.shift(); try { localStorage.setItem(HIST_KEY, JSON.stringify(history)); } catch (e){} }
+    if (!noHist && history[history.length - 1] !== line){ history.push(line); if (history.length > 200) history.shift(); store.set(HIST_KEY, history); }
     hIdx = history.length; ran++;
   }
   function flushAhead(){                 // the type-ahead lands on the prompt; a queued Enter runs it next frame
@@ -2033,7 +2033,7 @@ M.createTerminal = function createTerminal(opts){
   function skipBoot(){ if (!booting) return; booting = false; endBoot(); }
   function endBoot(){
     booting = false; rows = []; shown = 0; partial = 0;
-    M.TERM.store.set(BOOT_KEY, 1);
+    store.set(BOOT_KEY, 1);
     const w = welcome(out()); if (w.rows[0]) w.rows[0].wel = true;
     emit(w, (C.name || '') + '. ' + (A.role || '') + '. Type help to begin.');
     blinkT0 = now; dirty = true;

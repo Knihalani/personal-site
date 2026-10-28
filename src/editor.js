@@ -213,7 +213,7 @@ function start(api, argv, flavor){
   }
 
   /* ---- clipboard: internal, mirrored to the system clipboard when the browser allows ---- */
-  function sysWrite(t){ lastCopied = t; try { navigator.clipboard.writeText(t).catch(() => {}); } catch (e){} }
+  function sysWrite(t){ lastCopied = t; T.copy(t); }   // terminal.js: the clipboard API, or a hidden-textarea fallback
   function copy(){
     const r = selRange();
     clip = r ? textOf(r[0], r[1]) : lines[cy] + '\n';

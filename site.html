@@ -169,7 +169,7 @@ const M = window.MAC = window.MAC || {};
 
 const TAU = Math.PI * 2;
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
-const LS_KEY = 'mac.sound.muted';
+const LS_KEY = 'kaiav.sound.muted', OLD_KEY = 'mac.sound.muted';   // renamed to the site's prefix; moved over once
 
 /* ---------------- tiny DSP toolkit (pure JS, runs on Float32Arrays) ---------------- */
 function rng(seed){
@@ -474,7 +474,11 @@ Engine.prototype.event = function (name, when){
 
 /* ---------------- public API ---------------- */
 let eng = null, booted = false, muted = false, hidden = false, unlockedAt = 0;
-try { muted = localStorage.getItem(LS_KEY) === '1'; } catch (e){}
+try {
+  const old = localStorage.getItem(OLD_KEY);
+  if (old != null){ if (localStorage.getItem(LS_KEY) == null) localStorage.setItem(LS_KEY, old); localStorage.removeItem(OLD_KEY); }
+  muted = localStorage.getItem(LS_KEY) === '1';
+} catch (e){}
 
 function ready(){
   if (!eng) return false;
@@ -528,7 +532,6 @@ const sound = {
     g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.setTargetAtTime(muted ? 0 : 1, now, 0.04);
     if (!muted && !hidden && ctx.state === 'suspended') ctx.resume().catch(() => {});
   },
-  update(){},                                // nothing ambient runs; kept for the contract
 };
 
 document.addEventListener('visibilitychange', () => {
@@ -689,7 +692,7 @@ M.createScene = function createScene(container){
   /* ================= THE COMPUTER ================= */
   const CW = .246, CH = .345, CD = .275, CR = .022;
   const SLOPE = Math.tan(5 * Math.PI / 180), SLOPE_Y0 = -.112; // face leans back above the chin
-  const BZ = { y: .046, hw: .1095, hh: .0855, r: .023, wall: .015, depth: .021 }; // recessed CRT bezel (v11: tube ~4% bigger, bezel thinner)
+  const BZ = { y: .046, hw: .1095, hh: .0855, r: .023, wall: .015, depth: .021 }; // recessed CRT bezel
   const faceZ = y => CD / 2 - Math.max(0, y - SLOPE_Y0) * SLOPE;
   const SLOT = { x: .043, y: -.074, hw: .047, hh: .0028 };
   const computer = new THREE.Group();
@@ -1301,12 +1304,11 @@ M.createScene = function createScene(container){
   }
 
   /* ================= CAMERA: the typist's own eyes ================= */
-  /* One view. The eye sits square-on to the tube, ~0.6 m from the glass and a little above it, so a seated
-     person reads it without craning. The lens is long-ish so the tube fills the frame at that distance.
-     The head turns about a neck pivot below and behind the eyes: looking down carries the eyes forward and
-     down a little, the way a real head does, and the lens widens as it goes so the whole keyboard fits. */
+  /* One view: the typist's eyes. At rest the camera is square-on to the tube with the glass filling the frame;
+     looking down blends toward a second solved shot, sat back and above, that takes in the machine, the keyboard
+     and both hands (see solveShots). The resting eye (rig.eye) sits ~0.6 m from the glass and a little above it. */
   const D2R = Math.PI / 180;
-  const LOOK = { yaw: 12 * D2R, down: 35 * D2R, up: 6 * D2R };
+  const LOOK = { down: 35 * D2R };
   const REST_FILL = .76;                      // glass height / frame height at rest
   const YAW_REST = 4.5 * D2R, YAW_FULL = 10 * D2R, UP_MAX = 2.5 * D2R;   // how far the head turns: little while reading, more when leaned back
   const flatN = new V3(screenNormal.x, 0, screenNormal.z).normalize();
@@ -1315,28 +1317,11 @@ M.createScene = function createScene(container){
   const aimRest = screenCenter.clone().add(new V3(0, -.003, 0));
   const restDir = new V3().subVectors(aimRest, eyeRest).normalize();
   const YAW0 = Math.atan2(-restDir.x, -restDir.z), PITCH0 = Math.asin(restDir.y);
-  const KB_YAW = Math.atan2(-(keyboardCenter.x - eyeRest.x), -(keyboardCenter.z - eyeRest.z)) - YAW0;
-  const qRest = new THREE.Quaternion().setFromEuler(new THREE.Euler(PITCH0, YAW0, 0, 'YXZ'));
-  const pivot = eyeRest.clone().add(new V3(0, -.11, 0)).addScaledVector(flatN, .075); // top of the neck
-  const eyeArm = new V3().subVectors(eyeRest, pivot);
-  let aspect = 16 / 10, fovRest = 18, fovDown = 30;
-  function frameLens(){
-    // rest: the glass is ~76% of the frame height, and never wider than ~90% of the frame width (portrait phones)
-    const d = eyeRest.distanceTo(screenCenter);
-    const tv = Math.max((GH * .5) / (d * .76), (GW * .5) / (d * .9 * aspect));
-    fovRest = 2 * Math.atan(tv) / D2R;
-    // looking down at the keyboard (~0.45 m away): wide enough to take in the whole board and both hands
-    const tvd = Math.max(Math.tan(15 * D2R), .3 / aspect);
-    fovDown = Math.min(72, Math.max(fovRest, 2 * Math.atan(tvd) / D2R));
-  }
-  // critically damped springs (x, v) for yaw/pitch; an underdamped one for the lean-in
-  const yawS = { x: 0, v: 0, t: 0 }, pitchS = { x: 0, v: 0, t: 0 }, leanS = { x: 0, v: 0 };
+  let aspect = 16 / 10;
+  // critically damped springs (x, v, target) for yaw/pitch
+  const yawS = { x: 0, v: 0, t: 0 }, pitchS = { x: 0, v: 0, t: 0 };
   const crit = (s, w, dt) => { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h;
     s.v += (w * w * (s.t - s.x) - 2 * w * s.v) * h; s.x += s.v * h; } };
-  const curve = n => { const a = Math.abs(n), t = clamp((a - .12) / .88, 0, 1); return Math.sign(n) * t * t * (3 - 2 * t); };
-  const qLook = new THREE.Quaternion(), qDelta = new THREE.Quaternion(), eLook = new THREE.Euler(0, 0, 0, 'YXZ');
-  const eyeNow = eyeRest.clone(), fwdNow = new V3();
-  let breathT = 0;
   /* Two solved shots; the pointer blends between them (setLook: down leans back).
      'screen': square-on to the tube, close, the glass filling the frame (the reading view, at rest).
      'full'  : sat back and above, looking down: the whole machine, the whole keyboard and both hands. */
@@ -1483,16 +1468,13 @@ M.createScene = function createScene(container){
       hasKey: code => keys.has(code) || keys.has(ALIAS[code]),
       keyWorldPos(code){ const k = keys.get(code) || keys.get(ALIAS[code]); return k ? k.world.clone() : null; },
       keyRow(code){ const k = keys.get(code) || keys.get(ALIAS[code]); return k ? k.row : -1; },
-      press(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = -TRAVEL; activeKeys.add(k); sinceMove = 0; api.nudge(k.row === 4 ? .45 : .3); } },
+      press(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = -TRAVEL; activeKeys.add(k); sinceMove = 0; api.nudge(); } },
       release(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = 0; activeKeys.add(k); } },
     },
-    rig: { seat: SEAT.clone(), keyboardCenter, keyboardNormal, screenCenter: screenCenter.clone(), screenNormal: screenNormal.clone(), lampPosition: bulbPos.clone(), keySpacing: U,
+    rig: { seat: SEAT.clone(), keyboardCenter, keyboardNormal, screenCenter: screenCenter.clone(), lampPosition: bulbPos.clone(), keySpacing: U,
       eye: eyeRest.clone(),          // where the camera (the typist's eyes) sits at rest, world space
-      eyeLive: eyeNow,               // the camera's current position (updated in place every frame)
-      neck: pivot.clone(),           // the head turns about this point
-      // for room dressing: put wall props on z = wallZ, keep them out of windowRect and off the desk footprint
-      floorY: 0, deskTop: DESK_Y, deskBounds: { minX: -DESK.w / 2, maxX: DESK.w / 2, minZ: DESK.z - DESK.d / 2, maxZ: DESK.z + DESK.d / 2 },
-      wallZ: WALL_Z, windowRect: { x: WIN.x - WIN.hw - .05, y: WIN.y - WIN.hh - .025, w: WIN.hw * 2 + .1, h: WIN.hh * 2 + .045 } }, // x, y = lower-left corner, includes the trim and sill
+      // for room dressing: put wall props on z = wallZ and keep them out of windowRect
+      deskTop: DESK_Y, wallZ: WALL_Z, windowRect: { x: WIN.x - WIN.hw - .05, y: WIN.y - WIN.hh - .025, w: WIN.hw * 2 + .1, h: WIN.hh * 2 + .045 } }, // x, y = lower-left corner, includes the trim and sill
     add(o){ scene.add(o); added.push(o); o.traverse(m => { if (m.isMesh && !m.userData.noShadow) m.castShadow = true; }); },
     /* the desk lamp: true/false; get lampOn for the current switch state */
     setLamp(on){ on = !!on; if (on === lampS.on) return; lampS.on = on; lampS.t = 0; sag = REDUCED ? 0 : 1; },
@@ -1507,18 +1489,15 @@ M.createScene = function createScene(container){
       yawS.t = -Math.sign(nx) * sx;
       pitchS.t = ny > 0 ? -sstep(.3, .92, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
     },
-    /* a keystroke: the head dips toward the work for a moment */
+    /* a keystroke: skips the intro reveal and wakes the (idle-throttled) renderer */
     nudge(){ skipIntro(); sinceMove = 0; },
     update(dt, t){
-      breathT += dt;
       if (intro.t < intro.end && pitchS.t < -.2) skipIntro();   // leaning back skips the reveal too
       const drewLast = drew; drew = false;
       sinceMove += dt; sinceRender += dt;
       if (Math.abs(yawS.v) + Math.abs(pitchS.v) > 2e-3 || Math.abs(yawS.t - yawS.x) + Math.abs(pitchS.t - pitchS.x) > 1e-3) sinceMove = 0;
       crit(yawS, 3.4, dt); crit(pitchS, 3.1, dt);   // slow, critically damped: glides, never overshoots
-      { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h; leanS.v += (-110 * leanS.x - 2 * .75 * 10.5 * leanS.v) * h; leanS.x += leanS.v * h; } }
-      leanS.x = clamp(leanS.x, -.3, 1);
-      applyCamera(t);
+      applyCamera();
       // keys: a stiff spring down, a looser one back up with a small overshoot
       for (const k of activeKeys){
         const down = k.target < 0, w = down ? 75 : 62, z = down ? 1 : .5;
@@ -1576,7 +1555,7 @@ M.createScene = function createScene(container){
     resize(w, h){
       const pr = Math.min(prFor(w, h), prCap); if (Math.abs(pr - pixelRatio) > .01){ pixelRatio = pr; renderer.setPixelRatio(pr); }
       renderer.setSize(w, h, false); aspect = w / Math.max(1, h); screenDirty = true; camera.aspect = aspect; camera.updateProjectionMatrix();
-      frameLens(); solveShots(); applyCamera(breathT);
+      solveShots(); applyCamera();
     },
   };
   // test hook only: ?debug exposes the camera springs (e.g. pitchS.x = pitchS.t = -LOOK.down to force the lean)
@@ -1817,7 +1796,6 @@ const M = window.MAC = window.MAC || {};
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
-const gauss = (x, w) => Math.exp(-(x / w) * (x / w));
 const PI = Math.PI;
 const lin = hex => new THREE.Color(hex).convertSRGBToLinear();
 
@@ -1972,8 +1950,8 @@ function* surfaceNets(sdf, lo, hi, h){
   return { pos, idx };
 }
 
-/* ---------------- materials: skin with wrap-diffuse subsurface + rim; cloth with a soft fresnel sheen ---------------- */
-function makeMat(kind, U){
+/* ---------------- material: one silhouette shader for every typist mesh ---------------- */
+function makeMat(U){
   // The typist is a silhouette: matte near-black (#050505), no skin or cloth shading inside the shape, only a
   // faint cool rim from the CRT and a faint warm one from the lamp, so the outline reads against the dark keys.
   const m = new THREE.MeshStandardMaterial({ color: lin(0x050505), roughness: 1, metalness: 0 });
@@ -2075,10 +2053,9 @@ M.createTypist = function createTypist(api){
   const lampW = rig.lampPosition ? rig.lampPosition.clone() : kbW.clone().addScaledVector(latW, -.45).add(V3(0, .55, 0));
   const U = {
     uScrP: { value: scrW.clone() }, uLampP: { value: lampW },
-    uCrtC: { value: new THREE.Color(.36, 1, .62).multiplyScalar(.075) }, uLampC: { value: new THREE.Color(1, .7, .46).multiplyScalar(.2) },
-    uAmbC: { value: new THREE.Color(.11, .13, .2).multiplyScalar(.12) }, uLampK: { value: 1 },
+    uLampK: { value: 1 },
   };
-  const cloth = makeMat('cloth', U), cuffM = makeMat('cuff', U), skin = makeMat('skin', U);
+  const sil = makeMat(U);   // hips, legs, sleeves and hands all share it
   const mesh = (geo, mat, parent, pos, rot) => {
     const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true;
     if (pos) m.position.copy(pos); if (rot) m.rotation.set(rot[0], rot[1], rot[2], rot[3] || 'XYZ');
@@ -2091,13 +2068,13 @@ M.createTypist = function createTypist(api){
      lamp (in front of and beside the typist) their shadows fall behind the chair where nothing shows them. ---------- */
   const floorY = clamp(seatW.y > .2 ? -seatW.y : -.42, -.55, -.3);
   const hips = new THREE.Group(); root.add(hips);
-  mesh(blob(.165, .085, .15, (x, y, z) => .03 * Math.sin(x * 6 + z * 4) * (y > 0 ? 1 : .3)), cloth, hips, V3(0, .075, .01));
+  mesh(blob(.165, .085, .15, (x, y, z) => .03 * Math.sin(x * 6 + z * 4) * (y > 0 ? 1 : .3)), sil, hips, V3(0, .075, .01));
   for (const sd of [-1, 1]){
     const hip = V3(sd * .088, .085, -.01), knee = V3(sd * .112, .105, -.43), ankle = V3(sd * .12, floorY + .075, -.47);
     const seg = (a, b, r0, r1) => { const d = b.clone().sub(a), g = new THREE.Group(); g.position.copy(a); g.quaternion.setFromUnitVectors(V3(0, 1, 0), d.clone().normalize()); hips.add(g);
-      mesh(capsule(r0, r1, d.length(), 16, (an, y) => .025 * Math.sin(an * 5 + y * 30) * smooth(0, .1, y)), cloth, g); };
+      mesh(capsule(r0, r1, d.length(), 16, (an, y) => .025 * Math.sin(an * 5 + y * 30) * smooth(0, .1, y)), sil, g); };
     seg(hip, knee, .074, .056); seg(knee, ankle, .052, .04);
-    mesh(blob(.045, .035, .11), cloth, hips, ankle.clone().add(V3(0, -.035, -.055)));
+    mesh(blob(.045, .035, .11), sil, hips, ankle.clone().add(V3(0, -.035, -.055)));
   }
   noCast(hips);
   const SPINE0 = V3(0, .08, .03);
@@ -2141,8 +2118,8 @@ M.createTypist = function createTypist(api){
     const side = h ? 1 : -1, ts = -side;            // ts: which local x side the thumb is on
     const hand = new THREE.Group(); hand.scale.setScalar(HS); root.add(hand);
     const KN = [V3(ts * .037, -.009, -.024), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.08)];
-    const upper = new THREE.Group(); root.add(upper); mesh(upperGeo, cloth, upper); mesh(elbowGeo, cloth, upper, V3(0, L1, 0));
-    const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, cuffM, fore);
+    const upper = new THREE.Group(); root.add(upper); mesh(upperGeo, sil, upper); mesh(elbowGeo, sil, upper, V3(0, L1, 0));
+    const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, sil, fore);
     const fingers = [];
     for (let f = 0; f < 5; f++){
       const base = new THREE.Group(); base.position.copy(KN[f]); hand.add(base);
@@ -2154,7 +2131,7 @@ M.createTypist = function createTypist(api){
       // that meets the cap sits about that far below the axis, in world units
       fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][3] / TIPFL * 1.12 * HS + .0003,
         mode: 'idle', code: null, vcode: null, real: false, pressed: false, upReq: false, t: 0, tC: 0, Td: .08, lift: .005, relT: 9,
-        w: S(0), depth: S(0), act: 0, K: V3(), from: V3(), P: V3(), tip: V3(), restLocal: V3(), restHome: V3(), reach: V3(), start: 0,
+        w: S(0), depth: S(0), act: 0, K: V3(), from: V3(), P: V3(), tip: V3(), restLocal: V3(), restHome: V3(), reach: V3(),
         fid: new VSpring(V3()), fidT: V3(), fidAt: 1 + Math.random() * 4, queue: [], vel: V3(), prevP: V3(), v0: V3() });
     }
     hands.push({ h, side, ts, KN, hand, upper, fore, fingers, homeW: V3(), homeQ: new THREE.Quaternion(), deskW: V3(), deskQ: new THREE.Quaternion(),
@@ -2250,10 +2227,10 @@ M.createTypist = function createTypist(api){
 
   /* ---------- runtime state ---------- */
   const owner = new Map(), down = new Set(), timers = [], contacts = [];
-  let T = 0, lastKey = -9, lastHand = 0, lamped = !!rig.lampPosition, lampScan = 0, pendShift = null, deskCheck = 6, strikeSeq = 0;
+  let T = 0, lastKey = -9, lastHand = 0, lamped = !!rig.lampPosition, lampScan = 0, pendShift = null, deskCheck = 6;
   const act = S(0), lean = S(lean0), sway = S(0), twist = S(0);
   let swayT = 0, swayAt = 6, lampRef = null, lampMax = 0, lampFind = 0;
-  const ZERO = V3(), vI = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), Y = V3(0, 1, 0), qA = new THREE.Quaternion(), mB = new THREE.Matrix4();
+  const ZERO = V3(), vI = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), mB = new THREE.Matrix4();
 
   const snd = (c, d) => { try { if (M.sound && M.sound.key) M.sound.key(c, d); } catch (e){} };
   const doPress = c => { if (!down.has(c)){ down.add(c); try { kb.press(c); } catch (e){} snd(c, true); } };
@@ -2348,7 +2325,7 @@ M.createTypist = function createTypist(api){
       else doRelease(old);
     }
     F.mode = 'strike'; F.code = code; F.vcode = vcode; F.real = real; F.pressed = false; F.upReq = false; F.t = -(delay || 0);
-    F.K.copy(K); F.from.copy(F.P); F.start = ++strikeSeq;
+    F.K.copy(K); F.from.copy(F.P);
     F.v0.copy(delay ? ZERO : F.vel); if (F.v0.length() > .6) F.v0.setLength(.6);     // carry the finger's momentum into the new stroke
     const dist = F.from.distanceTo(v1.copy(K).addScaledVector(n, F.clear));
     F.Td = clamp(.06 + dist * .9, .062, .12) + .14 * hands[F.h].desk.x;
@@ -2692,7 +2669,7 @@ M.createTypist = function createTypist(api){
     geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
     geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
     geo.setIndex(SN.idx);
-    const sm = new THREE.SkinnedMesh(geo, skin);
+    const sm = new THREE.SkinnedMesh(geo, sil);
     sm.bind(new THREE.Skeleton(bones, boneInv), bindM);     // inverses captured in the home pose, before any key was struck
     sm.frustumCulled = false; sm.castShadow = true; sm.receiveShadow = true; sm.name = 'hand-skin';
     root.add(sm); H.skin = sm;
@@ -2719,7 +2696,7 @@ M.createTypist = function createTypist(api){
 </script>
 <script>
 /* terminal.js: the CRT terminal, the whole interface of the site.
-   MAC.createTerminal({ content, aspect }) -> { canvas, handleKey, insertText, update, run, scroll }
+   MAC.createTerminal({ content, aspect, cols? }) -> { canvas, handleKey, handleTap, insertText, update, run, scroll, ... } (see CONTRACT.md)
    Also implements MAC.TERM (cmds, apps, io, api, scr, fs): see CONTRACT.md "Terminal extension API".
    A small shell: a virtual filesystem kept in localStorage, pipes, redirection, globs, aliases, history.
 
@@ -2779,8 +2756,8 @@ function copyText(t){
   return fallback();
 }
 M.TERM.copy = copyText;
-/* small preferences: JSON in localStorage, quietly absent in private windows */
-M.TERM.store = {
+/* JSON in localStorage (the filesystem, history, aliases, small preferences); quietly absent when storage is blocked */
+const store = M.TERM.store = {
   get(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e){ return d; } },
   set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e){} },
 };
@@ -2888,7 +2865,7 @@ const HOME = '/home/kaiav';
 const FS_KEY = 'kaiav.term.fs.v1';
 function createFS(getCwd, onWrite){
   let root = null;
-  try { const s = JSON.parse(localStorage.getItem(FS_KEY) || 'null'); if (s && s.c && typeof s.c === 'object') root = s; } catch (e){}
+  { const s = store.get(FS_KEY, null); if (s && s.c && typeof s.c === 'object') root = s; }
   const mk = () => ({ c: {}, m: Date.now() });
   const isD = n => !!(n && n.c);
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
@@ -2907,7 +2884,7 @@ function createFS(getCwd, onWrite){
   function get(abs){ let n = root; for (const s of segs(abs)){ if (!isD(n) || !own(n.c, s)) return null; n = n.c[s]; } return n; }
   function parent(abs){ const s = segs(abs); const name = s.pop(); return { dir: get('/' + s.join('/')), name }; }
   let tSave = 0;
-  const persist = () => { try { localStorage.setItem(FS_KEY, JSON.stringify(root)); } catch (e){} };
+  const persist = () => store.set(FS_KEY, root);
   function changed(quiet){ clearTimeout(tSave); tSave = setTimeout(persist, 200); if (onWrite && !quiet) onWrite(); }
   const R = p => resolve(p, getCwd());
   const info = (name, n) => ({ name, dir: isD(n), size: isD(n) ? 0 : n.t.length, mtime: n.m || 0, locked: !isD(n) && n.g === 1 });
@@ -3159,7 +3136,7 @@ M.createTerminal = function createTerminal(opts){
   let shown = 0, partial = 0, carry = 0;   // typing-out progress
   let input = '', cur = 0;
   let scrollOff = 0, wheelAcc = 0;
-  let booting = !M.TERM.store.get(BOOT_KEY, 0), bootT = 0, bootLastDraw = -1;
+  let booting = !store.get(BOOT_KEY, 0), bootT = 0, bootLastDraw = -1;
   let now = 0, blinkT0 = 0, blinkOn = true, dirty = true;
   let animFps = 0, lastAnim = 0;
   let rate = RATE, rateRows = -1, rateShown = 0;   // the typing-out speed for what is pending (see update)
@@ -3170,8 +3147,8 @@ M.createTerminal = function createTerminal(opts){
   let nudgeOff = false, lastNudge = false, idleT0 = -1;   // the first-visit nudge under the prompt: after ~8s idle, until something works
   let runQueued = false;    // a whole line came in with the type-ahead: run it on the next frame
   let rs = null;            // ctrl+r search: { q, i, draft, dcur }
-  let history = [];
-  try { const h = JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); if (Array.isArray(h)) history = h.filter(s => typeof s === 'string').slice(-200); } catch (e){}
+  let history = store.get(HIST_KEY, []);
+  history = Array.isArray(history) ? history.filter(s => typeof s === 'string').slice(-200) : [];
   let hIdx = history.length, hDraft = '', hPrefix = '';
   const fresh = !history.length;     // a first-time visitor (nothing typed here before)
   let ran = 0;
@@ -3187,8 +3164,8 @@ M.createTerminal = function createTerminal(opts){
     PWD: HOME, LANG: 'en_US.UTF-8', COLUMNS: String(COLS), LINES: String(ROWS) };
   const ALIAS_KEY = 'kaiav.term.alias';
   let ALIASES = { ll: 'ls -l', la: 'ls -a', l: 'ls', dir: 'ls', cls: 'clear', less: 'cat', more: 'cat', quit: 'exit', logout: 'exit', '?': 'help', home: 'welcome' };
-  try { const a = JSON.parse(localStorage.getItem(ALIAS_KEY) || 'null'); if (a && typeof a === 'object') ALIASES = Object.assign(Object.create(null), a); } catch (e){}
-  const saveAliases = () => { try { localStorage.setItem(ALIAS_KEY, JSON.stringify(ALIASES)); } catch (e){} };
+  { const a = store.get(ALIAS_KEY, null); if (a && typeof a === 'object') ALIASES = Object.assign(Object.create(null), a); }
+  const saveAliases = () => store.set(ALIAS_KEY, ALIASES);
   const hasAlias = n => Object.prototype.hasOwnProperty.call(ALIASES, n);
   function setCwd(p){ ENV.OLDPWD = cwd; cwd = p; ENV.PWD = p; }
   const tildify = p => p === HOME ? '~' : p.startsWith(HOME + '/') ? '~' + p.slice(HOME.length) : p;
@@ -3398,7 +3375,7 @@ M.createTerminal = function createTerminal(opts){
   }
 
   /* ---- content ---- */
-  const L = C.links || {}, J = C.j || {}, E = C.eden || {}, A = C.about || {}, Wr = C.writing || {};
+  const L = C.links || {}, J = C.j || {}, E = C.eden || {}, A = C.about || {};
   const bare = u => String(u || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
   const URLS = {
     linkedin: L.linkedin || 'https://www.linkedin.com/in/kaiav-nihalani-594703356/',
@@ -3418,9 +3395,9 @@ M.createTerminal = function createTerminal(opts){
   ];
   const LINKLIST = () => OPEN.filter(o => o.name !== 'j');
   const wrapT = (t, w = 50) => wrap(t, w).join('\n');
-  const slugify = t => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const slugOf = p => p.slug || slugify(p.title) || String(p.id || '');
-  const posts = () => (Wr.posts || []).filter(p => p && (p.status == null || p.status === 'published')).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  // reader.js owns the post list (published only, newest first) and the slugs, so both always agree
+  const R = M.reader || { posts: () => [], slugOf: p => String(p.slug || p.id || '') };
+  const posts = () => R.posts(), slugOf = p => R.slugOf(p);
   const POSTITEMS = posts().map(p => ({ name: slugOf(p), kw: p.title ? [String(p.title).toLowerCase()] : [] }));
   /* a post by slug, id, title or list number (1 = newest) */
   const findPost = q => {
@@ -3919,7 +3896,7 @@ M.createTerminal = function createTerminal(opts){
     io.rich(o);
   } });
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
-    if (argv[1] === '-c'){ history = []; hIdx = 0; try { localStorage.setItem(HIST_KEY, '[]'); } catch (e){} return; }
+    if (argv[1] === '-c'){ history = []; hIdx = 0; store.set(HIST_KEY, []); return; }
     if (!history.length){ io.write('no history yet\n', 'dim'); return; }
     history.forEach((s, i) => { io.write(String(i + 1).padStart(5, ' ') + '  ', 'faint'); io.write(s + '\n'); });
   } });
@@ -4058,7 +4035,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function record(line, noHist){
     line = line.trim(); if (!line) return;
-    if (!noHist && history[history.length - 1] !== line){ history.push(line); if (history.length > 200) history.shift(); try { localStorage.setItem(HIST_KEY, JSON.stringify(history)); } catch (e){} }
+    if (!noHist && history[history.length - 1] !== line){ history.push(line); if (history.length > 200) history.shift(); store.set(HIST_KEY, history); }
     hIdx = history.length; ran++;
   }
   function flushAhead(){                 // the type-ahead lands on the prompt; a queued Enter runs it next frame
@@ -4753,7 +4730,7 @@ M.createTerminal = function createTerminal(opts){
   function skipBoot(){ if (!booting) return; booting = false; endBoot(); }
   function endBoot(){
     booting = false; rows = []; shown = 0; partial = 0;
-    M.TERM.store.set(BOOT_KEY, 1);
+    store.set(BOOT_KEY, 1);
     const w = welcome(out()); if (w.rows[0]) w.rows[0].wel = true;
     emit(w, (C.name || '') + '. ' + (A.role || '') + '. Type help to begin.');
     blinkT0 = now; dirty = true;
@@ -5950,7 +5927,6 @@ const net = {
 };
 const HTTP_TEXT = { 200: 'OK', 201: 'Created', 204: 'No Content', 301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified', 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 405: 'Method Not Allowed', 429: 'Too Many Requests', 500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable' };
 const host = u => { try { return new URL(u).host; } catch (e){ return String(u); } };
-M.net = net;
 T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usage: 'weather [-c | -f] [city]',
   opts: [['-c', 'Celsius'], ['-f', 'Fahrenheit']], ex: ['weather', 'weather tokyo', 'weather -f new york'],
   complete: () => ['london', 'tokyo', 'paris', 'mumbai', 'sydney', 'singapore', 'berlin', 'dubai', 'toronto', 'nairobi', 'seoul', 'reykjavik'],
@@ -6466,7 +6442,6 @@ const QR = (() => {
   }
   return { encode };
 })();
-M.qr = QR;
 T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] text...', opts: [['-l', 'low error correction: room for more text']],
   ex: ['qr risingfounder.net', 'qr kaiav.pages.dev', 'echo hello | qr'],
   more: 'draws a QR code your phone camera can read. up to about 200 characters (270 with -l). piped or redirected, it comes out as text blocks.',
@@ -6662,10 +6637,10 @@ async function vDerive(pass, salt, iter){
   return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 async function vSeal(){
-  const old = vRead(); const iv = crypto.getRandomValues(new Uint8Array(12));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, V.key, new TextEncoder().encode(JSON.stringify({ items: V.items }))));
   const blob = { v: 1, kdf: 'PBKDF2-SHA256', iter: V.iter, salt: V.salt, iv: b64(iv), ct: b64(ct) };
-  try { localStorage.setItem(VKEY, JSON.stringify(blob)); return true; } catch (e){ if (old) {} return false; }
+  try { localStorage.setItem(VKEY, JSON.stringify(blob)); return true; } catch (e){ return false; }
 }
 /* resolves true when the vault is open (setting it up on first use) */
 async function vUnlock(io){
@@ -7036,7 +7011,7 @@ function start(api, argv, flavor){
   }
 
   /* ---- clipboard: internal, mirrored to the system clipboard when the browser allows ---- */
-  function sysWrite(t){ lastCopied = t; try { navigator.clipboard.writeText(t).catch(() => {}); } catch (e){} }
+  function sysWrite(t){ lastCopied = t; T.copy(t); }   // terminal.js: the clipboard API, or a hidden-textarea fallback
   function copy(){
     const r = selRange();
     clip = r ? textOf(r[0], r[1]) : lines[cy] + '\n';
@@ -7562,7 +7537,8 @@ T.apps.vim = def('vim', 'edit a text file (nano-style, same as edit)', true);
 </script>
 <script>
 /* reader.js: a calm, typeset reading view for posts, laid over the scene as a DOM sheet.
-   MAC.reader = { open(slugOrId) -> bool, close(), isOpen, posts() }
+   MAC.reader = { open(slugOrId) -> bool, close(), isOpen, current, posts(), find(q), slugOf(p), sanitize(html) }
+   (terminal.js lists posts through posts() and slugOf(), so the two always agree.)
    Posts come from MAC.CONTENT.writing.posts: { id, slug, title, subtitle, date, tags, status, summary, html, wordCount, url? }.
    Only published posts show (a post with no status counts as published), newest first. A post with a url and no
    html opens the link instead. The html is sanitised with a small allowlist before it is inserted.
@@ -8135,7 +8111,6 @@ function frame(now){
   try { if (term.update(dt, T)) api.markScreenDirty(); } catch (e){ oops(e); }
   if (reading()) return;   // the reader sheet covers the room: hold the last frame and save the GPU
   try { typist.update(dt, T); } catch (e){ oops(e); }
-  try { if (sound && sound.update) sound.update(dt); } catch (e){ oops(e); }
   if (gl.isContextLost()) return;   // the contextlost event is on its way (see above)
   try { api.update(dt, T); api.render(); } catch (e){ oops(e); if (++bad > 9) toFlat('the 3D view kept failing'); }
   if ((runT += raw) > 2){ spanT += raw; if (raw > .06) slowT += raw; if (spanT > 5){ if (slowT / spanT > .5) degrade(); spanT = slowT = bad = 0; } }

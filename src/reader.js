@@ -1,5 +1,6 @@
 /* reader.js: a calm, typeset reading view for posts, laid over the scene as a DOM sheet.
-   MAC.reader = { open(slugOrId) -> bool, close(), isOpen, posts() }
+   MAC.reader = { open(slugOrId) -> bool, close(), isOpen, current, posts(), find(q), slugOf(p), sanitize(html) }
+   (terminal.js lists posts through posts() and slugOf(), so the two always agree.)
    Posts come from MAC.CONTENT.writing.posts: { id, slug, title, subtitle, date, tags, status, summary, html, wordCount, url? }.
    Only published posts show (a post with no status counts as published), newest first. A post with a url and no
    html opens the link instead. The html is sanitised with a small allowlist before it is inserted.

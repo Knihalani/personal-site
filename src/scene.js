@@ -145,7 +145,7 @@ M.createScene = function createScene(container){
   /* ================= THE COMPUTER ================= */
   const CW = .246, CH = .345, CD = .275, CR = .022;
   const SLOPE = Math.tan(5 * Math.PI / 180), SLOPE_Y0 = -.112; // face leans back above the chin
-  const BZ = { y: .046, hw: .1095, hh: .0855, r: .023, wall: .015, depth: .021 }; // recessed CRT bezel (v11: tube ~4% bigger, bezel thinner)
+  const BZ = { y: .046, hw: .1095, hh: .0855, r: .023, wall: .015, depth: .021 }; // recessed CRT bezel
   const faceZ = y => CD / 2 - Math.max(0, y - SLOPE_Y0) * SLOPE;
   const SLOT = { x: .043, y: -.074, hw: .047, hh: .0028 };
   const computer = new THREE.Group();
@@ -757,12 +757,11 @@ M.createScene = function createScene(container){
   }
 
   /* ================= CAMERA: the typist's own eyes ================= */
-  /* One view. The eye sits square-on to the tube, ~0.6 m from the glass and a little above it, so a seated
-     person reads it without craning. The lens is long-ish so the tube fills the frame at that distance.
-     The head turns about a neck pivot below and behind the eyes: looking down carries the eyes forward and
-     down a little, the way a real head does, and the lens widens as it goes so the whole keyboard fits. */
+  /* One view: the typist's eyes. At rest the camera is square-on to the tube with the glass filling the frame;
+     looking down blends toward a second solved shot, sat back and above, that takes in the machine, the keyboard
+     and both hands (see solveShots). The resting eye (rig.eye) sits ~0.6 m from the glass and a little above it. */
   const D2R = Math.PI / 180;
-  const LOOK = { yaw: 12 * D2R, down: 35 * D2R, up: 6 * D2R };
+  const LOOK = { down: 35 * D2R };
   const REST_FILL = .76;                      // glass height / frame height at rest
   const YAW_REST = 4.5 * D2R, YAW_FULL = 10 * D2R, UP_MAX = 2.5 * D2R;   // how far the head turns: little while reading, more when leaned back
   const flatN = new V3(screenNormal.x, 0, screenNormal.z).normalize();
@@ -771,28 +770,11 @@ M.createScene = function createScene(container){
   const aimRest = screenCenter.clone().add(new V3(0, -.003, 0));
   const restDir = new V3().subVectors(aimRest, eyeRest).normalize();
   const YAW0 = Math.atan2(-restDir.x, -restDir.z), PITCH0 = Math.asin(restDir.y);
-  const KB_YAW = Math.atan2(-(keyboardCenter.x - eyeRest.x), -(keyboardCenter.z - eyeRest.z)) - YAW0;
-  const qRest = new THREE.Quaternion().setFromEuler(new THREE.Euler(PITCH0, YAW0, 0, 'YXZ'));
-  const pivot = eyeRest.clone().add(new V3(0, -.11, 0)).addScaledVector(flatN, .075); // top of the neck
-  const eyeArm = new V3().subVectors(eyeRest, pivot);
-  let aspect = 16 / 10, fovRest = 18, fovDown = 30;
-  function frameLens(){
-    // rest: the glass is ~76% of the frame height, and never wider than ~90% of the frame width (portrait phones)
-    const d = eyeRest.distanceTo(screenCenter);
-    const tv = Math.max((GH * .5) / (d * .76), (GW * .5) / (d * .9 * aspect));
-    fovRest = 2 * Math.atan(tv) / D2R;
-    // looking down at the keyboard (~0.45 m away): wide enough to take in the whole board and both hands
-    const tvd = Math.max(Math.tan(15 * D2R), .3 / aspect);
-    fovDown = Math.min(72, Math.max(fovRest, 2 * Math.atan(tvd) / D2R));
-  }
-  // critically damped springs (x, v) for yaw/pitch; an underdamped one for the lean-in
-  const yawS = { x: 0, v: 0, t: 0 }, pitchS = { x: 0, v: 0, t: 0 }, leanS = { x: 0, v: 0 };
+  let aspect = 16 / 10;
+  // critically damped springs (x, v, target) for yaw/pitch
+  const yawS = { x: 0, v: 0, t: 0 }, pitchS = { x: 0, v: 0, t: 0 };
   const crit = (s, w, dt) => { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h;
     s.v += (w * w * (s.t - s.x) - 2 * w * s.v) * h; s.x += s.v * h; } };
-  const curve = n => { const a = Math.abs(n), t = clamp((a - .12) / .88, 0, 1); return Math.sign(n) * t * t * (3 - 2 * t); };
-  const qLook = new THREE.Quaternion(), qDelta = new THREE.Quaternion(), eLook = new THREE.Euler(0, 0, 0, 'YXZ');
-  const eyeNow = eyeRest.clone(), fwdNow = new V3();
-  let breathT = 0;
   /* Two solved shots; the pointer blends between them (setLook: down leans back).
      'screen': square-on to the tube, close, the glass filling the frame (the reading view, at rest).
      'full'  : sat back and above, looking down: the whole machine, the whole keyboard and both hands. */
@@ -939,16 +921,13 @@ M.createScene = function createScene(container){
       hasKey: code => keys.has(code) || keys.has(ALIAS[code]),
       keyWorldPos(code){ const k = keys.get(code) || keys.get(ALIAS[code]); return k ? k.world.clone() : null; },
       keyRow(code){ const k = keys.get(code) || keys.get(ALIAS[code]); return k ? k.row : -1; },
-      press(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = -TRAVEL; activeKeys.add(k); sinceMove = 0; api.nudge(k.row === 4 ? .45 : .3); } },
+      press(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = -TRAVEL; activeKeys.add(k); sinceMove = 0; api.nudge(); } },
       release(code){ const k = keys.get(code) || keys.get(ALIAS[code]); if (k){ k.target = 0; activeKeys.add(k); } },
     },
-    rig: { seat: SEAT.clone(), keyboardCenter, keyboardNormal, screenCenter: screenCenter.clone(), screenNormal: screenNormal.clone(), lampPosition: bulbPos.clone(), keySpacing: U,
+    rig: { seat: SEAT.clone(), keyboardCenter, keyboardNormal, screenCenter: screenCenter.clone(), lampPosition: bulbPos.clone(), keySpacing: U,
       eye: eyeRest.clone(),          // where the camera (the typist's eyes) sits at rest, world space
-      eyeLive: eyeNow,               // the camera's current position (updated in place every frame)
-      neck: pivot.clone(),           // the head turns about this point
-      // for room dressing: put wall props on z = wallZ, keep them out of windowRect and off the desk footprint
-      floorY: 0, deskTop: DESK_Y, deskBounds: { minX: -DESK.w / 2, maxX: DESK.w / 2, minZ: DESK.z - DESK.d / 2, maxZ: DESK.z + DESK.d / 2 },
-      wallZ: WALL_Z, windowRect: { x: WIN.x - WIN.hw - .05, y: WIN.y - WIN.hh - .025, w: WIN.hw * 2 + .1, h: WIN.hh * 2 + .045 } }, // x, y = lower-left corner, includes the trim and sill
+      // for room dressing: put wall props on z = wallZ and keep them out of windowRect
+      deskTop: DESK_Y, wallZ: WALL_Z, windowRect: { x: WIN.x - WIN.hw - .05, y: WIN.y - WIN.hh - .025, w: WIN.hw * 2 + .1, h: WIN.hh * 2 + .045 } }, // x, y = lower-left corner, includes the trim and sill
     add(o){ scene.add(o); added.push(o); o.traverse(m => { if (m.isMesh && !m.userData.noShadow) m.castShadow = true; }); },
     /* the desk lamp: true/false; get lampOn for the current switch state */
     setLamp(on){ on = !!on; if (on === lampS.on) return; lampS.on = on; lampS.t = 0; sag = REDUCED ? 0 : 1; },
@@ -963,18 +942,15 @@ M.createScene = function createScene(container){
       yawS.t = -Math.sign(nx) * sx;
       pitchS.t = ny > 0 ? -sstep(.3, .92, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
     },
-    /* a keystroke: the head dips toward the work for a moment */
+    /* a keystroke: skips the intro reveal and wakes the (idle-throttled) renderer */
     nudge(){ skipIntro(); sinceMove = 0; },
     update(dt, t){
-      breathT += dt;
       if (intro.t < intro.end && pitchS.t < -.2) skipIntro();   // leaning back skips the reveal too
       const drewLast = drew; drew = false;
       sinceMove += dt; sinceRender += dt;
       if (Math.abs(yawS.v) + Math.abs(pitchS.v) > 2e-3 || Math.abs(yawS.t - yawS.x) + Math.abs(pitchS.t - pitchS.x) > 1e-3) sinceMove = 0;
       crit(yawS, 3.4, dt); crit(pitchS, 3.1, dt);   // slow, critically damped: glides, never overshoots
-      { let rem = dt; while (rem > 1e-6){ const h = Math.min(rem, 1 / 240); rem -= h; leanS.v += (-110 * leanS.x - 2 * .75 * 10.5 * leanS.v) * h; leanS.x += leanS.v * h; } }
-      leanS.x = clamp(leanS.x, -.3, 1);
-      applyCamera(t);
+      applyCamera();
       // keys: a stiff spring down, a looser one back up with a small overshoot
       for (const k of activeKeys){
         const down = k.target < 0, w = down ? 75 : 62, z = down ? 1 : .5;
@@ -1032,7 +1008,7 @@ M.createScene = function createScene(container){
     resize(w, h){
       const pr = Math.min(prFor(w, h), prCap); if (Math.abs(pr - pixelRatio) > .01){ pixelRatio = pr; renderer.setPixelRatio(pr); }
       renderer.setSize(w, h, false); aspect = w / Math.max(1, h); screenDirty = true; camera.aspect = aspect; camera.updateProjectionMatrix();
-      frameLens(); solveShots(); applyCamera(breathT);
+      solveShots(); applyCamera();
     },
   };
   // test hook only: ?debug exposes the camera springs (e.g. pitchS.x = pitchS.t = -LOOK.down to force the lean)

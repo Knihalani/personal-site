@@ -153,7 +153,6 @@ function frame(now){
   try { if (term.update(dt, T)) api.markScreenDirty(); } catch (e){ oops(e); }
   if (reading()) return;   // the reader sheet covers the room: hold the last frame and save the GPU
   try { typist.update(dt, T); } catch (e){ oops(e); }
-  try { if (sound && sound.update) sound.update(dt); } catch (e){ oops(e); }
   if (gl.isContextLost()) return;   // the contextlost event is on its way (see above)
   try { api.update(dt, T); api.render(); } catch (e){ oops(e); if (++bad > 9) toFlat('the 3D view kept failing'); }
   if ((runT += raw) > 2){ spanT += raw; if (raw > .06) slowT += raw; if (spanT > 5){ if (slowT / spanT > .5) degrade(); spanT = slowT = bad = 0; } }

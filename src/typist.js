@@ -12,7 +12,6 @@ const M = window.MAC = window.MAC || {};
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
-const gauss = (x, w) => Math.exp(-(x / w) * (x / w));
 const PI = Math.PI;
 const lin = hex => new THREE.Color(hex).convertSRGBToLinear();
 
@@ -167,8 +166,8 @@ function* surfaceNets(sdf, lo, hi, h){
   return { pos, idx };
 }
 
-/* ---------------- materials: skin with wrap-diffuse subsurface + rim; cloth with a soft fresnel sheen ---------------- */
-function makeMat(kind, U){
+/* ---------------- material: one silhouette shader for every typist mesh ---------------- */
+function makeMat(U){
   // The typist is a silhouette: matte near-black (#050505), no skin or cloth shading inside the shape, only a
   // faint cool rim from the CRT and a faint warm one from the lamp, so the outline reads against the dark keys.
   const m = new THREE.MeshStandardMaterial({ color: lin(0x050505), roughness: 1, metalness: 0 });
@@ -270,10 +269,9 @@ M.createTypist = function createTypist(api){
   const lampW = rig.lampPosition ? rig.lampPosition.clone() : kbW.clone().addScaledVector(latW, -.45).add(V3(0, .55, 0));
   const U = {
     uScrP: { value: scrW.clone() }, uLampP: { value: lampW },
-    uCrtC: { value: new THREE.Color(.36, 1, .62).multiplyScalar(.075) }, uLampC: { value: new THREE.Color(1, .7, .46).multiplyScalar(.2) },
-    uAmbC: { value: new THREE.Color(.11, .13, .2).multiplyScalar(.12) }, uLampK: { value: 1 },
+    uLampK: { value: 1 },
   };
-  const cloth = makeMat('cloth', U), cuffM = makeMat('cuff', U), skin = makeMat('skin', U);
+  const sil = makeMat(U);   // hips, legs, sleeves and hands all share it
   const mesh = (geo, mat, parent, pos, rot) => {
     const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true;
     if (pos) m.position.copy(pos); if (rot) m.rotation.set(rot[0], rot[1], rot[2], rot[3] || 'XYZ');
@@ -286,13 +284,13 @@ M.createTypist = function createTypist(api){
      lamp (in front of and beside the typist) their shadows fall behind the chair where nothing shows them. ---------- */
   const floorY = clamp(seatW.y > .2 ? -seatW.y : -.42, -.55, -.3);
   const hips = new THREE.Group(); root.add(hips);
-  mesh(blob(.165, .085, .15, (x, y, z) => .03 * Math.sin(x * 6 + z * 4) * (y > 0 ? 1 : .3)), cloth, hips, V3(0, .075, .01));
+  mesh(blob(.165, .085, .15, (x, y, z) => .03 * Math.sin(x * 6 + z * 4) * (y > 0 ? 1 : .3)), sil, hips, V3(0, .075, .01));
   for (const sd of [-1, 1]){
     const hip = V3(sd * .088, .085, -.01), knee = V3(sd * .112, .105, -.43), ankle = V3(sd * .12, floorY + .075, -.47);
     const seg = (a, b, r0, r1) => { const d = b.clone().sub(a), g = new THREE.Group(); g.position.copy(a); g.quaternion.setFromUnitVectors(V3(0, 1, 0), d.clone().normalize()); hips.add(g);
-      mesh(capsule(r0, r1, d.length(), 16, (an, y) => .025 * Math.sin(an * 5 + y * 30) * smooth(0, .1, y)), cloth, g); };
+      mesh(capsule(r0, r1, d.length(), 16, (an, y) => .025 * Math.sin(an * 5 + y * 30) * smooth(0, .1, y)), sil, g); };
     seg(hip, knee, .074, .056); seg(knee, ankle, .052, .04);
-    mesh(blob(.045, .035, .11), cloth, hips, ankle.clone().add(V3(0, -.035, -.055)));
+    mesh(blob(.045, .035, .11), sil, hips, ankle.clone().add(V3(0, -.035, -.055)));
   }
   noCast(hips);
   const SPINE0 = V3(0, .08, .03);
@@ -336,8 +334,8 @@ M.createTypist = function createTypist(api){
     const side = h ? 1 : -1, ts = -side;            // ts: which local x side the thumb is on
     const hand = new THREE.Group(); hand.scale.setScalar(HS); root.add(hand);
     const KN = [V3(ts * .037, -.009, -.024), V3(ts * .026, .003, -.088), V3(ts * .008, .004, -.092), V3(-ts * .011, .003, -.088), V3(-ts * .028, .001, -.08)];
-    const upper = new THREE.Group(); root.add(upper); mesh(upperGeo, cloth, upper); mesh(elbowGeo, cloth, upper, V3(0, L1, 0));
-    const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, cuffM, fore);
+    const upper = new THREE.Group(); root.add(upper); mesh(upperGeo, sil, upper); mesh(elbowGeo, sil, upper, V3(0, L1, 0));
+    const fore = new THREE.Group(); root.add(fore); mesh(foreGeo, sil, fore);
     const fingers = [];
     for (let f = 0; f < 5; f++){
       const base = new THREE.Group(); base.position.copy(KN[f]); hand.add(base);
@@ -349,7 +347,7 @@ M.createTypist = function createTypist(api){
       // that meets the cap sits about that far below the axis, in world units
       fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][3] / TIPFL * 1.12 * HS + .0003,
         mode: 'idle', code: null, vcode: null, real: false, pressed: false, upReq: false, t: 0, tC: 0, Td: .08, lift: .005, relT: 9,
-        w: S(0), depth: S(0), act: 0, K: V3(), from: V3(), P: V3(), tip: V3(), restLocal: V3(), restHome: V3(), reach: V3(), start: 0,
+        w: S(0), depth: S(0), act: 0, K: V3(), from: V3(), P: V3(), tip: V3(), restLocal: V3(), restHome: V3(), reach: V3(),
         fid: new VSpring(V3()), fidT: V3(), fidAt: 1 + Math.random() * 4, queue: [], vel: V3(), prevP: V3(), v0: V3() });
     }
     hands.push({ h, side, ts, KN, hand, upper, fore, fingers, homeW: V3(), homeQ: new THREE.Quaternion(), deskW: V3(), deskQ: new THREE.Quaternion(),
@@ -445,10 +443,10 @@ M.createTypist = function createTypist(api){
 
   /* ---------- runtime state ---------- */
   const owner = new Map(), down = new Set(), timers = [], contacts = [];
-  let T = 0, lastKey = -9, lastHand = 0, lamped = !!rig.lampPosition, lampScan = 0, pendShift = null, deskCheck = 6, strikeSeq = 0;
+  let T = 0, lastKey = -9, lastHand = 0, lamped = !!rig.lampPosition, lampScan = 0, pendShift = null, deskCheck = 6;
   const act = S(0), lean = S(lean0), sway = S(0), twist = S(0);
   let swayT = 0, swayAt = 6, lampRef = null, lampMax = 0, lampFind = 0;
-  const ZERO = V3(), vI = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), Y = V3(0, 1, 0), qA = new THREE.Quaternion(), mB = new THREE.Matrix4();
+  const ZERO = V3(), vI = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), mB = new THREE.Matrix4();
 
   const snd = (c, d) => { try { if (M.sound && M.sound.key) M.sound.key(c, d); } catch (e){} };
   const doPress = c => { if (!down.has(c)){ down.add(c); try { kb.press(c); } catch (e){} snd(c, true); } };
@@ -543,7 +541,7 @@ M.createTypist = function createTypist(api){
       else doRelease(old);
     }
     F.mode = 'strike'; F.code = code; F.vcode = vcode; F.real = real; F.pressed = false; F.upReq = false; F.t = -(delay || 0);
-    F.K.copy(K); F.from.copy(F.P); F.start = ++strikeSeq;
+    F.K.copy(K); F.from.copy(F.P);
     F.v0.copy(delay ? ZERO : F.vel); if (F.v0.length() > .6) F.v0.setLength(.6);     // carry the finger's momentum into the new stroke
     const dist = F.from.distanceTo(v1.copy(K).addScaledVector(n, F.clear));
     F.Td = clamp(.06 + dist * .9, .062, .12) + .14 * hands[F.h].desk.x;
@@ -887,7 +885,7 @@ M.createTypist = function createTypist(api){
     geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
     geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
     geo.setIndex(SN.idx);
-    const sm = new THREE.SkinnedMesh(geo, skin);
+    const sm = new THREE.SkinnedMesh(geo, sil);
     sm.bind(new THREE.Skeleton(bones, boneInv), bindM);     // inverses captured in the home pose, before any key was struck
     sm.frustumCulled = false; sm.castShadow = true; sm.receiveShadow = true; sm.name = 'hand-skin';
     root.add(sm); H.skin = sm;

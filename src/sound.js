@@ -9,7 +9,7 @@ const M = window.MAC = window.MAC || {};
 
 const TAU = Math.PI * 2;
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
-const LS_KEY = 'mac.sound.muted';
+const LS_KEY = 'kaiav.sound.muted', OLD_KEY = 'mac.sound.muted';   // renamed to the site's prefix; moved over once
 
 /* ---------------- tiny DSP toolkit (pure JS, runs on Float32Arrays) ---------------- */
 function rng(seed){
@@ -314,7 +314,11 @@ Engine.prototype.event = function (name, when){
 
 /* ---------------- public API ---------------- */
 let eng = null, booted = false, muted = false, hidden = false, unlockedAt = 0;
-try { muted = localStorage.getItem(LS_KEY) === '1'; } catch (e){}
+try {
+  const old = localStorage.getItem(OLD_KEY);
+  if (old != null){ if (localStorage.getItem(LS_KEY) == null) localStorage.setItem(LS_KEY, old); localStorage.removeItem(OLD_KEY); }
+  muted = localStorage.getItem(LS_KEY) === '1';
+} catch (e){}
 
 function ready(){
   if (!eng) return false;
@@ -368,7 +372,6 @@ const sound = {
     g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.setTargetAtTime(muted ? 0 : 1, now, 0.04);
     if (!muted && !hidden && ctx.state === 'suspended') ctx.resume().catch(() => {});
   },
-  update(){},                                // nothing ambient runs; kept for the contract
 };
 
 document.addEventListener('visibilitychange', () => {
