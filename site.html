@@ -3567,6 +3567,8 @@ M.createTerminal = function createTerminal(opts){
   function sources(io, files, name){
     if (!files.length && !io.piped){ io.err('usage: ' + ((M.TERM.cmds[name] || {}).usage || name + ' file') + '\n'); io.exit(2); return []; }   // nothing to read: say how
     if (!files.length) return [{ name: '(standard input)', text: io.stdin || '' }];
+    // "cat my notes.txt" for a file called "my notes.txt": read it, as the visitor clearly meant
+    if (files.length > 1 && files.some(f => !FS.exists(f)) && FS.read(files.join(' ')) != null) files = [files.join(' ')];
     const r = [];
     for (const f of files){
       if (f === '-'){ r.push({ name: '(standard input)', text: io.stdin || '' }); continue; }
@@ -3665,13 +3667,13 @@ M.createTerminal = function createTerminal(opts){
         for (const e of ents){
           io.write((e.dir ? 'drwxr-xr-x' : e.locked ? '-r--r--r--' : '-rw-r--r--') + (COLS >= 50 || !io.tty ? '  kaiav  ' : '  '), 'faint');
           io.write((e.dir ? '-' : human(e.size)).padStart(w) + '  ' + (COLS >= 50 || !io.tty ? fmtDate(e.mtime) : fmtDate(e.mtime).slice(0, 6)) + '  ', 'dim');
-          io.write(e.name + (e.dir && e.name[0] !== '.' ? '/' : ''), e.dir ? 'bright' : 'normal');
+          io.write(lsName(e.name) + (e.dir && e.name[0] !== '.' ? '/' : ''), e.dir ? 'bright' : 'normal');
           io.write(e.locked && io.tty ? ' ' + LOCK + '\n' : '\n', 'faint');
         }
         return;
       }
       if (!io.tty){ io.write(ents.map(e => e.name).join('\n') + '\n'); return; }
-      const names = ents.map(e => e.name + (e.dir && e.name !== '.' && e.name !== '..' ? '/' : ''));
+      const names = ents.map(e => lsName(e.name) + (e.dir && e.name !== '.' && e.name !== '..' ? '/' : ''));
       const cw2 = Math.max(...names.map(n => n.length)) + 3, per = Math.max(1, Math.floor(COLS / cw2)), nr = Math.ceil(names.length / per);
       for (let r = 0; r < nr; r++){
         for (let c = 0; c < per; c++){ const k = c * nr + r; if (k >= names.length) break; io.write(pad(names[k], cw2), ents[k].dir ? 'bright' : 'normal'); }
@@ -3696,6 +3698,7 @@ M.createTerminal = function createTerminal(opts){
     setCwd(p);
   } });
   def('pwd', { g: 'files', desc: 'print the working directory', usage: 'pwd', run(argv, io){ io.write(cwd + '\n'); } });
+  const lsName = n => /[\s'"\\|&;<>$`#]/.test(n) ? "'" + n.replace(/'/g, "'\\''") + "'" : n;   // ls quotes names a shell would split, as GNU ls does
   def('cat', { g: 'files', desc: 'print files', usage: 'cat [-n] [file...]', opts: [['-n', 'number the lines']], ex: ['cat README.md', 'cat j.txt | grep founders'], run(argv, io){
     const { o, a } = getopts(argv.slice(1));
     if (a.length === 1 && io.tty && !o.n){ const n = FS.node(a[0]); if (n && n.g && n.doc && DOCS[n.doc]){ io.rich(DOCS[n.doc](out())); return; } }
@@ -4591,9 +4594,12 @@ M.createTerminal = function createTerminal(opts){
   }
 
   /* ---- completion and typeahead ---- */
+  const shEsc = n => n.replace(/[\s'"\\|&;<>$`#]/g, '\\$&');   // what the lexer reads back as one word
+  const unesc = w => w.replace(/\\(.)/g, '$1');
   function context(){
     const before = input.slice(0, cur);
-    let i = before.length; while (i > 0 && !/[\s|;&<>]/.test(before[i - 1])) i--;
+    // a word runs back to an unescaped separator: "my\ notes.txt" is one word
+    let i = before.length; while (i > 0 && (!/[\s|;&<>]/.test(before[i - 1]) || before[i - 2] === '\\')) i--;
     const word = before.slice(i);
     const pre = before.slice(0, i).trimEnd();
     const cmdPos = !pre || /(\|\||&&|[|;&])$/.test(pre);
@@ -4609,11 +4615,12 @@ M.createTerminal = function createTerminal(opts){
       if (Array.isArray(l) && l.length) return { kind: 'arg', q: word, from: i, items: l.map(n => ({ name: String(n) })), all: true };
     }
     if (word.startsWith('$')) return { kind: 'path', q: word.slice(1), from: i + 1, items: Object.keys(ENV).map(k => ({ name: k })) };
+    // paths: names are matched unescaped and offered escaped, so a name with spaces completes to something the shell reads
     const slash = word.lastIndexOf('/');
-    const dirPart = word.slice(0, slash + 1), q = word.slice(slash + 1);
+    const dirPart = unesc(word.slice(0, slash + 1)), q = word.slice(slash + 1), uq = unesc(q);
     const ents = FS.list(dirPart ? (dirPart === '/' ? '/' : dirPart.replace(/\/$/, '')) : '.');
     if (!ents) return { kind: 'path', q, from: i + slash + 1, items: [] };
-    return { kind: 'path', q, from: i + slash + 1, items: ents.filter(e => (q[0] === '.' || e.name[0] !== '.') && (cname !== 'cd' || e.dir)).map(e => ({ name: e.name + (e.dir ? '/' : '') })) };
+    return { kind: 'path', q, from: i + slash + 1, items: ents.filter(e => (uq[0] === '.' || e.name[0] !== '.') && (cname !== 'cd' || e.dir)).map(e => ({ name: shEsc(e.name) + (e.dir ? '/' : '') })) };
   }
   function candidates(ctx){
     if (!ctx) return [];
