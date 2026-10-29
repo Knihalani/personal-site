@@ -1,0 +1,118 @@
+<title>Kaiav Phone Prototypes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a quiet light-table. A row of live phones (or one, large), each captioned beneath; everything scales to fit the window. */
+:root {
+  --bg: #eceae6;          /* studio grey, a touch warm */
+  --ink: #1d1c1a;
+  --muted: #6d6a64;
+  --line: #d4d1cb;
+  --tab: #ffffff;
+  --accent: #2f5bea;      /* one cool accent, for the active tab and focus */
+  --bezel: #121214;
+  --bezel-hi: #3a3a3f;
+  --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --body: "Figtree", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #17171a; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --tab: #222227; --accent: #7c9bff; --bezel: #050506; --bezel-hi: #4a4a52; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #17171a; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --tab: #222227; --accent: #7c9bff; --bezel: #050506; --bezel-hi: #4a4a52; color-scheme: dark }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; overflow-x: hidden; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; padding-block: 20px 12px; }
+h1 { font: 700 clamp(22px, 2.4vw, 30px)/1.1 var(--display); letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); margin: 4px 0 0; max-width: 62ch; }
+nav { display: flex; flex-wrap: wrap; gap: 6px; }
+nav button { font: 500 13px var(--body); color: var(--ink); background: var(--tab); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+nav button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+nav button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: flex-start; gap: 28px; padding-block: 8px 20px; flex-wrap: wrap; }
+figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; }
+figure[hidden] { display: none !important; }
+.slot { position: relative; }
+.device { position: absolute; left: 0; top: 0; transform-origin: 0 0; width: 414px; height: 868px; border-radius: 64px;
+  background: var(--bezel); box-shadow: inset 0 0 0 2px var(--bezel-hi), 0 30px 60px -20px rgba(0,0,0,.35), 0 8px 18px -8px rgba(0,0,0,.3); }
+.screen { position: absolute; left: 12px; top: 12px; width: 390px; height: 844px; border-radius: 52px; overflow: hidden; background: #000; }
+.screen iframe { width: 390px; height: 844px; border: 0; display: block; }
+.island { position: absolute; left: 50%; top: 11px; width: 124px; height: 36px; margin-left: -62px; border-radius: 20px; background: #000; pointer-events: none; }
+.homebar { position: absolute; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: rgba(255,255,255,.55); mix-blend-mode: difference; pointer-events: none; }
+figcaption { text-align: center; max-width: 34ch; }
+figcaption b { font: 700 17px var(--display); display: block; }
+figcaption span { color: var(--muted); font-size: 13.5px; }
+figcaption a { font: 500 12px var(--mono); color: var(--accent); text-decoration: none; display: inline-block; margin-top: 4px; }
+figcaption a:hover { text-decoration: underline; }
+footer { color: var(--muted); font: 12px var(--mono); padding-block: 0 16px; text-align: center; }
+</style>
+
+<header>
+  <div>
+    <h1>Kaiav Phone Prototypes</h1>
+    <p class="sub">Three directions for a phone site that shares nothing with the desktop room. Each phone is live: tap, swipe and play inside it.</p>
+  </div>
+  <nav aria-label="View">
+    <button type="button" id="v-all" data-view="all" aria-pressed="true">All three</button>
+    <button type="button" id="v-os" data-view="os" aria-pressed="false">Phone OS</button>
+    <button type="button" id="v-room" data-view="room" aria-pressed="false">Room game</button>
+    <button type="button" id="v-arcade" data-view="arcade" aria-pressed="false">Arcade</button>
+  </nav>
+</header>
+
+<main id="stage">
+  <figure data-id="os">
+    <div class="slot"><div class="device"><div class="screen"><iframe src="os.html" title="Phone OS prototype" loading="eager"></iframe></div><div class="island"></div><div class="homebar"></div></div></div>
+    <figcaption><b>Phone OS</b><span>The site is its own little operating system: unlock it, open apps for About, J, Eden, Writing and Mail, and play the game app.</span><br><a href="os.html" target="_blank" rel="noopener">open on its own ↗</a></figcaption>
+  </figure>
+  <figure data-id="room">
+    <div class="slot"><div class="device"><div class="screen"><iframe src="room.html" title="Room game prototype" loading="eager"></iframe></div><div class="island"></div><div class="homebar"></div></div></div>
+    <figcaption><b>Room game</b><span>A pixel-art room to walk around. Talk to things to find out about Kaiav, and find the mini-games hidden in it.</span><br><a href="room.html" target="_blank" rel="noopener">open on its own ↗</a></figcaption>
+  </figure>
+  <figure data-id="arcade">
+    <div class="slot"><div class="device"><div class="screen"><iframe src="arcade.html" title="Arcade prototype" loading="eager"></iframe></div><div class="island"></div><div class="homebar"></div></div></div>
+    <figcaption><b>Arcade</b><span>A pocket arcade of quick one-thumb games. Each round you play reveals another fact, or skip straight to all of them.</span><br><a href="arcade.html" target="_blank" rel="noopener">open on its own ↗</a></figcaption>
+  </figure>
+</main>
+<footer>390 × 844 pt, an iPhone-sized screen, drawn to scale and shrunk to fit your window</footer>
+
+<script>
+(() => {
+  const DW = 414, DH = 868;
+  const figs = [...document.querySelectorAll('figure')];
+  const btns = [...document.querySelectorAll('nav button')];
+  let view = 'all';
+  function fit(){
+    const shown = figs.filter(f => !f.hidden);
+    const main = document.getElementById('stage');
+    const top = main.getBoundingClientRect().top;
+    const capH = 96, foot = 40;
+    const availH = Math.max(260, innerHeight - top - capH - foot);
+    const availW = Math.max(220, document.body.clientWidth - 32);
+    const n = view === 'all' && availW > 3 * 250 ? shown.length : 1;
+    const perW = (availW - (n - 1) * 28) / n;
+    const s = Math.min(1, availH / DH, perW / DW);
+    for (const f of shown){
+      const slot = f.querySelector('.slot');
+      slot.style.width = Math.round(DW * s) + 'px'; slot.style.height = Math.round(DH * s) + 'px';
+      f.querySelector('.device').style.transform = 'scale(' + s + ')';
+    }
+  }
+  function show(v){
+    view = v;
+    for (const b of btns) b.setAttribute('aria-pressed', String(b.dataset.view === v));
+    for (const f of figs) f.hidden = v !== 'all' && f.dataset.id !== v;
+    if (location.hash.slice(1) !== (v === 'all' ? '' : v)) history.replaceState(null, '', v === 'all' ? location.pathname : '#' + v);
+    fit();
+  }
+  btns.forEach(b => b.addEventListener('click', () => show(b.dataset.view)));
+  addEventListener('resize', fit);
+  addEventListener('hashchange', () => show(['os', 'room', 'arcade'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'all'));
+  show(['os', 'room', 'arcade'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'all');
+})();
+</script>
