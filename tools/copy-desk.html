@@ -996,6 +996,7 @@ let lk = null;
 function openLinkPop(){
   if (!editor || $('#desk-edit').hidden) return;
   closePops();
+  try { editor.view.domObserver.flush(); } catch (e){} // a shift+arrow selection the editor hasn't read from the page yet
   const href = editor.getAttributes('link').href || '';
   if (href) editor.chain().extendMarkRange('link').run();
   const { from, to } = editor.state.selection; lk = { from, to, had: !!href };
