@@ -68,18 +68,18 @@ footer { color: var(--muted); font: 12px var(--mono); padding-block: 0 16px; tex
 <main id="stage">
   <figure data-id="os">
     <div class="slot"><div class="device"><div class="screen"><iframe src="os.html" title="Phone OS prototype" loading="eager"></iframe></div><div class="island"></div><div class="homebar"></div></div></div>
-    <figcaption><b>Phone OS</b><span>The site is its own little operating system: unlock it, open apps for About, J, Eden, Writing and Mail, and play the game app.</span><br><a href="os.html" target="_blank" rel="noopener">open on its own ↗</a></figcaption>
+    <figcaption><b>Phone OS</b><span>The site is its own little operating system: unlock it, open apps for About, J, Eden, Writing and Mail, and play the game app.</span><br><a href="os.html" target="_blank" rel="noopener">open on its own &#8599;</a></figcaption>
   </figure>
   <figure data-id="room">
     <div class="slot"><div class="device"><div class="screen"><iframe src="room.html" title="Room game prototype" loading="eager"></iframe></div><div class="island"></div><div class="homebar"></div></div></div>
-    <figcaption><b>Room game</b><span>A pixel-art room to walk around. Talk to things to find out about Kaiav, and find the mini-games hidden in it.</span><br><a href="room.html" target="_blank" rel="noopener">open on its own ↗</a></figcaption>
+    <figcaption><b>Room game</b><span>A pixel-art room to walk around. Talk to things to find out about Kaiav, and find the mini-games hidden in it.</span><br><a href="room.html" target="_blank" rel="noopener">open on its own &#8599;</a></figcaption>
   </figure>
   <figure data-id="arcade">
     <div class="slot"><div class="device"><div class="screen"><iframe src="arcade.html" title="Arcade prototype" loading="eager"></iframe></div><div class="island"></div><div class="homebar"></div></div></div>
-    <figcaption><b>Arcade</b><span>A pocket arcade of quick one-thumb games. Each round you play reveals another fact, or skip straight to all of them.</span><br><a href="arcade.html" target="_blank" rel="noopener">open on its own ↗</a></figcaption>
+    <figcaption><b>Arcade</b><span>A pocket arcade of quick one-thumb games. Each round you play reveals another fact, or skip straight to all of them.</span><br><a href="arcade.html" target="_blank" rel="noopener">open on its own &#8599;</a></figcaption>
   </figure>
 </main>
-<footer>390 × 844 pt, an iPhone-sized screen, drawn to scale and shrunk to fit your window</footer>
+<footer>390 &times; 844 pt, an iPhone-sized screen, drawn to scale and shrunk to fit your window</footer>
 
 <script>
 (() => {
@@ -91,7 +91,7 @@ footer { color: var(--muted); font: 12px var(--mono); padding-block: 0 16px; tex
     const shown = figs.filter(f => !f.hidden);
     const main = document.getElementById('stage');
     const top = main.getBoundingClientRect().top;
-    const capH = 96, foot = 40;
+    const capH = 150, foot = 44;
     const availH = Math.max(260, innerHeight - top - capH - foot);
     const availW = Math.max(220, document.body.clientWidth - 32);
     const n = view === 'all' && availW > 3 * 250 ? shown.length : 1;
