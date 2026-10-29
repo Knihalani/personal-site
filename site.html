@@ -1808,12 +1808,6 @@ function spring(s, target, w, dt){
   const y = s.x - target, e = Math.exp(-w * dt), k = (s.v + w * y) * dt;
   s.x = target + (y + k) * e; s.v = (s.v - w * k) * e; return s.x;
 }
-/* Under-damped spring (zeta < 1) for the little rebound after a release; sub-stepped, so stable at any dt. */
-function bouncy(s, target, w, zeta, dt){
-  const n = Math.max(1, Math.ceil(dt * 480)), h = dt / n;
-  for (let i = 0; i < n; i++){ s.v += (-w * w * (s.x - target) - 2 * zeta * w * s.v) * h; s.x += s.v * h; }
-  return s.x;
-}
 class VSpring {
   constructor(v){ this.x = v.clone(); this.v = V3(); }
   step(t, w, dt){
@@ -1823,6 +1817,10 @@ class VSpring {
   }
 }
 const S = x => ({ x, v: 0 });
+/* Smooth 1D value noise (quintic fade) and a 3-octave sum in about -1..1: idle drift that never reads as a sine. */
+const hash1 = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+function noise1(x){ const i = Math.floor(x), f = x - i, u = f * f * f * (f * (f * 6 - 15) + 10); const a = hash1(i); return (a + (hash1(i + 1) - a) * u) * 2 - 1; }
+const fbm = (x, s) => noise1(x + s * 17.3) * .62 + noise1(x * 2.13 + s * 5.1 + 3.7) * .27 + noise1(x * 4.37 + s * 2.9 + 9.1) * .11;
 
 /* ---------------- keyboard knowledge: standard ANSI layout (key-centre x in key units, row) ---------------- */
 const LAYOUT = {};
@@ -2040,7 +2038,7 @@ M.createTypist = function createTypist(api){
   const keyLocal = code => { const p = wpos(code) || layoutWorld(code); return p ? toLocal(p) : null; };
 
   const n = dirLocal(nW), lat = dirLocal(latW), kfw = dirLocal(fwdW);
-  const U_KEY = uW, TRAVEL = .0032, HOVER = .0045, HAND_W = 36;
+  const U_KEY = uW, TRAVEL = .0032, HOVER = .0045;
   const REST_GAP = .0005, KNUCKLE_UP = .028, KNUCKLE_BACK = .052;   // fingertips rest on the caps (a hair above: never pressing)
 
   /* the desk surface just in front of the keyboard (for a hand resting there during long idles) */
@@ -2136,10 +2134,11 @@ M.createTypist = function createTypist(api){
       fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][3] / TIPFL * 1.12 * HS + .0003,
         mode: 'idle', code: null, vcode: null, real: false, pressed: false, upReq: false, t: 0, tC: 0, Td: .08, lift: .005, relT: 9,
         w: S(0), depth: S(0), act: 0, K: V3(), from: V3(), P: V3(), tip: V3(), restLocal: V3(), restHome: V3(), reach: V3(),
-        fid: new VSpring(V3()), fidT: V3(), fidAt: 1 + Math.random() * 4, queue: [], vel: V3(), prevP: V3(), v0: V3() });
+        fid: new VSpring(V3()), fidT: V3(), queue: [], vel: V3(), prevP: V3(), v0: V3(), hNow: 0, wW: 30 });
     }
     hands.push({ h, side, ts, KN, hand, upper, fore, fingers, homeW: V3(), homeQ: new THREE.Quaternion(), deskW: V3(), deskQ: new THREE.Quaternion(),
-      W: null, hold: V3(), region: null, nudge: V3(), lastActive: -9, yaw: S(0), desk: S(0), deskT: 0, elbowOut: S(0) });
+      W: null, Wt: null, hold: V3(), region: null, nudge: V3(), lastActive: -9, yaw: S(0), desk: S(0), deskT: 0, elbowOut: S(0),
+      fidAt: 2 + Math.random() * 4, fidF: null });
   }
 
   /* ---------- home pose: knuckles behind the home row, fingertips hovering over A S D F / J K L ; ---------- */
@@ -2192,7 +2191,7 @@ M.createTypist = function createTypist(api){
           H.KN[f].copy(tipH(inv, f).sub(tipOff(F, P[0], P[1], H.ts * P[2]))); F.base.position.copy(H.KN[f]);
         }
       }
-      H.W = new VSpring(H.homeW); H.hold.copy(H.homeW); H.region = new VSpring(H.homeW);
+      H.W = new VSpring(H.homeW); H.Wt = new VSpring(H.homeW); H.hold.copy(H.homeW); H.region = new VSpring(H.homeW);
       const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(HS, HS, HS)).invert();
       const ixLat = homes[0].clone().sub(space || C).dot(lat);
       const half = 2.7 * U_KEY;
@@ -2212,6 +2211,15 @@ M.createTypist = function createTypist(api){
     }
   }
   const deskLocalH = toLocal(V3(kbW.x, deskYw, kbW.z)).dot(n);
+  /* the key-top surface (height along n, by distance along the board), from one key per row: a finger that is not
+     pressing never sinks below it, wherever the hand has gone */
+  const rowRef = ['Space', 'KeyB', 'KeyG', 'KeyT', 'Digit5'].map(keyLocal).filter(Boolean).map(p => [p.dot(kfw), p.dot(n)]).sort((a, b) => a[0] - b[0]);
+  const capTop = f => {
+    const R = rowRef; if (!R.length) return -1e9;
+    if (f <= R[0][0]) return R[0][1];
+    for (let i = 0; i < R.length - 1; i++) if (f <= R[i + 1][0]){ const d = R[i + 1][0] - R[i][0]; return d > 1e-6 ? R[i][1] + (R[i + 1][1] - R[i][1]) * (f - R[i][0]) / d : R[i][1]; }
+    return R[R.length - 1][1];
+  };
 
   /* ---------- trunk: lean so the arms hang relaxed; when the scene gives the eye position, put the eyes there ---------- */
   const eyeL = rig.eye ? toLocal(rig.eye) : null;
@@ -2233,8 +2241,8 @@ M.createTypist = function createTypist(api){
   const owner = new Map(), down = new Set(), timers = [], contacts = [];
   let T = 0, lastKey = -9, lastHand = 0, lamped = !!rig.lampPosition, lampScan = 0, pendShift = null, deskCheck = 6;
   const act = S(0), lean = S(lean0), sway = S(0), twist = S(0);
-  let swayT = 0, swayAt = 6, lampRef = null, lampMax = 0, lampFind = 0;
-  const ZERO = V3(), vI = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), mB = new THREE.Matrix4();
+  let swayT = 0, swayAt = 6, lampRef = null, lampMax = 0, lampFind = 0, bPh = Math.random() * 6;
+  const ZERO = V3(), vI = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), vS = V3(), mB = new THREE.Matrix4();
 
   const snd = (c, d) => { try { if (M.sound && M.sound.key) M.sound.key(c, d); } catch (e){} };
   const doPress = c => { if (!down.has(c)){ down.add(c); try { kb.press(c); } catch (e){} snd(c, true); } };
@@ -2266,6 +2274,12 @@ M.createTypist = function createTypist(api){
     F.g0.updateMatrixWorld(true);
     F.tip.set(0, 0, -F.L[2]); F.g2.localToWorld(F.tip); root.worldToLocal(F.tip);
   }
+  /* solve; if the target was out of reach and the pad would end up inside the caps, aim higher until it clears them */
+  function solveSafe(F, P, below){
+    solveFinger(F, P);
+    let sink = capTop(F.tip.dot(kfw)) + F.clear - below - F.tip.dot(n);
+    if (sink > .0004){ vS.copy(P); for (let i = 0; i < 4 && sink > .0004; i++){ vS.addScaledVector(n, sink * 1.5); solveFinger(F, vS); sink = capTop(F.tip.dot(kfw)) + F.clear - below - F.tip.dot(n); } }
+  }
 
   /* Where the wrist has to be for finger F to land on key-top K: the hand moves ~40% of the way on its own (as a
      typist's does), then the residual the finger cannot reach is iterated out with the real finger IK. Cached. */
@@ -2290,9 +2304,12 @@ M.createTypist = function createTypist(api){
 
   function fingerFor(code, pos){
     if (code === 'Space'){      // the thumb of the less busy hand; on a tie, the hand that did not type last
-      const busy = H => H.fingers.reduce((a, G) => a + (G.mode === 'strike' ? 2 : G.mode === 'hold' ? 1 : 0), 0);
+      // (a hand reaching up the board counts as busy: its thumb can no longer get back to the bar; a sideways shift does not
+      // matter, the thumb just meets the bar further along)
+      const busy = H => H.fingers.reduce((a, G) => a + (G.mode === 'strike' ? 2 : G.mode === 'hold' ? 1 : 0), 0)
+        + Math.max(0, v1.copy(H.hold).sub(H.homeW).dot(kfw), v1.copy(H.W.x).sub(H.homeW).dot(kfw)) * 160;
       const b0 = busy(hands[0]), b1 = busy(hands[1]);
-      return hands[b0 === b1 ? 1 - lastHand : b0 < b1 ? 0 : 1].fingers[0];
+      return hands[Math.abs(b0 - b1) < .5 ? 1 - lastHand : b0 < b1 ? 0 : 1].fingers[0];
     }
     const m = FINGER[code];
     let F = null;
@@ -2316,11 +2333,17 @@ M.createTypist = function createTypist(api){
   function strike(code, vcode, F, delay, fromQueue){
     let K = keyLocal(vcode);
     const real = !!K && has(vcode);
-    if (vcode === 'Space' && K) K = thumbKey[F.h].clone();
+    let barOff = 0;
+    if (vcode === 'Space' && K){        // the thumb meets the bar wherever its hand is along the board
+      const H = hands[F.h], c = K.dot(lat);
+      K = thumbKey[F.h].clone(); const k0 = K.dot(lat);
+      barOff = clamp(H.hold.clone().sub(H.homeW).dot(lat), c - 2.6 * U_KEY - k0, c + 2.6 * U_KEY - k0);
+      K.addScaledVector(lat, barOff);
+    }
     if (!K) K = F.restHome.clone().addScaledVector(n, -F.clear - HOVER);     // unknown: just bob the finger
     // the same finger is still on its way to (or has only just touched) another key: finish that stroke first,
     // so every key that goes down is visibly struck, then go straight on to this one
-    if (!fromQueue && F.vcode && (F.queue.length || (F.mode === 'strike' && !F.pressed) || (F.mode === 'hold' && F.t - F.tC < .03))){
+    if (!fromQueue && F.vcode && (F.queue.length || (F.mode === 'strike' && !F.pressed) || (F.mode === 'hold' && F.t - F.tC < .025))){
       F.queue.push({ code, vcode, up: false }); owner.set(code, F); lastKey = T; return;
     }
     if ((F.mode === 'strike' || F.mode === 'hold') && F.vcode){      // the finger leaves a key it was still on
@@ -2328,16 +2351,23 @@ M.createTypist = function createTypist(api){
       if (!F.pressed && F.real){ doPress(old); timers.push({ at: T + .05, fn: () => doRelease(old) }); }
       else doRelease(old);
     }
-    F.mode = 'strike'; F.code = code; F.vcode = vcode; F.real = real; F.pressed = false; F.upReq = false; F.t = -(delay || 0);
+    // Shift first, then the letter: a stroke on the hand whose pinky is still on its way to Shift waits for it to land
+    if (!MOD.test(vcode)) for (const G of hands[F.h].fingers)
+      if (G !== F && G.mode === 'strike' && !G.pressed && G.code && MOD.test(G.code)) delay = Math.max(delay || 0, G.Td - G.t + .008);
+    const resting = F.mode === 'idle' || (F.mode === 'release' && F.relT > .08);
+    F.mode = 'strike'; F.code = code; F.vcode = vcode; F.real = real; F.pressed = false; F.upReq = false; F.t = -(delay || 0); F.e1 = undefined;
     F.K.copy(K); F.from.copy(F.P);
-    F.v0.copy(delay ? ZERO : F.vel); if (F.v0.length() > .6) F.v0.setLength(.6);     // carry the finger's momentum into the new stroke
+    F.v0.copy(delay ? ZERO : F.vel); if (F.v0.length() > .45) F.v0.setLength(.45);     // carry the finger's momentum into the new stroke
     const dist = F.from.distanceTo(v1.copy(K).addScaledVector(n, F.clear));
-    F.Td = clamp(.06 + dist * .9, .062, .12) + .14 * hands[F.h].desk.x;
-    F.lift = clamp(.0035 + dist * .14, .0035, .0085) * (F.f === 0 ? .6 : 1);
-    F.reach.copy(reachFor(F, K, real || LAYOUT[vcode] ? vcode + (vcode === 'Space' ? F.h : '') : null));
-    // give the wrist time to get there: the finger alone covers ~4 mm, the spring has to bring the rest
+    F.reach.copy(reachFor(F, K, real || LAYOUT[vcode] ? vcode + (vcode === 'Space' ? F.h : '') : null)).addScaledVector(lat, barOff);
+    /* A touch typist's stroke is short and decisive: ~35-50 ms from the base knuckle for a key under the finger, longer
+       only as far as the finger (and, for big reaches, the hand) has to travel. The wrist is driven to arrive with it. */
     const H = hands[F.h], move = H.W.x.distanceTo(v1.copy(H.homeW).add(F.reach));
-    if (move > .004){ let tt = F.Td; while (tt < .16 && move * (1 + HAND_W * tt) * Math.exp(-HAND_W * tt) > .004) tt += .005; F.Td = Math.max(F.Td, tt); }
+    F.Td = clamp(.04 + dist * .2 + move * .25 + Math.max(0, dist - .025) * .9 + Math.max(0, move - .012) * .9, .04, .13) + .14 * H.desk.x;
+    // a finger lifting off its resting cap rises a couple of mm; one already travelling arcs higher over the keys between
+    F.lift = (F.f === 0 ? .0012 : resting ? .003 : .0018) + clamp(dist - .012, 0, .05) * (F.f === 0 ? .05 : .11);
+    // wrist stiffness: lands the hand with the finger on a big reach; lazy when the finger alone can make up the gap
+    F.wW = 16 + (clamp(7.6 / Math.max(.03, F.Td + (delay || 0)), 30, 120) - 16) * smooth(.002, .008, move);
     owner.set(code, F);
     lastKey = T;
     if (F.f !== 0 && !MOD.test(code)) lastHand = F.h;
@@ -2399,11 +2429,13 @@ M.createTypist = function createTypist(api){
     /* ---- posture: lean in a touch while typing, breathing, slow weight shifts ---- */
     const typing = T - lastKey < 1.4 ? 1 : 0;
     spring(act, typing, typing ? 4 : 1.4, dt);
-    const breath = Math.sin(T * 2 * PI / 4.6);
+    // breathing: ~4.6 s cycles whose length and depth wander, not a metronome
+    bPh += dt * 2 * PI / 4.6 * (1 + .22 * fbm(T * .09, 1));
+    const breath = Math.sin(bPh) * (.8 + .25 * fbm(T * .13, 2));
     if ((swayT += dt) > swayAt){ swayT = 0; swayAt = 7 + Math.random() * 9; sway.tgt = (Math.random() - .5) * .03; twist.tgt = (Math.random() - .5) * .03; }
     spring(sway, sway.tgt || 0, 1.3, dt); spring(twist, twist.tgt || 0, 1.1, dt);
     spring(lean, lean0 + .03 * act.x, 3, dt);
-    spine.rotation.set(-(lean.x + .006 * breath), twist.x + .01 * Math.sin(T * .23), sway.x + .008 * Math.sin(T * .31));
+    spine.rotation.set(-(lean.x + .006 * breath), twist.x + .009 * fbm(T * .05, 3), sway.x + .007 * fbm(T * .06, 4));
     root.updateWorldMatrix(true, false);
     spine.updateMatrix();
 
@@ -2421,24 +2453,37 @@ M.createTypist = function createTypist(api){
 
     for (const H of hands){
       /* ---- wrist: goes where the active fingers need it (precomputed reach), drifts with the active region ---- */
-      const tgt = v2.set(0, 0, 0); let wsum = 0, lead = null;
+      /* the hand commits to every stroke in flight from its first frame (the reach of the finger about to land weighs
+         most), through a cascaded spring: a bell-shaped speed with no snap at either end. Small reaches drive it
+         lazily (the fingers do the work, so fast typing leaves the hands nearly still); big ones (digits, Backspace,
+         Enter) bring the hand, and with it the forearm and elbow, in time for contact. Quiet again, it eases home. */
+      const tgt = v2.set(0, 0, 0); let wsum = 0, lead = null, wW = 0;
       for (const F of H.fingers){
         if (F.mode !== 'strike' && F.mode !== 'hold') continue;
-        const wgt = F.mode === 'strike' ? (F.f === 0 ? .35 : 1) * (.35 + 3 * smooth(.15, .85, F.t / F.Td) + (F.t > F.Td ? 6 : 0)) /* the finger about to land owns the wrist */ : MOD.test(F.code || '') ? .15 : .5;
+        // (a thumb going for the bar while its hand is out on a reach brings the hand back with it)
+        const wgt = F.mode === 'strike' ? (F.f === 0 ? .25 + 2 * smooth(.006, .02, H.W.x.distanceTo(H.homeW)) : 1) * (F.t < 0 ? .4 : .6 + smooth(0, .7, F.t / F.Td))
+          * (MOD.test(F.code || '') ? 2 : 1) : MOD.test(F.code || '') ? .3 : F.f === 0 ? .12 : .45;     // a pinky holding Shift anchors the hand
         tgt.addScaledVector(F.reach, wgt); wsum += wgt;
-        if (F.mode === 'strike' && F.t / F.Td > .6 && (!lead || F.t / F.Td > lead.t / lead.Td)) lead = F;   // the finger about to land
+        if (F.mode === 'strike'){
+          wW = Math.max(wW, F.wW);
+          if (F.t / F.Td > .5 && (!lead || F.t / F.Td > lead.t / lead.Td)) lead = F;   // the finger about to land
+        }
       }
-      let w = 7;
+      let w;
       if (wsum > 0){
         tgt.multiplyScalar(1 / wsum).add(H.homeW);
-        H.hold.copy(tgt); H.lastActive = T; w = HAND_W;
+        H.hold.copy(tgt); H.lastActive = T; w = wW || 20;
         H.region.step(tgt, 5, dt);
       } else {
-        H.region.step(H.homeW, T - H.lastActive < .6 ? .5 : 2.5, dt);
-        if (T - H.lastActive < .35) w = 14;
-        H.hold.copy(H.homeW).lerp(H.region.x, .35).addScaledVector(n, .0011 * (1 + breath)).addScaledVector(kfw, .0015 * Math.sin(T * .7 + H.h * 2)).addScaledVector(lat, .001 * Math.sin(T * .43 + H.h));
+        const q = T - H.lastActive;
+        H.region.step(H.homeW, q < .6 ? .5 : 2.5, dt);
+        w = q < .4 ? 15 : 9;
+        // at rest: the breath lifts the wrist a little, and it wanders by about a millimetre (noise, not a sine)
+        H.hold.copy(H.homeW).lerp(H.region.x, .35).addScaledVector(n, .0009 * (1 + breath) + .0004 * fbm(T * .37, 10 + H.h))
+          .addScaledVector(kfw, .0011 * fbm(T * .21, 20 + H.h)).addScaledVector(lat, .0009 * fbm(T * .17, 30 + H.h));
       }
-      const W = H.W.step(H.hold, w, dt);
+      H.Wt.step(H.hold, w, dt);
+      const W = H.W.step(H.Wt.x, w, dt);
       spring(H.desk, H.deskT, H.deskT ? 2.6 : 9, dt);
       const dk = smooth(0, 1, H.desk.x);
       H.nudge.multiplyScalar(Math.exp(-(lead ? 3 : 7) * dt));
@@ -2466,78 +2511,90 @@ M.createTypist = function createTypist(api){
       frame(H.fore, E, Wp, V3(1, 0, 0).applyQuaternion(H.hand.quaternion));
 
       /* ---- fingers ---- */
-      for (const F of H.fingers){
-        F.act = F.mode === 'strike' ? smooth(0, 1, F.t / F.Td) : F.mode === 'hold' ? 1 : F.mode === 'release' ? clamp(F.w.x, 0, 1) : 0;
+      // idle adjustments: once the hand has been still a while, every few seconds one finger shifts or lifts a hair
+      // on its key and settles again (never a tapping rhythm, never off the key)
+      if ((H.fidAt -= dt) <= 0){
+        if (H.fidF){ H.fidF.fidT.set(0, 0, 0); H.fidF = null; H.fidAt = 2.5 + Math.random() * 6.5; }
+        else if (!wsum && T - H.lastActive > 1.5 && dk < .5){
+          const G = H.fingers[1 + Math.floor(Math.random() * 4)];
+          if (G.mode === 'idle' && !G.queue.length){
+            G.fidT.set((Math.random() - .5) * .0016, .0003 + Math.random() * .0011, (Math.random() - .5) * .002);
+            H.fidF = G; H.fidAt = .4 + Math.random() * .8;
+          } else H.fidAt = 1;
+        } else H.fidAt = 1 + Math.random();
       }
       for (const F of H.fingers){
-        // idle: resting pose + breathing + an occasional small lift, plus tendon coupling to busy neighbours
-        if ((F.fidAt -= dt) <= 0){
-          F.fidAt = 1.5 + Math.random() * 5;
-          if (F.fidT.lengthSq() > 0) F.fidT.set(0, 0, 0);
-          else { F.fidT.set(0, .002 + Math.random() * .004, (Math.random() - .5) * .004); F.fidAt = .25 + Math.random() * .4; }
-        }
-        F.fid.step(F.mode === 'idle' && !wsum ? F.fidT : ZERO, 14, dt);
+        F.fid.step(F.mode === 'idle' && !wsum ? F.fidT : ZERO, 10, dt);
         // resting on the cap: the pad stays planted while the hand breathes and drifts above it (the finger flexes
-        // instead), and only ever lifts off for a fidget or a neighbour's stroke
+        // instead), and only lifts off for an idle adjustment or with a neighbour's stroke
         const idle = v2.copy(F.restLocal).applyMatrix4(H.hand.matrix);
         idle.addScaledVector(n, (F.restHome.dot(n) - idle.dot(n)) * (1 - dk) * (1 - smooth(.003, .012, H.W.x.distanceTo(H.homeW))));
-        vI.copy(F.fid.x).applyQuaternion(H.hand.quaternion); idle.add(vI).addScaledVector(n, .0003 * (1 + Math.sin(T * 1.7 + F.f * 1.3 + H.h * 2)));
-        let cp = 0; for (const G of H.fingers) if (G !== F) cp += COUPLE[G.f][F.f] * G.act * (G.mode === 'strike' ? Math.sin(PI * clamp(G.t / G.Td, 0, 1)) * .6 + .4 : 1);
-        if (cp > 0) idle.addScaledVector(n, .0016 * Math.min(cp, 1.2));      // a neighbour's stroke lifts the coupled fingers a little
+        vI.copy(F.fid.x).applyQuaternion(H.hand.quaternion); idle.add(vI);
+        // sympathetic motion: shared tendons make a finger rise a little with its neighbours' lift (ring with middle most)
+        let cp = 0; for (const G of H.fingers) if (G !== F) cp += COUPLE[G.f][F.f] * G.hNow;
+        if (cp > 0) idle.addScaledVector(n, Math.min(cp * .4, .0012));
         if (dk > 0){ const hgt = idle.dot(n) - (deskLocalH + FR[F.f][3] * .8 * HS); idle.addScaledVector(n, -hgt * dk * (F.f ? .85 : .5)); }
+        // a finger that is not pressing never sinks into the caps, wherever the hand has gone
+        if (dk < 1){ const fl = capTop(idle.dot(kfw)) + F.clear + .0002 - idle.dot(n); if (fl > 0) idle.addScaledVector(n, fl * (1 - dk)); }
+
+        // a stroke queued behind this finger's last one starts as soon as that key has been visibly hit
+        if (F.queue.length && (F.mode === 'release' || F.mode === 'idle' || (F.mode === 'hold' && F.t - F.tC >= .025))){
+          const q = F.queue.shift();
+          strike(q.code, q.vcode, F, 0, true);
+          if (q.up){ F.upReq = true; if (owner.get(q.code) === F && !F.queue.some(e => e.code === q.code && !e.up)) owner.delete(q.code); }   // its key is already up
+        }
 
         if (F.mode === 'strike'){
           F.t += dt;
           const Kc = v3.copy(F.K).addScaledVector(n, F.clear);
-          let u = clamp(F.t / F.Td, 0, 1);
-          const e = smooth(0, .78, u);
-          // anticipation: a quick lift early on, then an accelerating drop that meets the cap with speed
-          // (the lift runs on an eased clock so it leaves with zero vertical speed but still lands moving down)
-          const ul = u * u * (2 - u);
-          const hgt = F.lift * (.5 * 4 * ul * (1 - ul) + .5 * 6.75 * ul * (1 - ul) * (1 - ul)) + .0015 * Math.sin(PI * Math.min(1, ul * 2.5)) * (1 - ul);
+          const u = clamp(F.t / F.Td, 0, 1);
+          const e = smooth(0, .8, u);           // across the keys: eased, on the cap centre before the last of the drop
+          // the drop: the finger leaves with no vertical jerk (eased clock), peaks early and meets the cap still moving
+          // down, so the contact reads as a decisive tap rather than a landing
+          const ul = u * u * (2 - u), hgt = F.lift * 4 * ul * (1 - ul);
+          F.hNow = hgt;
           F.P.copy(F.from).lerp(Kc, e).addScaledVector(n, hgt).addScaledVector(F.v0, F.Td * u * (1 - u) * (1 - u));
-          solveFinger(F, F.P);
+          solveSafe(F, F.P, 0);
           if (u >= 1){
             const err = F.tip.distanceTo(Kc);
-            if (err < .001 || F.t > F.Td + .1){
-              F.mode = 'hold'; F.pressed = true; F.tC = F.t; F.depth.x = 0; F.depth.v = .9;
-              contacts.push({ code: F.vcode, err: F.tip.clone().sub(Kc), t: F.t, at: T.toFixed(2) + '/h' + F.h });
+            if (F.e1 === undefined) F.e1 = err;
+            if (err < .0015 || F.t > F.Td + .1){
+              F.mode = 'hold'; F.pressed = true; F.tC = F.t; F.depth.x = 0; F.depth.v = 55; F.hNow = 0;
+              contacts.push({ e1: F.e1, Td: F.Td, code: F.vcode, err: F.tip.clone().sub(Kc), t: F.t, at: T.toFixed(2) + '/h' + F.h });
               if (contacts.length > 400) contacts.shift();
               if (F.real) doPress(F.vcode); else snd(F.vcode, true);
             }
           }
           if (F === lead){           // what the finger cannot reach, the wrist makes up next frame
             const err = v1.copy(F.P).sub(F.tip);
-            if (err.length() > 2e-4){ err.multiplyScalar(.5); if (err.length() > .001) err.setLength(.001); H.nudge.add(err); }   // gently: never a visible kick
-            if (H.nudge.length() > .016) H.nudge.setLength(.016);
+            if (err.length() > 2e-4){ err.multiplyScalar(.5); if (err.length() > .002) err.setLength(.002); H.nudge.add(err); }   // gently: never a visible kick
+            if (H.nudge.length() > .02) H.nudge.setLength(.02);
           }
         } else if (F.mode === 'hold'){
-          F.t += dt;
-          spring(F.depth, 1, 75, dt);
+          // the finger follows the cap to the bottom of its travel and dwells there while the key is held
+          F.t += dt; F.hNow = 0;
+          spring(F.depth, 1, 95, dt);
           F.P.copy(F.K).addScaledVector(n, F.clear - F.depth.x * TRAVEL);
           solveFinger(F, F.P);
           if (F.upReq && F.t - F.tC > .045){
             const c = F.vcode; F.upReq = false; F.mode = 'release'; F.relT = 0; F.w.x = 1; F.w.v = 0;
             if (F.real) doRelease(c); else snd(c, false);
           }
-          if (F.queue.length && F.t - F.tC >= .03){      // a stroke queued behind this one: go now
-            const q = F.queue.shift();
-            strike(q.code, q.vcode, F, 0, true);
-            if (q.up){ F.upReq = true; if (owner.get(q.code) === F && !F.queue.some(e => e.code === q.code && !e.up)) owner.delete(q.code); }   // its key is already up
-            solveFinger(F, F.P);         // reachFor() posed this finger while probing: put it back for this frame
-          }
         } else {
           F.relT += dt;
+          let rb = 0;
           if (F.mode === 'release'){
-            spring(F.depth, 0, 55, dt);
-            bouncy(F.w, 0, F.f === 0 ? 24 : 30, .5, dt);
-            if (F.relT > .5 || (Math.abs(F.w.x) < .003 && Math.abs(F.w.v) < .05)){ F.mode = 'idle'; F.code = null; F.vcode = null; }
+            // quick release: the finger rides the cap back up, lifts a hair off it and eases home (critically damped:
+            // no rubbery wobble)
+            spring(F.depth, 0, 60, dt);
+            spring(F.w, 0, F.f === 0 ? 28 : 32, dt);
+            rb = (F.f === 0 ? .0005 : .001) * Math.sin(PI * clamp(F.relT / .14, 0, 1));
+            if (F.relT > .5 || (F.w.x < .002 && Math.abs(F.w.v) < .03)){ F.mode = 'idle'; F.code = null; F.vcode = null; rb = 0; }
           }
           const Kc = v3.copy(F.K).addScaledVector(n, F.clear - F.depth.x * TRAVEL);
-          const k = F.mode === 'release' ? F.w.x : 0;
-          F.P.copy(idle).lerp(Kc, clamp(k, -.2, 1));
-          if (F.mode === 'release') F.P.addScaledVector(n, .0035 * Math.sin(PI * clamp(F.relT / .11, 0, 1)));
-          solveFinger(F, F.P);
+          F.P.copy(idle).lerp(Kc, F.mode === 'release' ? clamp(F.w.x, 0, 1) : 0).addScaledVector(n, rb);
+          F.hNow = rb;
+          solveSafe(F, F.P, F.mode === 'release' ? TRAVEL * clamp(F.depth.x, 0, 1) : 0);
         }
         if (dt > 0){ F.vel.copy(F.P).sub(F.prevP).multiplyScalar(1 / dt); F.prevP.copy(F.P); }
       }
