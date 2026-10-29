@@ -1,5 +1,6 @@
 <title>Kaiav Nihalani</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#0a0f0a">
 <meta name="description" content="Kaiav Nihalani — founder of Eden, co-founder of J: Rising Founder.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Kaiav Nihalani">
@@ -22,6 +23,7 @@ html, body{ margin: 0; height: 100%; background: var(--bg); color: var(--fg); ov
 /* phones: a slim header strip holds the sound toggle; the terminal fills the rest (main.js sizes it) */
 body.phone{ background: #0a0f0a; --hdr: calc(env(safe-area-inset-top, 0px) + 34px) }
 body.phone #mute{ top: calc(env(safe-area-inset-top, 0px) + 6px); bottom: auto; padding: 4px 8px; font-size: 11px }
+body.phone #mute::after{ content: ""; position: absolute; inset: -10px -8px }   /* a finger-sized target around the small box */
 body.phone #stage{ overflow: hidden; touch-action: none }
 body.phone::before{ content: ""; position: fixed; top: 0; left: 0; right: 0; height: var(--hdr); background: #0a0f0a; z-index: 1 }
 #stage .phone-term{ position: absolute; top: var(--hdr); left: 0; width: 100%; transition: transform .25s cubic-bezier(.2,.8,.2,1) }
@@ -1310,7 +1312,7 @@ M.createScene = function createScene(container){
   const D2R = Math.PI / 180;
   const LOOK = { down: 35 * D2R };
   const REST_FILL = .76;                      // glass height / frame height at rest
-  const YAW_REST = 4.5 * D2R, YAW_FULL = 10 * D2R, UP_MAX = 2.5 * D2R;   // how far the head turns: little while reading, more when leaned back
+  const YAW_REST = 7 * D2R, YAW_FULL = 8 * D2R, UP_MAX = 2.5 * D2R;   // how far the head turns: little while reading, more when leaned back
   const flatN = new V3(screenNormal.x, 0, screenNormal.z).normalize();
   const EYE_D = .6, EYE_UP = .125;
   const eyeRest = screenCenter.clone().addScaledVector(flatN, EYE_D); eyeRest.y = screenCenter.y + EYE_UP;
@@ -1366,7 +1368,9 @@ M.createScene = function createScene(container){
     // the pointer looks around: down leans back toward the full view (the hands), sideways/up turn the head a little
     const down = clamp(-pitchS.x / LOOK.down, 0, 1);
     const k = sstep(0, 1, down);
-    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * lerp(YAW_REST, YAW_FULL, k);
+    // narrow windows turn less, so the glass never leaves more than ~15% of itself out of frame while reading, and
+    // the whole keyboard stays in the lean view at either extreme
+    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * lerp(YAW_REST * Math.min(1, Math.pow(aspect / 1.25, 1.8)), YAW_FULL * Math.min(1, Math.pow(aspect / 1.6, 1.5)), k);
     camera.position.lerpVectors(shot.screen.pos, shot.full.pos, k);
     // the head travels a slight arc (up and back first) rather than a straight dolly
     camera.position.y += Math.sin(k * Math.PI) * .04;
@@ -1487,7 +1491,7 @@ M.createScene = function createScene(container){
       // yaw is normalised here (-1..1) and scaled in applyCamera: ~4.5 deg while reading, ~10 deg leaned back.
       const ax = Math.abs(nx), sx = sstep(.18, .95, ax);
       yawS.t = -Math.sign(nx) * sx;
-      pitchS.t = ny > 0 ? -sstep(.3, .92, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
+      pitchS.t = ny > 0 ? -sstep(.3, .8, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
     },
     /* a keystroke: skips the intro reveal and wakes the (idle-throttled) renderer */
     nudge(){ skipIntro(); sinceMove = 0; },
@@ -1496,7 +1500,7 @@ M.createScene = function createScene(container){
       const drewLast = drew; drew = false;
       sinceMove += dt; sinceRender += dt;
       if (Math.abs(yawS.v) + Math.abs(pitchS.v) > 2e-3 || Math.abs(yawS.t - yawS.x) + Math.abs(pitchS.t - pitchS.x) > 1e-3) sinceMove = 0;
-      crit(yawS, 3.4, dt); crit(pitchS, 3.1, dt);   // slow, critically damped: glides, never overshoots
+      crit(yawS, 6, dt); crit(pitchS, 5.6, dt);   // critically damped: settles in ~0.8 s, never overshoots
       applyCamera();
       // keys: a stiff spring down, a looser one back up with a small overshoot
       for (const k of activeKeys){
@@ -2404,7 +2408,11 @@ M.createTypist = function createTypist(api){
     spine.updateMatrix();
 
     /* ---- long idle: now and then one hand comes off the keys to rest on the desk ---- */
-    if (T - lastKey > 8 && (deskCheck -= dt) <= 0){
+    /* the resting spot is below the lean-back frame: while the visitor looks down at the desk, both hands stay on
+       (or come back to) the keys, so the view never shows a one-handed typist */
+    const watched = api.camera && api.camera.getWorldDirection(v1).y < -.3;
+    if (watched){ for (const H of hands) H.deskT = 0; deskCheck = Math.max(deskCheck, 3); }
+    else if (T - lastKey > 8 && (deskCheck -= dt) <= 0){
       deskCheck = 4 + Math.random() * 6;
       const on = hands.find(H => H.deskT);
       if (!on){ if (Math.random() < .55) hands[Math.random() < .6 ? 0 : 1].deskT = 1; }
@@ -2827,14 +2835,16 @@ function fitRow(spans, width){
   if (row.length) flush();
   return rows.length ? rows.map(r => r.map(x => x.br ? [x[0], x[1]] : x)) : [[]];
 }
-function wrap(text, width){
-  // written line breaks are kept (a blank line stays blank); "- " bullets wrap with a hanging indent
+function wrap(text, width, cont){
+  // written line breaks are kept (a blank line stays blank); "- " bullets wrap with a hanging indent.
+  // cont, if given, collects one flag per line: true where a line only continues the one before
   const src = String(text), out = [];
-  if (!/\n/.test(src)) return wrapLine(src, width, '');
+  const add = ls => { ls.forEach((l, k) => { out.push(l); if (cont) cont.push(k > 0); }); };
+  if (!/\n/.test(src)){ add(wrapLine(src, width, '')); return out; }
   for (const ln of src.split('\n')){
-    if (!ln.trim()){ out.push(''); continue; }
+    if (!ln.trim()){ add(['']); continue; }
     const b = /^\s*[-*\u2022]\s+/.exec(ln);
-    out.push(...(b ? wrapLine(ln.trim(), width, '  ') : wrapLine(ln, width, '')));
+    add(b ? wrapLine(ln.trim(), width, '  ') : wrapLine(ln, width, ''));
   }
   return out.length ? out : [''];
 }
@@ -3100,8 +3110,8 @@ const linesOf = t => t ? t.replace(/\n$/, '').split('\n') : [];
 M.createTerminal = function createTerminal(opts){
   const C = (opts && opts.content) || M.CONTENT || {};
   if (opts && opts.cols >= 32) COLS = opts.cols | 0;
-  const aspect = opts && opts.aspect > 0.3 && opts.aspect < 3 ? opts.aspect : 4 / 3;
-  const W = WIDTH, H = Math.round(WIDTH / aspect);
+  let aspect = opts && opts.aspect > 0.3 && opts.aspect < 3 ? opts.aspect : 4 / 3;
+  const W = WIDTH; let H = Math.round(WIDTH / aspect);   // (resize() changes H, the grid and the font size)
   const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d', { alpha: false });
   /* VT323 has an fi/fl ligature that would eat a grid cell: switch shaping extras off where the canvas allows,
@@ -3116,16 +3126,16 @@ M.createTerminal = function createTerminal(opts){
   const diskSound = () => { const t = performance.now(); if (t - lastDisk > 400){ lastDisk = t; sfx('disk'); } };
 
   /* ---- grid ---- */
-  const PADX = 52, cw = (W - 2 * PADX) / COLS;
-  let fs = cw / 0.4;                                    // VT323 advance is 0.4em; re-measured once loaded
-  const ch = Math.round(fs * LINE);
-  const ROWS = Math.floor((H - 64) / ch);
-  const PADY = Math.round((H - ROWS * ch) / 2);
+  const PADX = 52; let cw = (W - 2 * PADX) / COLS;
+  let advance = 0.4, fs = cw / advance;                 // VT323 advance is 0.4em; re-measured once loaded
+  let ch = Math.round(fs * LINE);
+  let ROWS = Math.floor((H - 64) / ch);
+  let PADY = Math.round((H - ROWS * ch) / 2);
   const font = (k = 1) => (fs * k).toFixed(2) + 'px ' + FONT;
   /* g.font is only assigned when it changes: the strings are built once per size (a font set is parsed every time) */
   let fontStr = {}, curFont = '';
   const setFont = (k = 1) => { const f = fontStr[k] || (fontStr[k] = font(k)); if (f !== curFont){ g.font = f; curFont = f; } };
-  const measureFont = () => { g.font = '100px ' + FONT; curFont = ''; const r = g.measureText('M').width / 100; if (r > 0.2 && r < 0.8){ fs = cw / r; fontStr = {}; } dirty = true; };
+  const measureFont = () => { g.font = '100px ' + FONT; curFont = ''; const r = g.measureText('M').width / 100; if (r > 0.2 && r < 0.8){ advance = r; fs = cw / r; fontStr = {}; } dirty = true; };
   if (document.fonts && document.fonts.load){
     document.fonts.load('40px VT323').then(() => measureFont(), () => {});
     if (document.fonts.ready) document.fonts.ready.then(() => measureFont(), () => {});
@@ -3175,11 +3185,15 @@ M.createTerminal = function createTerminal(opts){
     const r = [], o = {
       rows: r,
       line(...spans){ return o.at(2, ...spans); },
-      at(i, ...spans){ for (const s of fitRow(spans.map(x => typeof x === 'string' ? [x, 'n'] : x), COLS - i)) r.push({ k: 't', i, s }); return o; },
+      at(i, ...spans){ fitRow(spans.map(x => typeof x === 'string' ? [x, 'n'] : x), COLS - i).forEach((s, k) => r.push(k ? { k: 't', i, s, c: 1 } : { k: 't', i, s })); return o; },
       blank(){ r.push({ k: 't', i: 0, s: [] }); return o; },
       big(text, st = 'b'){ r.push({ k: 'big', i: 2, s: [[text, st]] }); return o; },
       head(label, note){ r.push({ k: 'head', i: 2, label, note: note || '' }); return o; },
-      para(text, st = 'n', width = COLS - 6, i = 2){ for (const l of wrap(text, width)) o.at(i, [l, st]); return o; },
+      para(text, st = 'n', width = COLS - 6, i = 2){
+        const cont = [];               // a wrapped line reads on from the one before in the screen-reader log
+        wrap(text, width, cont).forEach((l, k) => { o.at(i, [l, st]); if (cont[k]) r[r.length - 1].c = 1; });
+        return o;
+      },
       /* a square bitmap (true = dark), dark on a lit field with a quiet zone of q modules: QR codes.
          Drawn as vectors so a module is square whatever the cell shape. */
       /* a drawing h rows tall: draw(x, y, w, h, age, t); live(age) -> fps while it moves (none under reduced motion) */
@@ -3206,7 +3220,7 @@ M.createTerminal = function createTerminal(opts){
         const lay = max => { const ls = []; let cur = null, w = 0; gws.forEach((gw, k) => { if (cur && w + gap.length + gw > max){ ls.push(cur); cur = null; } if (!cur){ cur = []; w = 0; } else w += gap.length; cur.push(k); w += gw; }); if (cur) ls.push(cur); return ls; };
         let best = lay(COLS - i);
         for (let max = COLS - i - 1; best.length > 1 && max > 0; max--){ const t = lay(max); if (t.length > best.length) break; best = t; }
-        for (const ks of best) o.at(i, ...ks.flatMap((k, n) => n ? [[gap, 'f'], ...groups[k]] : groups[k]));
+        best.forEach((ks, l) => { o.at(i, ...ks.flatMap((k, n) => n ? [[gap, 'f'], ...groups[k]] : groups[k])); if (l) r[r.length - 1].c = 1; });
         return o;
       },
       link(label, url, i = 2, labelW = 0, shown){
@@ -3221,6 +3235,8 @@ M.createTerminal = function createTerminal(opts){
   const costOf = r => r.k === 'viz' || r.k === 'card' ? 40 : r.k === 'big' ? lenOf(r) * 2 + 4 : r.k === 'head' ? 30 : Math.max(3, lenOf(r) - (r.i || 0));
   const plainOf = r => r.k === 't' || r.k === 'big' ? r.s.map(s => s[1] === 'f' ? ' ' : s[0]).join('').replace(/\s+/g, ' ').trim()
     : r.k === 'card' ? r.title + '. ' + r.items.map(it => (it.ai >= 0 ? (it.ai + 1) + ', ' : '') + it.label + ': ' + (it.full || it.value)).join('. ') : '';
+  /* rows as sentences for the screen-reader log: a wrapped continuation reads on with a space, a new row after a period */
+  const plainRows = rows => { let t = ''; for (const r of rows){ const p = plainOf(r); if (!p) continue; t += !t ? p : (r.c || /[.!?:,]$/.test(t) ? ' ' : '. ') + p; } return t; };
   const textOf = r => r.k === 't' ? (' '.repeat(r.i || 0) + r.s.map(s => s[0]).join('')).replace(/\s+$/, '') : r.k === 'big' ? '  ' + r.s[0][0] : r.k === 'head' ? '  ' + r.label.toUpperCase()
     : r.k === 'card' ? r.items.map(it => pad(it.label, r.lw) + (it.full || it.value)).join('\n') : null;
   function makeCard(spec){
@@ -3244,14 +3260,14 @@ M.createTerminal = function createTerminal(opts){
       it.lines = parts; it.n = 1 + parts.length; y += it.n;
     }
     const note = spec.note && spec.title.length + spec.note.length + 10 <= COLS ? spec.note : '';
-    return { k: 'card', title: spec.title, note, items, acts, lw, stacked, body: y, sel: -1, verb: spec.verb || 'open', foot: null };
+    return { k: 'card', spec, title: spec.title, note, items, acts, lw, stacked, body: y, sel: -1, verb: spec.verb || 'open', foot: null };
   }
 
   function pushRow(r){ openRow = null; rows.push(r); dirty = true; }
   function emit(o, mirrorText){            // rich rows straight to the scrollback (outside a job)
     for (const r of o.rows) pushRow(r);
     trim();
-    mirror(mirrorText || o.rows.map(plainOf).filter(Boolean).join('. '));
+    mirror(mirrorText || plainRows(o.rows));
     toBottom(); dirty = true;
     if (REDUCED) revealAll();
   }
@@ -3266,7 +3282,7 @@ M.createTerminal = function createTerminal(opts){
     const m = document.getElementById('mirror'); if (!m) return;
     const add = t => { const p = document.createElement('p'); p.className = 'mirror-out'; p.textContent = t; m.appendChild(p); };
     if (cmd) add('command: ' + cmd);
-    text = String(text || '').replace(/\s+/g, ' ').replace(/\.\./g, '.').trim();
+    text = String(text || '').replace(/\ue000/g, '').replace(/\s+/g, ' ').replace(/([^.\s])\.\.(?=\s|$)/g, '$1.').trim();   // ("x.." from joins; "..." and a bare ".." stay)
     while (text){
       let cut = text.length;
       if (cut > 320){ cut = text.lastIndexOf('. ', 320); if (cut < 120) cut = text.lastIndexOf(' ', 320); if (cut < 120) cut = 320; else cut++; }
@@ -3283,8 +3299,9 @@ M.createTerminal = function createTerminal(opts){
   const clean = s => String(s == null ? '' : s).replace(/\t/g, '    ').replace(/\r/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
   const rowLen = r => r.s.reduce((n, s) => n + s[0].length, 0);
   function appendSpan(seg, st){
+    let cont = 0;                              // the row this wraps onto continues the last: 1 after a dropped space, 2 exactly (for resize)
     while (seg){
-      if (!openRow){ openRow = { k: 't', i: 0, s: [] }; rows.push(openRow); }
+      if (!openRow){ openRow = cont ? { k: 't', i: 0, s: [], c: cont } : { k: 't', i: 0, s: [] }; rows.push(openRow); }
       const room = COLS - rowLen(openRow);
       let piece = seg, rest = '';
       if (seg.length > room){
@@ -3293,13 +3310,13 @@ M.createTerminal = function createTerminal(opts){
         const used = rowLen(openRow);
         let cut = seg.lastIndexOf(' ', room);
         if (cut >= 0 && PUNCT.test(seg.slice(cut + 1).split(' ')[0]) && cut + 1 < seg.length) cut = seg.lastIndexOf(' ', cut - 1);
-        if (cut > 0 || (cut === 0 && used)){ piece = seg.slice(0, cut); rest = seg.slice(cut + 1); }
+        if (cut > 0 || (cut === 0 && used)){ piece = seg.slice(0, cut); rest = seg.slice(cut + 1); cont = 1; }
         else {
           const word = /^\S*/.exec(seg)[0], moved = used ? pullWord(openRow) : null;
           const mw = moved ? moved.reduce((n, x) => n + x[0].length, 0) : 0;
-          if (moved && mw + word.length <= COLS && (mw || used)){ openRow = { k: 't', i: 0, s: moved }; rows.push(openRow); continue; }
+          if (moved && mw + word.length <= COLS && (mw || used)){ openRow = { k: 't', i: 0, s: moved, c: 2 }; rows.push(openRow); continue; }
           if (moved) openRow.s.push(...moved);
-          piece = seg.slice(0, Math.max(0, room)); rest = seg.slice(Math.max(0, room));
+          piece = seg.slice(0, Math.max(0, room)); rest = seg.slice(Math.max(0, room)); cont = 2;
         }
       }
       const last = openRow.s[openRow.s.length - 1];
@@ -3339,7 +3356,7 @@ M.createTerminal = function createTerminal(opts){
     rich(o){
       openRow = null;
       for (const r of o.rows) rows.push(r);
-      if (job) job.plain += o.rows.map(plainOf).filter(Boolean).join('. ') + ' ';
+      if (job) job.plain += plainRows(o.rows) + ' ';
       dirty = true;
     },
   };
@@ -3888,7 +3905,7 @@ M.createTerminal = function createTerminal(opts){
     const o = out(); o.blank().head('every command').blank();
     for (const [label, names] of groups){
       let line = [], w = 0, first = true;
-      const flush = () => { o.at(2, [pad(first ? label : '', LW), 'd'], ...line); line = []; w = 0; first = false; };
+      const flush = () => { o.at(2, [pad(first ? label : '', LW), 'd'], ...line); if (!first) o.rows[o.rows.length - 1].c = 1; line = []; w = 0; first = false; };
       for (const n of names){
         if (line.length && w + 2 + n.length > room) flush();
         if (line.length){ line.push(['  ', 'f']); w += 2; }
@@ -3896,7 +3913,7 @@ M.createTerminal = function createTerminal(opts){
       }
       if (line.length) flush();
     }
-    o.blank().flow([[['man <cmd>', 'n'], [' details', 'f']], [['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']]], '   ').blank();
+    o.blank().flow([[['man <cmd>', 'n'], [' details', 'f']], ...(TAP ? [] : [[['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']]])], '   ').blank();
     io.rich(o);
   } });
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
@@ -4114,9 +4131,10 @@ M.createTerminal = function createTerminal(opts){
     for (const t of j.timers) clearTimeout(t);
     job = null; openRow = null;
     if (status === 0 && !j.dead) okRuns++;
-    if (j.hint){ suggestion = j.hint; tty.rich(out().at(0, ['did you mean ', 'd'], chip(j.hint, 'b'), ['?  press enter', 'f'])); j.plain += ' Did you mean ' + j.hint + '?'; }
+    if (j.hint){ suggestion = j.hint; tty.rich(out().at(0, ['did you mean ', 'd'], chip(j.hint, 'b'), ['?  ' + (TAP ? 'tap it' : 'press enter'), 'f'])); j.plain += ' Did you mean ' + j.hint + '? Press Enter to run it.'; }
     if (ahead) flushAhead();
-    trim(); mirror(j.plain || ''); if (j.tail) mirror(j.tail); toBottom(); dirty = true; touched();
+    const held = scrollOff;                    // someone reading back up keeps their place; any key or the note brings them down
+    trim(); mirror(j.plain || ''); if (j.tail) mirror(j.tail); touched(); scrollOff = held;
     if (REDUCED) revealAll();
   }
   async function execList(list, j){
@@ -4342,6 +4360,8 @@ M.createTerminal = function createTerminal(opts){
     const slack = cw * 0.6;
     for (const h of drawnHits){
       if (px < h.x0 - slack || px > h.x1 + slack || py < h.top - 4 || py >= h.bot + 4) continue;
+      if (h.link.stop){ if (job && !app) interrupt(); touched(); return true; }
+      if (h.link.bottom){ toBottom(); dirty = true; return true; }
       if (h.link.cmd){
         if (app || job) return false;
         disarm(); nudgeOff = true;
@@ -4355,20 +4375,26 @@ M.createTerminal = function createTerminal(opts){
     return false;
   }
   /* is there something to click at (fx, fy)? a chip, a card row or a link: for a pointer cursor */
+  /* also remembers what is under the pointer, so it can be lit (hitTest(-1, -1) when the pointer leaves) */
   function hitTest(fx, fy){
-    if (booting || app) return false;
+    const k = hitKey(fx, fy);
+    if (k !== hoverKey){ hoverKey = k; dirty = true; }
+    return !!k;
+  }
+  function hitKey(fx, fy){
+    if (booting || app) return '';
     const px = fx * W, py = fy * H;
-    if (px < X(1) || px > X(COLS - 1)) return false;
+    if (px < X(1) || px > X(COLS - 1)) return '';
     for (const r of drawnCards) for (const it of r.items){
       if (it.ai < 0) continue;
       const rt = r._top + ch * (it.y + 1);
-      if (py >= rt && py < rt + ch * it.n) return true;
+      if (py >= rt && py < rt + ch * it.n) return cardKeyOf(r._top, it);
     }
     for (const h of drawnHits){
       if (h.link.cmd && job) continue;
-      if (px >= h.x0 && px <= h.x1 && py >= h.top && py < h.bot) return true;
+      if (px >= h.x0 && px <= h.x1 && py >= h.top && py < h.bot) return spanKeyOf(h.x0, h.top);
     }
-    return false;
+    return '';
   }
   /* a key while io.ask is waiting */
   function askKey(e){
@@ -4384,7 +4410,7 @@ M.createTerminal = function createTerminal(opts){
     if (k === 'Enter'){ endAsk(a.buf); return true; }
     if (k === 'Escape'){ endAsk(null); return true; }
     if (k === 'Backspace' || (ctl && k.toLowerCase() === 'u')){ a.buf = k === 'Backspace' && !e.ctrlKey && !e.altKey ? a.buf.slice(0, -1) : ''; }
-    else if (k.length === 1 && !e.ctrlKey && !e.altKey && a.buf.length < 256 && k >= ' ') a.buf += k;
+    else if (k.length === 1 && !e.ctrlKey && !e.altKey && a.buf.length < 4096 && k >= ' ') a.buf += k;
     blinkT0 = now; blinkOn = true; dirty = true;
     return true;
   }
@@ -4404,6 +4430,7 @@ M.createTerminal = function createTerminal(opts){
     j.dead = true;
     openRow = null;
     rows.push({ k: 't', i: 0, s: [['^C', 'd']] });
+    j.plain += ' Stopped.';
     status = 130;
     for (const t of j.timers) clearTimeout(t);
     j.kill();
@@ -4451,7 +4478,7 @@ M.createTerminal = function createTerminal(opts){
     const def = M.TERM.apps[name];
     return new Promise(resolve => {
       const st = { name, ctx, printed: [], resolve, inst: null, dirty: true, done: false };
-      const api = {
+      const api = st.api = {
         cols: COLS, rows: ROWS, fs: FS, env: ENV, cwd, sound: M.sound,
         exit(code){ closeApp(st, code | 0); },
         print(t){ if (t != null) st.printed.push(String(t)); },
@@ -4519,9 +4546,20 @@ M.createTerminal = function createTerminal(opts){
     ['writing', ['posts', 'post', 'blog', 'writing']], ['links', ['links', 'linkedin', 'twitter', 'x', 'socials', 'social']],
     ['about', ['who', 'about', 'yourself']], ['help', ['help', 'how', 'what can']]];
   /* a rewritten line says what it ran, quietly, before the output */
+  /* spans hard-wrapped at the grid width, as a tty wraps a long command line */
+  function ttyRows(spans){
+    const out = []; let row = [], w = 0;
+    for (const [s0, st] of spans){
+      let t = s0;
+      while (t.length){ if (w >= COLS){ out.push(row); row = []; w = 0; } const n = Math.min(COLS - w, t.length); row.push([t.slice(0, n), st]); w += n; t = t.slice(n); }
+    }
+    out.push(row);
+    out.forEach((s, k) => rows.push(k ? { k: 't', i: 0, s, c: 2 } : { k: 't', i: 0, s }));
+    shown = rows.length; partial = 0;
+  }
   function said(cmd){ rows.push({ k: 't', i: 0, s: [['\u2192 ', 'f'], [cmd, 'd']] }); shown = rows.length; partial = 0; return cmd; }
   function execute(raw, programmatic){
-    rows.push({ k: 't', i: 0, s: [...promptSpans(), [raw, 'n']] }); shown = rows.length; partial = 0;
+    ttyRows([...promptSpans(), [raw, 'n']]);
     openRow = null;
     input = ''; cur = 0; suggestion = ''; tabState = null; disarm();
     hIdx = history.length; hDraft = '';
@@ -4604,9 +4642,9 @@ M.createTerminal = function createTerminal(opts){
     const ctx = context(); let list = candidates(ctx);
     if (!list.length){ sfx('beep'); return; }
     if (list.some(x => x.startsWith(ctx.q))) list = list.filter(x => x.startsWith(ctx.q));
-    if (list.length === 1){ accept(list[0], ctx.from, true); tabState = null; return; }
+    if (list.length === 1){ accept(list[0], ctx.from, true); tabState = null; mirror('Completed: ' + input); return; }   // the hidden input field never holds the line, so say it
     if (!list[0].startsWith(ctx.q)){                                    // a typo: take the best guess, as the ghost offered
-      const base = input, bcur = cur; accept(list[0], ctx.from, false);
+      const base = input, bcur = cur; accept(list[0], ctx.from, false); mirror('Completed: ' + input + '. Tab again for others.');
       tabState = { base, cur: bcur, list, i: 0, from: ctx.from, after: input, cyc: true }; return;
     }
     const cp = commonPrefix(list.filter(x => x.startsWith(ctx.q)));
@@ -4621,7 +4659,7 @@ M.createTerminal = function createTerminal(opts){
   function insert(s){
     s = s.replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\x7e\u00a0-\uffff]|[\ud800-\udfff\u0300-\u036f\u200b-\u200f\ufe00-\ufe0f]/g, '');   // one cell per char: no emoji, combining marks or zero-width
     if (!s) return;
-    if (input.length + s.length > 240) s = s.slice(0, 240 - input.length);
+    if (input.length + s.length > 4096) s = s.slice(0, 4096 - input.length);
     input = input.slice(0, cur) + s + input.slice(cur); cur += s.length;
     suggestion = ''; tabState = null;
   }
@@ -4689,9 +4727,9 @@ M.createTerminal = function createTerminal(opts){
       if (ctrl && c === 'l'){ clearScreen(); return true; }
       if (k === 'PageUp'){ scrollBy(ROWS - 2); return true; }
       if (k === 'PageDown'){ scrollBy(-(ROWS - 2)); return true; }
-      if (k.length === 1 && !ctrl && !alt){ if (ahead.length < 400) ahead += k; return true; }     // typed ahead: lands on the next prompt
-      if (k === 'Enter' && !alt){ if (ahead.length < 400) ahead += '\n'; return true; }            // ...and Enter queues it, like a real tty
-      if (k === 'Backspace'){ ahead = ahead.slice(0, -1); return true; }
+      if (k.length === 1 && !ctrl && !alt){ if (ahead.length < 400) ahead += k; dirty = true; return true; }     // typed ahead: lands on the next prompt
+      if (k === 'Enter' && !alt){ if (ahead.length < 400) ahead += '\n'; dirty = true; return true; }            // ...and Enter queues it, like a real tty
+      if (k === 'Backspace'){ ahead = ahead.slice(0, -1); dirty = true; return true; }
       return ['Enter', 'Escape'].includes(k);
     }
     if (rs) return searchKey(e);
@@ -4701,7 +4739,7 @@ M.createTerminal = function createTerminal(opts){
     if (ctrl && !alt){
       if (c === 'l'){ clearScreen(); touched(); return true; }
       if (c === 'c'){
-        rows.push({ k: 't', i: 0, s: [...promptSpans(), [input, 'n'], ['^C', 'd']] }); shown = rows.length; partial = 0;
+        ttyRows([...promptSpans(), [input, 'n'], ['^C', 'd']]);
         input = ''; cur = 0; suggestion = ''; hIdx = history.length; status = 130; touched(); return true;
       }
       if (c === 'a'){ cur = 0; touched(); return true; }
@@ -4772,7 +4810,7 @@ M.createTerminal = function createTerminal(opts){
     }
     if (armed && !job) disarm();                // phones: typing moves on from a card
     if (job && job.ask){ for (const ch of String(str)){ if (!job || !job.ask) break; askKey({ key: ch === '\n' || ch === '\r' ? 'Enter' : ch, ctrlKey: false, altKey: false }); } return; }
-    if (job){ ahead = (ahead + String(str).replace(/\r\n?/g, '\n').replace(/\t/g, ' ')).slice(0, 4000); return; }
+    if (job){ ahead = (ahead + String(str).replace(/\r\n?/g, '\n').replace(/\t/g, ' ')).slice(0, 4000); dirty = true; return; }
     if (rs){ for (const ch of String(str)) searchKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false }); return; }
     if (typing()) revealAll();
     const parts = String(str).replace(/\t/g, ' ').split(/\r\n?|\n/);
@@ -4824,6 +4862,7 @@ M.createTerminal = function createTerminal(opts){
       const on = (active && it.ai === r.sel) || flashing;
       if (flashing){ g.fillStyle = P.bright; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
       if (on && !flashing){ g.fillStyle = P.normal; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
+      else if (!flashing && it.ai >= 0 && hoverKey === cardKeyOf(top, it)){ g.strokeStyle = P.dim; g.lineWidth = 2; g.strokeRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
       const st = s => on ? 'z' : s;
       if (it.ai >= 0 && active) text(String(it.ai + 1), 3, rt, st('f'));   // numbers only while choosing: that is when digits work
       text(it.label, 5, rt, st('d'));
@@ -4860,13 +4899,14 @@ M.createTerminal = function createTerminal(opts){
       const link = sp[2];
       const selected = sp[1] === 'i';
       if (selected){ g.fillStyle = P.normal; g.fillRect(X(col) - 3, top + 1, s.length * cw * k + 6, ch * k - 2); }
-      setFont(k); g.fillStyle = selected ? P.bg : color(sp[1]);
+      const hov = link && !selected && hoverKey && hoverKey === spanKeyOf(X(col), top);
+      setFont(k); g.fillStyle = selected ? P.bg : hov ? P.bright : color(sp[1]);
       if (k === 1 && SPAN_VEC.test(s)){                // arrows and the lock, drawn: VT323 has neither
         fillT(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
         for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : color(sp[1]));
       } else fillT(s, X(col), top + fs * k * 0.68);
-      if (link && !selected){ g.fillStyle = link.cmd ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, 2); }
-      if (link && (link.cmd || link.url) && s.trim()) drawnHits.push({ x0: X(col), x1: X(col + s.length * k), top, bot: top + ch * k, link });
+      if (link && !selected){ g.fillStyle = hov ? P.normal : link.cmd || link.stop ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, hov ? 3 : 2); }
+      if (link && (link.cmd || link.url || link.stop) && s.trim()) drawnHits.push({ x0: X(col), x1: X(col + s.length * k), top, bot: top + ch * k, link });
       col += s.length * k;
     }
   }
@@ -4888,7 +4928,7 @@ M.createTerminal = function createTerminal(opts){
   function fitSpans(opts){ const len = f => f.reduce((n, x) => n + x[0].length, 0); return opts.find(f => len(f) <= COLS) || opts[opts.length - 1]; }
   function belowPrompt(){
     if (rs){
-      const q = rs.q, st = rs.fail ? 'a' : 'b';
+      const q = rs.q, st = rs.fail ? 'd' : 'b';
       return [fitSpans([
         [['search ', 'f'], [q, st], [rs.fail ? '  no match' : '', 'f'], ['   ctrl+r older \u00b7 enter run \u00b7 esc', 'f']],
         [['search ', 'f'], [q, st], [rs.fail ? '  no match' : '', 'f'], ['   ^R older \u00b7 esc', 'f']],
@@ -4899,7 +4939,7 @@ M.createTerminal = function createTerminal(opts){
     if (!t || !t.cyc || t.list.length < 2 || t.after !== input){
       if (!nudgeOn()) return [];
       if (input) return [[['press ', 'f'], ['enter', 'd'], [' to run it', 'f']]];
-      return [[['try ', 'f'], chip('about', 'd'), ['  or  ', 'f'], chip('help', 'd')]];
+      return [[['try ', 'f'], chip('about', 'd'), [' or ', 'f'], chip('help', 'd')]];
     }
     const w = Math.min(COLS - 2, Math.max(...t.list.map(x => x.length)) + 2), nc = Math.max(1, Math.floor(COLS / w));
     const lines = Math.ceil(t.list.length / nc), maxL = Math.min(5, Math.max(2, ROWS - 6));
@@ -4943,7 +4983,9 @@ M.createTerminal = function createTerminal(opts){
       const at = input.toLowerCase().indexOf(rs.q.toLowerCase()) - off;
       if (at >= 0 && at < vis.length) body = [[vis.slice(0, at), 'd'], [vis.slice(at, at + rs.q.length), 'b'], [vis.slice(at + rs.q.length), 'd']];
     }
+    if (off > 0){ const k = body.findIndex(x => x[0]); if (k >= 0){ body[k] = [body[k][0].slice(1), body[k][1]]; body.unshift(['\u2190', 'f']); } }   // more to the left
     drawSpans({ i: 0, s: [...promptSpans(), ...body] }, top, 999);
+    if (input.length > off + room && PL + cur - off !== COLS - 1) text('\u2192', COLS - 1, top, 'f');   // more to the right
     promptY = top + ch;
     const cx = X(PL + cur - off);
     if (gh){
@@ -4966,6 +5008,8 @@ M.createTerminal = function createTerminal(opts){
     }
   }
   let drawnCards = [], drawnHits = [];   // what is on screen and can be clicked or tapped
+  let hoverKey = '', lastFirst = -1, lastTotal = 0;   // the clickable thing under the mouse; the view, to notice it move
+  const cardKeyOf = (top, it) => 'c' + Math.round(top) + ':' + it.ai, spanKeyOf = (x0, top) => 's' + Math.round(x0) + ':' + Math.round(top);
   const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\u2022\ue000~]/g;
   const SPAN_VEC = /[\u2190-\u2193\u2022\ue000~]/, SPAN_VEC_G = /[\u2190-\u2193\u2022\ue000~]/g;
   function vecGlyph(c, col, top, colr){
@@ -5033,8 +5077,11 @@ M.createTerminal = function createTerminal(opts){
     if (app){ drawGrid(); return; }
     // lay out units bottom-anchored
     const total = totalUnits();
+    if (scrollOff > 0 && total > lastTotal) scrollOff += total - lastTotal;   // scrolled up: hold the view while output arrives
+    lastTotal = total;
     scrollOff = clamp(scrollOff, 0, Math.max(0, total - ROWS));
     const first = Math.max(0, total - ROWS - scrollOff);
+    if (first !== lastFirst){ lastFirst = first; hoverKey = ''; }
     /* a short history (the welcome) sits a little below the top of the tube, not jammed against it */
     // the welcome sits a little lower on the landscape tube; a phone column starts at the top
     const lift = !TAP && aspect > 1 && rows.length && rows[0].wel ? clamp(ROWS - total, 0, Math.min(4, Math.round(ROWS / 6))) : 0;
@@ -5069,8 +5116,10 @@ M.createTerminal = function createTerminal(opts){
       belowPrompt().forEach((r, k) => { const y = u + 1 + k; if (y >= first && y < first + ROWS) drawSpans({ i: 0, s: r }, PADY + (y - first + lift) * ch, 999); });
     } else if (job && job.ask && !app && !typing()){
       if (u >= first && u < first + ROWS) drawAsk(PADY + (u - first + lift) * ch);
+    } else if (job && !app && !typing() && ahead && u >= first && u < first + ROWS){
+      drawSpans({ i: 0, s: [[ahead.replace(/\n/g, ' ').slice(-(COLS - 1)), 'd']] }, PADY + (u - first + lift) * ch, 999);   // typed ahead: echoed now, run at the prompt
     } else if (job && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
-      text(COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 0, PADY + (u - first + lift) * ch, 'f');
+      drawSpans({ i: 0, s: [[TAP ? 'tap here to stop' : COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 'f', { stop: true }]] }, PADY + (u - first + lift) * ch, 999);
     }
     g.restore(); curFont = '';
     // scroll position: a thin rail on the right and a quiet note at the bottom
@@ -5079,10 +5128,12 @@ M.createTerminal = function createTerminal(opts){
       g.fillStyle = P.faint; g.fillRect(railX, railTop, 2, railH);
       const th = Math.max(24, railH * ROWS / total), ty = railTop + (railH - th) * (first / Math.max(1, total - ROWS));
       g.fillStyle = P.dim; g.fillRect(railX - 2, ty, 6, th);
-      const note = '  ' + scrollOff + ' more below' + (COLS >= 46 ? '  pgdn ' : ' ');
+      const note = '  ' + scrollOff + ' more below' + (COLS >= 46 && !TAP ? '  pgdn ' : ' ');
       const nx = COLS - note.length, top = PADY + (ROWS - 1) * ch;
       g.fillStyle = P.bg; g.fillRect(X(nx) - 8, top - 4, note.length * cw + 8, ch + 8);
       setFont(); g.fillStyle = P.dim; fillT(note, X(nx), top + fs * 0.68);
+      drawnHits = drawnHits.filter(h => h.bot <= top - 4 || h.x1 <= X(nx) - 8);                         // what the note covers is not tappable
+      drawnHits.push({ x0: X(nx + 2), x1: X(COLS - 1), top, bot: top + ch, link: { bottom: true } });   // a tap on it goes back down
     }
   }
   /* ---- boot screen ---- */
@@ -5160,9 +5211,53 @@ M.createTerminal = function createTerminal(opts){
     return changed;
   }
 
+  /* a new screen size (a phone turned, a window resized): the same machine on a new grid. History, files, the
+     line being typed and a running app all stay; scrollback rows wider than the grid are wrapped again, cards
+     are laid out afresh, and an app sees the new api.cols / api.rows (and scr) on its next render. */
+  function resize(asp, cols){
+    if (asp > 0.3 && asp < 3) aspect = asp;
+    if (cols >= 32) COLS = cols | 0;
+    H = Math.round(W / aspect); canvas.height = H;          // (resets the context: shaping and font are set again below)
+    cw = (W - 2 * PADX) / COLS; ch = Math.round(cw / 0.4 * LINE); fs = cw / advance;
+    ROWS = Math.floor((H - 64) / ch); PADY = Math.round((H - ROWS * ch) / 2);
+    fontStr = {}; curFont = ''; noShaping();
+    ENV.COLUMNS = String(COLS); ENV.LINES = String(ROWS);
+    grid.length = 0; for (let y = 0; y < ROWS; y++) grid.push(new Array(COLS));
+    scr.cols = COLS; scr.rows = ROWS; scr.clear();
+    if (app){ if (app.api){ app.api.cols = COLS; app.api.rows = ROWS; } if (gridCursor && (gridCursor.x >= COLS || gridCursor.y >= ROWS)) gridCursor = null; app.dirty = true; }
+    const next = [];
+    for (let a = 0; a < rows.length; a++){
+      const r = rows[a];
+      if (r.k === 't'){                          // a line and the rows it wrapped onto: joined, then wrapped again if too wide
+        let b = a + 1; while (b < rows.length && rows[b].k === 't' && rows[b].c && (rows[b].i || 0) === (r.i || 0)) b++;
+        const grp = rows.slice(a, b); a = b - 1;
+        if (!grp.some(x => lenOf(x) > COLS)){ next.push(...grp); continue; }
+        const first = r.s.map(x => x[0]).join('');
+        const hang = /^\s*[-*\u2022]\s/.test(first) ? '  ' : grp.length > 1 && grp[1].c === 1 ? /^\s*/.exec(grp[1].s.map(x => x[0]).join(''))[0].slice(0, 12) : '';   // a bullet's or a column's indent
+        const spans = [];
+        grp.forEach((x, k) => {
+          const ss = x.s.map(y => y.slice());
+          if (k && x.c !== 2){ while (ss.length && !ss[0][0].trim()) ss.shift(); if (ss.length){ ss[0][0] = ss[0][0].replace(/^\s+/, ''); spans.push([' ', 'n']); } }   // (an exact wrap joins as it was)
+          spans.push(...ss);
+        });
+        fitRow(spans, COLS - (r.i || 0) - hang.length).forEach((s, k) => next.push(k ? { k: 't', i: r.i, s: hang ? [[hang, 'n'], ...s] : s, c: 1 } : { k: 't', i: r.i, s, c: r.c }));
+        if (grp.includes(openRow)) openRow = null;
+        continue;
+      }
+      if (r.k === 'card' && r.spec){
+        const c = Object.assign(makeCard(r.spec), { sel: r.sel, done: r.done, flash: r.flash, foot: r.foot });
+        if (armed === r){ armed = c; setFoot(c); }
+        next.push(c); continue;
+      }
+      next.push(r);
+    }
+    rows = next; revealAll(); toBottom(); hoverKey = ''; lastFirst = -1; tabState = null;
+    dirty = true; draw();
+  }
+
   if (!booting) endBoot();
   draw();
-  return { canvas, handleKey, handleKeyUp, handleTap, hitTest, insertText, update, run, scroll, get cursorY(){ return promptY / H; },
+  return { canvas, handleKey, handleKeyUp, handleTap, hitTest, insertText, update, run, scroll, resize, get cursorY(){ return promptY / H; },
     get busy(){ return !!(app || job); } };   // a full-screen app or a running command: don't rebuild under it
 };
 })();
@@ -5245,10 +5340,23 @@ T.apps.tetris = {
   usage: 'tetris',
   more: 'arrows move, \u2191 or x turns, z turns back, \u2193 drops a row, space drops all the way, c holds, p pauses, q quits. on a phone, tap the sides to move, the top to turn and the bottom to drop.',
   start(api){
-    const STACK = (api.cols || 72) < 47;                               // phones: the panel goes under the well
-    const BH = Math.max(10, Math.min(20, (api.rows || 23) - (STACK ? 15 : 2)));   // well + floor + feet (+ panel) must fit
-    const board = Array.from({ length: BH }, () => Array(BW).fill(null));
+    /* the layout follows the grid, which can change under a running game (a phone turned on its side):
+       SIDE is a slim panel beside a full-height well (phones), STACK puts the panel under the well (narrower still) */
+    let SIDE, STACK, BH, gridC = 0, gridR = 0, board = [];
+    function layout(cols, rows){
+      if (cols === gridC && rows === gridR) return;
+      gridC = cols; gridR = rows;
+      SIDE = cols < 47 && cols >= 39; STACK = cols < 39;
+      const h = Math.max(Math.max(4, Math.min(10, rows - 3)), Math.min(20, rows - (STACK ? 15 : TOUCH ? 5 : 2)));   // well + floor + feet (+ panel, + room to tap below) must fit; a short grid (a phone on its side) gets a shorter well
+      if (h === BH) return;
+      // a new well height keeps the bottom of the stack; the falling piece keeps its height above the floor
+      const d = h - (BH || h);
+      board = board.length ? (d >= 0 ? Array.from({ length: d }, () => Array(BW).fill(null)).concat(board) : board.slice(-d)) : Array.from({ length: h }, () => Array(BW).fill(null));
+      BH = h;
+      if (cur){ cur.y += d; while (!fits(cur.p, cur.r, cur.x, cur.y) && cur.y > -4) cur.y--; }
+    }
     let bag = [], queue = [], cur = null, hold = null, canHold = true;
+    layout(api.cols || 72, api.rows || 23);
     let score = 0, lines = 0, level = 1, hi = hiGet(TETRIS_HI), newHi = false;
     let fall = 0, lockT = 0, lockMoves = 0, paused = false, over = false, flash = null, t = 0, help = true;
 
@@ -5263,6 +5371,7 @@ T.apps.tetris = {
       if (!fits(cur.p, cur.r, cur.x, cur.y)){ cur.y--; if (!fits(cur.p, cur.r, cur.x, cur.y)) gameOver(); }
     }
     function next(){ fill(); spawn(queue.shift()); fill(); canHold = true; }
+    const summary = () => api.print(`tetris: ${score} points, ${lines} lines, ` + (newHi ? 'a new best' : 'best ' + Math.max(hi, score)));
     function gameOver(){
       over = true;
       if (score > hi){ hi = score; newHi = true; hiSet(TETRIS_HI, hi); }
@@ -5313,23 +5422,22 @@ T.apps.tetris = {
       next();
     }
     next();
-    let oyDrawn = 0;                                         // where the well was last drawn (for taps)
+    let oyDrawn = 0, bxDrawn = 0;                            // where the well was last drawn (for taps)
 
     return {
-      /* phones: the top of the screen turns, the bottom drops, the left and right thirds move */
+      /* taps: beside the falling piece moves it that way, on it turns it, below the well drops it */
       tap(col, row){
         help = false;
         /* the bottom row is the way out on a phone: the first tap pauses, the next one quits (the terminal
            treats a tap an app does not use, on that row, as esc) */
-        if (TOUCH && row >= (api.rows || 23) - 1){ if (over || paused) return false; paused = true; return true; }
+        if (TOUCH && row >= gridR - 1){ if (over || paused) return false; paused = true; return true; }
         if (over){ restart(); return true; }
         if (paused){ paused = false; return true; }
         if (!cur || flash) return true;
-        const rows = api.rows || 23, cols = api.cols || 40;
-        if (row < rows * 0.3) rotate(1);
-        else if (row >= Math.min(rows * 0.75, oyDrawn + BH)) hardDrop();
-        else if (col < cols / 3) shift(-1);
-        else if (col >= cols * 2 / 3) shift(1);
+        if (row >= oyDrawn + BH){ hardDrop(); return true; }
+        const xs = cells(cur.p, cur.r, cur.x, cur.y).map(([x]) => bxDrawn + x * 2);
+        if (col < Math.min(...xs)) shift(-1);
+        else if (col > Math.max(...xs) + 1) shift(1);
         else rotate(1);
         return true;
       },
@@ -5338,10 +5446,10 @@ T.apps.tetris = {
         help = false;
         if (over){
           if (k === 'Enter' || k === 'r' || k === 'R') restart();
-          else if (isQuit(k)) api.exit(0);
+          else if (isQuit(k)){ summary(); api.exit(0); }
           return true;
         }
-        if (isQuit(k)){ api.print(`tetris: score ${score}, ${lines} lines, level ${level}. high score ${Math.max(hi, score)}`); if (score > hi) hiSet(TETRIS_HI, score); api.exit(0); return true; }
+        if (isQuit(k)){ if (score > hi){ hi = score; newHi = true; hiSet(TETRIS_HI, score); } summary(); api.exit(0); return true; }
         if (k === 'p' || k === 'P'){ paused = !paused; return true; }
         if (paused || !cur || flash) return true;
         switch (k){
@@ -5373,12 +5481,13 @@ T.apps.tetris = {
         return dirty;
       },
       render(scr){
+        layout(scr.cols, scr.rows);
         scr.clear(); scr.cursor(0, 0, null);
         const W = BW * 2 + 4;
-        const compact = STACK || scr.cols < 64 || scr.rows < 22;      // one panel, beside the well or under it
-        const ox = STACK ? Math.max(0, ((scr.cols - W) / 2) | 0) : compact ? Math.max(0, ((scr.cols - (W + 3 + 20)) / 2) | 0) : ((scr.cols - W) / 2) | 0;
-        const oy = Math.max(0, ((scr.rows - BH - 2 - (STACK ? 13 : 0)) / 2) | 0); oyDrawn = oy;
-        const bx = ox + 2;  // first board column
+        const compact = STACK || SIDE || scr.cols < 64 || scr.rows < 22;      // one panel, beside the well or under it
+        const ox = STACK ? Math.max(0, ((scr.cols - W) / 2) | 0) : SIDE ? Math.max(0, ((scr.cols - W - 15) / 2) | 0) : compact ? Math.max(0, ((scr.cols - (W + 3 + 20)) / 2) | 0) : ((scr.cols - W) / 2) | 0;
+        const oy = TOUCH && !STACK ? Math.max(0, Math.min(2, scr.rows - BH - 7)) : Math.max(0, ((scr.rows - BH - 2 - (STACK ? 13 : 0)) / 2) | 0); oyDrawn = oy;
+        const bx = ox + 2; bxDrawn = bx;  // first board column
         // well: classic "<!" ... "!>" sides
         for (let y = 0; y < BH; y++){
           scr.put(ox, oy + y, '<!', 'faint'); scr.put(bx + BW * 2, oy + y, '!>', 'faint');
@@ -5401,7 +5510,18 @@ T.apps.tetris = {
         // mini piece preview
         const mini = (p, x, y, level) => { if (!p) return; const n = SHAPES[p].length; const off = n === 4 ? 0 : 1;
           for (const [cx, cy] of STATES[p][0]) scr.put(x + (cx + off) * 2, y + cy - (p === 'I' ? 1 : 0), '  ', blk(level)); };
-        if (compact){
+        if (SIDE){
+          // a slim column: next, hold, the numbers, then how to play
+          const rx = ox + W + 1, ry = oy;
+          scr.put(rx, ry, 'NEXT', 'dim'); mini(queue[0], rx, ry + 1, 'bright');
+          const ny = TOUCH ? ry + 4 : ry + 8;                           // a phone has no hold key, so no hold box
+          if (!TOUCH){ scr.put(rx, ry + 4, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx, ry + 5, canHold ? 'normal' : 'faint'); }
+          [['SCORE', score, 'bright'], ['HIGH', Math.max(hi, score), score > hi ? 'bright' : 'normal'], ['LEVEL', level, 'normal'], ['LINES', lines, 'normal']]
+            .forEach(([a, v, st], i) => { scr.put(rx, ny + i, a.padEnd(6), 'dim'); scr.put(rx + 6, ny + i, String(v), st); });
+          const ks = TOUCH ? [['tap', ''], ['beside', 'move'], ['on it', 'turn'], ['below', 'drop']]
+            : [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
+          ks.forEach(([a, b], i) => { const y = ny + 5 + i; if (y >= scr.rows - 1) return; scr.put(rx, y, a.padEnd(7), b ? 'normal' : 'faint'); scr.put(rx + 7, y, b, 'faint'); });
+        } else if (compact){
           const rx = STACK ? ox + 2 : ox + W + 3, ry = STACK ? oy + BH + 3 : oy;
           scr.put(rx, ry, 'NEXT', 'dim'); mini(queue[0], rx, ry + 1, 'bright');
           scr.put(rx + 10, ry, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx + 10, ry + 1, canHold ? 'normal' : 'faint');
@@ -5409,7 +5529,7 @@ T.apps.tetris = {
             .forEach(([a, v, st], i) => { scr.put(rx, ry + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, ry + 4 + i, String(v), st); });
           const ks = [['\u2190\u2192', 'move'], ['\u2191 x', 'turn'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           const ky = ry + 9, two = STACK || scr.rows - ky < ks.length;
-          const short = TOUCH ? [['tap', 'sides move'], ['top', 'turn'], ['low', 'drop']]
+          const short = TOUCH ? [['tap', 'beside: move'], ['on', 'it: turn'], ['low', 'drop']]
             : [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           (two ? short : ks).forEach(([a, b], i) => {
             const x = rx + (two ? (i % 2) * (TOUCH ? 15 : 11) : 0), y = ky + (two ? i >> 1 : i);
@@ -5448,11 +5568,11 @@ T.apps.tetris = {
           c(6, 'GAME  OVER', 'bright');
           c(8, 'score ' + score, 'normal');
           c(9, lines + ' lines  lvl ' + level, 'dim');
-          c(10, newHi ? '* new high score *' : 'best ' + hi, newHi ? 'accent' : 'dim');
+          c(10, newHi ? 'new high score' : 'best ' + hi, newHi ? 'accent' : 'dim');
           if (REDUCED || Math.floor(t * 2) % 2 === 0) c(12, TOUCH ? 'tap again' : 'enter again', 'normal');
           if (!TOUCH) c(13, 'q quit', 'faint');
         } else if (help && score === 0){
-          scr.put(bx + 3, oy + 3, TOUCH ? ' tap to play' : 'arrows to play', 'dim');
+          scr.put(bx + 3, oy + 3, TOUCH ? 'tap to steer' : 'arrows to play', 'dim');
         }
         if (TOUCH) center(scr, scr.rows - 1, paused || over ? 'tap here to quit' : 'tap here to pause', 'faint');
       },
@@ -5470,11 +5590,12 @@ T.apps.snake = {
   usage: 'snake',
   more: 'eat, grow, and stay off the walls and your own tail. arrows or wasd turn, p pauses, q quits. on a phone, tap beside the head to turn.',
   start(api){
-    const cols = api.cols || 72, rows = api.rows || 23;
-    const GW = Math.floor((cols - 2) / 2), GH = rows - 3;    // cells are 2 columns wide, so they look square
+    let cols = api.cols || 72, rows = api.rows || 23;
+    let GW = Math.floor((cols - 2) / 2), GH = rows - 3;      // cells are 2 columns wide, so they look square
     const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
     const KEYMAP = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right', k: 'up', j: 'down', h: 'left', l: 'right' };
     let body, dir, queue, food, score, step, acc, paused, over, hi = hiGet(SNAKE_HI), newHi, t = 0, started, eaten;
+    const summary = () => api.print(`snake: ${score} points, length ${body.length}, ` + (newHi ? 'a new best' : 'best ' + Math.max(hi, score)));
     function placeFood(){
       const taken = new Set(body.map(([x, y]) => x + ',' + y));
       if (taken.size >= GW * GH) return null;
@@ -5534,10 +5655,10 @@ T.apps.snake = {
         const k = e.key;
         if (over){
           if (k === 'Enter' || k === 'r' || k === 'R') reset();
-          else if (isQuit(k)) api.exit(0);
+          else if (isQuit(k)){ summary(); api.exit(0); }
           return true;
         }
-        if (isQuit(k)){ api.print(`snake: ${score} points, length ${body.length}. high score ${Math.max(hi, score)}`); if (score > hi) hiSet(SNAKE_HI, score); api.exit(0); return true; }
+        if (isQuit(k)){ if (score > hi){ hi = score; newHi = true; hiSet(SNAKE_HI, score); } if (started) summary(); api.exit(0); return true; }
         if (k === 'p' || k === 'P' || (k === ' ' && started)){ paused = !paused; return true; }
         const d = KEYMAP[k];
         if (d && !paused){ started = true; turn(d); }
@@ -5553,8 +5674,22 @@ T.apps.snake = {
         return dirty;
       },
       render(scr){
+        if (scr.cols !== cols || scr.rows !== rows){            // the grid changed (a phone turned): a new field when the snake fits in it
+          cols = scr.cols; rows = scr.rows;
+          const w = Math.floor((cols - 2) / 2), h = rows - 3;
+          if (!started || over){ GW = w; GH = h; reset(); }
+          else {
+            // slide the snake in if it is small enough for the new field, and pause so the player can find it again
+            const xs = body.map(p => p[0]), ys = body.map(p => p[1]);
+            const dx = Math.min(0, w - 1 - Math.max(...xs)), dy = Math.min(0, h - 1 - Math.max(...ys));
+            if (Math.max(...xs) - Math.min(...xs) < w && Math.max(...ys) - Math.min(...ys) < h){
+              if (dx || dy){ body = body.map(([x, y]) => [x + dx, y + dy]); paused = true; }
+              GW = w; GH = h; if (!food || food[0] >= w || food[1] >= h) food = placeFood();
+            } else paused = true;                               // too long to fit: keep the old field until it fits again
+          }
+        }
         scr.clear(); scr.cursor(0, 0, null);
-        const ox = ((scr.cols - GW * 2 - 2) / 2) | 0, oy = 1;
+        const ox = Math.max(0, ((scr.cols - GW * 2 - 2) / 2) | 0), oy = 1;
         // status line
         scr.put(ox, 0, 'SNAKE', 'bright');
         scr.put(ox + 8, 0, 'score ' + score, 'normal');
@@ -5577,15 +5712,22 @@ T.apps.snake = {
         const [hx, hy] = body[0];
         headAt = [ox + 1 + hx * 2, oy + 1 + hy];
         at(hx, hy, over ? 'xx' : '  ', blk('bright'));
-        const cw = 30, cx = ox + 1 + ((GW * 2 - cw) / 2 | 0), cy = oy + ((GH - 9) / 2 | 0) + 1;
+        // the cards sit in the middle; the one before the start sits higher, so the snake shows under it
+        const cw = Math.min(GW * 2 - 2, 34), cx = ox + 1 + ((GW * 2 - cw) / 2 | 0), cy = started || over ? oy + ((GH - 9) / 2 | 0) + 1 : oy + 1;
         const c = (y, s, st) => scr.put(cx + ((cw - s.length) / 2 | 0), cy + y, s, st);
-        if (over){
+        if (over && GH < 12){
+          const m = ' game over \u00b7 ' + score + ' points \u00b7 ' + (TOUCH ? 'tap' : 'enter') + ' again ';
+          scr.put(ox + 1 + Math.max(0, (GW * 2 - m.length) / 2 | 0), oy, m.slice(0, GW * 2), 'bright');
+        } else if (over){
           box(scr, cx, cy, cw, 10, 'normal');
           c(1, 'G A M E   O V E R', 'bright');
           c(3, score + ' points', 'normal');
           c(4, 'length ' + n + '   apples ' + eaten, 'dim');
-          c(6, newHi ? '* new high score *' : 'best ' + hi, newHi ? 'accent' : 'dim');
+          c(6, newHi ? 'new high score' : 'best ' + hi, newHi ? 'accent' : 'dim');
           c(8, TOUCH ? 'tap again' : 'enter again  \u00b7  q quit', REDUCED || Math.floor(t * 2) % 2 === 0 ? 'normal' : 'dim');
+        } else if (paused && GH < 12){                          // a short field: say it on the wall, not over the snake
+          const m = ' paused \u00b7 ' + (TOUCH ? 'tap' : 'p') + ' to resume ';
+          scr.put(ox + 1 + ((GW * 2 - m.length) / 2 | 0), oy, m, 'bright');
         } else if (paused){
           box(scr, cx, cy + 2, cw, 5, 'dim');
           c(3, 'PAUSED', 'bright'); c(5, TOUCH ? 'tap to resume' : 'p to resume', 'dim');
@@ -5800,7 +5942,7 @@ function wrap(text, width){
    (a tap on the bottom row is esc there). */
 const isQuitKey = ([k, d]) => d === 'quit' || k === 'esc' || k === 'q' || k === 'any key';
 function keysLine(scr, y, keys){
-  let ks = TOUCH ? keys.map(x => x[1] === 'quit' ? ['tap here', 'to quit'] : x[0] === 'any key' ? ['tap here', x[1]] : x) : keys.slice();
+  let ks = TOUCH ? keys.map(x => x[1] === 'quit' ? ['tap here', 'to quit'] : x[0] === 'any key' ? ['tap', 'to ' + x[1]] : x[0] === 'space' ? ['tap', x[1]] : x) : keys.slice();
   const len = a => a.reduce((n, [k, d]) => n + k.length + (d ? 1 + d.length : 0), 0) + (a.length - 1) * 3;
   while (ks.length > 1 && len(ks) > scr.cols - 2){
     let i = ks.length - 1; while (i > 0 && (isQuitKey(ks[i]) || ks[i][0] === 'tap here')) i--;
@@ -6082,12 +6224,16 @@ T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer durati
     if (dur > 86400){ api.print('timer: up to 24 hours'); api.exit(2); return {}; }
     const elapsed = () => (paused ? pausedAt : now()) - t0;
     const finish = () => { api.print('timer: ' + fmtHMS(dur) + (done ? ' done' : ', stopped with ' + fmtHMS(Math.ceil(dur - elapsed())) + ' left')); api.exit(0); };
+    let lastRows = api.rows || 18;                     // the grid can change size under the app; render keeps this current
+    const pause = () => { if (paused){ t0 += now() - pausedAt; paused = false; } else { pausedAt = now(); paused = true; } };
     return {
+      /* phones: a tap pauses and resumes, and closes the finished timer; the bottom row is the way out */
+      tap(col, row){ if (row >= lastRows - 1) return false; if (done) finish(); else pause(); return true; },
       key(e){
         if (e.ctrlKey || e.metaKey) return false;
         const k = e.key;
         if (done || isQuit(e)){ finish(); return true; }
-        if (k === ' ' || k === 'p' || k === 'Enter'){ if (paused){ t0 += now() - pausedAt; paused = false; } else { pausedAt = now(); paused = true; } return true; }
+        if (k === ' ' || k === 'p' || k === 'Enter'){ pause(); return true; }
         if (k === 'r' || k === 'R'){ t0 = now(); paused = false; return true; }
         if (k === '+' || k === '='){ dur += 60; return true; }
         if (k === '-'){ dur = Math.max(elapsed() + 1, dur - 60); return true; }
@@ -6102,7 +6248,7 @@ T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer durati
         return false;
       },
       render(scr){
-        scr.clear();
+        scr.clear(); lastRows = scr.rows;
         const W = scr.cols, H = scr.rows;
         let big = fmtHMS(Math.ceil(Math.max(0, dur - elapsed()) - 1e-6)), small = '';
         const frac = Math.min(1, elapsed() / dur), avail = H - 7;
@@ -6125,7 +6271,7 @@ T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer durati
         scr.fill(bx, y, bw, 1, '·', 'faint'); scr.fill(bx, y, Math.round(bw * frac), 1, ' ', blk(done ? 'bright' : 'dim'));
         y += 2;
         center(scr, y, done ? "time's up" : paused ? 'paused' : fmtHMS(dur) + ' timer', done ? 'bright' : 'normal');
-        keysLine(scr, H - 1, done ? [['any key', 'done']] : [['space', paused ? 'resume' : 'pause'], ['q', 'quit'], ['+/-', 'a minute'], ['r', 'restart']]);
+        keysLine(scr, H - 1, done ? [['any key', 'close']] : [['space', paused ? 'resume' : 'pause'], ['q', 'quit'], ['+/-', 'a minute'], ['r', 'restart']]);
       },
     };
   } };
@@ -6186,7 +6332,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
   more: 'type the passage as it appears. the clock starts on your first key. mistakes light up; backspace fixes them. at the end you get words per minute (five characters to a word, correct ones only) and accuracy. tab gives a new passage, esc quits.',
   start(api){
     let best = lsGet(TYPE_BEST, 0) || 0, order = PASSAGES.map((_, i) => i).sort(() => Math.random() - 0.5), pi = 0;
-    let text, typed, t0, t1, keys, errs, done, newBest, lastShow = -1;
+    let text, typed, t0, t1, keys, errs, done, newBest, lastShow = -1, lastRows = api.rows || 18;
     const now = () => performance.now() / 1000;
     function reset(){ text = PASSAGES[order[pi++ % order.length]]; typed = ''; t0 = 0; t1 = 0; keys = 0; errs = 0; done = false; newBest = false; }
     reset();
@@ -6202,7 +6348,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
     const quit = () => { api.print(done ? 'typing: ' + wpm() + ' wpm, ' + acc() + '% accurate' + (newBest ? ', a new best' : '') : 'typing: stopped'); api.exit(0); };
     return {
       /* phones have no esc: a tap on the keys line (the bottom row) quits */
-      tap(col, row){ if (row >= (api.rows || 18) - 1){ quit(); return true; } return false; },
+      tap(col, row){ if (row >= lastRows - 1){ quit(); return true; } if (done){ reset(); return true; } return false; },
       key(e){
         if (e.ctrlKey || e.metaKey || e.altKey) return false;
         const k = e.key;
@@ -6219,7 +6365,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
       },
       tick(){ const s = t0 && !done ? Math.floor(secs() * 2) : -1; if (s !== lastShow){ lastShow = s; return true; } return false; },
       render(scr){
-        scr.clear();
+        scr.clear(); lastRows = scr.rows;
         const W = scr.cols, H = scr.rows, w = Math.min(W - 4, 60), x0 = ((W - w) / 2) | 0;
         scr.put(x0, 0, spaced('typing'), 'dim');
         const stats = wpm() + ' wpm  ' + acc() + '%  ' + fmtHMS(secs());
@@ -6246,14 +6392,15 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
         if (done){
           scr.cursor(null);
           const y = ty + lines.length * 2 + 1;
-          const n = String(wpm()), f = fitScale(n, W - 20, Math.max(5, H - y - 4)) || { sx: 1, sy: 1, w: bitWidth(DIG3, n), h: 5 };
+          const n = String(wpm()), f = fitScale(n, W - 20, Math.min(10, Math.max(5, H - y - 4))) || { sx: 1, sy: 1, w: bitWidth(DIG3, n), h: 5 };
           const bx = x0, by = y;
           if (y + f.h + 2 < H){ bigText(scr, bx, by, n, f.sx, f.sy, blk('bright')); scr.put(bx + f.w + 2, by + f.h - 1, 'wpm', 'dim'); }
           const sx = bx + f.w + 8 <= x0 + w - 14 ? bx + f.w + 8 : x0, sy = sx === x0 ? by + f.h + 1 : by;
           scr.put(sx, sy, 'accuracy', 'dim'); scr.put(sx + 10, sy, acc() + '%', 'normal');
           scr.put(sx, sy + 1, 'time', 'dim'); scr.put(sx + 10, sy + 1, fmtHMS(secs()), 'normal');
           scr.put(sx, sy + 2, 'best', 'dim'); scr.put(sx + 10, sy + 2, best ? best + ' wpm' + (newBest ? '  new best' : '') : '-', newBest ? 'bright' : 'normal');
-          keysLine(scr, H - 1, [['enter', 'again'], ['q', 'quit']]);
+          if (acc() < 80) center(scr, H - 3, 'a best needs 80% accuracy', 'faint');
+          keysLine(scr, H - 1, TOUCH ? [['tap above', 'again'], ['q', 'quit']] : [['enter', 'again'], ['q', 'quit']]);
         } else {
           keysLine(scr, H - 1, TOUCH ? [['esc', 'quit']] : t0 ? [['tab', 'new passage'], ['esc', 'quit']] : [['start typing', ''], ['tab', 'new passage'], ['esc', 'quit']]);
         }
@@ -6436,7 +6583,7 @@ T.cmds.define = { g: 'net', desc: 'what a word means', usage: 'define word', ex:
     if (!w){ io.err('usage: define word  (try: define serendipity)\n'); return 2; }
     let d;
     try { d = await net.json('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(w.toLowerCase())); }
-    catch (e){ if (e.status === 404){ io.err('define: no entry for ' + w + '\n'); return 1; } return net.fail(io, 'define', e); }
+    catch (e){ if (e.status === 404 || e.kind === 'cors'){ io.err('define: no entry for ' + w + '\n'); return 1; } return net.fail(io, 'define', e); }   // its 404 carries no CORS header
     const e0 = d[0] || {}, ph = e0.phonetic || ((e0.phonetics || []).find(p => p.text) || {}).text || '';
     const means = [];
     for (const e of d) for (const m of e.meanings || []){ const ex = means.find(x => x.pos === m.partOfSpeech); if (ex) ex.defs.push(...m.definitions); else means.push({ pos: m.partOfSpeech, defs: m.definitions.slice() }); }
@@ -6559,7 +6706,7 @@ T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] 
     if (!q){ io.err('qr: too long for this little encoder (' + new TextEncoder().encode(text).length + ' bytes; ' + (lo ? 271 : 213) + ' max' + (lo ? '' : ', or 271 with -l') + ')\n'); return 1; }
     if (!io.tty){ const qz = 2, n = q.size + qz * 2; let s = ''; for (let y = -qz; y < q.size + qz; y++){ for (let x = -qz; x < q.size + qz; x++) s += (q.modules[y] && q.modules[y][x]) ? '##' : '  '; s += '\n'; } io.out(s); return; }
     const o = io.ui();
-    o.blank().bits(q.modules, 3).blank().at(2, [clip(text.replace(/\s+/g, ' '), io.cols - 14), 'd'], ['   v' + q.version + ' ' + q.ecc, 'f']).blank();
+    o.blank().bits(q.modules, 3).blank().at(2, [clip(text.replace(/\s+/g, ' '), io.cols - 4), 'd']).blank();
     io.rich(o);
   } };
 
@@ -6735,6 +6882,29 @@ function genPass(len, plain){
   return pw;
 }
 const copy = T.copy;                                   // terminal.js
+/* a short line under a command, indented, wrapping under itself on a narrow screen: spans are [text, 'd'|'n'|'f'|'b'] */
+function say(io, ...spans){
+  if (io.tty && io.ui){ const o = io.ui(); o.at(2, ...spans); io.rich(o); }
+  else io.out('  ' + spans.map(x => x[0]).join('') + '\n');
+}
+/* the export: 'kn84v1:' iterations (blank for the default) . salt . iv . ciphertext, base64 without padding. Short, so it
+   pastes in one go; the older 'kn84vault:' + base64(JSON) form still imports */
+const unpad = x => String(x).replace(/=+$/, ''), repad = x => x + '='.repeat((4 - x.length % 4) % 4);
+const vExport = b => 'kn84v1:' + (b.iter && b.iter !== VITER ? b.iter : '') + '.' + unpad(b.salt) + '.' + unpad(b.iv) + '.' + unpad(b.ct);
+function vParse(s){
+  s = String(s || '').replace(/\s+/g, '');
+  const m = /^kn84v1:(\d*)\.([A-Za-z0-9+/]+)\.([A-Za-z0-9+/]+)\.([A-Za-z0-9+/]+)$/.exec(s);
+  if (m) return { v: 1, kdf: 'PBKDF2-SHA256', iter: m[1] ? +m[1] : VITER, salt: repad(m[2]), iv: repad(m[3]), ct: repad(m[4]) };
+  try { const b = JSON.parse(atob(s.replace(/^kn84vault:/, ''))); if (b && b.ct && b.salt && b.iv) return b; } catch (e){}
+  return null;
+}
+/* the clipboard, if the browser lets the page read it (a permission prompt gets a few seconds) */
+function clipRead(){
+  try {
+    if (!(navigator.clipboard && navigator.clipboard.readText)) return Promise.resolve('');
+    return Promise.race([navigator.clipboard.readText().catch(() => ''), new Promise(res => setTimeout(() => res(''), 6000))]);
+  } catch (e){ return Promise.resolve(''); }
+}
 function vLock(){ if (V.items) for (const it of V.items) it.pw = ''; V.key = null; V.items = null; clearTimeout(V.timer); }
 function vTouch(){ clearTimeout(V.timer); V.timer = setTimeout(vLock, VIDLE); }
 try { document.addEventListener('visibilitychange', () => { if (document.hidden) vLock(); }); } catch (e){}
@@ -6796,13 +6966,13 @@ async function vaultSave(io, pw, label){
   if (vFind(label)){ io.err('vault: ' + label + ' is already saved  (try: vault rm ' + label + ')\n'); return false; }
   V.items.push({ label, pw, created: new Date().toISOString().slice(0, 10) });
   if (!(await vSeal())){ V.items.pop(); io.err('vault: could not store it\n'); return false; }
-  io.out('  saved as ', 'dim'); io.out(label, 'bright'); io.out(' in your vault, encrypted\n', 'dim');
+  say(io, ['saved as ', 'd'], [label, 'b'], [' in your vault, encrypted', 'd']);
   return true;
 }
 const VSUB = ['add', 'get', 'rm', 'rename', 'lock', 'export', 'import', 'reset'];
 T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this browser', usage: 'vault [add | get | rm | rename | lock | export | import | reset] [label]',
   ex: ['vault', 'vault add github', 'vault get github', 'vault rename github gh', 'vault lock', 'pass  then s to save'],
-  more: 'passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. nothing is sent anywhere. clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. it locks after 5 idle minutes or when you leave the tab. handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault so you can keep a copy; vault import takes it back.',
+  more: 'passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. nothing is sent anywhere. clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. it locks after 5 idle minutes or when you leave the tab. handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault and copies it (vault export > vault.txt keeps it as a file); vault import reads it back from the clipboard, a paste or a pipe (cat vault.txt | vault import), and asks for its passphrase before it replaces anything.',
   complete(args){ if (!args.length) return VSUB; if (['get', 'rm', 'rename'].includes(args[0]) && args.length === 1 && V.items) return V.items.map(it => it.label); return null; },
   async run(argv, io){
     const sub = argv[1] || '', arg = argv[2];
@@ -6813,25 +6983,47 @@ T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this brow
     if (sub === 'lock'){ const was = !!V.key; vLock(); io.out(was ? 'vault locked\n' : 'vault was already locked\n', 'dim'); return; }
     if (sub === 'export'){
       const b = vRead(); if (!b){ io.err('vault: nothing to export yet\n'); return 1; }
-      const s = 'kn84vault:' + btoa(JSON.stringify(b));
+      const s = vExport(b);
       if (!io.tty){ io.out(s + '\n'); return; }
-      io.out('  your vault, still encrypted. keep it somewhere safe;\n  vault import takes it back.\n\n', 'dim');
-      for (let k = 0; k < s.length; k += io.cols - 4) io.out('  ' + s.slice(k, k + io.cols - 4) + '\n', 'faint');
-      const ok = await copy(s); io.out(ok ? '\n  copied to the clipboard\n' : '\n', 'dim'); return;
+      const ok = await copy(s);
+      const o = io.ui(); o.blank().at(2, ['your vault, still encrypted. keep a copy somewhere safe; ', 'd'], ['vault import', 'n'], [' brings it back.', 'd']).blank();
+      for (let k = 0; k < s.length; k += io.cols - 4) o.at(2, [s.slice(k, k + io.cols - 4), 'f']);
+      o.blank(); if (ok) o.at(2, ['copied to the clipboard', 'd']).blank();
+      io.rich(o); return;
     }
     if (sub === 'import'){
-      let s = (argv.slice(2).join('') || io.stdin || '').replace(/\s+/g, '');
-      if (!s && io.ask) s = ((await io.ask('paste the export  ')) || '').replace(/\s+/g, '');
-      let b = null; try { b = JSON.parse(atob(s.replace(/^kn84vault:/, ''))); } catch (e){}
-      if (!b || !b.ct || !b.salt || !b.iv){ io.err('vault: that is not a vault export\n'); return 1; }
-      if (vRead() && io.ask){ const k = await io.ask([['replace the vault on this device? ', 'n'], ['y', 'b'], [' yes  ·  any other key no', 'f']], { keys: ['y'] }); if (k !== 'y'){ io.out('  kept the one you have\n', 'dim'); return; } }
+      let s = (argv.slice(2).join('') || io.stdin || '').replace(/\s+/g, ''), b = s ? vParse(s) : null;
+      const typed = !!argv[2] || !io.stdin;              // a command line or a prompt keeps ~240 characters; a pipe keeps all
+      if (!s && io.tty && io.ask){                      // the clipboard first (vault export put it there), then a paste
+        const c = await clipRead(); b = vParse(c);
+        if (b) say(io, ['found a vault export on the clipboard', 'd']);
+        else { s = ((await io.ask('paste the export  ')) || '').replace(/\s+/g, ''); b = vParse(s); }
+        if (!s && !b){ say(io, ['nothing imported', 'f']); return 1; }
+      }
+      const maybeCut = typed && s.length >= 220;
+      const cutNote = () => say(io, ['a long export gets cut short when typed or pasted here. copy it, then run ', 'd'], ['vault import', 'n'], [': it reads the clipboard', 'd']);
+      if (!b){ if (maybeCut) cutNote(); io.err('vault: that is not a vault export\n'); return 1; }
+      if (!(window.crypto && crypto.subtle) || !io.tty || !io.ask){ io.err('vault: import asks for the passphrase, so it needs the screen\n'); return 1; }
+      // open it first: nothing replaces the vault here unless the passphrase really opens the new one
+      let got = null;
+      for (let tries = 3; tries > 0 && !got; tries--){
+        const p = await io.ask('its passphrase  ', { secret: true }); if (!p){ say(io, ['nothing imported', 'f']); return 1; }
+        try {
+          const key = await vDerive(p, unb64(b.salt), b.iter || VITER);
+          const data = JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(b.iv) }, key, unb64(b.ct))));
+          got = { key, items: Array.isArray(data.items) ? data.items : [] };
+        } catch (e){ if (tries > 1) say(io, [maybeCut ? 'that does not open it (or the export was cut short). try again' : 'that does not open it. try again', 'd']); }
+      }
+      if (!got){ if (maybeCut) cutNote(); io.err('vault: that passphrase does not open this export. nothing imported\n'); return 1; }
+      if (vRead()){ const k = await io.ask([['replace the vault on this device? ', 'n'], ['y', 'b'], [' yes  ·  any other key no', 'f']], { keys: ['y'] }); if (k !== 'y'){ say(io, ['kept the one you have', 'd']); return; } }
       try { localStorage.setItem(VKEY, JSON.stringify(b)); } catch (e){ io.err('vault: could not store it\n'); return 1; }
-      vLock(); io.out('  imported. it opens with the passphrase it was made with\n', 'dim'); return;
+      vLock(); V.key = got.key; V.salt = b.salt; V.iter = b.iter || VITER; V.items = got.items; vTouch();
+      say(io, ['imported ' + got.items.length + (got.items.length === 1 ? ' password' : ' passwords') + '. ', 'd'], ['vault', 'n', { cmd: 'vault' }], [' lists them', 'd']); return;
     }
     if (sub === 'reset'){
       if (!vRead()){ io.out('no vault here\n', 'dim'); return; }
       if (!io.ask){ io.err('vault: reset needs the screen\n'); return 1; }
-      io.out('  this deletes every saved password on this device, for good.\n', 'normal');
+      say(io, ['this deletes every saved password on this device, for good.', 'n']);
       const t = await io.ask([['type ', 'f'], ['delete', 'b'], [' to confirm  ', 'f']]);
       if (t !== 'delete'){ io.out('  nothing deleted\n', 'dim'); return; }
       vLock(); try { localStorage.removeItem(VKEY); } catch (e){}
@@ -6885,9 +7077,11 @@ T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this brow
 
 /* credits: what this page is made of */
 T.cmds.credits = { g: 'misc', desc: 'who made what', usage: 'credits', run(argv, io){
-  io.out('three.js by mrdoob and contributors, MIT\n');
-  if (M.KEY_SAMPLES && M.KEY_SAMPLES.credit) io.out(M.KEY_SAMPLES.credit + '\n', 'dim');
-  io.out('everything else: kaiav\n');
+  const ks = M.KEY_SAMPLES && M.KEY_SAMPLES.credit;
+  if (!io.tty || !io.ui){ io.out('three.js by mrdoob and contributors, MIT\n' + (ks ? ks + '\n' : '') + 'everything else: kaiav\n'); return; }
+  const o = io.ui(); o.blank().at(2, ['three.js', 'n'], [' by mrdoob and contributors, MIT', 'd']);
+  if (ks) o.at(2, [ks, 'd']);
+  o.at(2, ['everything else: ', 'd'], ['kaiav', 'n']).blank(); io.rich(o);
 } };
 
 /* a hello for people who type one */
@@ -6985,7 +7179,7 @@ function start(api, argv, flavor){
   }
   if (readOnly && (flavor === 'vi' || flavor === 'vim')) say(COLS < 54 ? 'nano-style ' + flavor + '. read-only: :w copies' : 'nano-style ' + flavor + ', read-only file. ^S saves a copy', 'dim', 7);
   else if (readOnly) say(COLS < 54 ? 'built-in file. :w saves a copy, :q quits' : 'built-in file, read-only. ^S saves a copy', 'dim', 7);
-  else if (flavor === 'vi' || flavor === 'vim') say(COLS < 54 ? 'nano-style ' + flavor + '. :w saves, :q quits' : 'this ' + flavor + ' is nano-style: just type. :w or ^S saves, :q quits', 'dim', 7);
+  else if (flavor === 'vi' || flavor === 'vim') say(COLS < 54 ? 'nano-style ' + flavor + '. :w saves, :q quits' : 'a nano-style ' + flavor + ': just type. :w saves, :q quits', 'dim', 7);
   else if (COLS < 54) say('tip: :wq on its own line saves', 'dim', 7);
   else if (isNew) say('new file', 'dim');
 
@@ -7275,7 +7469,7 @@ function start(api, argv, flavor){
   function finish(how){
     done = true;
     const name = disp(path), n = plural(lines.length, 'line');
-    if (how === 'discard') api.print((path ? 'discarded changes to ' + name : 'discarded untitled buffer') + ' · nothing written');
+    if (how === 'discard') api.print(saves ? 'saved ' + name + ' · later changes not kept' : (path ? 'discarded changes to ' + name : 'discarded untitled buffer') + ' · nothing written');
     else if (saves) api.print('saved ' + name + ' · ' + n);
     else if (path) api.print('closed ' + name + ' · ' + n + (readOnly ? ' · read-only' : ' · no changes'));
     api.exit(0);
@@ -7581,7 +7775,7 @@ function start(api, argv, flavor){
     }
     if (msg){
       let t = '[ ' + msg.text + ' ]';
-      if (t.length > COLS) t = msg.text.slice(0, COLS);
+      if (t.length > COLS) t = msg.text.length > COLS ? msg.text.slice(0, COLS - 3) + '...' : msg.text;
       scr.put(Math.max(0, Math.floor((COLS - t.length) / 2)), y, t, msg.style);
     }
   }
@@ -7881,9 +8075,9 @@ const CSS = `
   .rd-sheet{ inset:0; width:auto; left:0; transform:translateY(14px); border-radius:0; box-shadow:none;
     padding-bottom:env(safe-area-inset-bottom, 0px) }
   #reader.rd-in .rd-sheet{ transform:none }
-  .rd-bar{ padding:max(8px, env(safe-area-inset-top, 0px)) 8px 8px 4px }
+  .rd-bar{ padding:max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) 8px max(4px, env(safe-area-inset-left, 0px)) }
   .rd-bar .rd-where{ display:none }
-  .rd-col{ padding:0 max(20px, env(safe-area-inset-left, 0px)) 0 max(20px, env(safe-area-inset-right, 0px)) }
+  .rd-col{ padding:0 max(20px, env(safe-area-inset-right, 0px)) 0 max(20px, env(safe-area-inset-left, 0px)) }
   .rd-head{ padding:2.4rem 0 1.6rem }
   .rd-prose{ padding-top:1.6rem; hyphens:auto; -webkit-hyphens:auto }
   .rd-nav{ grid-template-columns:1fr } .rd-nav .rd-next{ grid-column:1 }
@@ -8037,6 +8231,7 @@ function open(q){
   }
   // every post opens at its top: render() can't reset a sheet that was still display:none
   sheet.style.scrollBehavior = 'auto'; sheet.scrollTop = 0; sheet.style.scrollBehavior = '';
+  onScroll();   // render() measured a hidden sheet (progress read as full)
   sheet.focus({ preventScroll: true });
   return true;
 }
@@ -8178,19 +8373,21 @@ on(stage, 'click', e => {
 });
 
 /* the one hint: shown once, gone after the first lean or ~12 s. Without pointer look (reduced motion) there is none */
-let hintT = 0;
-const hideHint = () => { if (!hintT) return; clearTimeout(hintT); hintT = 0; hint.style.opacity = '0'; setTimeout(() => { hint.hidden = true; }, 1300); };
+let hintT = 0, hintIn = 0;
+const hideHint = () => { if (!hintT) return; clearTimeout(hintT); clearTimeout(hintIn); hintT = 0; hint.style.opacity = '0'; setTimeout(() => { hint.hidden = true; }, 1300); };
 on(window, 'pointermove', e => {
-  if (e.pointerType !== 'mouse' || REDUCED || reading()) return;
-  const ny = e.clientY / innerHeight * 2 - 1;
-  look(e.clientX / innerWidth * 2 - 1, ny);
-  if (ny > 0.5) hideHint();
-  // clickable words on the tube get a pointer
+  if (e.pointerType !== 'mouse' || reading()) return;
+  if (!REDUCED){
+    const ny = e.clientY / innerHeight * 2 - 1;
+    look(e.clientX / innerWidth * 2 - 1, ny);
+    if (ny > 0.5) hideHint();
+  }
+  // clickable words on the tube get a pointer (and light up)
   const p = term.hitTest && api.pickScreen ? api.pickScreen(e.clientX, e.clientY) : null;
-  const want = p && term.hitTest(p.u, p.v) ? 'pointer' : '';
+  const want = term.hitTest && term.hitTest(p ? p.u : -1, p ? p.v : -1) ? 'pointer' : '';   // (-1, -1) clears the hover
   if (stage.style.cursor !== want) stage.style.cursor = want;
 });
-on(D.documentElement, 'mouseleave', () => look(0, 0));
+on(D.documentElement, 'mouseleave', () => { look(0, 0); if (term.hitTest) term.hitTest(-1, -1); });
 
 /* the GPU dropped the context (driver reset, GPU switch, too many tabs). three.js r147's restore leaves this scene
    black, so go straight to the flat terminal; a reload brings the room back */
@@ -8226,7 +8423,10 @@ const fromHash = deepLinks(() => term, ac.signal);
 whenReady(() => {
   if (dead) return;
   fromHash(); focusInput(); raf = requestAnimationFrame(frame);
-  if (!REDUCED && !matchMedia('(hover: none)').matches){ hint.hidden = false; hintT = setTimeout(hideHint, 12000); }
+  if (!REDUCED && !matchMedia('(hover: none)').matches){   // fades in once the tube has had a moment, out after ~12 s
+    hint.style.opacity = '0'; hint.hidden = false;
+    hintIn = setTimeout(() => { hint.style.opacity = ''; }, 1800); hintT = setTimeout(hideHint, 14000);
+  }
 });
 
 /* the terminal alone, no 3D. Phones: full width under a header strip, text typed through #kbd. Desktops (a fallback):
@@ -8238,20 +8438,24 @@ function flat(){
      really changes (a rotation, a desktop window resize). The on-screen keyboard only changes the height on
      phones, so there it never rebuilds: place() lifts the prompt instead */
   const build = () => {
-    const probe = D.createElement('div'); probe.className = 'phone-term'; probe.style.cssText = 'visibility:hidden;padding-bottom:env(safe-area-inset-bottom, 0px)';
+    const probe = D.createElement('div'); probe.className = 'phone-term';
+    probe.style.cssText = 'visibility:hidden;padding:0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)';
     stage.appendChild(probe);
-    const top = probe.offsetTop, inset = parseFloat(getComputedStyle(probe).paddingBottom) || 0; probe.remove();
-    const W = TOUCH ? innerWidth : Math.max(200, Math.min(innerWidth - 32, 760)), H = Math.max(200, innerHeight - top - inset - (TOUCH ? 0 : 16));
-    term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols: W < 420 ? 40 : W < 600 ? 46 : 54 });
-    if (cv) cv.remove();
-    cv = term.canvas; cv.className = 'phone-term'; cv.style.width = W + 'px'; cv.style.height = H + 'px'; stage.appendChild(cv);
+    const cs = getComputedStyle(probe), px = v => parseFloat(v) || 0;
+    const top = probe.offsetTop, inset = px(cs.paddingBottom), sl = TOUCH ? px(cs.paddingLeft) : 0, sr = TOUCH ? px(cs.paddingRight) : 0; probe.remove();
+    // a phone on its side keeps the text clear of the notch and the rounded corners
+    const W = TOUCH ? innerWidth - sl - sr : Math.max(200, Math.min(innerWidth - 32, 760)), H = Math.max(200, innerHeight - top - inset - (TOUCH ? 0 : 16));
+    const cols = W < 420 ? 40 : W < 600 ? 46 : 54;
+    // a rotation or window resize reflows the same terminal (history, files, a running app all kept)
+    if (term && term.resize) term.resize(W / H, cols);
+    else { term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols }); if (cv) cv.remove(); }
+    cv = term.canvas; cv.className = 'phone-term'; cv.style.width = W + 'px'; if (sl) cv.style.left = sl + 'px'; cv.style.height = H + 'px'; stage.appendChild(cv);
     bw = innerWidth; bh = innerHeight; shift = 0;
   };
   build();
   let rt = 0;
   addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => {
-    // rebuilding starts a fresh terminal, so it is skipped while an editor, game or command is running
-    if ((Math.abs(innerWidth - bw) > 40 || (!TOUCH && Math.abs(innerHeight - bh) > 40)) && !term.busy){ build(); fromHash(); } else place();
+    if (Math.abs(innerWidth - bw) > 40 || (!TOUCH && Math.abs(innerHeight - bh) > 40)) build(); else place();
   }, 150); });
   const focus = () => { if (!reading()) try { kbd.focus({ preventScroll: true }); } catch (e){} };
   setupMute(TOUCH ? null : focus);
@@ -8279,14 +8483,32 @@ function flat(){
     const r = cv.getBoundingClientRect(), want = term.hitTest((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height) ? 'pointer' : '';
     if (stage.style.cursor !== want) stage.style.cursor = want;
   });
+  stage.addEventListener('pointerleave', () => { if (term.hitTest) term.hitTest(-1, -1); stage.style.cursor = ''; });
   stage.addEventListener('click', e => {
+    if (caught){ caught = false; return; }   // that touch stopped a fling: it was not a tap
     const r = cv.getBoundingClientRect();
     if (term.handleTap && term.handleTap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)){ unlock(); return; }   // a card row: copy / open
     kbd.focus();
   });
-  // touch drag scrolls the terminal's history
-  let ty = null; stage.addEventListener('touchstart', e => { ty = e.touches[0].clientY; }, { passive: true });
-  stage.addEventListener('touchmove', e => { if (ty == null || !term.scroll) return; const y = e.touches[0].clientY; term.scroll((ty - y) * 2.5); ty = y; e.preventDefault(); }, { passive: false });
+  /* touch drag scrolls the terminal's history; a flick carries on and eases out, and a touch catches it */
+  let ty = null, tt = 0, vel = 0, fling = 0, caught = false;
+  const glide = () => {
+    fling = 0; vel *= 0.95; if (Math.abs(vel) < 0.05 || !term.scroll) return;
+    term.scroll(vel * 16 * 2.5); fling = requestAnimationFrame(glide);
+  };
+  stage.addEventListener('touchstart', e => {
+    caught = !!fling; cancelAnimationFrame(fling); fling = 0; vel = 0;
+    ty = e.touches[0].clientY; tt = e.timeStamp;
+  }, { passive: true });
+  stage.addEventListener('touchmove', e => {
+    if (ty == null || !term.scroll) return;
+    const y = e.touches[0].clientY, dt = Math.max(1, e.timeStamp - tt);
+    term.scroll((ty - y) * 2.5); vel = 0.8 * ((ty - y) / dt) + 0.2 * vel; ty = y; tt = e.timeStamp; e.preventDefault();
+  }, { passive: false });
+  stage.addEventListener('touchend', e => {
+    ty = null; if (REDUCED || e.timeStamp - tt > 80 || Math.abs(vel) < 0.3) return;   // a held finger, or a slow drag, stops where it is
+    vel = Math.max(-4, Math.min(4, vel)); fling = requestAnimationFrame(glide);
+  }, { passive: true });
   // keep the prompt line above the on-screen keyboard: measured from the canvas's untransformed top
   const place = () => {
     const vv = window.visualViewport, bottom = vv ? vv.offsetTop + vv.height : innerHeight;

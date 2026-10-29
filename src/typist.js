@@ -620,7 +620,11 @@ M.createTypist = function createTypist(api){
     spine.updateMatrix();
 
     /* ---- long idle: now and then one hand comes off the keys to rest on the desk ---- */
-    if (T - lastKey > 8 && (deskCheck -= dt) <= 0){
+    /* the resting spot is below the lean-back frame: while the visitor looks down at the desk, both hands stay on
+       (or come back to) the keys, so the view never shows a one-handed typist */
+    const watched = api.camera && api.camera.getWorldDirection(v1).y < -.3;
+    if (watched){ for (const H of hands) H.deskT = 0; deskCheck = Math.max(deskCheck, 3); }
+    else if (T - lastKey > 8 && (deskCheck -= dt) <= 0){
       deskCheck = 4 + Math.random() * 6;
       const on = hands.find(H => H.deskT);
       if (!on){ if (Math.random() < .55) hands[Math.random() < .6 ? 0 : 1].deskT = 1; }
