@@ -22,8 +22,8 @@ Without WebGL the desktop gets the same terminal-only page. Deep links run a pag
 ## What's in the terminal
 
 - **About Kaiav:** `about`, `eden`, `j`, `writing` (posts open in a typeset reader), `contact`
-  (copies an address), `links`, `linkedin`, `x`, `gh`, `open <name|url>`
-- **Do something:** `edit` (a nano-style editor), `todo`, `weather [city]`, `timer`, `qr`, `pass` and an
+  (copies an address), `links`, `linkedin`, `x`, `gh`, `open <name|url>`, `neofetch`
+- **Do something:** `edit` (a nano-style editor), `todo`, `weather [city]`, `timer`, `clock`, `qr`, `pass` and an
   encrypted `vault` (kept only in your browser), `cal`, `bc`, `convert`, `roll`, `countdown`
 - **The network** (live site only; the claude.ai preview blocks it): `curl`, `hn`, `wiki`, `define`
 - **Play:** `tetris`, `snake` (tap controls on phones), `typing` (a WPM test), `donut`, `lamp`
@@ -51,7 +51,7 @@ src/
   typist.js      the hands: arm and finger IK, strike timing synced to key travel and sound
   terminal.js    the shell, the virtual filesystem and the canvas renderer the CRT displays
   apps.js        full-screen apps: tetris, snake, donut, lamp
-  extras.js      weather, todo, timer, typing test, qr, pass/vault, the network commands and small tools
+  extras.js      weather, todo, timer, clock, typing test, qr, pass/vault, the network commands and small tools
   editor.js      edit / nano / vi / vim
   reader.js      the typeset post reader
   main.js        input routing, the terminal-only layout (phones, no WebGL), fallbacks, the loop

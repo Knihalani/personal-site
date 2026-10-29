@@ -1,5 +1,5 @@
 /* extras.js: things to do on the KN-84 (see CONTRACT.md, "Terminal extension API").
-   weather, todo, timer, typing, curl / hn / wiki / define, qr, small offline tools, pass + vault, credits.
+   weather, todo, timer, clock, typing, curl / hn / wiki / define, qr, small offline tools, pass + vault, credits.
 
    Plain commands print rich rows through io.ui() (the terminal's own builder) when writing to the
    screen, and plain text when piped or redirected. Full-screen apps draw solid pixels as inverse-video
@@ -362,6 +362,44 @@ T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer durati
         y += 2;
         center(scr, y, done ? "time's up" : paused ? 'paused' : fmtHMS(dur) + ' timer', done ? 'bright' : 'normal');
         keysLine(scr, H - 1, done ? [['any key', 'done']] : [['space', paused ? 'resume' : 'pause'], ['q', 'quit'], ['+/-', 'a minute'], ['r', 'restart']]);
+      },
+    };
+  } };
+
+/* clock: the time in the timer's big digits. Narrow screens get big h:mm with small :ss beside or under it */
+T.apps.clock = { g: 'tools', desc: 'the time, in big digits', usage: 'clock',
+  more: 'shows the time in big digits, with the date and your time zone under it. q or esc quits.',
+  start(api){
+    let last = '';
+    let tz = ''; try { tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || '').replace(/_/g, ' '); } catch (e){}
+    return {
+      key(e){
+        if (e.ctrlKey || e.metaKey) return false;
+        if (isQuit(e)){ api.exit(0); return true; }
+        return false;
+      },
+      tick(){ const s = new Date().toTimeString().slice(0, 8); if (s !== last){ last = s; return true; } return false; },
+      render(scr){
+        scr.clear();
+        const W = scr.cols, H = scr.rows, d = new Date();
+        let big = d.getHours() + ':' + two(d.getMinutes()) + ':' + two(d.getSeconds()), small = '';
+        const avail = H - 7;
+        let f = fitScale(big, W - 4, avail);
+        if (!f || f.sx < 2){
+          const short = big.slice(0, big.lastIndexOf(':')), g2 = fitScale(short, W - 4, avail);
+          if (g2 && (!f || g2.sx > f.sx)){ small = big.slice(big.lastIndexOf(':')); big = short; f = g2; }
+        }
+        const blockH = f ? f.h : 1, top = Math.max(2, ((H - blockH - 5) / 2) | 0);
+        center(scr, top - 2, spaced('clock'), 'dim');
+        if (f){
+          const beside = small && f.w + small.length + 1 <= W - 2, x = ((W - f.w - (beside ? small.length + 1 : 0)) / 2) | 0;
+          bigText(scr, x, top, big, f.sx, f.sy, blk('bright'));
+          if (small){ if (beside) scr.put(x + f.w + 1, top + f.h - 1, small, 'dim'); else scr.put(x + f.w - small.length, top + f.h, small, 'dim'); }
+        } else center(scr, top, big, 'bright');
+        const y = top + blockH + (small && f && f.w + small.length + 1 > W - 2 ? 2 : 1);
+        center(scr, y, d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }), 'normal');
+        if (tz) center(scr, y + 1, tz, 'faint');
+        keysLine(scr, H - 1, [['q', 'quit']]);
       },
     };
   } };

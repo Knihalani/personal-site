@@ -485,6 +485,8 @@ M.createTerminal = function createTerminal(opts){
       para(text, st = 'n', width = COLS - 6, i = 2){ for (const l of wrap(text, width)) o.at(i, [l, st]); return o; },
       /* a square bitmap (true = dark), dark on a lit field with a quiet zone of q modules: QR codes.
          Drawn as vectors so a module is square whatever the cell shape. */
+      /* a drawing h rows tall: draw(x, y, w, h, age, t); live(age) -> fps while it moves (none under reduced motion) */
+      viz(h, draw, live){ r.push({ k: 'viz', h, draw, live: live || null, t0: -1 }); return o; },
       bits(m, q = 2){
         const n = m.length + 2 * q, availW = X(COLS - 2) - X(2), availH = (ROWS - 4) * ch;
         const sz = Math.max(2, Math.floor(Math.min(availW / n, availH / n, cw * 1.2)));
@@ -737,9 +739,11 @@ M.createTerminal = function createTerminal(opts){
     '  convert 5 km to mi',
     '  todo        a to-do list',
     '  timer 5m    count down, then beep',
+    '  clock       the time, in big digits',
     '  edit        write a note',
     '  typing      a typing test',
-    '  tetris      a game (snake too)', '',
+    '  tetris      a game (snake too)',
+    '  neofetch    about this machine', '',
     '## the shell', '',
     '  help        what you can type',
     '  man grep    the manual for grep',
@@ -1213,6 +1217,68 @@ M.createTerminal = function createTerminal(opts){
     saveAliases();
   } });
   def('clear', { g: 'system', desc: 'clear the screen', usage: 'clear', run(argv, io){ if (io.tty) clearScreen(); } });
+  def('neofetch', { g: 'system', desc: 'about this machine', usage: 'neofetch',
+    more: 'a summary of the KN-84 and its owner: the system, this visit\'s uptime, the terminal size, the files in your home, and who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is. wide screens draw the machine beside it.',
+    run(argv, io){
+      const info = fetchInfo();
+      if (!io.tty){ io.write(ENV.USER + '@' + ENV.HOSTNAME + '\n' + info.map(([k, v]) => pad(k, 10) + v).join('\n') + '\n'); return; }
+      const o = out(); o.blank().viz(info.length + 3, drawFetch, age => age < 1.2 ? 30 : 4).blank()
+        .line(['see also  ', 'f'], ...chips(['about', 'links', 'contact'], 'n')).blank();
+      io.rich(o);
+      if (job) job.plain += info.map(([k, v]) => (k || 'and') + ' ' + v).join('. ') + '. ';
+    } });
+  /* the neofetch rows: the KN-84 (as the site already describes it), then its owner, from content.js */
+  function fetchInfo(){
+    let files = 0;
+    const walk = d => { for (const e of FS.list(d) || []) if (e.dir) walk(d + '/' + e.name); else files++; };
+    walk(HOME);
+    const shown = n => !n.hidden;
+    const ncmd = Object.values(M.TERM.cmds).filter(c => c && shown(c)).length + Object.keys(M.TERM.apps).filter(n => !M.TERM.cmds[n] && shown(M.TERM.apps[n])).length;
+    const roles = String(A.role || [E.role && E.title && E.role + ' of ' + E.title, J.role && 'Co-founder of J'].filter(Boolean).join(' · ')).split(/\s*·\s*/).filter(Boolean);
+    return [['OS', 'KNOS 1.04'], ['Host', 'KN-84'], ['Uptime', uptimeStr()], ['Shell', 'sh, ' + ncmd + ' commands'], ['Terminal', 'vt320, ' + COLS + 'x' + ROWS],
+      ['Font', 'VT323'], ['Files', files + ' in ~'], ['User', C.name || 'Kaiav'], ...roles.map((r, i) => [i ? '' : 'Role', r])];
+  }
+  /* the KN-84 itself, in outline: a compact all-in-one with its screen lit, and a keyboard; the card beside it.
+     Under 50 columns the drawing goes and the card starts at the margin */
+  function drawFetch(x, y, w, h, age, t){
+    const ap = REDUCED ? 1 : ease(age / 0.5);
+    const col = COLS < 50 ? 2 : Math.max(14, COLS - 31);
+    if (COLS >= 50){
+      const bx = x, by = y + ch * 0.2, bw = cw * Math.min(18, col - 6), bh = ch * 7.6;
+      g.strokeStyle = P.normal; g.lineWidth = 2;
+      g.strokeRect(bx, by, bw, bh * ap);
+      if (ap >= 1){
+        const sx = bx + cw * 2, sy = by + ch * 0.7, sw = bw - cw * 4, sh = ch * 4.4;
+        g.strokeStyle = P.dim; g.strokeRect(sx, sy, sw, sh);
+        g.fillStyle = P.faint; g.fillRect(sx + 6, sy + 6, sw - 12, sh - 12);
+        g.fillStyle = P.bg; g.fillRect(sx + 10, sy + 10, sw - 20, sh - 20);
+        text('$', 5, sy + 16, 'n');
+        if (REDUCED || (t % 1.06) < 0.53){ g.fillStyle = P.normal; g.fillRect(X(7), sy + 20, cw, ch - 10); }
+        const fy = sy + sh + ch * 0.75;                       // floppy slot and power light
+        g.fillStyle = P.dim; g.fillRect(bx + bw - cw * 8, fy, cw * 6, 4);
+        g.fillStyle = P.bright; g.fillRect(bx + cw * 2, fy - 2, 8, 8);
+        const ky = by + bh + ch * 0.6, kh = ch * 2.6, kr = (kh - 12) / 4, nk = Math.floor((bw / cw) / 1.6);   // keyboard
+        g.strokeStyle = P.normal; g.strokeRect(bx - cw, ky, bw + cw * 2, kh);
+        g.fillStyle = P.dim;
+        for (let r = 0; r < 3; r++) for (let c2 = 0; c2 < nk - (r % 2); c2++) g.fillRect(bx + c2 * cw * 1.6 + (r % 2) * cw * 0.5, ky + 6 + r * kr, cw * 1.2, kr - 5);
+        g.fillRect(bx + bw * 0.22, ky + 6 + 3 * kr, bw * 0.56, kr - 5);
+      }
+    }
+    const info = fetchInfo();
+    const n = REDUCED ? 99 : Math.floor((age - 0.15) * 40);
+    if (n <= 0) return;
+    text(ENV.USER, col, y, 'b'); text('@', col + ENV.USER.length, y, 'f'); text(ENV.HOSTNAME, col + ENV.USER.length + 1, y, 'b');
+    g.fillStyle = P.faint; g.fillRect(X(col), y + ch * 1.48, cw * (ENV.USER.length + 1 + ENV.HOSTNAME.length), 2);
+    info.forEach(([k, v], i) => {
+      if (i + 1 > n) return;
+      const top = y + (i + 2) * ch * 0.98;
+      text(k, col, top, 'd'); text(v.slice(0, COLS - col - 10), col + 10, top, 'n');
+    });
+    if (n > info.length + 1){
+      const top = y + (info.length + 2.2) * ch * 0.98;
+      [P.faint, P.dim, P.normal, P.bright, P.accent].forEach((c, i) => { g.fillStyle = c; g.fillRect(X(col + i * 3), top + 6, cw * 2.6, ch - 12); });
+    }
+  }
 
   /* misc */
   def('bc', { g: 'misc', desc: 'a calculator', usage: 'bc [expression]', opts: [], more: 'arithmetic with + - * / % ^ and parentheses, plus sqrt, abs, floor, ceil, round and pi. reads the expression from its arguments, or one per line from a pipe.', ex: ['bc 2^10', "echo '(1+2)*3' | bc"], run(argv, io){
