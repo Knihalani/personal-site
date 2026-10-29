@@ -938,11 +938,11 @@ M.createScene = function createScene(container){
     setLook(nx, ny){
       nx = clamp(+nx || 0, -1, 1); ny = clamp(+ny || 0, -1, 1);
       // a wide dead zone around the reading view: the whole upper half of the window and the middle band are rest,
-      // so the screen holds still while the cursor wanders over it. Leaning back starts a third of the way down.
+      // so the screen holds still while the cursor wanders over it. Leaning back starts three quarters of the way down and is complete near the bottom edge.
       // yaw is normalised here (-1..1) and scaled in applyCamera: ~4.5 deg while reading, ~10 deg leaned back.
       const ax = Math.abs(nx), sx = sstep(.18, .95, ax);
       yawS.t = -Math.sign(nx) * sx;
-      pitchS.t = ny > 0 ? -sstep(.3, .8, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
+      pitchS.t = ny > 0 ? -sstep(.5, .92, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
     },
     /* a keystroke: skips the intro reveal and wakes the (idle-throttled) renderer */
     nudge(){ skipIntro(); sinceMove = 0; },
