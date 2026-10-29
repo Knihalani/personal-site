@@ -1065,7 +1065,7 @@ async function vaultSave(io, pw, label){
 const VSUB = ['add', 'get', 'rm', 'rename', 'lock', 'export', 'import', 'reset'];
 T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this browser', usage: 'vault [add | get | rm | rename | lock | export | import | reset] [label]',
   ex: ['vault', 'vault add github', 'vault get github', 'vault rename github gh', 'vault lock', 'pass  then s to save'],
-  more: 'passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. nothing is sent anywhere. clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. it locks after 5 idle minutes or when you leave the tab. handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault and copies it; vault import reads it back from the clipboard, or from a paste.',
+  more: 'passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. nothing is sent anywhere. clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. it locks after 5 idle minutes or when you leave the tab. handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault and copies it (vault export > vault.txt keeps it as a file); vault import reads it back from the clipboard, a paste or a pipe (cat vault.txt | vault import), and asks for its passphrase before it replaces anything.',
   complete(args){ if (!args.length) return VSUB; if (['get', 'rm', 'rename'].includes(args[0]) && args.length === 1 && V.items) return V.items.map(it => it.label); return null; },
   async run(argv, io){
     const sub = argv[1] || '', arg = argv[2];
@@ -1086,20 +1086,32 @@ T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this brow
     }
     if (sub === 'import'){
       let s = (argv.slice(2).join('') || io.stdin || '').replace(/\s+/g, ''), b = s ? vParse(s) : null;
+      const typed = !!argv[2] || !io.stdin;              // a command line or a prompt keeps ~240 characters; a pipe keeps all
       if (!s && io.tty && io.ask){                      // the clipboard first (vault export put it there), then a paste
         const c = await clipRead(); b = vParse(c);
-        if (b) say(io, ['found an export on the clipboard', 'd']);
-        else s = ((await io.ask('paste the export  ')) || '').replace(/\s+/g, '');
+        if (b) say(io, ['found a vault export on the clipboard', 'd']);
+        else { s = ((await io.ask('paste the export  ')) || '').replace(/\s+/g, ''); b = vParse(s); }
         if (!s && !b){ say(io, ['nothing imported', 'f']); return 1; }
       }
-      if (!b) b = vParse(s);
-      if (!b){
-        if (s.length >= 250) say(io, ['that paste was cut short. copy the export, then run ', 'd'], ['vault import', 'n'], [' again: it reads the clipboard', 'd']);
-        io.err('vault: that is not a vault export\n'); return 1;
+      const maybeCut = typed && s.length >= 220;
+      const cutNote = () => say(io, ['a long export gets cut short when typed or pasted here. copy it, then run ', 'd'], ['vault import', 'n'], [': it reads the clipboard', 'd']);
+      if (!b){ if (maybeCut) cutNote(); io.err('vault: that is not a vault export\n'); return 1; }
+      if (!(window.crypto && crypto.subtle) || !io.tty || !io.ask){ io.err('vault: import asks for the passphrase, so it needs the screen\n'); return 1; }
+      // open it first: nothing replaces the vault here unless the passphrase really opens the new one
+      let got = null;
+      for (let tries = 3; tries > 0 && !got; tries--){
+        const p = await io.ask('its passphrase  ', { secret: true }); if (!p){ say(io, ['nothing imported', 'f']); return 1; }
+        try {
+          const key = await vDerive(p, unb64(b.salt), b.iter || VITER);
+          const data = JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(b.iv) }, key, unb64(b.ct))));
+          got = { key, items: Array.isArray(data.items) ? data.items : [] };
+        } catch (e){ if (tries > 1) say(io, [maybeCut ? 'that does not open it (or the export was cut short). try again' : 'that does not open it. try again', 'd']); }
       }
-      if (vRead() && io.ask){ const k = await io.ask([['replace the vault on this device? ', 'n'], ['y', 'b'], [' yes  ·  any other key no', 'f']], { keys: ['y'] }); if (k !== 'y'){ say(io, ['kept the one you have', 'd']); return; } }
+      if (!got){ if (maybeCut) cutNote(); io.err('vault: that passphrase does not open this export. nothing imported\n'); return 1; }
+      if (vRead()){ const k = await io.ask([['replace the vault on this device? ', 'n'], ['y', 'b'], [' yes  ·  any other key no', 'f']], { keys: ['y'] }); if (k !== 'y'){ say(io, ['kept the one you have', 'd']); return; } }
       try { localStorage.setItem(VKEY, JSON.stringify(b)); } catch (e){ io.err('vault: could not store it\n'); return 1; }
-      vLock(); say(io, ['imported. it opens with the passphrase it was made with', 'd']); return;
+      vLock(); V.key = got.key; V.salt = b.salt; V.iter = b.iter || VITER; V.items = got.items; vTouch();
+      say(io, ['imported ' + got.items.length + (got.items.length === 1 ? ' password' : ' passwords') + '. ', 'd'], ['vault', 'n', { cmd: 'vault' }], [' lists them', 'd']); return;
     }
     if (sub === 'reset'){
       if (!vRead()){ io.out('no vault here\n', 'dim'); return; }

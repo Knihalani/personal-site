@@ -405,8 +405,8 @@ const linesOf = t => t ? t.replace(/\n$/, '').split('\n') : [];
 M.createTerminal = function createTerminal(opts){
   const C = (opts && opts.content) || M.CONTENT || {};
   if (opts && opts.cols >= 32) COLS = opts.cols | 0;
-  const aspect = opts && opts.aspect > 0.3 && opts.aspect < 3 ? opts.aspect : 4 / 3;
-  const W = WIDTH, H = Math.round(WIDTH / aspect);
+  let aspect = opts && opts.aspect > 0.3 && opts.aspect < 3 ? opts.aspect : 4 / 3;
+  const W = WIDTH; let H = Math.round(WIDTH / aspect);   // (resize() changes H, the grid and the font size)
   const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d', { alpha: false });
   /* VT323 has an fi/fl ligature that would eat a grid cell: switch shaping extras off where the canvas allows,
@@ -421,16 +421,16 @@ M.createTerminal = function createTerminal(opts){
   const diskSound = () => { const t = performance.now(); if (t - lastDisk > 400){ lastDisk = t; sfx('disk'); } };
 
   /* ---- grid ---- */
-  const PADX = 52, cw = (W - 2 * PADX) / COLS;
-  let fs = cw / 0.4;                                    // VT323 advance is 0.4em; re-measured once loaded
-  const ch = Math.round(fs * LINE);
-  const ROWS = Math.floor((H - 64) / ch);
-  const PADY = Math.round((H - ROWS * ch) / 2);
+  const PADX = 52; let cw = (W - 2 * PADX) / COLS;
+  let advance = 0.4, fs = cw / advance;                 // VT323 advance is 0.4em; re-measured once loaded
+  let ch = Math.round(fs * LINE);
+  let ROWS = Math.floor((H - 64) / ch);
+  let PADY = Math.round((H - ROWS * ch) / 2);
   const font = (k = 1) => (fs * k).toFixed(2) + 'px ' + FONT;
   /* g.font is only assigned when it changes: the strings are built once per size (a font set is parsed every time) */
   let fontStr = {}, curFont = '';
   const setFont = (k = 1) => { const f = fontStr[k] || (fontStr[k] = font(k)); if (f !== curFont){ g.font = f; curFont = f; } };
-  const measureFont = () => { g.font = '100px ' + FONT; curFont = ''; const r = g.measureText('M').width / 100; if (r > 0.2 && r < 0.8){ fs = cw / r; fontStr = {}; } dirty = true; };
+  const measureFont = () => { g.font = '100px ' + FONT; curFont = ''; const r = g.measureText('M').width / 100; if (r > 0.2 && r < 0.8){ advance = r; fs = cw / r; fontStr = {}; } dirty = true; };
   if (document.fonts && document.fonts.load){
     document.fonts.load('40px VT323').then(() => measureFont(), () => {});
     if (document.fonts.ready) document.fonts.ready.then(() => measureFont(), () => {});
@@ -555,7 +555,7 @@ M.createTerminal = function createTerminal(opts){
       it.lines = parts; it.n = 1 + parts.length; y += it.n;
     }
     const note = spec.note && spec.title.length + spec.note.length + 10 <= COLS ? spec.note : '';
-    return { k: 'card', title: spec.title, note, items, acts, lw, stacked, body: y, sel: -1, verb: spec.verb || 'open', foot: null };
+    return { k: 'card', spec, title: spec.title, note, items, acts, lw, stacked, body: y, sel: -1, verb: spec.verb || 'open', foot: null };
   }
 
   function pushRow(r){ openRow = null; rows.push(r); dirty = true; }
@@ -594,8 +594,9 @@ M.createTerminal = function createTerminal(opts){
   const clean = s => String(s == null ? '' : s).replace(/\t/g, '    ').replace(/\r/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
   const rowLen = r => r.s.reduce((n, s) => n + s[0].length, 0);
   function appendSpan(seg, st){
+    let cont = 0;                              // the row this wraps onto continues the last: 1 after a dropped space, 2 exactly (for resize)
     while (seg){
-      if (!openRow){ openRow = { k: 't', i: 0, s: [] }; rows.push(openRow); }
+      if (!openRow){ openRow = cont ? { k: 't', i: 0, s: [], c: cont } : { k: 't', i: 0, s: [] }; rows.push(openRow); }
       const room = COLS - rowLen(openRow);
       let piece = seg, rest = '';
       if (seg.length > room){
@@ -604,13 +605,13 @@ M.createTerminal = function createTerminal(opts){
         const used = rowLen(openRow);
         let cut = seg.lastIndexOf(' ', room);
         if (cut >= 0 && PUNCT.test(seg.slice(cut + 1).split(' ')[0]) && cut + 1 < seg.length) cut = seg.lastIndexOf(' ', cut - 1);
-        if (cut > 0 || (cut === 0 && used)){ piece = seg.slice(0, cut); rest = seg.slice(cut + 1); }
+        if (cut > 0 || (cut === 0 && used)){ piece = seg.slice(0, cut); rest = seg.slice(cut + 1); cont = 1; }
         else {
           const word = /^\S*/.exec(seg)[0], moved = used ? pullWord(openRow) : null;
           const mw = moved ? moved.reduce((n, x) => n + x[0].length, 0) : 0;
-          if (moved && mw + word.length <= COLS && (mw || used)){ openRow = { k: 't', i: 0, s: moved }; rows.push(openRow); continue; }
+          if (moved && mw + word.length <= COLS && (mw || used)){ openRow = { k: 't', i: 0, s: moved, c: 2 }; rows.push(openRow); continue; }
           if (moved) openRow.s.push(...moved);
-          piece = seg.slice(0, Math.max(0, room)); rest = seg.slice(Math.max(0, room));
+          piece = seg.slice(0, Math.max(0, room)); rest = seg.slice(Math.max(0, room)); cont = 2;
         }
       }
       const last = openRow.s[openRow.s.length - 1];
@@ -1772,7 +1773,7 @@ M.createTerminal = function createTerminal(opts){
     const def = M.TERM.apps[name];
     return new Promise(resolve => {
       const st = { name, ctx, printed: [], resolve, inst: null, dirty: true, done: false };
-      const api = {
+      const api = st.api = {
         cols: COLS, rows: ROWS, fs: FS, env: ENV, cwd, sound: M.sound,
         exit(code){ closeApp(st, code | 0); },
         print(t){ if (t != null) st.printed.push(String(t)); },
@@ -1848,7 +1849,7 @@ M.createTerminal = function createTerminal(opts){
       while (t.length){ if (w >= COLS){ out.push(row); row = []; w = 0; } const n = Math.min(COLS - w, t.length); row.push([t.slice(0, n), st]); w += n; t = t.slice(n); }
     }
     out.push(row);
-    for (const s of out) rows.push({ k: 't', i: 0, s });
+    out.forEach((s, k) => rows.push(k ? { k: 't', i: 0, s, c: 2 } : { k: 't', i: 0, s }));
     shown = rows.length; partial = 0;
   }
   function said(cmd){ rows.push({ k: 't', i: 0, s: [['\u2192 ', 'f'], [cmd, 'd']] }); shown = rows.length; partial = 0; return cmd; }
@@ -2505,9 +2506,53 @@ M.createTerminal = function createTerminal(opts){
     return changed;
   }
 
+  /* a new screen size (a phone turned, a window resized): the same machine on a new grid. History, files, the
+     line being typed and a running app all stay; scrollback rows wider than the grid are wrapped again, cards
+     are laid out afresh, and an app sees the new api.cols / api.rows (and scr) on its next render. */
+  function resize(asp, cols){
+    if (asp > 0.3 && asp < 3) aspect = asp;
+    if (cols >= 32) COLS = cols | 0;
+    H = Math.round(W / aspect); canvas.height = H;          // (resets the context: shaping and font are set again below)
+    cw = (W - 2 * PADX) / COLS; ch = Math.round(cw / 0.4 * LINE); fs = cw / advance;
+    ROWS = Math.floor((H - 64) / ch); PADY = Math.round((H - ROWS * ch) / 2);
+    fontStr = {}; curFont = ''; noShaping();
+    ENV.COLUMNS = String(COLS); ENV.LINES = String(ROWS);
+    grid.length = 0; for (let y = 0; y < ROWS; y++) grid.push(new Array(COLS));
+    scr.cols = COLS; scr.rows = ROWS; scr.clear();
+    if (app){ if (app.api){ app.api.cols = COLS; app.api.rows = ROWS; } if (gridCursor && (gridCursor.x >= COLS || gridCursor.y >= ROWS)) gridCursor = null; app.dirty = true; }
+    const next = [];
+    for (let a = 0; a < rows.length; a++){
+      const r = rows[a];
+      if (r.k === 't'){                          // a line and the rows it wrapped onto: joined, then wrapped again if too wide
+        let b = a + 1; while (b < rows.length && rows[b].k === 't' && rows[b].c && (rows[b].i || 0) === (r.i || 0)) b++;
+        const grp = rows.slice(a, b); a = b - 1;
+        if (!grp.some(x => lenOf(x) > COLS)){ next.push(...grp); continue; }
+        const first = r.s.map(x => x[0]).join('');
+        const hang = /^\s*[-*\u2022]\s/.test(first) ? '  ' : grp.length > 1 && grp[1].c === 1 ? /^\s*/.exec(grp[1].s.map(x => x[0]).join(''))[0].slice(0, 12) : '';   // a bullet's or a column's indent
+        const spans = [];
+        grp.forEach((x, k) => {
+          const ss = x.s.map(y => y.slice());
+          if (k && x.c !== 2){ while (ss.length && !ss[0][0].trim()) ss.shift(); if (ss.length){ ss[0][0] = ss[0][0].replace(/^\s+/, ''); spans.push([' ', 'n']); } }   // (an exact wrap joins as it was)
+          spans.push(...ss);
+        });
+        fitRow(spans, COLS - (r.i || 0) - hang.length).forEach((s, k) => next.push(k ? { k: 't', i: r.i, s: hang ? [[hang, 'n'], ...s] : s, c: 1 } : { k: 't', i: r.i, s, c: r.c }));
+        if (grp.includes(openRow)) openRow = null;
+        continue;
+      }
+      if (r.k === 'card' && r.spec){
+        const c = Object.assign(makeCard(r.spec), { sel: r.sel, done: r.done, flash: r.flash, foot: r.foot });
+        if (armed === r){ armed = c; setFoot(c); }
+        next.push(c); continue;
+      }
+      next.push(r);
+    }
+    rows = next; revealAll(); toBottom(); hoverKey = ''; lastFirst = -1; tabState = null;
+    dirty = true; draw();
+  }
+
   if (!booting) endBoot();
   draw();
-  return { canvas, handleKey, handleKeyUp, handleTap, hitTest, insertText, update, run, scroll, get cursorY(){ return promptY / H; },
+  return { canvas, handleKey, handleKeyUp, handleTap, hitTest, insertText, update, run, scroll, resize, get cursorY(){ return promptY / H; },
     get busy(){ return !!(app || job); } };   // a full-screen app or a running command: don't rebuild under it
 };
 })();
