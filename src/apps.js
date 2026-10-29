@@ -94,7 +94,7 @@ T.apps.tetris = {
       if (!fits(cur.p, cur.r, cur.x, cur.y)){ cur.y--; if (!fits(cur.p, cur.r, cur.x, cur.y)) gameOver(); }
     }
     function next(){ fill(); spawn(queue.shift()); fill(); canHold = true; }
-    const summary = () => api.print(`tetris: ${score} points, ${lines} lines, ` + (newHi ? 'a new high score' : 'best ' + Math.max(hi, score)));
+    const summary = () => api.print(`tetris: ${score} points, ${lines} lines, ` + (newHi ? 'a new best' : 'best ' + Math.max(hi, score)));
     function gameOver(){
       over = true;
       if (score > hi){ hi = score; newHi = true; hiSet(TETRIS_HI, hi); }
@@ -236,12 +236,13 @@ T.apps.tetris = {
           // a slim column: next, hold, the numbers, then how to play
           const rx = ox + W + 1, ry = oy;
           scr.put(rx, ry, 'NEXT', 'dim'); mini(queue[0], rx, ry + 1, 'bright');
-          scr.put(rx, ry + 4, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx, ry + 5, canHold ? 'normal' : 'faint');
+          const ny = TOUCH ? ry + 4 : ry + 8;                           // a phone has no hold key, so no hold box
+          if (!TOUCH){ scr.put(rx, ry + 4, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx, ry + 5, canHold ? 'normal' : 'faint'); }
           [['SCORE', score, 'bright'], ['HIGH', Math.max(hi, score), score > hi ? 'bright' : 'normal'], ['LEVEL', level, 'normal'], ['LINES', lines, 'normal']]
-            .forEach(([a, v, st], i) => { scr.put(rx, ry + 8 + i, a.padEnd(6), 'dim'); scr.put(rx + 6, ry + 8 + i, String(v), st); });
+            .forEach(([a, v, st], i) => { scr.put(rx, ny + i, a.padEnd(6), 'dim'); scr.put(rx + 6, ny + i, String(v), st); });
           const ks = TOUCH ? [['tap', ''], ['beside', 'move'], ['on it', 'turn'], ['below', 'drop']]
             : [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
-          ks.forEach(([a, b], i) => { if (ry + 13 + i >= scr.rows - 1) return; scr.put(rx, ry + 13 + i, a.padEnd(7), b ? 'normal' : 'faint'); scr.put(rx + 7, ry + 13 + i, b, 'faint'); });
+          ks.forEach(([a, b], i) => { const y = ny + 5 + i; if (y >= scr.rows - 1) return; scr.put(rx, y, a.padEnd(7), b ? 'normal' : 'faint'); scr.put(rx + 7, y, b, 'faint'); });
         } else if (compact){
           const rx = STACK ? ox + 2 : ox + W + 3, ry = STACK ? oy + BH + 3 : oy;
           scr.put(rx, ry, 'NEXT', 'dim'); mini(queue[0], rx, ry + 1, 'bright');
@@ -316,7 +317,7 @@ T.apps.snake = {
     const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
     const KEYMAP = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right', k: 'up', j: 'down', h: 'left', l: 'right' };
     let body, dir, queue, food, score, step, acc, paused, over, hi = hiGet(SNAKE_HI), newHi, t = 0, started, eaten;
-    const summary = () => api.print(`snake: ${score} points, length ${body.length}, ` + (newHi ? 'a new high score' : 'best ' + Math.max(hi, score)));
+    const summary = () => api.print(`snake: ${score} points, length ${body.length}, ` + (newHi ? 'a new best' : 'best ' + Math.max(hi, score)));
     function placeFood(){
       const taken = new Set(body.map(([x, y]) => x + ',' + y));
       if (taken.size >= GW * GH) return null;

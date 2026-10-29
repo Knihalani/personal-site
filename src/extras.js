@@ -492,7 +492,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
           scr.put(sx, sy, 'accuracy', 'dim'); scr.put(sx + 10, sy, acc() + '%', 'normal');
           scr.put(sx, sy + 1, 'time', 'dim'); scr.put(sx + 10, sy + 1, fmtHMS(secs()), 'normal');
           scr.put(sx, sy + 2, 'best', 'dim'); scr.put(sx + 10, sy + 2, best ? best + ' wpm' + (newBest ? '  new best' : '') : '-', newBest ? 'bright' : 'normal');
-          if (acc() < 80 && sy + 4 < H - 1) scr.put(sx, sy + 4, 'a best needs 80% accuracy', 'faint');
+          if (acc() < 80) center(scr, H - 3, 'a best needs 80% accuracy', 'faint');
           keysLine(scr, H - 1, TOUCH ? [['tap above', 'again'], ['q', 'quit']] : [['enter', 'again'], ['q', 'quit']]);
         } else {
           keysLine(scr, H - 1, TOUCH ? [['esc', 'quit']] : t0 ? [['tab', 'new passage'], ['esc', 'quit']] : [['start typing', ''], ['tab', 'new passage'], ['esc', 'quit']]);

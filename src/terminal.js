@@ -1427,7 +1427,8 @@ M.createTerminal = function createTerminal(opts){
     if (status === 0 && !j.dead) okRuns++;
     if (j.hint){ suggestion = j.hint; tty.rich(out().at(0, ['did you mean ', 'd'], chip(j.hint, 'b'), ['?  ' + (TAP ? 'tap it' : 'press enter'), 'f'])); j.plain += ' Did you mean ' + j.hint + '? Press Enter to run it.'; }
     if (ahead) flushAhead();
-    trim(); mirror(j.plain || ''); if (j.tail) mirror(j.tail); toBottom(); dirty = true; touched();
+    const held = scrollOff;                    // someone reading back up keeps their place; any key or the note brings them down
+    trim(); mirror(j.plain || ''); if (j.tail) mirror(j.tail); touched(); scrollOff = held;
     if (REDUCED) revealAll();
   }
   async function execList(list, j){
@@ -1668,20 +1669,26 @@ M.createTerminal = function createTerminal(opts){
     return false;
   }
   /* is there something to click at (fx, fy)? a chip, a card row or a link: for a pointer cursor */
+  /* also remembers what is under the pointer, so it can be lit (hitTest(-1, -1) when the pointer leaves) */
   function hitTest(fx, fy){
-    if (booting || app) return false;
+    const k = hitKey(fx, fy);
+    if (k !== hoverKey){ hoverKey = k; dirty = true; }
+    return !!k;
+  }
+  function hitKey(fx, fy){
+    if (booting || app) return '';
     const px = fx * W, py = fy * H;
-    if (px < X(1) || px > X(COLS - 1)) return false;
+    if (px < X(1) || px > X(COLS - 1)) return '';
     for (const r of drawnCards) for (const it of r.items){
       if (it.ai < 0) continue;
       const rt = r._top + ch * (it.y + 1);
-      if (py >= rt && py < rt + ch * it.n) return true;
+      if (py >= rt && py < rt + ch * it.n) return cardKeyOf(r._top, it);
     }
     for (const h of drawnHits){
       if (h.link.cmd && job) continue;
-      if (px >= h.x0 && px <= h.x1 && py >= h.top && py < h.bot) return true;
+      if (px >= h.x0 && px <= h.x1 && py >= h.top && py < h.bot) return spanKeyOf(h.x0, h.top);
     }
-    return false;
+    return '';
   }
   /* a key while io.ask is waiting */
   function askKey(e){
@@ -2014,9 +2021,9 @@ M.createTerminal = function createTerminal(opts){
       if (ctrl && c === 'l'){ clearScreen(); return true; }
       if (k === 'PageUp'){ scrollBy(ROWS - 2); return true; }
       if (k === 'PageDown'){ scrollBy(-(ROWS - 2)); return true; }
-      if (k.length === 1 && !ctrl && !alt){ if (ahead.length < 400) ahead += k; return true; }     // typed ahead: lands on the next prompt
-      if (k === 'Enter' && !alt){ if (ahead.length < 400) ahead += '\n'; return true; }            // ...and Enter queues it, like a real tty
-      if (k === 'Backspace'){ ahead = ahead.slice(0, -1); return true; }
+      if (k.length === 1 && !ctrl && !alt){ if (ahead.length < 400) ahead += k; dirty = true; return true; }     // typed ahead: lands on the next prompt
+      if (k === 'Enter' && !alt){ if (ahead.length < 400) ahead += '\n'; dirty = true; return true; }            // ...and Enter queues it, like a real tty
+      if (k === 'Backspace'){ ahead = ahead.slice(0, -1); dirty = true; return true; }
       return ['Enter', 'Escape'].includes(k);
     }
     if (rs) return searchKey(e);
@@ -2097,7 +2104,7 @@ M.createTerminal = function createTerminal(opts){
     }
     if (armed && !job) disarm();                // phones: typing moves on from a card
     if (job && job.ask){ for (const ch of String(str)){ if (!job || !job.ask) break; askKey({ key: ch === '\n' || ch === '\r' ? 'Enter' : ch, ctrlKey: false, altKey: false }); } return; }
-    if (job){ ahead = (ahead + String(str).replace(/\r\n?/g, '\n').replace(/\t/g, ' ')).slice(0, 4000); return; }
+    if (job){ ahead = (ahead + String(str).replace(/\r\n?/g, '\n').replace(/\t/g, ' ')).slice(0, 4000); dirty = true; return; }
     if (rs){ for (const ch of String(str)) searchKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false }); return; }
     if (typing()) revealAll();
     const parts = String(str).replace(/\t/g, ' ').split(/\r\n?|\n/);
@@ -2149,6 +2156,7 @@ M.createTerminal = function createTerminal(opts){
       const on = (active && it.ai === r.sel) || flashing;
       if (flashing){ g.fillStyle = P.bright; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
       if (on && !flashing){ g.fillStyle = P.normal; g.fillRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
+      else if (!flashing && it.ai >= 0 && hoverKey === cardKeyOf(top, it)){ g.strokeStyle = P.dim; g.lineWidth = 2; g.strokeRect(X(2), rt + 3, X(COLS - 2) - X(2), ch * it.n - 6); }
       const st = s => on ? 'z' : s;
       if (it.ai >= 0 && active) text(String(it.ai + 1), 3, rt, st('f'));   // numbers only while choosing: that is when digits work
       text(it.label, 5, rt, st('d'));
@@ -2185,12 +2193,13 @@ M.createTerminal = function createTerminal(opts){
       const link = sp[2];
       const selected = sp[1] === 'i';
       if (selected){ g.fillStyle = P.normal; g.fillRect(X(col) - 3, top + 1, s.length * cw * k + 6, ch * k - 2); }
-      setFont(k); g.fillStyle = selected ? P.bg : color(sp[1]);
+      const hov = link && !selected && hoverKey && hoverKey === spanKeyOf(X(col), top);
+      setFont(k); g.fillStyle = selected ? P.bg : hov ? P.bright : color(sp[1]);
       if (k === 1 && SPAN_VEC.test(s)){                // arrows and the lock, drawn: VT323 has neither
         fillT(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
         for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : color(sp[1]));
       } else fillT(s, X(col), top + fs * k * 0.68);
-      if (link && !selected){ g.fillStyle = link.cmd || link.stop ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, 2); }
+      if (link && !selected){ g.fillStyle = hov ? P.normal : link.cmd || link.stop ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, hov ? 3 : 2); }
       if (link && (link.cmd || link.url || link.stop) && s.trim()) drawnHits.push({ x0: X(col), x1: X(col + s.length * k), top, bot: top + ch * k, link });
       col += s.length * k;
     }
@@ -2293,6 +2302,8 @@ M.createTerminal = function createTerminal(opts){
     }
   }
   let drawnCards = [], drawnHits = [];   // what is on screen and can be clicked or tapped
+  let hoverKey = '', lastFirst = -1, lastTotal = 0;   // the clickable thing under the mouse; the view, to notice it move
+  const cardKeyOf = (top, it) => 'c' + Math.round(top) + ':' + it.ai, spanKeyOf = (x0, top) => 's' + Math.round(x0) + ':' + Math.round(top);
   const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\u2022\ue000~]/g;
   const SPAN_VEC = /[\u2190-\u2193\u2022\ue000~]/, SPAN_VEC_G = /[\u2190-\u2193\u2022\ue000~]/g;
   function vecGlyph(c, col, top, colr){
@@ -2360,8 +2371,11 @@ M.createTerminal = function createTerminal(opts){
     if (app){ drawGrid(); return; }
     // lay out units bottom-anchored
     const total = totalUnits();
+    if (scrollOff > 0 && total > lastTotal) scrollOff += total - lastTotal;   // scrolled up: hold the view while output arrives
+    lastTotal = total;
     scrollOff = clamp(scrollOff, 0, Math.max(0, total - ROWS));
     const first = Math.max(0, total - ROWS - scrollOff);
+    if (first !== lastFirst){ lastFirst = first; hoverKey = ''; }
     /* a short history (the welcome) sits a little below the top of the tube, not jammed against it */
     // the welcome sits a little lower on the landscape tube; a phone column starts at the top
     const lift = !TAP && aspect > 1 && rows.length && rows[0].wel ? clamp(ROWS - total, 0, Math.min(4, Math.round(ROWS / 6))) : 0;
@@ -2396,6 +2410,8 @@ M.createTerminal = function createTerminal(opts){
       belowPrompt().forEach((r, k) => { const y = u + 1 + k; if (y >= first && y < first + ROWS) drawSpans({ i: 0, s: r }, PADY + (y - first + lift) * ch, 999); });
     } else if (job && job.ask && !app && !typing()){
       if (u >= first && u < first + ROWS) drawAsk(PADY + (u - first + lift) * ch);
+    } else if (job && !app && !typing() && ahead && u >= first && u < first + ROWS){
+      drawSpans({ i: 0, s: [[ahead.replace(/\n/g, ' ').slice(-(COLS - 1)), 'd']] }, PADY + (u - first + lift) * ch, 999);   // typed ahead: echoed now, run at the prompt
     } else if (job && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
       drawSpans({ i: 0, s: [[TAP ? 'tap here to stop' : COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 'f', { stop: true }]] }, PADY + (u - first + lift) * ch, 999);
     }
