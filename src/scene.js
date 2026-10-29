@@ -764,6 +764,11 @@ M.createScene = function createScene(container){
   const LOOK = { down: 35 * D2R };
   const REST_FILL = .76;                      // glass height / frame height at rest
   const YAW_REST = 7 * D2R, YAW_FULL = 8 * D2R, UP_MAX = 2.5 * D2R;   // how far the head turns: little while reading, more when leaned back
+  /* while reading, the head never turns so far that a column of text leaves the frame: on a narrow (4:3) window the
+     turn is trimmed to what the frame can spare (see solveShots). leanAt: where the lean starts, in the pointer's
+     ny (-1..1): the bottom edge of the glass in the resting view, so the lean begins the moment the pointer leaves
+     the tube downward and ramps continuously from there (no jump when it crosses the edge) */
+  let yawRest = YAW_REST, leanAt = .78, leanEnd = .97;
   const flatN = new V3(screenNormal.x, 0, screenNormal.z).normalize();
   const EYE_D = .6, EYE_UP = .125;
   const eyeRest = screenCenter.clone().addScaledVector(flatN, EYE_D); eyeRest.y = screenCenter.y + EYE_UP;
@@ -781,7 +786,9 @@ M.createScene = function createScene(container){
   const camN = screenNormal.clone().normalize();
   const camQS = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new V3(), camN.clone().negate(), new V3(0, 1, 0)));
   const camUpS = new V3(0, 1, 0).applyQuaternion(camQS);
-  const FULL = { back: .62, up: .42, kbFront: .05 };
+  /* kbFront: margin in front of the board, so the wrists and the cuffs (the hands are the subject) are in frame,
+     not cut at the knuckles. fullPts also hold the case's top edge, so the machine is never beheaded */
+  const FULL = { back: .62, up: .42, kbFront: .085 };
   const eyeFull = eyeRest.clone().addScaledVector(flatN, FULL.back); eyeFull.y += FULL.up;
   eyeFull.x = (screenCenter.x + keyboardCenter.x) / 2;
   const fullPts = (() => {
@@ -789,9 +796,10 @@ M.createScene = function createScene(container){
     for (const sx of [-1, 1]) for (const sy of [-1, 1]) ps.push(screenCenter.clone().addScaledVector(gx, sx * (GW / 2 + .035)).add(new V3(0, sy * (GH / 2 + .035), 0)));
     const kx = new V3(Math.cos(KB.yaw), 0, -Math.sin(KB.yaw)), kz = new V3(Math.sin(KB.yaw), 0, Math.cos(KB.yaw));
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) ps.push(keyboardCenter.clone().addScaledVector(kx, sx * (KB.w / 2 + .02)).addScaledVector(kz, sz > 0 ? KB.d / 2 + FULL.kbFront : -KB.d / 2));
+    for (const sx of [-1, 1]) ps.push(computer.localToWorld(new V3(sx * CW * .4, CH / 2 + .012, CD / 2 - .03)));
     return ps;
   })();
-  const shot = { screen: { pos: new V3(), q: new THREE.Quaternion(), fov: 30 }, full: { pos: eyeFull.clone(), q: new THREE.Quaternion(), fov: 40 } };
+  const shot = { screen: { pos: new V3(), q: new THREE.Quaternion(), fov: 30, aim: screenCenter.clone() }, full: { pos: eyeFull.clone(), q: new THREE.Quaternion(), fov: 40, aim: new V3() } };
   function solveShots(){
     // screen: the glass fills ~72% of the height (or ~84% of the width on narrow windows), dead centre, square-on,
     // so the bezel and a margin of the case frame it all round
@@ -799,6 +807,12 @@ M.createScene = function createScene(container){
     const need = Math.max((GH / 2) / REST_FILL, (GW / 2) / (.84 * aspect));
     shot.screen.pos.copy(screenCenter).addScaledVector(camN, need / tv).addScaledVector(camUpS, .0);
     shot.screen.q.copy(camQS); shot.screen.fov = fovS;
+    // the text's half-width as seen from the reading eye, vs the frame's half-width: the turn keeps a 1.5 deg margin
+    const dS = need / tv, textHalf = Math.atan(GW / 2 * (1 - 2 * screenU.uInset.value.x) / dS), hHalf = Math.atan(tv * aspect);
+    yawRest = clamp(hHalf - textHalf - 1.5 * D2R, 2.5 * D2R, YAW_REST);
+    // the glass's bottom edge in the resting frame (exact, through the bulge): the lean starts just below it
+    const gb = glass.localToWorld(new V3(0, -GH / 2, 0)).sub(shot.screen.pos).applyQuaternion(camQS.clone().invert());
+    leanAt = clamp(gb.y / gb.z / tv + .02, .55, .9); leanEnd = Math.min(.985, leanAt + .19);
     // full: aim and fov solved so the machine, keyboard and hands sit centred with a small margin
     const inv = new THREE.Matrix4(), m = new THREE.Matrix4(), e = new THREE.Euler(0, 0, 0, 'YXZ');
     let yaw = YAW0, pitch = PITCH0 - .3, tvv = .3, th = .3;
@@ -812,20 +826,30 @@ M.createScene = function createScene(container){
       tvv = Math.tan((vmax - vmin) / 2); th = Math.tan((hmax - hmin) / 2);
     }
     shot.full.fov = Math.min(85, 2 * Math.atan(Math.max(tvv, th / aspect) * 1.02) / D2R);
+    // the point the lean view is centred on, at the depth of the subject (the middle of the machine and the board):
+    // the lean moves the eye's aim along the line between the two shots' subjects, so the frame never drifts off them
+    const mid = new V3(); for (const p of fullPts) mid.add(p); mid.multiplyScalar(1 / fullPts.length);
+    shot.full.aim.set(0, 0, -1).applyQuaternion(shot.full.q).multiplyScalar(mid.distanceTo(eyeFull)).add(eyeFull);
   }
   const _q = new THREE.Quaternion();
-  const _qy = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _Y = new V3(0, 1, 0), _X = new V3(1, 0, 0);
+  const _qy = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _Y = new V3(0, 1, 0), _X = new V3(1, 0, 0), _aim = new V3(), _m4 = new THREE.Matrix4();
   function applyCamera(){
     // the pointer looks around: down leans back toward the full view (the hands), sideways/up turn the head a little
     const down = clamp(-pitchS.x / LOOK.down, 0, 1);
     const k = sstep(0, 1, down);
-    // narrow windows turn less, so the glass never leaves more than ~15% of itself out of frame while reading, and
-    // the whole keyboard stays in the lean view at either extreme
-    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * lerp(YAW_REST * Math.min(1, Math.pow(aspect / 1.25, 1.8)), YAW_FULL * Math.min(1, Math.pow(aspect / 1.6, 1.5)), k);
+    // while reading the turn is capped so no text leaves the frame (yawRest, solved per aspect); leaned back, narrow
+    // windows turn less so the whole keyboard stays in the lean view at either extreme
+    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * lerp(yawRest, YAW_FULL * Math.min(1, Math.pow(aspect / 1.6, 1.5)), k);
     camera.position.lerpVectors(shot.screen.pos, shot.full.pos, k);
     // the head travels a slight arc (up and back first) rather than a straight dolly
     camera.position.y += Math.sin(k * Math.PI) * .04;
-    _q.copy(shot.screen.q).slerp(shot.full.q, k);
+    /* orientation: look at a point that slides from the tube to the lean view's subject. A plain slerp between the two
+       shots turned the head faster than it moved, so halfway through the view looked over the top of the machine at
+       the wall; aiming keeps the machine (then the board and hands) in frame for the whole move. Both ends are exact:
+       each shot is square to its own aim with no roll */
+    if (k <= 0) _q.copy(shot.screen.q);
+    else if (k >= 1) _q.copy(shot.full.q);
+    else { _aim.lerpVectors(shot.screen.aim, shot.full.aim, k); _m4.lookAt(camera.position, _aim, _Y); _q.setFromRotationMatrix(_m4); }
     _qy.setFromAxisAngle(_Y, lookYaw); _qp.setFromAxisAngle(_X, lookUp * (1 - .5 * k));
     camera.quaternion.copy(_qy).multiply(_q).multiply(_qp);
     const fov = lerp(shot.screen.fov, shot.full.fov, k);
@@ -833,14 +857,15 @@ M.createScene = function createScene(container){
   }
   /* never see inside the typist's head: anything added to the scene whose bounds wrap the eye is hidden */
   const added = [], hidden = new Set(), _sph = new THREE.Sphere();
+  const nearEye = m => {
+    if (!m.isMesh || !m.visible || !m.geometry) return;
+    if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+    _sph.copy(m.geometry.boundingSphere).applyMatrix4(m.matrixWorld);
+    if (_sph.distanceToPoint(camera.position) < camera.near + .045){ m.visible = false; hidden.add(m); }
+  };
   function hideNearEye(){
     for (const m of hidden){ m.visible = true; } hidden.clear();
-    for (const root of added) root.traverse(m => {
-      if (!m.isMesh || !m.visible || !m.geometry) return;
-      if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
-      _sph.copy(m.geometry.boundingSphere).applyMatrix4(m.matrixWorld);
-      if (_sph.distanceToPoint(camera.position) < camera.near + .045){ m.visible = false; hidden.add(m); }
-    });
+    for (const root of added) root.traverse(nearEye);
   }
 
   /* ================= SCREEN TEXTURE & GLOW ================= */
@@ -938,12 +963,13 @@ M.createScene = function createScene(container){
     /* nx, ny in -1..1 from the pointer (0,0 = the screen). ny > 0 looks down toward the keyboard. */
     setLook(nx, ny){
       nx = clamp(+nx || 0, -1, 1); ny = clamp(+ny || 0, -1, 1);
-      // a wide dead zone around the reading view: the whole upper half of the window and the middle band are rest,
-      // so the screen holds still while the cursor wanders over it. Leaning back starts three quarters of the way down and is complete near the bottom edge.
-      // yaw is normalised here (-1..1) and scaled in applyCamera: ~4.5 deg while reading, ~10 deg leaned back.
+      // a dead zone around the reading view: the middle band of the window holds still while the cursor reads.
+      // Leaning back starts at the bottom edge of the glass (leanAt, ~88% down the window) and is complete just
+      // above the bottom edge, a ~10% band: the pointer over the tube never pulls the view (main.js holds ny <= 0 there too).
+      // yaw is normalised here (-1..1) and scaled in applyCamera: up to 7 deg while reading, 8 deg leaned back.
       const ax = Math.abs(nx), sx = sstep(.18, .95, ax);
       yawS.t = -Math.sign(nx) * sx;
-      pitchS.t = ny > 0 ? -sstep(.5, .92, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
+      pitchS.t = ny > 0 ? -sstep(leanAt, leanEnd, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
     },
     /* a keystroke: skips the intro reveal and wakes the (idle-throttled) renderer */
     nudge(){ skipIntro(); sinceMove = 0; },
@@ -1015,7 +1041,7 @@ M.createScene = function createScene(container){
     },
   };
   // test hook only: ?debug exposes the camera springs (e.g. pitchS.x = pitchS.t = -LOOK.down to force the lean)
-  if (/[?&]debug\b/.test(location.search)) api._dbg = { yawS, pitchS, intro, shot, LOOK, lampS };
+  if (/[?&]debug\b/.test(location.search)) api._dbg = { yawS, pitchS, intro, shot, LOOK, lampS, view: () => ({ yawRest, leanAt, leanEnd, fullFov: shot.full.fov }) };
   api.resize(container.clientWidth || innerWidth, container.clientHeight || innerHeight);
   return api;
 };

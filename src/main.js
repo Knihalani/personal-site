@@ -39,6 +39,11 @@ function deepLinks(getTerm, signal){
   addEventListener('hashchange', fromHash, { signal });
   return fromHash;
 }
+/* wheel deltas in pixels: a line-based wheel (Firefox with a mouse reports 3 lines a notch) or a page-based one
+   would otherwise move the terminal 1/40 as far as a trackpad. Ctrl+wheel (and a trackpad pinch) is left to the
+   browser's zoom */
+const wheelPx = e => e.deltaY * (e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? innerHeight : 1);
+
 /* start once the fonts are in (or after 1.5 s, whichever comes first) */
 function whenReady(go){
   (D.fonts ? Promise.race([D.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve())
@@ -67,6 +72,7 @@ let dead = false, raf = 0;
 function toFlat(why){
   if (dead) return; dead = true; console.warn('3D off:', why);
   ac.abort(); cancelAnimationFrame(raf); hint.hidden = true;
+  delete M.world;   // the lamp command must not list or drive a scene that is gone
   try { api.renderer.dispose(); } catch (e){}
   stage.textContent = ''; flat(term);   // the same terminal carries on: scrollback, cwd, a running app
 }
@@ -112,7 +118,7 @@ on(kbd, 'compositionend', takeText);
 on(kbd, 'keydown', e => { if (reading()) return; if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key) || e.key.startsWith('Arrow')){ onDown(e); e.stopPropagation(); } });
 on(kbd, 'keyup', e => { onUp(e); e.stopPropagation(); });
 /* the wheel scrolls the terminal; the cursor looks around, and moving it down leans back to the whole desk */
-on(window, 'wheel', e => { if (reading()) return; if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
+on(window, 'wheel', e => { if (reading() || e.ctrlKey) return; if (term.scroll){ term.scroll(wheelPx(e)); e.preventDefault(); hover(); } }, { passive: false });
 on(stage, 'pointerdown', () => unlock());
 /* clicking the tube: command words and card rows on the terminal are clickable (the scene maps the click to the canvas) */
 on(stage, 'click', e => {
@@ -123,23 +129,35 @@ on(stage, 'click', e => {
 });
 
 /* the one hint: shown once, gone after the first lean or ~12 s. Without pointer look (reduced motion) there is none */
-let hintT = 0, hintIn = 0;
+let hintT = 0, hintIn = 0, px = -1, py = -1, movedAt = -9;
 const hideHint = () => { if (!hintT) return; clearTimeout(hintT); clearTimeout(hintIn); hintT = 0; hint.style.opacity = '0'; setTimeout(() => { hint.hidden = true; }, 1300); };
-on(window, 'pointermove', e => {
-  if (e.pointerType !== 'mouse' || reading()) return;
-  const p = api.pickScreen ? api.pickScreen(e.clientX, e.clientY) : null;
-  if (!REDUCED){
-    // over the tube the head holds still, so the bottom rows can be reached and clicked; leaning back starts
-    // once the pointer leaves the glass (below it, or beside it low down)
-    const ny = e.clientY / innerHeight * 2 - 1;
-    look(e.clientX / innerWidth * 2 - 1, p ? Math.min(ny, 0) : ny);
-    if (ny > 0.5 && !p) hideHint();
-  }
-  // clickable words on the tube get a pointer (and light up)
+/* clickable words on the tube get a pointer (and light up). Run again while the view is still settling after a move
+   and after a scroll, so the highlight follows what is really under the cursor, not what was there */
+function hover(p){
+  if (px < 0) return;
+  if (p === undefined) p = api.pickScreen ? api.pickScreen(px, py) : null;
   const want = term.hitTest && term.hitTest(p ? p.u : -1, p ? p.v : -1) ? 'pointer' : '';   // (-1, -1) clears the hover
   if (stage.style.cursor !== want) stage.style.cursor = want;
+}
+on(window, 'pointermove', e => {
+  if (e.pointerType !== 'mouse' || reading()) return;
+  px = e.clientX; py = e.clientY; movedAt = performance.now();
+  const p = api.pickScreen ? api.pickScreen(px, py) : null;
+  if (!REDUCED){
+    // over the tube the head holds still, so the bottom rows can be reached and clicked; leaning back starts just
+    // below the glass's bottom edge (scene.js setLook), so it ramps in from where the tube ends, with no jump
+    const ny = e.clientY / innerHeight * 2 - 1;
+    look(e.clientX / innerWidth * 2 - 1, p ? Math.min(ny, 0) : ny);
+    if (ny > 0.8 && !p) hideHint();   // a real lean (it starts ~0.75)
+  }
+  hover(p);
 });
-on(D.documentElement, 'mouseleave', () => { look(0, 0); if (term.hitTest) term.hitTest(-1, -1); });
+/* the pointer leaves the window: the head comes back to the tube, unless it left through the bottom edge, which is
+   just a lean that overshot (in a window above the dock or taskbar): that keeps the desk in view */
+on(D.documentElement, 'mouseleave', e => {
+  if (!(e.clientY >= innerHeight - 4 && e.clientX > 0 && e.clientX < innerWidth)) look(0, 0);
+  px = py = -1; if (term.hitTest) term.hitTest(-1, -1);
+});
 
 /* the GPU dropped the context (driver reset, GPU switch, too many tabs). three.js r147's restore leaves this scene
    black, so go straight to the flat terminal; a reload brings the room back */
@@ -166,6 +184,7 @@ function frame(now){
   try { if (term.update(dt, T)){ api.markScreenDirty(); if (api.setScreenLum && term.lum != null) api.setScreenLum(term.lum); } } catch (e){ oops(e); }
   if (reading()) return;   // the reader sheet covers the room: hold the last frame and save the GPU
   try { typist.update(dt, T); } catch (e){ oops(e); }
+  if (now - movedAt < 1200) hover();   // the view is still easing under a pointer that has stopped
   if (gl.isContextLost()) return;   // the contextlost event is on its way (see above)
   try { api.update(dt, T); api.render(); } catch (e){ oops(e); if (++bad > 9) toFlat('the 3D view kept failing'); }
   if ((runT += raw) > 2){ spanT += raw; if (raw > .06) slowT += raw; if (spanT > 5){ if (slowT / spanT > .5) degrade(); spanT = slowT = bad = 0; } }
@@ -230,7 +249,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     else if (e.target === kbd && e.key.length === 1 && !e.ctrlKey) e.preventDefault();
   });
   addEventListener('keyup', e => { if (!reading() && term.handleKeyUp) term.handleKeyUp(e); });
-  addEventListener('wheel', e => { if (reading() || !term.scroll) return; term.scroll(e.deltaY); e.preventDefault(); }, { passive: false });
+  addEventListener('wheel', e => { if (reading() || !term.scroll || e.ctrlKey) return; term.scroll(wheelPx(e)); e.preventDefault(); }, { passive: false });
   stage.addEventListener('pointerdown', () => { unlock(); });
   stage.addEventListener('pointermove', e => {
     if (e.pointerType !== 'mouse' || !term.hitTest) return;

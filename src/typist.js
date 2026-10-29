@@ -29,6 +29,36 @@ class VSpring {
   }
 }
 const S = x => ({ x, v: 0 });
+/* Minimum-jerk follower: each frame, plan the quintic from the current position, velocity and acceleration to the
+   target (at rest there) arriving in T seconds, and advance along it by dt. Re-planned every frame from the live state,
+   so a target that jumps (a new stroke, a stroke handing over to the next) only bends the path: position, velocity
+   and acceleration stay continuous, the speed profile stays bell-shaped, and it is exact for any frame time.
+   s = {x, v, a} (Vector3s). The wrists ride on this: a spring stiff enough to land a reach on time snapped the hand
+   across most of the distance in a single frame. */
+function minJerk(s, target, T, dt){
+  if (dt <= 0) return s.x;
+  if (dt >= T){ s.x.copy(target); s.v.set(0, 0, 0); s.a.set(0, 0, 0); return s.x; }
+  const T2 = T * T, T3 = T2 * T, T4 = T3 * T, T5 = T4 * T, t = dt, t2 = t * t, t3 = t2 * t, t4 = t3 * t, t5 = t4 * t;
+  for (const c of 'xyz'){
+    const p0 = s.x[c], v0 = s.v[c], a0 = s.a[c], h = target[c] - p0;
+    const c3 = (20 * h - 12 * v0 * T - 3 * a0 * T2) / (2 * T3), c4 = (-30 * h + 16 * v0 * T + 3 * a0 * T2) / (2 * T4), c5 = (12 * h - 6 * v0 * T - a0 * T2) / (2 * T5);
+    s.x[c] = p0 + v0 * t + a0 / 2 * t2 + c3 * t3 + c4 * t4 + c5 * t5;
+    s.v[c] = v0 + a0 * t + 3 * c3 * t2 + 4 * c4 * t3 + 5 * c5 * t4;
+    s.a[c] = a0 + 6 * c3 * t + 12 * c4 * t2 + 20 * c5 * t3;
+  }
+  return s.x;
+}
+/* the same for one number: s = {x, v, a} */
+function minJerk1(s, target, T, dt){
+  if (dt <= 0) return s.x;
+  if (dt >= T || (Math.abs(target - s.x) < 1e-5 && Math.abs(s.v) < 1e-4)){ s.x = target; s.v = s.a = 0; return s.x; }   // (a receding plan only creeps in)
+  const T2 = T * T, t = dt, p0 = s.x, v0 = s.v, a0 = s.a, h = target - p0;
+  const c3 = (20 * h - 12 * v0 * T - 3 * a0 * T2) / (2 * T2 * T), c4 = (-30 * h + 16 * v0 * T + 3 * a0 * T2) / (2 * T2 * T2), c5 = (12 * h - 6 * v0 * T - a0 * T2) / (2 * T2 * T2 * T);
+  s.x = p0 + t * (v0 + t * (a0 / 2 + t * (c3 + t * (c4 + t * c5))));
+  s.v = v0 + t * (a0 + t * (3 * c3 + t * (4 * c4 + t * 5 * c5)));
+  s.a = a0 + t * (6 * c3 + t * (12 * c4 + t * 20 * c5));
+  return s.x;
+}
 /* Smooth 1D value noise (quintic fade) and a 3-octave sum in about -1..1: idle drift that never reads as a sine. */
 const hash1 = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 function noise1(x){ const i = Math.floor(x), f = x - i, u = f * f * f * (f * (f * 6 - 15) + 10); const a = hash1(i); return (a + (hash1(i + 1) - a) * u) * 2 - 1; }
@@ -346,10 +376,10 @@ M.createTypist = function createTypist(api){
       fingers.push({ h, f, base, g0, g1, g2, L: FL[f], T: TABLES[f], clear: FR[f][3] / TIPFL * 1.12 * HS + .0003,
         mode: 'idle', code: null, vcode: null, real: false, pressed: false, upReq: false, t: 0, tC: 0, Td: .08, lift: .005, relT: 9,
         w: S(0), depth: S(0), act: 0, K: V3(), from: V3(), P: V3(), tip: V3(), restLocal: V3(), restHome: V3(), reach: V3(),
-        fid: new VSpring(V3()), fidT: V3(), queue: [], vel: V3(), prevP: V3(), v0: V3(), hNow: 0, wW: 30 });
+        fid: new VSpring(V3()), fidT: V3(), queue: [], vel: V3(), prevP: V3(), v0: V3(), hNow: 0 });
     }
     hands.push({ h, side, ts, KN, hand, upper, fore, fingers, homeW: V3(), homeQ: new THREE.Quaternion(), deskW: V3(), deskQ: new THREE.Quaternion(),
-      W: null, Wt: null, hold: V3(), region: null, nudge: V3(), lastActive: -9, yaw: S(0), desk: S(0), deskT: 0, elbowOut: S(0),
+      W: null, Wt: null, hold: V3(), region: null, nudge: V3(), lastActive: -9, yaw: S(0), desk: { x: 0, v: 0, a: 0 }, deskT: 0, elbowOut: S(0),
       fidAt: 2 + Math.random() * 4, fidF: null });
   }
 
@@ -403,7 +433,7 @@ M.createTypist = function createTypist(api){
           H.KN[f].copy(tipH(inv, f).sub(tipOff(F, P[0], P[1], H.ts * P[2]))); F.base.position.copy(H.KN[f]);
         }
       }
-      H.W = new VSpring(H.homeW); H.Wt = new VSpring(H.homeW); H.hold.copy(H.homeW); H.region = new VSpring(H.homeW);
+      H.W = { x: H.homeW.clone(), v: V3(), a: V3() }; H.hold.copy(H.homeW); H.region = new VSpring(H.homeW);
       const inv = new THREE.Matrix4().compose(H.homeW, H.homeQ, V3(HS, HS, HS)).invert();
       const ixLat = homes[0].clone().sub(space || C).dot(lat);
       const half = 2.7 * U_KEY;
@@ -455,6 +485,7 @@ M.createTypist = function createTypist(api){
   const act = S(0), lean = S(lean0), sway = S(0), twist = S(0);
   let swayT = 0, swayAt = 6, lampRef = null, lampMax = 0, lampFind = 0, bPh = Math.random() * 6;
   const ZERO = V3(), vI = V3(), v1 = V3(), v2 = V3(), v3 = V3(), v4 = V3(), vS = V3(), mB = new THREE.Matrix4();
+  const vT = V3(), aD = V3(), aPole = V3(), aE = V3(), fY = V3(), fX = V3(), fZ = V3(), xUp = V3(), xFo = V3();   // arm scratch: no allocation per frame
 
   const snd = (c, d) => { try { if (M.sound && M.sound.key) M.sound.key(c, d); } catch (e){} };
   const doPress = c => { if (!down.has(c)){ down.add(c); try { kb.press(c); } catch (e){} snd(c, true); } };
@@ -578,8 +609,6 @@ M.createTypist = function createTypist(api){
     F.Td = clamp(.04 + dist * .2 + move * .25 + Math.max(0, dist - .025) * .9 + Math.max(0, move - .012) * .9, .04, .13) + .14 * H.desk.x;
     // a finger lifting off its resting cap rises a couple of mm; one already travelling arcs higher over the keys between
     F.lift = (F.f === 0 ? .0012 : resting ? .003 : .0018) + clamp(dist - .012, 0, .05) * (F.f === 0 ? .05 : .11);
-    // wrist stiffness: lands the hand with the finger on a big reach; lazy when the finger alone can make up the gap
-    F.wW = 16 + (clamp(7.6 / Math.max(.03, F.Td + (delay || 0)), 30, 120) - 16) * smooth(.002, .008, move);
     owner.set(code, F);
     lastKey = T;
     if (F.f !== 0 && !MOD.test(code)) lastHand = F.h;
@@ -628,6 +657,11 @@ M.createTypist = function createTypist(api){
     if (bestL){ bestL.getWorldPosition(U.uLampP.value); lamped = true; }
   }
 
+  /* a limb segment's frame: y along the bone, x from a hint (so the cloth keeps a stable roll) */
+  function armFrame(g, from, to, xHint){
+    const yA = fY.copy(to).sub(from).normalize(), xA = fX.copy(xHint).addScaledVector(yA, -xHint.dot(yA)).normalize(), zA = fZ.copy(xA).cross(yA);
+    g.position.copy(from); g.quaternion.setFromRotationMatrix(mB.makeBasis(xA, yA, zA));
+  }
   function update(dt, t){
     dt = clamp(dt || 0, 0, .05); T += dt;
     if (!lamped && (lampScan -= dt) <= 0){ lampScan = 1.5; findLamp(); }
@@ -654,7 +688,9 @@ M.createTypist = function createTypist(api){
     /* ---- long idle: now and then one hand comes off the keys to rest on the desk ---- */
     /* the resting spot is below the lean-back frame: while the visitor looks down at the desk, both hands stay on
        (or come back to) the keys, so the view never shows a one-handed typist */
-    const watched = api.camera && api.camera.getWorldDirection(v1).y < -.3;
+    // (the reading view looks ~6 deg down; the hands start back as soon as the head begins to lean, so they are on the
+    // keys by the time the lean view settles, not still walking in from the desk)
+    const watched = api.camera && api.camera.getWorldDirection(v1).y < -.17;
     if (watched){ for (const H of hands) H.deskT = 0; deskCheck = Math.max(deskCheck, 3); }
     else if (T - lastKey > 8 && (deskCheck -= dt) <= 0){
       deskCheck = 4 + Math.random() * 6;
@@ -669,7 +705,7 @@ M.createTypist = function createTypist(api){
          most), through a cascaded spring: a bell-shaped speed with no snap at either end. Small reaches drive it
          lazily (the fingers do the work, so fast typing leaves the hands nearly still); big ones (digits, Backspace,
          Enter) bring the hand, and with it the forearm and elbow, in time for contact. Quiet again, it eases home. */
-      const tgt = v2.set(0, 0, 0); let wsum = 0, lead = null, wW = 0;
+      const tgt = v2.set(0, 0, 0); let wsum = 0, lead = null, due = 9;
       for (const F of H.fingers){
         if (F.mode !== 'strike' && F.mode !== 'hold') continue;
         // (a thumb going for the bar while its hand is out on a reach brings the hand back with it)
@@ -677,50 +713,49 @@ M.createTypist = function createTypist(api){
           * (MOD.test(F.code || '') ? 2 : 1) : MOD.test(F.code || '') ? .3 : F.f === 0 ? .12 : .45;     // a pinky holding Shift anchors the hand
         tgt.addScaledVector(F.reach, wgt); wsum += wgt;
         if (F.mode === 'strike'){
-          wW = Math.max(wW, F.wW);
+          due = Math.min(due, F.Td - F.t);   // time until the next contact on this hand
           if (F.t / F.Td > .5 && (!lead || F.t / F.Td > lead.t / lead.Td)) lead = F;   // the finger about to land
         }
       }
-      let w;
+      /* how long the wrist takes to get there: a stroke in flight wants it by contact (never under ~80 ms: the finger
+         reaches the last few mm, and anything quicker reads as a twitch); between strokes and at rest it eases */
+      let Tw;
       if (wsum > 0){
         tgt.multiplyScalar(1 / wsum).add(H.homeW);
-        H.hold.copy(tgt); H.lastActive = T; w = wW || 20;
+        H.hold.copy(tgt); H.lastActive = T; Tw = due < 9 ? clamp(due, .08, .2) : .16;
         H.region.step(tgt, 5, dt);
       } else {
         const q = T - H.lastActive;
         H.region.step(H.homeW, q < .6 ? .5 : 2.5, dt);
-        w = q < .4 ? 15 : 9;
+        Tw = q < .4 ? .28 : .45;
         // at rest: the breath lifts the wrist a little, and it wanders by about a millimetre (noise, not a sine)
         H.hold.copy(H.homeW).lerp(H.region.x, .35).addScaledVector(n, .0009 * (1 + breath) + .0004 * fbm(T * .37, 10 + H.h))
           .addScaledVector(kfw, .0011 * fbm(T * .21, 20 + H.h)).addScaledVector(lat, .0009 * fbm(T * .17, 30 + H.h));
       }
-      H.Wt.step(H.hold, w, dt);
-      const W = H.W.step(H.Wt.x, w, dt);
-      spring(H.desk, H.deskT, H.deskT ? 2.6 : 9, dt);
-      const dk = smooth(0, 1, H.desk.x);
+      // the residual the lead finger could not reach goes into the wrist's target, not straight onto its position
       H.nudge.multiplyScalar(Math.exp(-(lead ? 3 : 7) * dt));
+      const W = minJerk(H.W, vT.copy(H.hold).add(H.nudge), Tw, dt);
+      // onto the desk unhurried; back to the keys briskly (a keystroke, or the visitor leaning in to look), still smooth
+      minJerk1(H.desk, H.deskT, H.deskT ? 1.1 : .5, dt);
+      const dk = smooth(0, 1, H.desk.x);
       spring(H.yaw, yawFor(H, W), 14, dt);
-      const Wp = v4.copy(W).lerp(H.deskW, dk).add(H.nudge);
+      const Wp = v4.copy(W).lerp(H.deskW, dk);
       if (dk > 0 && dk < 1) Wp.addScaledVector(n, .03 * Math.sin(PI * dk));      // lift over the keyboard edge
 
       /* ---- arm: 2-bone IK, shoulder -> elbow -> wrist, elbow out and down; cloth frames keep a stable roll ---- */
       const Sh = v3.copy(SHOULDER[H.h]); Sh.y += .003 * breath; Sh.applyMatrix4(spine.matrix);
-      const dv = Wp.clone().sub(Sh); let dist = dv.length(); dv.normalize();
+      const dv = aD.copy(Wp).sub(Sh); let dist = dv.length(); dv.normalize();
       dist = clamp(dist, Math.abs(L1 - L2) + .01, L1 + L2 - .004);
       Wp.copy(Sh).addScaledVector(dv, dist);
       poseHand(H, Wp, H.yaw.x * (1 - dk), dk);
       const dLat = v1.copy(W).sub(H.homeW).dot(lat);
       spring(H.elbowOut, clamp(dLat * H.side * 4, -.4, .6), 6, dt);
-      const pole = V3(H.side * (1.25 + H.elbowOut.x), -.55, .3).normalize();   // elbows out by the sides: the forearms come in from the corners
+      const pole = aPole.set(H.side * (1.25 + H.elbowOut.x), -.55, .3).normalize();   // elbows out by the sides: the forearms come in from the corners
       pole.addScaledVector(dv, -pole.dot(dv)).normalize();
       const a = (L1 * L1 - L2 * L2 + dist * dist) / (2 * dist), hh = Math.sqrt(Math.max(0, L1 * L1 - a * a));
-      const E = Sh.clone().addScaledVector(dv, a).addScaledVector(pole, hh);
-      const frame = (g, from, to, xHint) => {
-        const yA = to.clone().sub(from).normalize(), xA = xHint.clone().addScaledVector(yA, -xHint.dot(yA)).normalize(), zA = xA.clone().cross(yA);
-        g.position.copy(from); g.quaternion.setFromRotationMatrix(mB.makeBasis(xA, yA, zA));
-      };
-      frame(H.upper, Sh, E, V3(H.side, 0, 0));
-      frame(H.fore, E, Wp, V3(1, 0, 0).applyQuaternion(H.hand.quaternion));
+      const E = aE.copy(Sh).addScaledVector(dv, a).addScaledVector(pole, hh);
+      armFrame(H.upper, Sh, E, xUp.set(H.side, 0, 0));
+      armFrame(H.fore, E, Wp, xFo.set(1, 0, 0).applyQuaternion(H.hand.quaternion));
 
       /* ---- fingers ---- */
       // idle adjustments: once the hand has been still a while, every few seconds one finger shifts or lifts a hair
@@ -770,7 +805,7 @@ M.createTypist = function createTypist(api){
           if (u >= 1){
             const err = F.tip.distanceTo(Kc);
             if (F.e1 === undefined) F.e1 = err;
-            if (err < .0015 || F.t > F.Td + .1){
+            if (err < .0025 || F.t > F.Td + .1){   // within 2.5 mm of the cap centre (the hold then settles it there)
               F.mode = 'hold'; F.pressed = true; F.tC = F.t; F.depth.x = 0; F.depth.v = 55; F.hNow = 0;
               contacts.push({ e1: F.e1, Td: F.Td, code: F.vcode, err: F.tip.clone().sub(Kc), t: F.t, at: T.toFixed(2) + '/h' + F.h });
               if (contacts.length > 400) contacts.shift();
