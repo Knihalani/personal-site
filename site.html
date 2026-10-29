@@ -4206,6 +4206,8 @@ M.createTerminal = function createTerminal(opts){
       mirror((card.sel + 1) + ' of ' + n + ': ' + it.label + ', ' + (it.secret ? '' : it.full || it.value) + '. Enter to ' + verbOf(card) + '.');
       touched(); return true;
     }
+    // a card with a single action (j's site, a lone link): a bare enter on an empty line takes it
+    if (k === 'Enter' && !choosing && n === 1 && !input && !e.ctrlKey && !e.altKey){ armed = null; actOn(card, card.acts[0]); touched(); return true; }
     if (choosing && !e.ctrlKey && !e.altKey){
       let pick = -1;
       if (k === 'Enter') pick = card.sel;
