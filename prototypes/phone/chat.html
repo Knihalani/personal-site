@@ -1,0 +1,1741 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f7f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c0c0e" media="(prefers-color-scheme: dark)">
+<meta name="format-detection" content="telephone=no">
+<title>Kaiav Nihalani</title>
+<meta name="description" content="Chat with Kaiav Nihalani: ask anything, or search.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* ---------- tokens ---------- */
+:root{
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --fs: 16px; --lh: 21px; --track: -0.011em;
+  --bg: #ffffff;
+  --bar: rgba(247,247,249,.92);
+  --bar-solid: #f7f7f9;
+  --hair: rgba(60,60,67,.16);
+  --ink: #0d0d10;
+  --ink2: #3a3a40;
+  --muted: #6c6c74;
+  --faint: #a1a1a8;
+  --fill: rgba(118,118,128,.12);
+  --fill2: rgba(118,118,128,.2);
+  --them: #ececf0;
+  --them-ink: #0d0d10;
+  --me: #2c58e8;
+  --me-ink: #ffffff;
+  --accent: #2c58e8;
+  --accent-ink: #2449d4;
+  --accent-soft: rgba(44,88,232,.1);
+  --chip-line: rgba(44,88,232,.28);
+  --card: #ececf0;
+  --card-line: rgba(60,60,67,.12);
+  --card-in: rgba(255,255,255,.62);
+  --sheet: #f2f2f6;
+  --cell: #ffffff;
+  --danger: #d92d20;
+  --mark: rgba(44,88,232,.16);
+  --scrim: rgba(10,10,14,.22);
+  --toast: rgba(28,28,32,.92);
+  --toast-ink: #fff;
+  --shadow: 0 10px 30px -10px rgba(16,24,40,.28), 0 2px 8px -2px rgba(16,24,40,.12);
+  --av1: #9aa2b1; --av2: #7b8394;
+  --online: #2fb457;
+  color-scheme: light dark;
+}
+@supports (font: -apple-system-body) { :root { --fs: 17px; --lh: 22px; --track: -0.022em; } }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg: #0c0c0e;
+  --bar: rgba(22,22,25,.9);
+  --bar-solid: #161619;
+  --hair: rgba(255,255,255,.1);
+  --ink: #f3f3f5;
+  --ink2: #d4d4d9;
+  --muted: #9b9ba4;
+  --faint: #6a6a72;
+  --fill: rgba(118,118,128,.24);
+  --fill2: rgba(118,118,128,.34);
+  --them: #232328;
+  --them-ink: #f3f3f5;
+  --me: #3a64f2;
+  --me-ink: #ffffff;
+  --accent: #5b80ff;
+  --accent-ink: #94adff;
+  --accent-soft: rgba(91,128,255,.16);
+  --chip-line: rgba(148,173,255,.3);
+  --card: #1c1c20;
+  --card-line: rgba(255,255,255,.08);
+  --card-in: rgba(255,255,255,.04);
+  --sheet: #0c0c0e;
+  --cell: #1a1a1e;
+  --danger: #ff6b5e;
+  --mark: rgba(122,152,255,.28);
+  --scrim: rgba(0,0,0,.45);
+  --toast: rgba(52,52,58,.94);
+  --toast-ink: #fff;
+  --shadow: 0 12px 36px -8px rgba(0,0,0,.7), 0 2px 8px rgba(0,0,0,.4);
+  --av1: #6b7282; --av2: #4c5262;
+  --online: #34c759;
+}}
+:root[data-theme="dark"]{
+  --bg: #0c0c0e; --bar: rgba(22,22,25,.9); --bar-solid: #161619; --hair: rgba(255,255,255,.1);
+  --ink: #f3f3f5; --ink2: #d4d4d9; --muted: #9b9ba4; --faint: #6a6a72; --fill: rgba(118,118,128,.24); --fill2: rgba(118,118,128,.34);
+  --them: #232328; --them-ink: #f3f3f5; --me: #3a64f2; --me-ink: #fff; --accent: #5b80ff; --accent-ink: #94adff;
+  --accent-soft: rgba(91,128,255,.16); --chip-line: rgba(148,173,255,.3); --card: #1c1c20; --card-line: rgba(255,255,255,.08); --card-in: rgba(255,255,255,.04);
+  --sheet: #0c0c0e; --cell: #1a1a1e; --danger: #ff6b5e; --mark: rgba(122,152,255,.28); --scrim: rgba(0,0,0,.45);
+  --toast: rgba(52,52,58,.94); --shadow: 0 12px 36px -8px rgba(0,0,0,.7), 0 2px 8px rgba(0,0,0,.4); --av1: #6b7282; --av2: #4c5262; --online: #34c759;
+}
+
+/* ---------- base ---------- */
+*,*::before,*::after{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html,body{ margin: 0; height: 100%; background: var(--bg); color: var(--ink); }
+body{ position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none;
+  font: 400 var(--fs)/var(--lh) var(--font); letter-spacing: var(--track);
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+button, input{ font: inherit; letter-spacing: inherit; color: inherit; }
+button{ background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
+a{ color: inherit; text-decoration: none; }
+svg{ display: block; flex: none; }
+:focus{ outline: none; }
+:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+.sr{ position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+[hidden]{ display: none !important; }
+
+#app{ position: fixed; left: 0; top: 0; width: 100%; height: 100%; height: var(--app-h, 100dvh); overflow: hidden; overflow: clip; }
+
+/* ---------- header ---------- */
+.bar{ position: absolute; z-index: 30; left: 0; right: 0; top: 0;
+  padding: calc(env(safe-area-inset-top, 0px) + 6px) max(8px, env(safe-area-inset-right, 0px)) 6px max(8px, env(safe-area-inset-left, 0px));
+  display: flex; align-items: center; gap: 4px;
+  background: var(--bar); -webkit-backdrop-filter: saturate(180%) blur(28px); backdrop-filter: saturate(180%) blur(28px); }
+.bar::after{ content: ""; position: absolute; left: 0; right: 0; bottom: -0.5px; height: 0.5px; background: var(--hair); opacity: var(--hair-o, 0); transition: opacity .25s; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){ .bar, .composer, .s-head{ background: var(--bar-solid); } }
+.who{ flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 4px 8px 4px 6px; border-radius: 12px; text-align: left; transition: background-color .2s, transform .2s cubic-bezier(.3,.7,.4,1); }
+.who:active{ background: var(--fill); transform: scale(.985); }
+.who-t{ min-width: 0; display: flex; flex-direction: column; }
+.who-t b{ font-weight: 600; font-size: 16px; line-height: 20px; letter-spacing: -0.015em; display: flex; align-items: center; gap: 2px; }
+.who-t b svg{ width: 14px; height: 14px; color: var(--faint); margin-top: 1px; }
+.who-t small{ font-size: 12.5px; line-height: 16px; color: var(--muted); letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.icon-btn{ width: 40px; height: 40px; border-radius: 20px; display: grid; place-items: center; color: var(--accent-ink); transition: background-color .2s, transform .2s cubic-bezier(.3,.7,.4,1); }
+.icon-btn svg{ width: 22px; height: 22px; }
+.icon-btn:active{ background: var(--fill); transform: scale(.92); }
+
+/* avatar */
+.av{ position: relative; flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+  background: linear-gradient(180deg, var(--av1), var(--av2)); color: #fff; font-weight: 600; font-size: 15px; letter-spacing: .02em; }
+.av span{ transform: translateY(.5px); }
+.av .dot{ position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: var(--online); box-shadow: 0 0 0 2.5px var(--bar-solid); }
+.av.lg{ width: 84px; height: 84px; font-size: 32px; letter-spacing: .03em; }
+.av.md{ width: 64px; height: 64px; font-size: 24px; }
+
+/* ---------- thread ---------- */
+#scroller{ position: absolute; inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
+  display: flex; flex-direction: column; touch-action: pan-y; scrollbar-width: none; }
+#scroller::-webkit-scrollbar{ display: none; }
+.sp-top{ flex: none; height: var(--hh, 60px); }
+.sp-bot{ flex: none; height: calc(var(--ch, 120px) + 8px); }
+.sfield{ flex: none; margin: 8px max(16px, env(safe-area-inset-right,0px)) 0 max(16px, env(safe-area-inset-left,0px)); height: 36px; border-radius: 10px; background: var(--fill);
+  display: flex; align-items: center; gap: 6px; padding: 0 10px; color: var(--muted); text-align: left; transition: transform .2s cubic-bezier(.3,.7,.4,1), background-color .2s; }
+.sfield svg{ width: 17px; height: 17px; }
+.sfield span{ font-size: var(--fs); }
+.sfield:active{ transform: scale(.985); background: var(--fill2); }
+.intro{ flex: none; margin-top: auto; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 28px 24px 4px; }
+.intro h1{ margin: 12px 0 2px; font-size: 20px; line-height: 25px; font-weight: 600; letter-spacing: -0.02em; }
+.intro p{ margin: 0; font-size: 14px; line-height: 19px; color: var(--muted); letter-spacing: -0.005em; }
+.intro .av .dot{ width: 18px; height: 18px; right: 1px; bottom: 1px; box-shadow: 0 0 0 3px var(--bg); }
+
+#log{ flex: none; overflow: hidden; overflow: clip; overflow-clip-margin: 0; padding: 8px max(16px, env(safe-area-inset-right,0px)) 0 max(16px, env(safe-area-inset-left,0px)); --sx: 0px; }
+.sep{ text-align: center; font-size: 12px; line-height: 16px; color: var(--muted); margin: 18px 0 6px; letter-spacing: 0; }
+.sep b{ font-weight: 600; }
+.row{ position: relative; display: flex; margin-top: 2px; }
+.row.them{ justify-content: flex-start; }
+.row.me{ justify-content: flex-end; }
+.row.gs{ margin-top: 14px; }
+.sep + .row{ margin-top: 8px; }
+.row.has-rx{ padding-top: 16px; }
+.row.me > .b, .row.me > .card, .row.me > .status-wrap{ transform: translateX(var(--sx)); }
+.row .ts{ position: absolute; right: -80px; bottom: 0; width: 64px; height: 100%; display: flex; align-items: center; justify-content: flex-end;
+  font-size: 11.5px; color: var(--muted); letter-spacing: 0; font-variant-numeric: tabular-nums; transform: translateX(var(--sx)); pointer-events: none; white-space: nowrap; }
+#log.dragging .row > *{ transition: none !important; }
+
+.b{ position: relative; max-width: min(78%, 320px); padding: 8px 13px 9px; border-radius: 20px; background-color: var(--them); color: var(--them-ink);
+  white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; hyphens: manual;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  transition: border-radius .18s ease, transform .3s cubic-bezier(.3,.7,.4,1), background-color .2s; }
+.row.me .b{ background-color: var(--me); color: var(--me-ink); }
+.b:focus-visible{ outline-offset: 3px; border-radius: 20px; }
+/* grouping: corners facing the sender tighten inside a group */
+.row.them:not(.gs) > .b, .row.them:not(.gs) > .card{ border-top-left-radius: 6px; }
+.row.them:not(.ge) > .b, .row.them:not(.ge) > .card{ border-bottom-left-radius: 6px; }
+.row.me:not(.gs) > .b, .row.me:not(.gs) > .card{ border-top-right-radius: 6px; }
+.row.me:not(.ge) > .b, .row.me:not(.ge) > .card{ border-bottom-right-radius: 6px; }
+/* tail */
+.b::after{ content: ""; position: absolute; bottom: 0; width: 17px; height: 19px; background: inherit; opacity: 0; transition: opacity .15s;
+  -webkit-mask: var(--tail) no-repeat 0 0 / 100% 100%; mask: var(--tail) no-repeat 0 0 / 100% 100%; pointer-events: none; }
+:root{ --tail: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 19'%3E%3Cpath d='M0 0H11V6.5C11 12.2 13 16 16.6 18.3C17 18.6 16.8 19 16.3 19C12.2 19 9 18.1 6.7 16.4C4.8 18 2.6 19 0 19Z'/%3E%3C/svg%3E"); }
+.row.me.ge > .b{ border-bottom-right-radius: 16px; }
+.row.me.ge > .b::after{ right: -6px; opacity: 1; }
+.row.them.ge > .b{ border-bottom-left-radius: 16px; }
+.row.them.ge > .b::after{ left: -6px; opacity: 1; transform: scaleX(-1); }
+.b.pressing{ transform: scale(.965); transition-duration: .45s; }
+.b.flash{ animation: flash 1.4s ease; }
+@keyframes flash{ 0%,100%{ filter: none; } 20%,55%{ filter: brightness(.86) saturate(1.2); } }
+:root[data-dark] .b.flash{ animation-name: flashd; }
+@keyframes flashd{ 0%,100%{ filter: none; } 20%,55%{ filter: brightness(1.45); } }
+
+.b.quote{ padding-left: 13px; }
+.b.quote .q{ display: block; border-left: 3px solid var(--fill2); padding: 1px 0 1px 10px; }
+.b.typing{ padding: 0; width: 62px; height: 38px; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.b.typing i{ width: 7.5px; height: 7.5px; border-radius: 50%; background: var(--muted); opacity: .45; animation: dot 1.25s infinite ease-in-out; }
+.b.typing i:nth-child(2){ animation-delay: .16s; } .b.typing i:nth-child(3){ animation-delay: .32s; }
+@keyframes dot{ 0%,60%,100%{ opacity: .38; transform: translateY(0) scale(.92); } 28%{ opacity: .95; transform: translateY(-2.5px) scale(1); } }
+
+/* reactions */
+.rx{ position: absolute; top: -19px; z-index: 2; min-width: 30px; height: 30px; padding: 0 7px; border-radius: 15px; display: grid; place-items: center;
+  background: var(--them); color: var(--accent-ink); box-shadow: 0 0 0 2.5px var(--bg); font: 800 11px/1 var(--font); letter-spacing: -.02em; pointer-events: none; }
+.rx svg{ width: 15px; height: 15px; }
+.row.them .rx{ right: -20px; background: var(--me); color: #fff; }
+.row.me .rx{ left: -20px; background: var(--them); color: var(--accent-ink); }
+.rx.pop{ animation: rxpop .5s cubic-bezier(.3,1.6,.5,1); }
+@keyframes rxpop{ 0%{ transform: scale(.2); opacity: 0; } 100%{ transform: scale(1); opacity: 1; } }
+
+/* status under last visitor message */
+.status{ display: flex; justify-content: flex-end; margin: 4px 4px 0 0; font-size: 11.5px; line-height: 14px; color: var(--muted); letter-spacing: 0; gap: 3px; align-items: center; transform: translateX(var(--sx)); }
+.status svg{ width: 15px; height: 11px; }
+.status.read svg{ color: var(--accent-ink); }
+.status.in{ animation: fadein .3s ease; }
+@keyframes fadein{ from{ opacity: 0; } }
+
+/* ---------- cards ---------- */
+.card{ position: relative; width: min(84%, 320px); border-radius: 20px; background: var(--card); color: var(--them-ink); overflow: hidden; transition: border-radius .18s, transform .25s cubic-bezier(.3,.7,.4,1); }
+.row.them > .card{ border: 0.5px solid var(--card-line); }
+a.card:active, .lrow:active, .prow:active{ transform: scale(.98); }
+.jc-top{ display: flex; gap: 12px; align-items: center; padding: 14px 14px 10px; }
+.tile{ flex: none; width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: var(--bg); color: var(--ink); box-shadow: inset 0 0 0 0.5px var(--card-line); }
+.tile svg{ width: 20px; height: 20px; }
+.tile.letter{ font-weight: 700; font-size: 19px; letter-spacing: -0.03em; background: var(--ink); color: var(--bg); box-shadow: none; }
+.jc-top .t{ min-width: 0; display: flex; flex-direction: column; }
+.jc-top b{ font-weight: 600; font-size: 16px; line-height: 20px; letter-spacing: -0.015em; }
+.jc-top small{ font-size: 13px; line-height: 17px; color: var(--muted); letter-spacing: 0; }
+.jc-line{ padding: 0 14px 10px; font-size: 15px; line-height: 20px; color: var(--ink2); letter-spacing: -0.01em; }
+.facts{ margin: 0 10px; border-radius: 12px; background: var(--card-in); display: grid; grid-template-columns: auto 1fr; font-size: 14px; line-height: 18px; letter-spacing: -0.005em; box-shadow: inset 0 0 0 0.5px var(--card-line); }
+.facts dt, .facts dd{ margin: 0; padding: 8px 12px; border-top: 0.5px solid var(--card-line); }
+.facts dt{ color: var(--muted); text-transform: capitalize; padding-right: 4px; }
+.facts dd{ font-weight: 500; }
+.facts dt:first-of-type, .facts dd:first-of-type{ border-top: 0; }
+.jc-go{ display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 13px; font-size: 15px; font-weight: 500; color: var(--accent-ink); }
+.jc-go svg{ width: 16px; height: 16px; }
+
+.crow{ padding: 12px 14px 12px; }
+.crow + .crow{ border-top: 0.5px solid var(--card-line); }
+.crow small{ display: block; font-size: 12.5px; line-height: 16px; color: var(--muted); letter-spacing: 0; }
+.crow .addr{ display: block; font-size: 16px; line-height: 22px; font-weight: 500; letter-spacing: -0.015em; overflow-wrap: anywhere; margin-top: 1px; -webkit-user-select: text; user-select: text; }
+.cact{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.btn{ height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 15px; font-weight: 500; letter-spacing: -0.01em;
+  background: var(--card-in); color: var(--accent-ink); box-shadow: inset 0 0 0 0.5px var(--card-line); transition: transform .18s cubic-bezier(.3,.7,.4,1), background-color .2s; }
+.btn svg{ width: 16px; height: 16px; }
+.btn.primary{ background: var(--me); color: #fff; box-shadow: none; }
+.btn:active{ transform: scale(.96); }
+.btn.done{ color: var(--online); }
+
+.lrow, .prow{ display: flex; align-items: center; gap: 12px; padding: 11px 14px; transition: background-color .2s, transform .2s; }
+.lrow + .lrow, .prow + .prow{ border-top: 0.5px solid var(--card-line); }
+.lrow .t, .prow .t{ min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.lrow b, .prow b{ font-weight: 600; font-size: 16px; line-height: 20px; letter-spacing: -0.015em; }
+.lrow small, .prow small{ font-size: 13px; line-height: 17px; color: var(--muted); letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow small.sum{ white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.lrow > svg, .prow > svg{ width: 15px; height: 15px; color: var(--faint); }
+.lrow:active, .prow:active{ background: var(--fill); }
+
+/* ---------- composer ---------- */
+.composer{ position: absolute; z-index: 30; left: 0; right: 0; bottom: 0;
+  padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+  background: var(--bar); -webkit-backdrop-filter: saturate(180%) blur(28px); backdrop-filter: saturate(180%) blur(28px); }
+.composer::before{ content: ""; position: absolute; left: 0; right: 0; top: -0.5px; height: 0.5px; background: var(--hair); opacity: var(--chair-o, 0); transition: opacity .25s; }
+.chips{ display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding: 0 max(16px, env(safe-area-inset-right,0px)) 8px max(16px, env(safe-area-inset-left,0px)); scrollbar-width: none; overscroll-behavior-x: contain;
+  scroll-padding-inline: 16px; transition: height .32s cubic-bezier(.3,.7,.3,1), opacity .2s, padding-bottom .32s cubic-bezier(.3,.7,.3,1); }
+.chips::-webkit-scrollbar{ display: none; }
+.chips.off{ opacity: 0; pointer-events: none; height: 0; padding-bottom: 0; }
+.chips{ height: 42px; }
+.chip{ flex: none; height: 34px; padding: 0 14px; border-radius: 17px; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; white-space: nowrap;
+  color: var(--accent-ink); background: var(--bg); box-shadow: inset 0 0 0 1px var(--chip-line);
+  transition: transform .22s cubic-bezier(.3,.7,.4,1), background-color .2s; }
+.chip:active{ transform: scale(.94); background: var(--accent-soft); }
+.chip.in{ animation: chipin .45s cubic-bezier(.25,1.2,.4,1) both; }
+@keyframes chipin{ from{ opacity: 0; transform: translateY(8px) scale(.94); } }
+.cform{ display: flex; align-items: flex-end; gap: 8px; padding: 0 max(12px, env(safe-area-inset-right,0px)) 0 max(12px, env(safe-area-inset-left,0px)); }
+.field{ position: relative; flex: 1; min-width: 0; display: flex; align-items: center; min-height: 40px; border-radius: 20px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--hair); transition: box-shadow .2s; }
+.field:focus-within{ box-shadow: inset 0 0 0 1px var(--chip-line); }
+#input{ flex: 1; min-width: 0; height: 40px; border: 0; background: transparent; padding: 0 44px 0 16px; font-size: max(16px, var(--fs)); color: var(--ink); -webkit-appearance: none; appearance: none; border-radius: 20px; }
+#input::placeholder{ color: var(--faint); opacity: 1; }
+#input:focus-visible{ outline: none; }
+.field:has(#input:focus-visible){ box-shadow: inset 0 0 0 2px var(--accent); }
+.send{ position: absolute; right: 4px; bottom: 4px; width: 32px; height: 32px; border-radius: 16px; background: var(--me); color: #fff; display: grid; place-items: center;
+  transform: scale(0); opacity: 0; transition: transform .32s cubic-bezier(.3,1.5,.5,1), opacity .15s; pointer-events: none; }
+.send svg{ width: 18px; height: 18px; }
+.send.on{ transform: scale(1); opacity: 1; pointer-events: auto; }
+.send.on:active{ transform: scale(.88); }
+
+/* new messages pill */
+.pill{ position: absolute; z-index: 25; left: 50%; bottom: calc(var(--ch, 120px) + 12px); transform: translate(-50%, 10px) scale(.94); opacity: 0; pointer-events: none;
+  display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px 0 12px; border-radius: 17px; font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
+  background: var(--me); color: #fff; box-shadow: var(--shadow); transition: transform .35s cubic-bezier(.3,1.3,.5,1), opacity .2s; }
+.pill svg{ width: 16px; height: 16px; }
+.pill.on{ transform: translate(-50%, 0) scale(1); opacity: 1; pointer-events: auto; }
+.pill:active{ transform: translate(-50%, 0) scale(.95); }
+
+/* ---------- toast ---------- */
+.toast{ position: absolute; z-index: 90; left: 50%; top: calc(var(--hh, 60px) + 10px); transform: translate(-50%, -12px) scale(.96); opacity: 0; pointer-events: none;
+  display: flex; align-items: center; gap: 8px; max-width: calc(100% - 32px); padding: 9px 16px 9px 12px; border-radius: 20px; background: var(--toast); color: var(--toast-ink);
+  font-size: 14px; line-height: 18px; font-weight: 500; letter-spacing: -0.005em; box-shadow: var(--shadow);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); transition: transform .4s cubic-bezier(.3,1.3,.5,1), opacity .2s; }
+.toast svg{ width: 18px; height: 18px; color: #6ee38f; }
+.toast span{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast.on{ transform: translate(-50%, 0) scale(1); opacity: 1; }
+
+/* ---------- search ---------- */
+.search{ position: absolute; inset: 0; z-index: 60; display: flex; flex-direction: column; background: var(--bg); opacity: 0; visibility: hidden; transition: opacity .22s ease, visibility 0s .22s; }
+.search.on{ opacity: 1; visibility: visible; transition: opacity .22s ease; }
+.s-head{ flex: none; display: flex; align-items: center; gap: 4px; padding: calc(env(safe-area-inset-top, 0px) + 10px) max(8px, env(safe-area-inset-right,0px)) 10px max(16px, env(safe-area-inset-left,0px));
+  background: var(--bar); -webkit-backdrop-filter: saturate(180%) blur(28px); backdrop-filter: saturate(180%) blur(28px); position: relative; z-index: 2;
+  transform: translateY(-6px); transition: transform .35s cubic-bezier(.3,1.2,.5,1); }
+.s-head::after{ content: ""; position: absolute; left: 0; right: 0; bottom: -0.5px; height: 0.5px; background: var(--hair); }
+.search.on .s-head{ transform: none; }
+.s-field{ flex: 1; min-width: 0; height: 38px; border-radius: 10px; background: var(--fill); display: flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; color: var(--muted); }
+.s-field svg{ width: 17px; height: 17px; }
+#sInput{ flex: 1; min-width: 0; height: 38px; border: 0; background: transparent; font-size: max(16px, var(--fs)); color: var(--ink); -webkit-appearance: none; appearance: none; padding: 0; }
+#sInput::-webkit-search-cancel-button{ display: none; }
+#sInput:focus-visible{ outline: none; }
+.s-field:focus-within{ box-shadow: inset 0 0 0 1.5px var(--chip-line); }
+#sInput::placeholder{ color: var(--muted); opacity: 1; }
+.s-clear{ width: 30px; height: 30px; border-radius: 15px; display: grid; place-items: center; color: var(--faint); }
+.s-clear svg{ width: 17px; height: 17px; }
+.s-cancel{ flex: none; height: 38px; padding: 0 8px 0 10px; font-size: var(--fs); color: var(--accent-ink); border-radius: 10px; }
+.s-cancel:active{ opacity: .5; }
+.s-body{ flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding: 4px 0 calc(24px + env(safe-area-inset-bottom, 0px)); }
+.s-h{ margin: 16px max(16px, env(safe-area-inset-left,0px)) 6px; font-size: 13px; line-height: 18px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.results{ list-style: none; margin: 0; padding: 0; }
+.res{ display: flex; gap: 12px; align-items: flex-start; padding: 10px max(16px, env(safe-area-inset-right,0px)) 10px max(16px, env(safe-area-inset-left,0px)); cursor: pointer; position: relative; transition: background-color .15s; }
+.res::after{ content: ""; position: absolute; left: 60px; right: 0; bottom: 0; height: 0.5px; background: var(--hair); }
+.res:last-child::after{ display: none; }
+.res:active, .res.hl{ background: var(--fill); }
+.res .ico{ flex: none; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-ink); margin-top: 1px; }
+.res .ico svg{ width: 17px; height: 17px; }
+.res .ico.l{ font-weight: 700; font-size: 15px; letter-spacing: -0.02em; }
+.res .rt{ min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.res .rt small{ font-size: 12.5px; line-height: 16px; color: var(--muted); letter-spacing: 0; font-weight: 500; }
+.res .rt span{ font-size: 15.5px; line-height: 20px; color: var(--ink); letter-spacing: -0.012em; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+mark{ background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; margin: 0 -1px; font-weight: 600; }
+.s-empty{ padding: 48px 32px; text-align: center; color: var(--muted); font-size: 15px; line-height: 20px; }
+.s-empty b{ display: block; color: var(--ink); font-size: 17px; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.015em; }
+.s-empty .btn{ display: inline-flex; margin-top: 16px; padding: 0 16px; background: var(--me); color: #fff; box-shadow: none; max-width: 100%; }
+.s-empty .btn span{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- sheets ---------- */
+.scrim{ position: absolute; inset: 0; z-index: 70; background: var(--scrim); opacity: 0; visibility: hidden; transition: opacity .3s ease, visibility 0s .3s; }
+.scrim.on{ opacity: 1; visibility: visible; transition: opacity .3s ease; }
+.sheet{ position: absolute; z-index: 71; left: 0; right: 0; bottom: 0; max-height: calc(100% - env(safe-area-inset-top, 0px) - 14px); display: flex; flex-direction: column;
+  background: var(--sheet); border-radius: 14px 14px 0 0; box-shadow: 0 -10px 40px -10px rgba(0,0,0,.3);
+  transform: translateY(105%); visibility: hidden; will-change: transform; }
+.sheet.on{ visibility: visible; }
+.grab{ flex: none; height: 22px; display: grid; place-items: center; touch-action: none; cursor: grab; }
+.grab i{ width: 36px; height: 5px; border-radius: 3px; background: var(--fill2); }
+.sh-x{ position: absolute; right: 12px; top: 12px; width: 30px; height: 30px; border-radius: 15px; background: var(--fill); color: var(--muted); display: grid; place-items: center; z-index: 2; }
+.sh-x svg{ width: 14px; height: 14px; }
+.sh-body{ flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0 max(16px, env(safe-area-inset-right,0px)) calc(28px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left,0px)); }
+.p-head{ display: flex; flex-direction: column; align-items: center; text-align: center; padding: 10px 8px 18px; touch-action: none; }
+.p-head h2{ margin: 12px 0 2px; font-size: 24px; line-height: 29px; font-weight: 700; letter-spacing: -0.025em; }
+.p-head p{ margin: 0; font-size: 15px; line-height: 20px; color: var(--muted); letter-spacing: -0.01em; }
+.acts{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 24px; }
+.act{ display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px 8px; border-radius: 12px; background: var(--cell); color: var(--accent-ink); font-size: 12px; line-height: 15px; font-weight: 500; letter-spacing: 0;
+  transition: transform .2s cubic-bezier(.3,.7,.4,1), background-color .2s; min-width: 0; }
+.act svg{ width: 22px; height: 22px; }
+.act span{ max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act:active{ transform: scale(.95); background: var(--fill); }
+.grp-h{ margin: 0 0 6px 16px; font-size: 13px; line-height: 18px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.grp{ background: var(--cell); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
+.cell{ position: relative; display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 11px 16px; font-size: 16px; line-height: 21px; letter-spacing: -0.012em; }
+.cell + .cell::before{ content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 0.5px; background: var(--hair); }
+.cell .t{ flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cell .t small{ font-size: 13px; line-height: 17px; color: var(--muted); letter-spacing: 0; }
+.cell .t span{ overflow-wrap: anywhere; }
+.cell .t p{ margin: 0; white-space: pre-wrap; }
+.cell .t p + p{ margin-top: 8px; }
+.cell.link{ color: var(--accent-ink); }
+.cell > svg{ width: 15px; height: 15px; color: var(--faint); }
+.cell .mini{ width: 34px; height: 34px; border-radius: 17px; background: var(--fill); color: var(--accent-ink); display: grid; place-items: center; flex: none; }
+.cell .mini svg{ width: 16px; height: 16px; }
+.cell .mini:active{ transform: scale(.9); }
+a.cell:active, button.cell:active{ background: var(--fill); }
+button.cell{ width: 100%; text-align: left; }
+.cell.danger{ color: var(--danger); justify-content: center; font-weight: 500; }
+.bul{ padding-left: 0; }
+.bul .cell{ align-items: flex-start; }
+.bul .cell i{ flex: none; width: 5px; height: 5px; border-radius: 50%; background: var(--faint); margin-top: 8px; }
+.cell .facts{ margin: 10px 0 0; background: var(--sheet); }
+.foot{ text-align: center; font-size: 12px; color: var(--faint); margin: -8px 0 8px; letter-spacing: 0; }
+
+/* reader */
+.rd h2{ margin: 8px 0 4px; font-size: 26px; line-height: 31px; letter-spacing: -0.025em; }
+.rd .meta{ color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+.rd .prose{ font-size: 17px; line-height: 27px; letter-spacing: -0.01em; }
+.rd .prose a{ color: var(--accent-ink); text-decoration: underline; }
+.rd .prose img{ max-width: 100%; height: auto; border-radius: 10px; }
+.rd .prose pre{ overflow-x: auto; background: var(--cell); padding: 12px; border-radius: 10px; font-size: 14px; }
+
+/* ---------- tapback ---------- */
+.tb{ position: absolute; inset: 0; z-index: 80; visibility: hidden; }
+.tb.on{ visibility: visible; }
+.tb-scrim{ position: absolute; inset: 0; background: var(--scrim); -webkit-backdrop-filter: blur(14px) saturate(120%); backdrop-filter: blur(14px) saturate(120%); opacity: 0; transition: opacity .25s ease; }
+.tb.on .tb-scrim{ opacity: 1; }
+.tb-clone{ position: absolute; margin: 0 !important; pointer-events: none; }
+.tb-clone .ts{ display: none; }
+.tb-bar{ position: absolute; display: flex; gap: 2px; padding: 5px; border-radius: 26px; background: var(--cell); box-shadow: var(--shadow); transform-origin: var(--ox, 50%) 100%; }
+.tb-bar button{ width: 42px; height: 42px; border-radius: 21px; display: grid; place-items: center; color: var(--muted); font: 800 14px/1 var(--font); letter-spacing: -.03em; transition: transform .2s cubic-bezier(.3,1.5,.5,1), background-color .15s, color .15s; }
+.tb-bar button svg{ width: 21px; height: 21px; }
+.tb-bar button:active{ transform: scale(.86); }
+.tb-bar button[aria-pressed="true"]{ background: var(--me); color: #fff; }
+.tb-menu{ position: absolute; min-width: 180px; border-radius: 14px; background: var(--cell); box-shadow: var(--shadow); overflow: hidden; transform-origin: var(--ox, 50%) 0; }
+.tb-menu button{ width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; font-size: 16px; letter-spacing: -0.012em; }
+.tb-menu button + button{ border-top: 0.5px solid var(--hair); }
+.tb-menu button svg{ width: 18px; height: 18px; color: var(--muted); }
+.tb-menu button:active{ background: var(--fill); }
+
+/* ---------- motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{ animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+  .b.typing i{ opacity: .6; }
+}
+
+/* noscript */
+.nojs{ position: fixed; inset: 0; overflow: auto; padding: 32px 20px; background: var(--bg); color: var(--ink); z-index: 999; font-size: 16px; line-height: 24px; }
+.nojs h1{ font-size: 24px; margin: 0 0 4px; } .nojs p{ margin: 0 0 12px; } .nojs a{ color: var(--accent-ink); text-decoration: underline; }
+</style>
+</head>
+<body>
+<noscript><div class="nojs">
+  <h1>Kaiav Nihalani</h1>
+  <p>Co-founder of J · Founder of Eden</p>
+  <p>16 y/o · Born in Hong Kong · Cofounder of J (helping young founders) · Founder of Eden (giving agents context)</p>
+  <p><b>J: Rising Founder</b>: first chance for young founders globally. <a href="https://risingfounder.net">risingfounder.net</a></p>
+  <p><b>Eden</b>: Giving agents context</p>
+  <p>Email: <a href="mailto:kaiav@risingfounder.net">kaiav@risingfounder.net</a> (J), <a href="mailto:kaiav.nihalani@gmail.com">kaiav.nihalani@gmail.com</a> (everything else)</p>
+  <p><a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/">LinkedIn</a> · <a href="https://x.com/KaiavRNihalani">X</a> · <a href="https://github.com/knihalani/personal-site">GitHub</a></p>
+</div></noscript>
+
+<div id="app">
+  <header class="bar" id="bar">
+    <button class="who" id="who" type="button" aria-haspopup="dialog" aria-controls="profile">
+      <span class="av" aria-hidden="true"><span>KN</span><i class="dot"></i></span>
+      <span class="who-t"><b><span id="hName"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6.5 15 12l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></b><small id="hRole"></small></span>
+    </button>
+    <button class="icon-btn" id="searchBtn" type="button" aria-label="Search" aria-haspopup="dialog" aria-controls="search"></button>
+  </header>
+
+  <main id="scroller">
+    <div class="sp-top" aria-hidden="true"></div>
+    <button class="sfield" id="sField" type="button" aria-haspopup="dialog" aria-controls="search"><span class="sf-i"></span><span>Search</span></button>
+    <section class="intro" id="intro" aria-label="Profile">
+      <span class="av md" aria-hidden="true"><span>KN</span></span>
+      <h1 id="iName"></h1>
+      <p id="iRole"></p>
+    </section>
+    <div id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation" tabindex="-1"></div>
+    <div class="sp-bot" aria-hidden="true"></div>
+  </main>
+
+  <button class="pill" id="pill" type="button" tabindex="-1"><span>New messages</span></button>
+
+  <footer class="composer" id="composer">
+    <div class="chips off" id="chips" role="group" aria-label="Suggested questions"></div>
+    <form class="cform" id="form" autocomplete="off">
+      <div class="field">
+        <label class="sr" for="input">Message</label>
+        <input id="input" type="text" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" spellcheck="true" maxlength="300">
+        <button class="send" id="send" type="submit" aria-label="Send" tabindex="-1"></button>
+      </div>
+    </form>
+  </footer>
+
+  <div class="search" id="search" role="dialog" aria-modal="true" aria-label="Search">
+    <div class="s-head">
+      <div class="s-field"><span class="sf-i"></span>
+        <input id="sInput" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Search" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="results" aria-label="Search everything">
+        <button class="s-clear" id="sClear" type="button" aria-label="Clear search" hidden></button>
+      </div>
+      <button class="s-cancel" id="sCancel" type="button">Cancel</button>
+    </div>
+    <div class="s-body" id="sBody"></div>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="profile" role="dialog" aria-modal="true" aria-labelledby="pName">
+    <div class="grab" aria-hidden="true"><i></i></div>
+    <button class="sh-x" type="button" data-close aria-label="Close"></button>
+    <div class="sh-body" id="pBody"></div>
+  </div>
+  <div class="sheet" id="reader" role="dialog" aria-modal="true" aria-label="Post">
+    <div class="grab" aria-hidden="true"><i></i></div>
+    <button class="sh-x" type="button" data-close aria-label="Close"></button>
+    <div class="sh-body rd" id="rBody"></div>
+  </div>
+
+  <div class="tb" id="tb" aria-hidden="true">
+    <div class="tb-scrim" id="tbScrim"></div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script id="content">
+/* All copy on the site. Edit here (or in the Copy Desk). */
+window.MAC = window.MAC || {};
+MAC.CONTENT = {
+  "name": "Kaiav Nihalani",
+  "links": {
+    "linkedin": "https://www.linkedin.com/in/kaiav-nihalani-594703356/",
+    "x": "https://x.com/KaiavRNihalani",
+    "github": "https://github.com/knihalani/personal-site"
+  },
+  "eden": {
+    "title": "Eden",
+    "role": "Founder",
+    "line": "Giving agents context",
+    "body": "Pivoting around but working in the agent context space, more to come soon ..."
+  },
+  "j": {
+    "title": "J: Rising Founder",
+    "role": "Co-founder",
+    "line": "first chance for young founders globally",
+    "body": "A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world\n\nWe wanna give the next gen of founders the resources, network and support they need to succeed beyond what they could achieve alone",
+    "facts": [
+      [
+        "length",
+        "three months"
+      ],
+      [
+        "where",
+        "remote, anywhere"
+      ],
+      [
+        "who",
+        "founders aged 23 and under"
+      ],
+      [
+        "when",
+        "right now"
+      ]
+    ],
+    "url": "https://risingfounder.net"
+  },
+  "about": {
+    "title": "About",
+    "role": "Co-founder of J · Founder of Eden",
+    "body": [
+      "- 16 y/o\n- Born in Hong Kong\n- Cofounder of J (helping young founders)\n- Founder of Eden (giving agents context)\n- Done some internships\n- I'm most knowledgeable on agents/LLMs but anything in tech that you find cool I probably do too\n- Reach out for anything! Check out contact, 99.9% chance whoever you are that I will wanna hear from you\n- If I can help you with something (not hiring) please let me know/ask!\n- Main things I do outside school + building are squash and BJJ"
+    ]
+  },
+  "contact": [
+    {
+      "label": "J",
+      "email": "kaiav@risingfounder.net"
+    },
+    {
+      "label": "Everything else",
+      "email": "kaiav.nihalani@gmail.com"
+    }
+  ],
+  "notes": [
+    "take care of yourself\nand just keep going",
+    "ask better\nquestions",
+    "sleep >\ncoffee",
+    "call home"
+  ],
+  "writing": { "title": "Writing", "posts": [] }
+};
+</script>
+<script>
+(() => {
+'use strict';
+
+/* ================================================================
+   Content: everything factual comes from MAC.CONTENT at runtime.
+   ================================================================ */
+const C = (window.MAC && window.MAC.CONTENT) || {};
+const NAME = String(C.name || '');
+const FIRST = NAME.split(/\s+/)[0] || '';
+const ROLE = String((C.about && C.about.role) || '');
+const BUL = [].concat((C.about && C.about.body) || []).join('\n').split('\n')
+  .map(s => s.replace(/^\s*[-–•*]\s*/, '').trim()).filter(Boolean);
+const bul = re => BUL.find(s => re.test(s)) || null;
+const paras = s => String(s || '').split(/\n\s*\n/).map(x => x.trim()).filter(Boolean);
+const J = C.j || {}, E = C.eden || {};
+const CONTACTS = [].concat(C.contact || []).filter(c => c && c.email);
+const LINKS = C.links || {};
+const NOTES = [].concat(C.notes || []).filter(Boolean).map(String);
+const slugify = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const slugOf = p => p.slug || slugify(p.title) || String(p.id || '');
+const POSTS = [].concat((C.writing && C.writing.posts) || [])
+  .filter(p => p && (p.status == null || p.status === 'published'))
+  .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+const B = {
+  age: () => bul(/\by\/?o\b|years? old/i),
+  from: () => bul(/born|hong kong/i),
+  j: () => bul(/\bof j\b/i),
+  eden: () => bul(/\bof eden\b/i),
+  interns: () => bul(/internship/i),
+  tech: () => bul(/knowledgeable|llm/i),
+  reach: () => bul(/reach out/i),
+  help: () => bul(/hiring|help you/i),
+  fun: () => bul(/squash|bjj|jiu/i),
+};
+const generalContact = () => CONTACTS.find(c => /else|general|other|personal/i.test(c.label || '')) || CONTACTS[CONTACTS.length - 1];
+
+/* ================================================================
+   Small helpers
+   ================================================================ */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const RM = matchMedia('(prefers-reduced-motion: reduce)');
+let MOTION = !RM.matches;
+(RM.addEventListener ? RM.addEventListener('change', e => { MOTION = !e.matches; }) : RM.addListener && RM.addListener(e => { MOTION = !e.matches; }));
+const DARKQ = matchMedia('(prefers-color-scheme: dark)');
+const syncDark = () => document.documentElement.toggleAttribute('data-dark', DARKQ.matches);
+syncDark(); (DARKQ.addEventListener ? DARKQ.addEventListener('change', syncDark) : DARKQ.addListener && DARKQ.addListener(syncDark));
+const haptic = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
+const timeFmt = (() => { try { return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }); } catch (e) { return { format: d => d.toTimeString().slice(0, 5) }; } })();
+const fmtTime = t => timeFmt.format(new Date(t));
+const fmtDay = t => {
+  const d = new Date(t), now = new Date();
+  const same = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (same(d, now)) return 'Today';
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (same(d, y)) return 'Yesterday';
+  try { return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); } catch (e) { return d.toDateString(); }
+};
+const fmtDate = s => { const d = new Date(String(s) + (/^\d{4}-\d{2}-\d{2}$/.test(s) ? 'T12:00:00' : '')); return isNaN(d) ? String(s || '') : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); };
+
+/* spring easing: simulated once, expressed as CSS linear() when supported */
+function spring(k, c, m = 1) {
+  let x = 0, v = 0, t = 0; const dt = 1 / 240, pts = [0];
+  while (t < 2.5) {
+    for (let i = 0; i < 4; i++) { const a = (-k * (x - 1) - c * v) / m; v += a * dt; x += v * dt; t += dt; }
+    pts.push(x);
+    if (t > .15 && Math.abs(x - 1) < .002 && Math.abs(v) < .02) break;
+  }
+  pts[pts.length - 1] = 1;
+  return { dur: Math.round(t * 1000), ease: 'linear(' + pts.map(p => +p.toFixed(4)).join(', ') + ')' };
+}
+const LINEAR_OK = !!(window.CSS && CSS.supports && CSS.supports('animation-timing-function', 'linear(0, 1)'));
+const SPR = LINEAR_OK ? spring(230, 22) : { dur: 520, ease: 'cubic-bezier(.22,1.25,.36,1)' };
+const SPR_SOFT = LINEAR_OK ? spring(170, 21) : { dur: 560, ease: 'cubic-bezier(.25,1.12,.4,1)' };
+const anim = (el, kf, o) => { try { return el.animate(kf, o); } catch (e) { return null; } };
+
+/* ================================================================
+   Icons (inline SVG, currentColor)
+   ================================================================ */
+const sv = (d, extra = '') => `<svg viewBox="0 0 24 24" aria-hidden="true" ${extra}>${d}</svg>`;
+const st = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+const IC = {
+  search: sv(`<circle cx="10.75" cy="10.75" r="6.25" ${st}/><path d="m15.5 15.5 4.5 4.5" ${st}/>`),
+  send: sv(`<path d="M12 19V5.5M6.5 11 12 5.5l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`),
+  down: sv(`<path d="M12 5v13.5M6.5 13 12 18.5l5.5-5.5" ${st} stroke-width="2.2"/>`),
+  copy: sv(`<rect x="8.5" y="8.5" width="11" height="11" rx="2.5" ${st} stroke-width="1.8"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" ${st} stroke-width="1.8"/>`),
+  mail: sv(`<rect x="3" y="5.5" width="18" height="13" rx="2.5" ${st} stroke-width="1.8"/><path d="m3.8 7 8.2 6.2L20.2 7" ${st} stroke-width="1.8"/>`),
+  check: sv(`<path d="m5 12.5 4.5 4.5L19 7.5" ${st} stroke-width="2.4"/>`),
+  ext: sv(`<path d="M8 16 16.5 7.5M9.5 7.5h7v7" ${st} stroke-width="2.1"/>`),
+  chev: sv(`<path d="M9.5 6.5 15 12l-5.5 5.5" ${st} stroke-width="2.3"/>`),
+  x: sv(`<path d="M6.5 6.5l11 11M17.5 6.5l-11 11" ${st} stroke-width="2.6"/>`),
+  xcirc: sv(`<circle cx="12" cy="12" r="9.5" fill="currentColor"/><path d="M9 9l6 6M15 9l-6 6" stroke="var(--bg)" stroke-width="1.8" stroke-linecap="round"/>`),
+  chat: sv(`<path d="M12 4.5c-4.7 0-8.5 3.1-8.5 7 0 2 1 3.8 2.7 5.1-.2 1.2-.8 2.3-1.7 3.1 1.9 0 3.5-.7 4.6-1.6 1 .3 1.9.4 2.9.4 4.7 0 8.5-3.1 8.5-7s-3.8-7-8.5-7z" ${st} stroke-width="1.8"/>`),
+  globe: sv(`<circle cx="12" cy="12" r="8.5" ${st} stroke-width="1.8"/><path d="M3.5 12h17M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5S9.7 5.9 12 3.5z" ${st} stroke-width="1.6"/>`),
+  person: sv(`<circle cx="12" cy="8.5" r="3.8" ${st} stroke-width="1.8"/><path d="M4.8 19.5c1.2-3.3 3.9-5 7.2-5s6 1.7 7.2 5" ${st} stroke-width="1.8"/>`),
+  quote: sv(`<path d="M10 7.5c-2.6.9-4.4 3-4.4 6.2V17h4.2v-4.2H7.8M18.4 7.5c-2.6.9-4.4 3-4.4 6.2V17h4.2v-4.2h-2" ${st} stroke-width="1.8"/>`),
+  doc: sv(`<path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z" ${st} stroke-width="1.8"/><path d="M13.5 3.5V8h4.5M9 12.5h6M9 16h6" ${st} stroke-width="1.8"/>`),
+  link: sv(`<path d="M10.5 13.5a4 4 0 0 0 5.7 0l2.8-2.8a4 4 0 0 0-5.7-5.7l-1.1 1.1M13.5 10.5a4 4 0 0 0-5.7 0L5 13.3A4 4 0 0 0 10.7 19l1.1-1.1" ${st} stroke-width="1.9"/>`),
+  bolt: sv(`<path d="M8 12.5c0-3.6 1.8-6.9 4-9 2.2 2.1 4 5.4 4 9a4 4 0 0 1-8 0zM12 20.5v-4" ${st} stroke-width="1.8"/>`),
+  trash: sv(`<path d="M4.5 7h15M9.5 7V5h5v2M6.5 7l.9 12.1a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4L17.5 7" ${st} stroke-width="1.8"/>`),
+  ticks: `<svg viewBox="0 0 20 14" aria-hidden="true"><path d="m1.5 7.5 3.6 3.6L12.5 3.5M8.6 11.1l.4.4L16.5 3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  tick: `<svg viewBox="0 0 20 14" aria-hidden="true"><path d="m4.5 7.5 3.6 3.6L15.5 3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  heart: sv(`<path fill="currentColor" d="M12 20.3c-.3 0-.6-.1-.8-.3C7.6 17 3 13.4 3 8.9 3 6.1 5.1 4 7.7 4c1.8 0 3.3.9 4.3 2.4C13 4.9 14.5 4 16.3 4 18.9 4 21 6.1 21 8.9c0 4.5-4.6 8.1-8.2 11.1-.2.2-.5.3-.8.3z"/>`),
+  thumb: sv(`<path fill="currentColor" d="M7.2 10.2v9.8H4.6c-.9 0-1.6-.7-1.6-1.6v-6.6c0-.9.7-1.6 1.6-1.6h2.6zm1.8 9.8v-9.9l3.6-5.9c.4-.7 1.3-1 2-.6.7.3 1 1.1.8 1.9L14.5 9.2h4.6c1.2 0 2.1 1.1 1.9 2.3l-1.1 6.7c-.2 1.1-1.1 1.8-2.2 1.8H9z"/>`),
+  linkedin: sv(`<path fill="currentColor" d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45z"/>`),
+  xlogo: sv(`<path fill="currentColor" d="M17.75 3h3.07l-6.7 7.66L22 21h-6.17l-4.83-6.32L5.47 21H2.4l7.17-8.2L2 3h6.33l4.37 5.78L17.75 3zm-1.08 16.18h1.7L7.4 4.73H5.58l11.09 14.45z"/>`),
+  github: sv(`<path fill="currentColor" d="M12 2.2a9.9 9.9 0 0 0-3.13 19.3c.5.1.68-.21.68-.48v-1.7c-2.76.6-3.34-1.33-3.34-1.33-.45-1.15-1.1-1.45-1.1-1.45-.9-.62.07-.6.07-.6 1 .07 1.52 1.02 1.52 1.02.89 1.52 2.33 1.08 2.9.83.09-.64.35-1.08.63-1.33-2.2-.25-4.52-1.1-4.52-4.9 0-1.08.39-1.97 1.02-2.66-.1-.25-.44-1.26.1-2.63 0 0 .83-.27 2.72 1.02a9.4 9.4 0 0 1 4.95 0c1.89-1.29 2.72-1.02 2.72-1.02.54 1.37.2 2.38.1 2.63.63.7 1.02 1.58 1.02 2.66 0 3.81-2.32 4.65-4.53 4.9.36.3.67.9.67 1.83v2.72c0 .27.18.58.69.48A9.9 9.9 0 0 0 12 2.2z"/>`),
+};
+const RX = [
+  { id: 'heart', label: 'Heart', html: IC.heart },
+  { id: 'up', label: 'Thumbs up', html: IC.thumb },
+  { id: 'ha', label: 'Ha ha', html: '<span style="font-size:12.5px">HA</span>' },
+  { id: 'bang', label: 'Exclamation', html: '<span>!!</span>' },
+  { id: 'q', label: 'Question', html: '<span style="font-size:16px">?</span>' },
+];
+const LINK_META = {
+  linkedin: { name: 'LinkedIn', icon: IC.linkedin },
+  x: { name: 'X', icon: IC.xlogo },
+  twitter: { name: 'X', icon: IC.xlogo },
+  github: { name: 'GitHub', icon: IC.github },
+};
+const linkMeta = k => LINK_META[k] || { name: k.charAt(0).toUpperCase() + k.slice(1), icon: IC.link };
+const prettyUrl = u => String(u || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+const hostOf = u => { try { return new URL(u).host.replace(/^www\./, ''); } catch (e) { return prettyUrl(u); } };
+
+/* ================================================================
+   Language: normalising, fuzzy matching, intents
+   ================================================================ */
+const norm = s => String(s || '').toLowerCase()
+  .replace(/[‘’ʼ`]/g, "'").replace(/'/g, '')
+  .replace(/[^\p{L}\p{N}@.]+/gu, ' ').replace(/(^|\s)\.+|\.+(\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
+const toks = s => norm(s).split(' ').filter(Boolean);
+const STOP = new Set(('a an the is are am was were be been being do does did you your yours youre u ur i im ive me my mine to of for in on at and or ' +
+  'whats wat what s can could would should will please pls plz tell about know want like it its this that there with any anything some something ' +
+  'get got have has had just so up kaiav kaiavs he his him hes').split(' '));
+function osa(a, b, max) {
+  const la = a.length, lb = b.length;
+  if (Math.abs(la - lb) > max) return max + 1;
+  let p2 = null, p = Array.from({ length: lb + 1 }, (_, i) => i);
+  for (let i = 1; i <= la; i++) {
+    const c = [i]; let best = i;
+    for (let j = 1; j <= lb; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let v = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + cost);
+      if (p2 && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, p2[j - 2] + 1);
+      c.push(v); if (v < best) best = v;
+    }
+    if (best > max) return max + 1;
+    p2 = p; p = c;
+  }
+  return p[lb];
+}
+const fuzzMax = n => n >= 8 ? 2 : n >= 4 ? 1 : 0;
+/* how well query token q matches word w: 1 exact, .85 prefix, .65 fuzzy, .5 infix */
+function tokScore(q, w) {
+  if (q === w) return 1;
+  if (q.length >= 2 && w.startsWith(q)) return q.length >= 3 ? .85 : .6;
+  if (w.length >= 4 && q.startsWith(w) && q.length - w.length <= 2) return .8;
+  const m = fuzzMax(Math.min(q.length, w.length));
+  if (m && osa(q, w, m) <= m) return .65;
+  if (q.length >= 4 && w.includes(q)) return .5;
+  return 0;
+}
+
+const INTENTS = {
+  about:     { q: 'Who are you?', kw: ['who', 'yourself', 'nihalani', 'bio', 'biography', 'background', 'intro', 'introduce', 'introduction', 'person', 'profile'] },
+  age:       { q: 'How old are you?', kw: ['age', 'old', 'older', 'years', 'birthday', 'yo'] },
+  from:      { q: 'Where are you from?', kw: ['from', 'where', 'hong', 'kong', 'hk', 'born', 'birthplace', 'hometown', 'grew', 'grow', 'live', 'living', 'based', 'country', 'city', 'nationality', 'origin', 'raised', 'asia', 'china'] },
+  j:         { q: 'What’s J?', kw: ['j', 'rising', 'risingfounder', 'program', 'programme', 'accelerator', 'incubator', 'fellowship', 'cohort', 'founders', 'youth', 'teen', 'teens', 'startup', 'startups', 'remote', 'free'] },
+  apply:     { q: 'How do I apply to J?', kw: ['apply', 'application', 'applying', 'join', 'signup', 'enroll', 'enrol', 'register', 'eligible', 'eligibility', 'deadline', 'admission', 'accepted', 'participate'] },
+  eden:      { q: 'What’s Eden?', kw: ['eden', 'context', 'pivot', 'pivoting'] },
+  tech:      { q: 'What do you know most about?', kw: ['agents', 'agent', 'ai', 'llm', 'llms', 'gpt', 'ml', 'tech', 'technology', 'knowledgeable', 'knowledge', 'expertise', 'expert', 'skills', 'specialty', 'interests', 'interested', 'nerd', 'models'] },
+  interns:   { q: 'Have you done internships?', kw: ['internship', 'internships', 'intern', 'interned', 'experience', 'worked', 'cv', 'resume'] },
+  hiring:    { q: 'Are you hiring?', kw: ['hire', 'hiring', 'hired', 'jobs', 'job', 'position', 'positions', 'opening', 'openings', 'recruit', 'recruiting', 'career', 'careers', 'employ', 'employment', 'vacancy'] },
+  help:      { q: 'Can you help me with something?', kw: ['help', 'helping', 'assist', 'support', 'favor', 'favour', 'mentor', 'advise', 'question'] },
+  contact:   { q: 'How do I reach you?', kw: ['contact', 'email', 'emails', 'mail', 'gmail', 'reach', 'touch', 'message', 'dm', 'talk', 'connect', 'address', 'ping', 'inbox'] },
+  links:     { q: 'Where can I find you online?', kw: ['links', 'link', 'social', 'socials', 'profiles', 'online', 'media', 'follow', 'handles', 'website', 'accounts'] },
+  linkedin:  { q: 'What’s your LinkedIn?', kw: ['linkedin'] },
+  x:         { q: 'What’s your X?', kw: ['twitter', 'tweet', 'tweets', 'x'] },
+  github:    { q: 'What’s your GitHub?', kw: ['github', 'git', 'code', 'repo', 'repository', 'source', 'opensource'] },
+  notes:     { q: 'Show me your notes', kw: ['notes', 'note', 'advice', 'tips', 'quote', 'quotes', 'motto', 'mantra', 'mantras', 'lessons', 'wisdom', 'principles', 'reminders', 'philosophy'] },
+  writing:   { q: 'Anything you’ve written?', kw: ['writing', 'written', 'writes', 'blog', 'blogs', 'posts', 'post', 'articles', 'article', 'essays', 'essay', 'newsletter', 'substack', 'publish', 'published'] },
+  fun:       { q: 'What do you do for fun?', kw: ['fun', 'hobby', 'hobbies', 'sport', 'sports', 'squash', 'bjj', 'jiu', 'jitsu', 'jiujitsu', 'jujitsu', 'grappling', 'martial', 'weekend', 'weekends', 'gym', 'exercise', 'spare', 'outside', 'play', 'train', 'training', 'athlete', 'racket', 'wrestling'] },
+  role:      { q: 'What do you do?', kw: ['role', 'title', 'building', 'build', 'projects', 'project', 'company', 'companies', 'founder', 'cofounder', 'occupation'] },
+  name:      { q: 'What’s your name?', kw: ['name', 'called'] },
+};
+const SOCIAL = new Set(['greeting', 'howareyou', 'thanks', 'bye', 'ack']);
+const RXS = [
+  ['greeting', 3, /^(hi+|hey+|hello+|hiya|yo|sup|howdy|heya|hallo|hola|gm|greetings|good (morning|afternoon|evening))\b/],
+  ['howareyou', 3, /\b(how (are|r) (you|u)|hows it going|how is it going|whats up|wassup|how you doing|hows life)\b/],
+  ['thanks', 3, /\b(thanks?|thank (you|u)|thx|ty|tysm|cheers|appreciate( it)?)\b/],
+  ['bye', 3, /\b(bye|goodbye|see (ya|you)|cya|gtg|good night|goodnight)\b/],
+  ['ack', 3, /^(ok(ay)?|k|kk|cool|nice|great|awesome|got it|sure|yes|yeah|yep|yup|ya|no|nope|nah|lol|haha+|wow|interesting|neat|sweet|perfect|amazing|love it)\b/],
+  ['about', 3, /\b(who (are|r) (you|u)|who is (this|kaiav)|about (you|yourself)|tell me about yourself|introduce yourself|your story)\b/],
+  ['age', 3, /\b(how old|your age|years old|y o|when were you born)\b/],
+  ['from', 3, /\b(where (are|r) (you|u)( originally)? from|where were you born|where did you grow|where do you live|where are you based|hong kong)\b/],
+  ['j', 3, /\b(what is j|whats j|tell me about j|about j|rising ?founders?)\b/],
+  ['j', 1.5, /(^|\s)j(\s|$)/],
+  ['apply', 3, /\b(how (do|can) i (apply|join|get in)|sign ?up|can i join|apply)\b/],
+  ['eden', 3, /\beden\b/],
+  ['hiring', 3, /\b(are you hiring|hiring|hire|job|jobs|work for you|work with you|internship at|intern (at|for) you)\b/],
+  ['help', 3, /\b(can you help|could you help|help me|need help|need advice|ask you something)\b/],
+  ['role', 3, /\b(what (do|does) (you|kaiav|he) do|what are you (working on|building|up to)|what do you work on|what is your job)\b/],
+  ['contact', 3, /\b(get in touch|reach (you|out)|contact|email|e mail)\b/],
+  ['name', 3, /\b(your name|whats your name)\b/],
+  ['tech', 3, /\b(what are you into|what do you know|good at|what are you interested in|ai|agents?|llms?)\b/],
+  ['writing', 3, /\b(have you written|anything (youve )?written|do you write|blog)\b/],
+  ['notes', 3, /\b(notes?|advice)\b/],
+  ['fun', 3, /\b(for fun|free time|spare time|hobbies|hobby|outside (of )?school|do you play)\b/],
+];
+function classify(text) {
+  const n = norm(text);
+  const sc = {};
+  for (const [id, w, re] of RXS) if (re.test(n)) sc[id] = (sc[id] || 0) + w;
+  const ts = n.split(' ').filter(t => t && !STOP.has(t));
+  for (const t of ts) for (const id in INTENTS) {
+    let best = 0;
+    for (const k of INTENTS[id].kw) {
+      if (k.length <= 2 || t.length <= 2) { if (k === t) best = 1; continue; }
+      const s = tokScore(t, k); if (s > best) best = s;
+    }
+    if (best >= .6) sc[id] = (sc[id] || 0) + best;
+  }
+  let top = null, topS = 0, soc = null, socS = 0;
+  for (const id in sc) {
+    if (SOCIAL.has(id)) { if (sc[id] > socS) { soc = id; socS = sc[id]; } }
+    else if (sc[id] > topS) { top = id; topS = sc[id]; }
+  }
+  const greeted = sc.greeting > 0;
+  if (top && topS >= .6) return { intent: top, score: topS, greeted, tokens: ts };
+  if (soc) return { intent: soc, score: socS, tokens: ts };
+  return { intent: null, score: 0, tokens: ts };
+}
+
+/* ================================================================
+   Search index: every piece of content, tagged with its intent
+   ================================================================ */
+const bulletIntent = s => /\by\/?o\b/i.test(s) ? 'age' : /born|hong kong/i.test(s) ? 'from' : /\bof j\b/i.test(s) ? 'j' : /\bof eden\b/i.test(s) ? 'eden'
+  : /intern/i.test(s) ? 'interns' : /knowledgeable|llm/i.test(s) ? 'tech' : /reach out|contact/i.test(s) ? 'contact' : /hiring|help/i.test(s) ? 'help' : /squash|bjj/i.test(s) ? 'fun' : 'about';
+const CAT = {
+  about: ['About', IC.person], age: ['About', IC.person], from: ['About', IC.person], interns: ['About', IC.person], tech: ['About', IC.person], help: ['About', IC.person],
+  hiring: ['About', IC.person], fun: ['For fun', IC.bolt], role: ['About', IC.person], name: ['About', IC.person],
+  j: [J.title || 'J', 'J'], apply: [J.title || 'J', 'J'], eden: [E.title || 'Eden', 'E'], contact: ['Contact', IC.mail], links: ['Links', IC.link],
+  linkedin: ['Links', IC.linkedin], x: ['Links', IC.xlogo], github: ['Links', IC.github], notes: ['Notes', IC.quote], writing: ['Writing', IC.doc],
+};
+const INDEX = [];
+const addIx = (intent, text, find, extra = {}) => { if (text) INDEX.push(Object.assign({ intent, text: String(text), words: toks(text), find }, extra)); };
+if (NAME) addIx('about', NAME, null, { label: 'Name' });
+if (ROLE) addIx('role', ROLE, null);
+BUL.forEach(s => addIx(bulletIntent(s), s, { text: s }));
+if (J.title) addIx('j', J.title, { type: 'jcard' });
+if (J.line) addIx('j', J.line, { text: J.line });
+paras(J.body).forEach(p => addIx('j', p, { text: p }));
+[].concat(J.facts || []).forEach(f => f && addIx('j', f[0] + ': ' + f[1], { type: 'jcard' }));
+if (J.url) addIx('apply', prettyUrl(J.url), { type: 'jcard' }, { label: 'Website' });
+if (E.title || E.line) addIx('eden', [E.title, E.line].filter(Boolean).join(': '), { text: E.line });
+paras(E.body).forEach(p => addIx('eden', p, { text: p }));
+CONTACTS.forEach(c => addIx('contact', (c.label ? c.label + ': ' : '') + c.email, { type: 'contact' }));
+Object.keys(LINKS).forEach(k => LINKS[k] && addIx(LINK_META[k] ? k : 'links', linkMeta(k).name + ': ' + prettyUrl(LINKS[k]), { type: 'links' }));
+NOTES.forEach(n => addIx('notes', n, { text: n }));
+POSTS.forEach(p => addIx('post:' + slugOf(p), [p.title, p.subtitle || p.summary].filter(Boolean).join(': '), { type: 'posts' }, { cat: ['Writing', IC.doc] }));
+const SEARCH_STOP = new Set([...STOP].filter(w => !['kaiav', 'he', 'his', 'him'].includes(w)));
+['who', 'where', 'how', 'old', 'from'].forEach(w => SEARCH_STOP.delete(w));
+
+function search(query) {
+  const qt = toks(query).filter(t => !SEARCH_STOP.has(t));
+  if (!qt.length) return [];
+  const cls = classify(query);
+  const phrase = norm(query);
+  const out = [];
+  for (const e of INDEX) {
+    const tags = (INTENTS[e.intent] && INTENTS[e.intent].kw) || (e.intent.startsWith('post:') ? INTENTS.writing.kw : []);
+    let sum = 0, all = true, textHits = 0;
+    const hit = new Map();
+    for (const q of qt) {
+      let best = 0, bi = -1;
+      e.words.forEach((w, i) => { const s = (q.length <= 1 ? (q === w ? 1 : 0) : tokScore(q, w)); if (s > best) { best = s; bi = i; } });
+      if (best) { textHits++; hit.set(bi, Math.max(hit.get(bi) || 0, best)); e.words.forEach((w, i) => { if (i !== bi && q.length > 1 && tokScore(q, w) >= .65) hit.set(i, 1); }); }
+      let tb = 0;
+      for (const k of tags) { const s = (q.length <= 2 || k.length <= 2) ? (q === k ? 1 : 0) : tokScore(q, k); if (s > tb) tb = s; }
+      const s = Math.max(best, tb * .75);
+      if (!s) all = false;
+      sum += s;
+    }
+    let score = sum / qt.length;
+    if (!all) score *= .45;
+    if (phrase.length > 2 && norm(e.text).includes(phrase)) score += .5;
+    if (cls.intent && cls.intent === e.intent && cls.score >= 1) score += .45;
+    if (textHits) score += .05 * textHits;
+    if (score >= .42) out.push({ e, score, hit, qt });
+  }
+  out.sort((a, b) => b.score - a.score);
+  return out.slice(0, 14);
+}
+/* highlight matched words in a snippet */
+function highlight(text, qt) {
+  const re = /[\p{L}\p{N}]+/gu; let m, last = 0, html = '';
+  while ((m = re.exec(text))) {
+    const w = m[0].toLowerCase(); let len = 0;
+    for (const q of qt) {
+      if (q === w) { len = w.length; break; }
+      if (q.length >= 2 && w.startsWith(q)) len = Math.max(len, q.length);
+      else if (q.length >= 3 && fuzzMax(Math.min(q.length, w.length)) && osa(q, w, fuzzMax(Math.min(q.length, w.length))) <= fuzzMax(Math.min(q.length, w.length))) len = w.length;
+      else if (q.length >= 4 && w.includes(q)) { const i = w.indexOf(q); html += esc(text.slice(last, m.index + i)) + '<mark>' + esc(text.substr(m.index + i, q.length)) + '</mark>'; last = m.index + i + q.length; len = -1; break; }
+    }
+    if (len > 0) { html += esc(text.slice(last, m.index)) + '<mark>' + esc(m[0].slice(0, len)) + '</mark>'; last = m.index + len; }
+  }
+  return html + esc(text.slice(last));
+}
+
+/* ================================================================
+   Answers: bursts of parts, each built from content
+   ================================================================ */
+const T = text => text ? { type: 'text', text: String(text) } : null;
+const Q = text => text ? { type: 'quote', text: String(text) } : null;
+const FALLBACKS = [
+  ['Hmm, I don’t have an answer for that one here.', 'Try one of these, or just reach out directly.'],
+  ['Not sure I can answer that here.', 'These might help:'],
+  ['That one’s beyond this little chat.', 'Here’s what I can tell you about:'],
+];
+const ANS = {
+  greet: () => [[T(FIRST ? `Hey! I’m ${FIRST}.` : 'Hey!')], [T(B.j()), T(B.eden())], [T('Ask me anything, or tap a suggestion below.')]],
+  about: () => [[T(B.age()), T(B.from())], [T(B.j()), T(B.eden())], [T(B.interns()), T(B.tech())]],
+  age: () => [[T(B.age())]],
+  from: () => [[T(B.from())]],
+  j: () => [[T(J.line)], paras(J.body).map(T), [{ type: 'jcard' }]],
+  apply: () => [[T('Here you go:'), { type: 'jcard' }]],
+  eden: () => [[T(E.line)], paras(E.body).map(T)],
+  tech: () => [[T(B.tech())], [T(B.eden())]],
+  interns: () => [[T(B.interns())]],
+  hiring: () => [[T(B.help())]],
+  help: () => [[T(B.help())], [T(B.reach())]],
+  contact: () => [[T(B.reach())], [CONTACTS.length ? { type: 'contact' } : null]],
+  links: () => [[T('Here you go:'), Object.keys(LINKS).length ? { type: 'links' } : null]],
+  linkedin: () => LINKS.linkedin ? [[T('Here you go:'), { type: 'links', keys: ['linkedin'] }]] : null,
+  x: () => (LINKS.x || LINKS.twitter) ? [[T('Here you go:'), { type: 'links', keys: [LINKS.x ? 'x' : 'twitter'] }]] : null,
+  github: () => LINKS.github ? [[T('Here you go:'), { type: 'links', keys: ['github'] }]] : null,
+  notes: () => NOTES.length ? [[T('Here are my notes:')], NOTES.map(Q)] : null,
+  writing: () => POSTS.length ? [[T('Here’s what I’ve written:'), { type: 'posts' }]]
+    : [[T('Nothing published yet.')], [T(NOTES.length ? 'Want to see my notes instead?' : 'Anything else?')]],
+  fun: () => [[T(B.fun())]],
+  role: () => [[T(B.j()), T(B.eden())]],
+  name: () => [[T(NAME)]],
+  greeting: () => [[T('Hey!'), T('Ask me anything, or tap a suggestion below.')]],
+  howareyou: () => [[T('Hey! What would you like to know?')]],
+  thanks: () => [[T('Anytime!'), T('Anything else?')]],
+  bye: () => [[T('Thanks for stopping by!')]],
+  ack: () => [[T('Anything else you’d like to know?')]],
+};
+const OFFERS = { writing: () => (POSTS.length || !NOTES.length) ? null : 'notes' };
+function plan(intent) {
+  let bursts = null;
+  if (intent && intent.startsWith('post:')) {
+    const slug = intent.slice(5);
+    if (POSTS.some(p => slugOf(p) === slug)) bursts = [[T('Here you go:'), { type: 'posts', slugs: [slug] }]];
+  } else if (ANS[intent]) bursts = ANS[intent]();
+  bursts = (bursts || []).map(b => (b || []).filter(Boolean)).filter(b => b.length);
+  if (!bursts.length) {
+    const f = FALLBACKS[state.fb++ % FALLBACKS.length];
+    return { intent: 'fallback', bursts: [[T(f[0])], [T(f[1])]] };
+  }
+  return { intent, bursts };
+}
+
+/* contextual suggestions */
+const CHIP = {
+  about: 'Who are you?', j: 'What’s J?', eden: 'What’s Eden?', contact: 'How do I reach you?', fun: 'What do you do for fun?',
+  links: 'Links', writing: 'Anything you’ve written?', notes: 'Show me your notes', apply: 'How do I apply to J?',
+  age: 'How old are you?', from: 'Where are you from?', tech: 'What do you know most about?', help: 'Can you help me with something?',
+  hiring: 'Are you hiring?', interns: 'Internships?',
+};
+const DEFAULT = ['about', 'j', 'eden', 'contact', 'fun', 'links', 'writing'];
+const FOLLOW = {
+  greet: DEFAULT, greeting: DEFAULT, howareyou: DEFAULT, ack: ['about', 'j', 'eden', 'contact', 'links'],
+  about: ['j', 'eden', 'fun', 'contact', 'from'],
+  age: ['from', 'fun', 'j', 'about'], from: ['age', 'fun', 'about', 'j'], name: ['about', 'j', 'eden'],
+  j: ['apply', 'eden', 'contact', 'about'], apply: ['contact', 'eden', 'about', 'links'],
+  eden: ['tech', 'j', 'contact', 'writing'], tech: ['eden', 'j', 'writing', 'contact'],
+  interns: ['tech', 'j', 'eden', 'contact'], hiring: ['help', 'contact', 'j', 'about'], help: ['contact', 'j', 'eden', 'links'],
+  role: ['j', 'eden', 'about', 'fun'],
+  contact: ['links', 'help', 'about', 'j'], links: ['contact', 'writing', 'about', 'notes'],
+  linkedin: ['links', 'contact', 'about'], x: ['links', 'contact', 'about'], github: ['links', 'contact', 'tech'],
+  writing: ['notes', 'links', 'contact', 'about'], notes: ['about', 'fun', 'contact', 'j'],
+  fun: ['from', 'age', 'j', 'eden'], thanks: ['links', 'contact', 'notes', 'about'], bye: ['about', 'j', 'contact'],
+  fallback: ['about', 'j', 'eden', 'contact', 'links'],
+};
+function chipList() {
+  const last = state.last || 'greet';
+  const asked = new Set(state.asked);
+  const fol = (FOLLOW[last] || DEFAULT).filter(i => CHIP[i] && i !== last);
+  const out = [];
+  const push = i => { if (!out.includes(i) && CHIP[i] && i !== last && (ANS[i] && plan_ok(i))) out.push(i); };
+  if (state.offer) push(state.offer);
+  fol.filter(i => !asked.has(i)).forEach(push);
+  DEFAULT.filter(i => !asked.has(i)).forEach(push);
+  if (out.length < 3) fol.forEach(push);
+  if (out.length < 3) DEFAULT.forEach(push);
+  return out.slice(0, 5);
+}
+const plan_ok = i => { try { const b = ANS[i](); return !!(b && b.some(x => x && x.some(Boolean))); } catch (e) { return false; } };
+
+/* ================================================================
+   State (session)
+   ================================================================ */
+const KEY = 'kn-chat-v1';
+let state = { msgs: [], asked: [], last: null, offer: null, seq: 0, fb: 0 };
+const load = () => { try { const s = JSON.parse(sessionStorage.getItem(KEY) || 'null'); if (s && Array.isArray(s.msgs)) state = Object.assign(state, s); } catch (e) {} };
+const save = () => { try { sessionStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+/* ================================================================
+   DOM
+   ================================================================ */
+const app = $('#app'), bar = $('#bar'), scroller = $('#scroller'), log = $('#log'), composer = $('#composer'), chipsEl = $('#chips');
+const form = $('#form'), input = $('#input'), sendBtn = $('#send'), pill = $('#pill'), toastEl = $('#toast');
+$('#hName').textContent = NAME; $('#hRole').textContent = ROLE; $('#iName').textContent = NAME; $('#iRole').textContent = ROLE;
+document.title = NAME || document.title;
+$('#who').setAttribute('aria-label', (NAME ? NAME + ', ' : '') + 'view profile');
+$('#searchBtn').innerHTML = IC.search;
+document.querySelectorAll('.sf-i').forEach(e => { e.outerHTML = IC.search; });
+$('#sField').lastElementChild.textContent = 'Search ' + (FIRST || '');
+$('#sInput').placeholder = 'Search ' + (FIRST || 'everything');
+sendBtn.innerHTML = IC.send; pill.insertAdjacentHTML('beforeend', IC.down); $('#sClear').innerHTML = IC.xcirc;
+document.querySelectorAll('.sh-x').forEach(b => { b.innerHTML = IC.x; });
+input.placeholder = FIRST ? 'Ask ' + FIRST + ' anything' : 'Message';
+
+/* layout: header/composer heights and the visual viewport (on-screen keyboards) */
+const nearBottom = (px = 64) => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < px;
+let stick = true;
+const ro = new ResizeObserver(() => {
+  const wasBottom = stick;
+  app.style.setProperty('--hh', bar.offsetHeight + 'px');
+  app.style.setProperty('--ch', composer.offsetHeight + 'px');
+  if (wasBottom) scroller.scrollTop = scroller.scrollHeight;
+});
+ro.observe(bar); ro.observe(composer);
+const vv = window.visualViewport;
+function fitViewport() {
+  if (!vv) return;
+  const wasBottom = stick;
+  app.style.setProperty('--app-h', vv.height + 'px');
+  app.style.transform = vv.offsetTop ? `translateY(${vv.offsetTop}px)` : '';
+  if (wasBottom) requestAnimationFrame(() => { scroller.scrollTop = scroller.scrollHeight; });
+}
+if (vv) { vv.addEventListener('resize', fitViewport); vv.addEventListener('scroll', fitViewport); fitViewport(); }
+window.addEventListener('scroll', () => { if (window.scrollY) window.scrollTo(0, 0); }, { passive: true });
+app.addEventListener('scroll', () => { if (app.scrollTop || app.scrollLeft) { app.scrollTop = 0; app.scrollLeft = 0; } }, { passive: true });
+
+/* hairlines + new-messages pill */
+let unseen = false;
+function onScroll() {
+  stick = nearBottom();
+  const top = scroller.scrollTop > 2;
+  app.style.setProperty('--hair-o', top ? 1 : 0);
+  app.style.setProperty('--chair-o', stick ? 0 : 1);
+  if (stick && unseen) { unseen = false; pill.classList.remove('on'); }
+}
+scroller.addEventListener('scroll', onScroll, { passive: true });
+pill.addEventListener('click', () => scrollBottom(true));
+function scrollBottom(smooth) {
+  const top = scroller.scrollHeight;
+  if (smooth && MOTION) scroller.scrollTo({ top, behavior: 'smooth' }); else scroller.scrollTop = top;
+  stick = true; unseen = false; pill.classList.remove('on');
+}
+
+/* ================================================================
+   Rendering messages
+   ================================================================ */
+let typingRow = null;
+const rowOf = id => log.querySelector(`.row[data-id="${id}"]`);
+function cardHTML(m) {
+  if (m.type === 'jcard') {
+    const facts = [].concat(J.facts || []).filter(f => f && f.length >= 2);
+    return `<a class="card jcard" href="${esc(J.url || '#')}" target="_blank" rel="noopener noreferrer" aria-label="${esc((J.title || 'J') + ', ' + hostOf(J.url))}">
+      <div class="jc-top"><span class="tile letter" aria-hidden="true">${esc((J.title || 'J').charAt(0))}</span><span class="t"><b>${esc(J.title || '')}</b><small>${esc(hostOf(J.url))}</small></span></div>
+      ${J.line ? `<div class="jc-line">${esc(J.line)}</div>` : ''}
+      ${facts.length ? `<dl class="facts">${facts.map(f => `<dt>${esc(f[0])}</dt><dd>${esc(f[1])}</dd>`).join('')}</dl>` : ''}
+      <div class="jc-go"><span>Visit ${esc(hostOf(J.url))}</span>${IC.ext}</div></a>`;
+  }
+  if (m.type === 'contact') {
+    return `<div class="card contact">${CONTACTS.map(c => `<div class="crow"><small>${esc(c.label || '')}</small><span class="addr">${esc(c.email)}</span>
+      <div class="cact"><button class="btn" type="button" data-copy="${esc(c.email)}" aria-label="Copy ${esc(c.email)}">${IC.copy}<span>Copy</span></button>
+      <a class="btn primary" href="mailto:${esc(c.email)}" aria-label="Email ${esc(c.email)}">${IC.mail}<span>Email</span></a></div></div>`).join('')}</div>`;
+  }
+  if (m.type === 'links') {
+    const keys = (m.keys || Object.keys(LINKS)).filter(k => LINKS[k]);
+    return `<div class="card links">${keys.map(k => { const lm = linkMeta(k); return `<a class="lrow" href="${esc(LINKS[k])}" target="_blank" rel="noopener noreferrer">
+      <span class="tile" aria-hidden="true">${lm.icon}</span><span class="t"><b>${esc(lm.name)}</b><small>${esc(prettyUrl(LINKS[k]))}</small></span>${IC.ext}</a>`; }).join('')}</div>`;
+  }
+  if (m.type === 'posts') {
+    const ps = m.slugs ? POSTS.filter(p => m.slugs.includes(slugOf(p))) : POSTS;
+    return `<div class="card posts">${ps.map(p => `<a class="prow" href="${p.html ? '#post/' + esc(slugOf(p)) : esc(p.url || '#')}" data-post="${esc(slugOf(p))}" ${p.html ? '' : 'target="_blank" rel="noopener noreferrer"'}>
+      <span class="tile" aria-hidden="true">${IC.doc}</span><span class="t"><b>${esc(p.title || 'Untitled')}</b>${p.date ? `<small>${esc(fmtDate(p.date))}</small>` : ''}${p.summary ? `<small class="sum">${esc(p.summary)}</small>` : ''}</span>${IC.chev}</a>`).join('')}</div>`;
+  }
+  return '';
+}
+function buildRow(m) {
+  const row = document.createElement('div');
+  row.className = 'row ' + m.who; row.dataset.id = m.id;
+  let inner;
+  if (m.type === 'text' || m.type === 'quote') {
+    const who = m.who === 'me' ? 'You' : (FIRST || 'Kaiav');
+    inner = `<div class="b ${m.type === 'quote' ? 'quote' : 'tx'}" tabindex="-1" aria-label="${esc(who + ': ' + m.text)}">${m.type === 'quote' ? `<span class="q">${esc(m.text)}</span>` : esc(m.text)}</div>`;
+  } else inner = cardHTML(m);
+  row.innerHTML = inner + `<time class="ts" aria-hidden="true" datetime="${new Date(m.ts).toISOString()}">${esc(fmtTime(m.ts))}</time>`;
+  if (m.rx) setRx(row, m.rx, false);
+  return row;
+}
+function setRx(row, id, pop) {
+  let badge = row.querySelector('.rx');
+  const r = RX.find(x => x.id === id);
+  if (!r) { if (badge) badge.remove(); row.classList.remove('has-rx'); return; }
+  if (!badge) { badge = document.createElement('span'); badge.className = 'rx'; (row.querySelector('.b') || row.firstElementChild).appendChild(badge); }
+  badge.innerHTML = r.html; badge.setAttribute('role', 'img'); badge.setAttribute('aria-label', 'Reaction: ' + r.label);
+  row.classList.add('has-rx');
+  if (pop && MOTION) { badge.classList.remove('pop'); void badge.offsetWidth; badge.classList.add('pop'); }
+}
+function sepNode(ts) {
+  const d = document.createElement('div'); d.className = 'sep'; d.setAttribute('aria-hidden', 'true');
+  d.innerHTML = `<b>${esc(fmtDay(ts))}</b> ${esc(fmtTime(ts))}`; return d;
+}
+/* group consecutive messages from one sender: corner radii + tails */
+function regroup() {
+  const rows = [...log.children].filter(n => n.classList.contains('row'));
+  rows.forEach((r, i) => {
+    const prev = r.previousElementSibling, next = r.nextElementSibling;
+    const who = r.classList.contains('me') ? 'me' : 'them';
+    const same = n => n && n.classList.contains('row') && n.classList.contains(who);
+    r.classList.toggle('gs', !same(prev));
+    r.classList.toggle('ge', !same(next));
+  });
+}
+function statusUpdate(animate) {
+  const old = log.querySelector('.status'); if (old) old.remove();
+  const lastMe = [...state.msgs].reverse().find(m => m.who === 'me');
+  if (!lastMe) return;
+  const row = rowOf(lastMe.id); if (!row) return;
+  const s = document.createElement('div');
+  s.className = 'status' + (lastMe.read ? ' read' : '') + (animate ? ' in' : '');
+  s.innerHTML = (lastMe.read ? IC.ticks : IC.tick) + `<span>${lastMe.read ? 'Read ' + esc(fmtTime(lastMe.readAt || lastMe.ts)) : 'Delivered'}</span>`;
+  s.setAttribute('aria-hidden', 'true');
+  row.after(s);
+}
+function insertNode(n) { if (typingRow && typingRow.parentNode === log) log.insertBefore(n, typingRow); else log.appendChild(n); }
+
+function addMsg(m, how = {}) {
+  m.id = ++state.seq; m.ts = m.ts || Date.now();
+  const prev = state.msgs[state.msgs.length - 1];
+  if (!prev || m.ts - prev.ts > 30 * 60e3) m.sep = true;
+  state.msgs.push(m); save();
+  const atBottom = stick || nearBottom(120);
+  if (m.sep) insertNode(sepNode(m.ts));
+  const row = buildRow(m);
+  insertNode(row);
+  regroup();
+  statusUpdate(false);
+  if (atBottom) scrollBottom(true); else if (m.who === 'them') { unseen = true; pill.classList.add('on'); }
+  enter(row, m, how);
+  return row;
+}
+function enter(row, m, how) {
+  const node = row.firstElementChild;
+  if (!MOTION) { anim(node, [{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' }); return; }
+  const r = node.getBoundingClientRect();
+  if (how.from) {
+    /* fly from the composer field or a chip into place */
+    const f = how.from;
+    const dx = f.left - r.left, dy = (f.top + f.height / 2) - (r.top + r.height / 2);
+    const sx = how.scale ? clamp(f.width / r.width, .6, 1.4) : 1;
+    const cs = getComputedStyle(node);
+    node.style.transformOrigin = 'left center';
+    anim(node, [
+      { transform: `translate(${dx}px, ${dy}px) scale(${sx})`, backgroundColor: how.bg || cs.backgroundColor, color: how.fg || cs.color },
+      { transform: 'none', backgroundColor: cs.backgroundColor, color: cs.color, offset: .999 },
+      { transform: 'none' },
+    ], { duration: SPR.dur, easing: SPR.ease });
+    anim(node, [{ backgroundColor: how.bg || cs.backgroundColor, color: how.fg || cs.color }, { backgroundColor: cs.backgroundColor, color: cs.color }], { duration: 260, easing: 'ease-out' });
+  } else {
+    node.style.transformOrigin = m.who === 'me' ? 'right bottom' : 'left bottom';
+    anim(node, [{ transform: `translateY(${how.dy || 10}px) scale(${how.s0 || .9})` }, { transform: 'none' }], { duration: SPR_SOFT.dur, easing: SPR_SOFT.ease });
+    anim(node, [{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
+  }
+  const st = row.nextElementSibling;
+  if (st && st.classList.contains('status')) anim(st, [{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: 150, fill: 'backwards' });
+}
+function showTyping() {
+  if (typingRow) return;
+  typingRow = document.createElement('div');
+  typingRow.className = 'row them typing-row'; typingRow.setAttribute('aria-hidden', 'true');
+  typingRow.innerHTML = '<div class="b typing"><i></i><i></i><i></i></div>';
+  const atBottom = stick || nearBottom(120);
+  log.appendChild(typingRow); regroup();
+  if (atBottom) scrollBottom(true);
+  const b = typingRow.firstElementChild;
+  if (MOTION) { b.style.transformOrigin = 'left bottom'; anim(b, [{ transform: 'scale(.5)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: SPR.dur, easing: SPR.ease }); }
+}
+function hideTyping() { if (typingRow) { typingRow.remove(); typingRow = null; regroup(); } }
+function renderAll() {
+  log.textContent = ''; typingRow = null;
+  for (const m of state.msgs) { if (m.sep) log.appendChild(sepNode(m.ts)); log.appendChild(buildRow(m)); }
+  regroup(); statusUpdate(false);
+}
+
+/* ================================================================
+   Conversation flow
+   ================================================================ */
+const queue = []; let busy = false;
+function askVisitor(text, intent, how) {
+  text = String(text || '').trim(); if (!text) return;
+  addMsg({ who: 'me', type: 'text', text }, how || {});
+  if (!intent) {
+    const c = classify(text);
+    intent = c.intent;
+    if (intent === 'ack' && state.offer && /^(y|yes|yeah|yep|yup|ya|sure|ok|okay|please|go on|sounds good)/.test(norm(text))) intent = state.offer;
+    if (!intent) { const r = search(text); if (r[0] && r[0].score >= .95 && r[0].qt.length && r[0].hit.size >= r[0].qt.length) intent = r[0].e.intent; }
+    queue.push({ intent, greeted: c.greeted && intent && !SOCIAL.has(intent) });
+  } else queue.push({ intent });
+  pump();
+}
+async function pump() {
+  if (busy) return; busy = true;
+  setChips(null);
+  while (queue.length) await reply(queue.shift());
+  busy = false;
+  setChips(chipList(), true);
+}
+const typeMs = burst => {
+  const len = burst.reduce((n, p) => n + (p.type === 'text' || p.type === 'quote' ? p.text.length : 70), 0);
+  const ms = clamp(380 + len * 14, 650, 1700);
+  return MOTION ? ms : ms * .5;
+};
+async function reply(q) {
+  const run = runId;
+  const p = plan(q.intent);
+  if (q.greeted && p.bursts[0]) p.bursts[0].unshift(T('Hey!'));
+  /* read receipt */
+  await wait(MOTION ? 420 : 200);
+  const lastMe = [...state.msgs].reverse().find(m => m.who === 'me');
+  if (lastMe && !lastMe.read) { lastMe.read = true; lastMe.readAt = Date.now(); save(); statusUpdate(true); }
+  await wait(MOTION ? 260 : 100);
+  for (const burst of p.bursts) {
+    if (run !== runId) return;
+    showTyping();
+    await wait(typeMs(burst));
+    hideTyping();
+    if (run !== runId) return;
+    for (let i = 0; i < burst.length; i++) {
+      const part = Object.assign({ who: 'them', intent: p.intent }, burst[i]);
+      addMsg(part, { s0: .86 });
+      if (i < burst.length - 1) await wait(MOTION ? 170 : 60);
+    }
+    await wait(MOTION ? 320 : 120);
+  }
+  if (p.intent !== 'fallback' && !state.asked.includes(p.intent)) state.asked.push(p.intent);
+  state.last = p.intent;
+  state.offer = OFFERS[p.intent] ? OFFERS[p.intent]() : null;
+  save();
+}
+
+/* suggestion chips */
+function setChips(list, animate) {
+  if (!list) { chipsEl.classList.add('off'); chipsEl.setAttribute('aria-hidden', 'true'); chipsEl.querySelectorAll('button').forEach(b => { b.tabIndex = -1; }); return; }
+  chipsEl.textContent = '';
+  list.forEach((id, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = CHIP[id]; b.dataset.intent = id;
+    if (animate && MOTION) { b.classList.add('in'); b.style.animationDelay = (i * 40) + 'ms'; }
+    chipsEl.appendChild(b);
+  });
+  chipsEl.scrollLeft = 0;
+  chipsEl.classList.remove('off'); chipsEl.removeAttribute('aria-hidden');
+}
+chipsEl.addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b || busy) return;
+  haptic(6);
+  const r = b.getBoundingClientRect(), cs = getComputedStyle(b);
+  askVisitor(b.textContent, b.dataset.intent, { from: r, scale: true, bg: cs.backgroundColor, fg: cs.color });
+});
+
+/* composer */
+const syncSend = () => sendBtn.classList.toggle('on', input.value.trim().length > 0);
+input.addEventListener('input', syncSend);
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  const text = input.value.trim(); if (!text) return;
+  const r = input.getBoundingClientRect();
+  const from = { left: r.left + 3, top: r.top, width: r.width, height: r.height };
+  input.value = ''; syncSend();
+  askVisitor(text, null, { from, bg: getComputedStyle(input.parentNode).backgroundColor, fg: getComputedStyle(input).color });
+});
+
+/* clipboard + toast */
+let toastT = 0;
+function toast(msg) {
+  toastEl.innerHTML = IC.check + `<span>${esc(msg)}</span>`;
+  toastEl.classList.add('on'); clearTimeout(toastT);
+  toastT = setTimeout(() => toastEl.classList.remove('on'), 1900);
+}
+async function copyText(t) {
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(t); return true; } } catch (e) {}
+  try {
+    const ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, t.length);
+    const ok = document.execCommand('copy'); ta.remove(); return ok;
+  } catch (e) { return false; }
+}
+document.addEventListener('click', async e => {
+  const c = e.target.closest('[data-copy]');
+  if (c) {
+    e.preventDefault(); haptic(6);
+    const t = c.dataset.copy, ok = await copyText(t);
+    toast(ok ? 'Copied ' + t : t);
+    const lbl = c.querySelector('span');
+    if (ok && lbl) { const was = lbl.textContent, ic = c.querySelector('svg'); c.classList.add('done'); lbl.textContent = 'Copied'; if (ic) ic.outerHTML = IC.check;
+      setTimeout(() => { c.classList.remove('done'); lbl.textContent = was; const i2 = c.querySelector('svg'); if (i2) i2.outerHTML = IC.copy; }, 1600); }
+    return;
+  }
+  const p = e.target.closest('[data-post]');
+  if (p) { const post = POSTS.find(x => slugOf(x) === p.dataset.post); if (post && post.html) { e.preventDefault(); openReader(post); } }
+});
+
+/* ================================================================
+   Search
+   ================================================================ */
+const sEl = $('#search'), sInput = $('#sInput'), sBody = $('#sBody'), sClear = $('#sClear');
+let sResults = [], sAct = 0, lastFocus = null;
+const SUGGEST = ['about', 'j', 'eden', 'contact', 'links', 'fun', 'notes', 'writing'];
+function icoFor(intent, cat) {
+  const c = cat || CAT[intent] || (intent.startsWith('post:') ? ['Writing', IC.doc] : ['About', IC.person]);
+  return c[1].startsWith('<') ? `<span class="ico" aria-hidden="true">${c[1]}</span>` : `<span class="ico l" aria-hidden="true">${esc(c[1])}</span>`;
+}
+function renderSearch() {
+  const q = sInput.value;
+  sClear.hidden = !q;
+  if (!q.trim()) {
+    sResults = SUGGEST.filter(plan_ok).map(i => ({ suggest: i }));
+    sBody.innerHTML = `<div class="s-h" id="sH">Suggestions</div><ul class="results" id="results" role="listbox" aria-labelledby="sH">${sResults.map((r, i) => `<li class="res" role="option" id="opt${i}" data-i="${i}">${icoFor(r.suggest)}<span class="rt"><small>${esc(CAT[r.suggest][0])}</small><span>${esc(INTENTS[r.suggest].q)}</span></span></li>`).join('')}</ul>`;
+  } else {
+    sResults = search(q);
+    if (!sResults.length) {
+      sBody.innerHTML = `<div class="s-empty" id="results" role="listbox" aria-label="No results"><b>No results</b>Nothing matches “${esc(q.trim())}”.<br><button class="btn" type="button" id="sAsk"><span>Ask ${esc(FIRST || '')} instead</span></button></div>`;
+      $('#sAsk').addEventListener('click', () => { const t = sInput.value; closeSearch(); askVisitor(t); });
+    } else {
+      sBody.innerHTML = `<div class="s-h" id="sH">${sResults.length} result${sResults.length === 1 ? '' : 's'}</div><ul class="results" id="results" role="listbox" aria-labelledby="sH">${sResults.map((r, i) => {
+        const cat = r.e.cat || CAT[r.e.intent] || ['About', IC.person];
+        const label = r.e.label ? cat[0] + ' · ' + r.e.label : cat[0];
+        return `<li class="res" role="option" id="opt${i}" data-i="${i}">${icoFor(r.e.intent, r.e.cat)}<span class="rt"><small>${esc(label)}</small><span>${highlight(r.e.text.replace(/\s*\n+\s*/g, ' / '), r.qt)}</span></span></li>`;
+      }).join('')}</ul>`;
+    }
+  }
+  sAct = 0; markAct();
+}
+function markAct() {
+  sBody.querySelectorAll('.res').forEach((n, i) => { const on = i === sAct && !!sInput.value.trim(); n.classList.toggle('hl', on); n.setAttribute('aria-selected', String(i === sAct)); });
+  if (sResults.length) sInput.setAttribute('aria-activedescendant', 'opt' + sAct); else sInput.removeAttribute('aria-activedescendant');
+}
+function openSearch() {
+  lastFocus = document.activeElement;
+  sInput.value = ''; renderSearch();
+  sEl.classList.add('on'); app.setAttribute('data-search', '');
+  sInput.focus({ preventScroll: true });
+  sBody.scrollTop = 0;
+}
+function closeSearch() {
+  sEl.classList.remove('on'); app.removeAttribute('data-search');
+  sInput.blur();
+}
+function pickResult(i) {
+  const r = sResults[i]; if (!r) return;
+  closeSearch();
+  if (r.suggest) { askVisitor(INTENTS[r.suggest].q, r.suggest); return; }
+  const e = r.e;
+  /* already answered? scroll to it */
+  const found = e.find && [...state.msgs].reverse().find(m => m.who === 'them' && (e.find.text ? m.text === e.find.text : m.type === e.find.type));
+  if (found) { const row = rowOf(found.id); if (row) { revealRow(row); return; } }
+  const q = e.intent.startsWith('post:') ? (POSTS.find(p => 'post:' + slugOf(p) === e.intent) || {}).title || INTENTS.writing.q : (INTENTS[e.intent] || INTENTS.about).q;
+  askVisitor(q, e.intent);
+}
+function revealRow(row) {
+  const node = row.firstElementChild;
+  const target = row.offsetTop - (scroller.clientHeight - row.offsetHeight) / 2;
+  scroller.scrollTo({ top: target, behavior: MOTION ? 'smooth' : 'auto' });
+  node.classList.remove('flash'); void node.offsetWidth; node.classList.add('flash');
+  setTimeout(() => node.classList.remove('flash'), 1500);
+}
+$('#searchBtn').addEventListener('click', openSearch);
+$('#sField').addEventListener('click', openSearch);
+$('#sCancel').addEventListener('click', () => { closeSearch(); if (lastFocus && lastFocus.focus && lastFocus !== document.body) lastFocus.focus({ preventScroll: true }); });
+sClear.addEventListener('click', () => { sInput.value = ''; renderSearch(); sInput.focus(); });
+sInput.addEventListener('input', renderSearch);
+sInput.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); sAct = Math.min(sResults.length - 1, sAct + 1); markAct(); scrollAct(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); sAct = Math.max(0, sAct - 1); markAct(); scrollAct(); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (sResults.length) pickResult(sAct); else if (sInput.value.trim()) { const t = sInput.value; closeSearch(); askVisitor(t); } }
+});
+const scrollAct = () => { const n = $('#opt' + sAct); if (n) n.scrollIntoView({ block: 'nearest' }); };
+sBody.addEventListener('click', e => { const li = e.target.closest('.res'); if (li) pickResult(+li.dataset.i); });
+sBody.addEventListener('touchstart', () => { if (document.activeElement === sInput) sInput.blur(); }, { passive: true });
+
+/* pull down at the top of the thread opens search */
+(() => {
+  let y0 = null, pulled = 0;
+  scroller.addEventListener('touchstart', e => { y0 = scroller.scrollTop <= 0 ? e.touches[0].clientY : null; pulled = 0; }, { passive: true });
+  scroller.addEventListener('touchmove', e => { if (y0 != null) pulled = e.touches[0].clientY - y0; }, { passive: true });
+  scroller.addEventListener('touchend', () => { if (y0 != null && pulled > 90 && scroller.scrollTop <= 0) { haptic(10); openSearch(); } y0 = null; }, { passive: true });
+})();
+
+/* ================================================================
+   Sheets: profile and post reader (drag to dismiss)
+   ================================================================ */
+const scrim = $('#scrim'), profile = $('#profile'), reader = $('#reader');
+let openSheetEl = null, sheetReturn = null;
+function animSheet(el, from, to, done) {
+  const dur = MOTION ? (to === 0 ? SPR_SOFT.dur : 280) : 1;
+  const a = anim(el, [{ transform: `translateY(${from}px)` }, { transform: `translateY(${to}px)` }], { duration: dur, easing: to === 0 ? SPR_SOFT.ease : 'cubic-bezier(.4,0,.8,.4)', fill: 'forwards' });
+  const fin = () => { el.style.transform = to === 0 ? 'none' : `translateY(${to}px)`; if (a) a.cancel(); done && done(); };
+  if (a) a.onfinish = fin; else fin();
+}
+function openSheet(el) {
+  if (openSheetEl) closeSheet(true);
+  sheetReturn = document.activeElement;
+  openSheetEl = el;
+  el.classList.add('on'); scrim.classList.add('on');
+  el.querySelector('.sh-body').scrollTop = 0;
+  const h = el.offsetHeight;
+  animSheet(el, h, 0);
+  document.querySelectorAll('#app > :not(.sheet):not(.scrim):not(.toast)').forEach(n => n.setAttribute('inert', ''));
+  setTimeout(() => (el.querySelector('.sh-x') || el).focus({ preventScroll: true }), 30);
+}
+function closeSheet(instant) {
+  const el = openSheetEl; if (!el) return;
+  openSheetEl = null; scrim.classList.remove('on');
+  document.querySelectorAll('#app [inert]').forEach(n => n.removeAttribute('inert'));
+  const cur = new DOMMatrix(getComputedStyle(el).transform).m42 || 0;
+  const end = () => { el.classList.remove('on'); el.style.transform = ''; };
+  if (instant) end(); else animSheet(el, cur, el.offsetHeight + 20, end);
+  if (sheetReturn && sheetReturn.focus) sheetReturn.focus({ preventScroll: true });
+}
+scrim.addEventListener('click', () => closeSheet());
+document.querySelectorAll('.sheet [data-close]').forEach(b => b.addEventListener('click', () => closeSheet()));
+document.querySelectorAll('.sheet').forEach(sh => {
+  let y0 = null, dy = 0, t0 = 0, last = 0, v = 0;
+  const body = sh.querySelector('.sh-body');
+  sh.addEventListener('pointerdown', e => {
+    const onHandle = e.target.closest('.grab, .p-head');
+    if (!onHandle && body.scrollTop > 0) return;
+    if (e.target.closest('button, a, input')) return;
+    y0 = e.clientY; dy = 0; t0 = last = performance.now(); v = 0;
+    sh._handle = !!onHandle;
+  });
+  sh.addEventListener('pointermove', e => {
+    if (y0 == null) return;
+    const d = e.clientY - y0;
+    if (!sh._drag) { if (Math.abs(d) < 6) return; if (d < 0 && !sh._handle) { y0 = null; return; } sh._drag = true; try { sh.setPointerCapture(e.pointerId); } catch (_) {} }
+    const now = performance.now(); v = (d - dy) / Math.max(1, now - last); last = now;
+    dy = d > 0 ? d : d / 4;
+    sh.style.transform = `translateY(${dy}px)`;
+  });
+  const up = () => {
+    if (y0 == null) return; y0 = null;
+    if (!sh._drag) return; sh._drag = false;
+    if (dy > 120 || v > .6) closeSheet(); else animSheet(sh, dy, 0);
+  };
+  sh.addEventListener('pointerup', up); sh.addEventListener('pointercancel', up);
+});
+
+function buildProfile() {
+  const gc = generalContact();
+  const acts = [
+    `<button class="act" type="button" data-act="msg">${IC.chat}<span>Message</span></button>`,
+    gc ? `<a class="act" href="mailto:${esc(gc.email)}">${IC.mail}<span>Email</span></a>` : '',
+    J.url ? `<a class="act" href="${esc(J.url)}" target="_blank" rel="noopener noreferrer">${IC.globe}<span>${esc((J.title || 'J').split(':')[0])}</span></a>` : '',
+    LINKS.linkedin ? `<a class="act" href="${esc(LINKS.linkedin)}" target="_blank" rel="noopener noreferrer">${IC.linkedin}<span>LinkedIn</span></a>` : '',
+  ].filter(Boolean);
+  const facts = [].concat(J.facts || []).filter(f => f && f.length >= 2);
+  $('#pBody').innerHTML = `
+    <div class="p-head"><span class="av lg" aria-hidden="true"><span>KN</span></span><h2 id="pName">${esc(NAME)}</h2><p>${esc(ROLE)}</p></div>
+    <div class="acts" style="grid-template-columns:repeat(${acts.length},1fr)">${acts.join('')}</div>
+    ${BUL.length ? `<h3 class="grp-h">${esc((C.about && C.about.title) || 'About')}</h3><div class="grp bul">${BUL.map(b => `<div class="cell"><i aria-hidden="true"></i><span class="t"><span>${esc(b)}</span></span></div>`).join('')}</div>` : ''}
+    ${J.title ? `<h3 class="grp-h">${esc(J.title)}</h3><div class="grp"><div class="cell"><span class="t">${J.line ? `<p><b>${esc(J.line)}</b></p>` : ''}${paras(J.body).map(p => `<p>${esc(p)}</p>`).join('')}
+      ${facts.length ? `<dl class="facts">${facts.map(f => `<dt>${esc(f[0])}</dt><dd>${esc(f[1])}</dd>`).join('')}</dl>` : ''}</span></div>
+      ${J.url ? `<a class="cell link" href="${esc(J.url)}" target="_blank" rel="noopener noreferrer"><span class="t"><span>${esc(hostOf(J.url))}</span></span>${IC.ext}</a>` : ''}</div>` : ''}
+    ${E.title ? `<h3 class="grp-h">${esc(E.title)}</h3><div class="grp"><div class="cell"><span class="t">${E.line ? `<p><b>${esc(E.line)}</b></p>` : ''}${paras(E.body).map(p => `<p>${esc(p)}</p>`).join('')}</span></div></div>` : ''}
+    ${CONTACTS.length ? `<h3 class="grp-h">Contact</h3><div class="grp">${CONTACTS.map(c => `<div class="cell"><span class="t"><small>${esc(c.label || '')}</small><span>${esc(c.email)}</span></span>
+      <button class="mini" type="button" data-copy="${esc(c.email)}" aria-label="Copy ${esc(c.email)}">${IC.copy}</button><a class="mini" href="mailto:${esc(c.email)}" aria-label="Email ${esc(c.email)}">${IC.mail}</a></div>`).join('')}</div>` : ''}
+    ${Object.keys(LINKS).length ? `<h3 class="grp-h">Links</h3><div class="grp">${Object.keys(LINKS).filter(k => LINKS[k]).map(k => `<a class="cell" href="${esc(LINKS[k])}" target="_blank" rel="noopener noreferrer"><span class="tile" aria-hidden="true" style="width:32px;height:32px;border-radius:9px">${linkMeta(k).icon}</span><span class="t"><span>${esc(linkMeta(k).name)}</span><small>${esc(prettyUrl(LINKS[k]))}</small></span>${IC.ext}</a>`).join('')}</div>` : ''}
+    ${NOTES.length ? `<h3 class="grp-h">Notes</h3><div class="grp">${NOTES.map(n => `<div class="cell"><span class="t"><p>${esc(n)}</p></span></div>`).join('')}</div>` : ''}
+    <div class="grp"><button class="cell danger" type="button" data-act="clear">${IC.trash}<span>Clear chat</span></button></div>`;
+}
+$('#pBody').addEventListener('click', e => {
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  if (a.dataset.act === 'msg') { closeSheet(); setTimeout(() => input.focus(), 50); }
+  if (a.dataset.act === 'clear') { closeSheet(); clearChat(); }
+});
+$('#who').addEventListener('click', () => { buildProfile(); openSheet(profile); });
+function clearChat() {
+  queue.length = 0; hideTyping();
+  state = { msgs: [], asked: [], last: null, offer: null, seq: state.seq, fb: 0 };
+  save(); log.textContent = ''; setChips(null);
+  toast('Chat cleared');
+  const run = ++runId; busy = false;
+  setTimeout(() => { if (run === runId) greet(); }, 500);
+}
+let runId = 0;
+
+/* tiny allowlist sanitiser for post html */
+function sanitize(html) {
+  const ok = new Set('P BR B STRONG I EM U S A UL OL LI BLOCKQUOTE H2 H3 H4 PRE CODE HR IMG FIGURE FIGCAPTION SPAN SUP SUB'.split(' '));
+  const doc = new DOMParser().parseFromString('<div>' + String(html || '') + '</div>', 'text/html');
+  const walk = n => [...n.childNodes].forEach(c => {
+    if (c.nodeType === 1) {
+      if (!ok.has(c.tagName)) { if (/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED)$/.test(c.tagName)) c.remove(); else { walk(c); c.replaceWith(...c.childNodes); } return; }
+      [...c.attributes].forEach(a => { const n2 = a.name.toLowerCase(); const keep = (n2 === 'href' && c.tagName === 'A' && /^(https?:|mailto:|#)/i.test(a.value)) || (n2 === 'src' && c.tagName === 'IMG' && /^(https?:|data:image\/)/i.test(a.value)) || n2 === 'alt'; if (!keep) c.removeAttribute(a.name); });
+      if (c.tagName === 'A') { c.setAttribute('target', '_blank'); c.setAttribute('rel', 'noopener noreferrer'); }
+      walk(c);
+    } else if (c.nodeType !== 3) c.remove();
+  });
+  const root = doc.body.firstChild; walk(root); return root.innerHTML;
+}
+function openReader(p) {
+  $('#rBody').innerHTML = `<h2>${esc(p.title || '')}</h2><div class="meta">${esc([p.date && fmtDate(p.date), p.subtitle].filter(Boolean).join(' · '))}</div><div class="prose">${sanitize(p.html)}</div>`;
+  reader.setAttribute('aria-label', p.title || 'Post');
+  openSheet(reader);
+}
+
+/* ================================================================
+   Gestures on the thread: long-press tapbacks, swipe for timestamps
+   ================================================================ */
+const tb = $('#tb');
+let tbState = null;
+function openTapback(bubble) {
+  if (tbState || !bubble || bubble.classList.contains('typing')) return;
+  const row = bubble.closest('.row'); const id = +row.dataset.id;
+  const m = state.msgs.find(x => x.id === id); if (!m) return;
+  haptic(10);
+  const ar = app.getBoundingClientRect();
+  const rr = row.getBoundingClientRect(), br = bubble.getBoundingClientRect();
+  const clone = row.cloneNode(true);
+  clone.classList.add('tb-clone'); clone.removeAttribute('data-id');
+  clone.style.cssText = `left:${rr.left - ar.left}px;top:${rr.top - ar.top}px;width:${rr.width}px;`;
+  clone.querySelectorAll('[tabindex]').forEach(n => n.removeAttribute('tabindex'));
+  const cb = clone.querySelector('.b'); cb.classList.remove('pressing', 'flash');
+  tb.appendChild(clone);
+  row.style.visibility = 'hidden';
+  const me = m.who === 'me';
+  const barEl = document.createElement('div');
+  barEl.className = 'tb-bar'; barEl.setAttribute('role', 'toolbar'); barEl.setAttribute('aria-label', 'React');
+  barEl.innerHTML = RX.map(r => `<button type="button" data-rx="${r.id}" aria-label="${r.label}" aria-pressed="${m.rx === r.id}">${r.html}</button>`).join('');
+  const menu = document.createElement('div');
+  menu.className = 'tb-menu'; menu.setAttribute('role', 'menu');
+  menu.innerHTML = `<button type="button" role="menuitem" data-tb="copy"><span>Copy</span>${IC.copy}</button>`;
+  tb.appendChild(barEl); tb.appendChild(menu);
+  const W = ar.width, H = ar.height, hh = bar.offsetHeight, ch = composer.offsetHeight;
+  const bw = barEl.offsetWidth, bh = barEl.offsetHeight, mw = menu.offsetWidth, mh = menu.offsetHeight;
+  const bx = clamp(me ? br.right - ar.left - bw : br.left - ar.left, 8, W - bw - 8);
+  const mx = clamp(me ? br.right - ar.left - mw : br.left - ar.left, 8, W - mw - 8);
+  /* lift the bubble into a comfortable zone if it sits too close to an edge */
+  const need = bh + 10 + (br.height) + 10 + mh;
+  const minTop = hh + 8 + bh + 10, maxBottom = H - 16 - mh - 10;
+  let shift = 0;
+  const top0 = br.top - ar.top;
+  if (top0 < minTop) shift = minTop - top0;
+  else if (top0 + br.height > maxBottom) shift = Math.max(maxBottom - br.height, minTop) - top0;
+  if (need > H - hh - 24) shift = minTop - top0;
+  const bTop = top0 + shift;
+  barEl.style.left = bx + 'px'; barEl.style.top = (bTop - bh - 10) + 'px';
+  menu.style.left = mx + 'px'; menu.style.top = Math.min(bTop + br.height + 10, H - mh - 8) + 'px';
+  barEl.style.setProperty('--ox', (br.left - ar.left + br.width / 2 - bx) + 'px');
+  tb.classList.add('on'); tb.removeAttribute('aria-hidden');
+  document.querySelectorAll('#app > :not(.tb):not(.toast)').forEach(n => n.setAttribute('inert', ''));
+  if (MOTION) {
+    anim(clone, [{ transform: 'none' }, { transform: `translateY(${shift}px)` }], { duration: SPR.dur, easing: SPR.ease, fill: 'forwards' });
+    anim(cb, [{ transform: 'scale(.965)' }, { transform: 'scale(1.03)' }], { duration: SPR.dur, easing: SPR.ease, fill: 'forwards' });
+    anim(barEl, [{ transform: 'scale(.3) translateY(20px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: SPR.dur, easing: SPR.ease });
+    [...barEl.children].forEach((b, i) => anim(b, [{ transform: 'scale(.4)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: SPR.dur, delay: 30 + i * 28, easing: SPR.ease, fill: 'backwards' }));
+    anim(menu, [{ transform: 'scale(.6)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: SPR.dur, delay: 40, easing: SPR.ease, fill: 'backwards' });
+  } else clone.style.transform = `translateY(${shift}px)`;
+  tbState = { row, clone, barEl, menu, m, shift, ret: document.activeElement };
+  setTimeout(() => { const f = barEl.querySelector('[aria-pressed="true"]') || barEl.firstElementChild; f && f.focus({ preventScroll: true }); }, 20);
+}
+function closeTapback() {
+  const s = tbState; if (!s) return; tbState = null;
+  tb.classList.remove('on'); tb.setAttribute('aria-hidden', 'true');
+  document.querySelectorAll('#app [inert]').forEach(n => n.removeAttribute('inert'));
+  const done = () => { s.clone.remove(); s.barEl.remove(); s.menu.remove(); s.row.style.visibility = ''; };
+  if (MOTION) {
+    anim(s.barEl, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.85)' }], { duration: 160, fill: 'forwards', easing: 'ease-in' });
+    anim(s.menu, [{ opacity: 1 }, { opacity: 0, transform: 'scale(.85)' }], { duration: 160, fill: 'forwards', easing: 'ease-in' });
+    const cb = s.clone.querySelector('.b');
+    anim(cb, [{ transform: 'scale(1.03)' }, { transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.3,.7,.4,1)', fill: 'forwards' });
+    const a = anim(s.clone, [{ transform: `translateY(${s.shift}px)` }, { transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.3,.7,.4,1)', fill: 'forwards' });
+    if (a) a.onfinish = done; else done();
+  } else done();
+  const b = s.row.querySelector('.b'); if (b && s.ret && s.ret.closest && s.ret.closest('#tb')) b.focus({ preventScroll: true }); else if (s.ret && s.ret.focus) s.ret.focus({ preventScroll: true });
+}
+tb.addEventListener('click', async e => {
+  const r = e.target.closest('[data-rx]');
+  if (r && tbState) {
+    const s = tbState, id = r.dataset.rx;
+    s.m.rx = s.m.rx === id ? null : id; save();
+    haptic(6);
+    [...s.barEl.children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset.rx === s.m.rx)));
+    setRx(s.row, s.m.rx, true); setRx(s.clone, s.m.rx, true);
+    setTimeout(closeTapback, MOTION ? 260 : 0);
+    return;
+  }
+  const c = e.target.closest('[data-tb="copy"]');
+  if (c && tbState) { const t = tbState.m.text; closeTapback(); const ok = await copyText(t); toast(ok ? 'Copied' : 'Couldn’t copy'); return; }
+  if (!e.target.closest('.tb-bar, .tb-menu')) closeTapback();
+});
+tb.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); closeTapback(); return; }
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    const bs = [...tbState.barEl.children], i = bs.indexOf(document.activeElement);
+    if (i >= 0) { e.preventDefault(); bs[(i + (e.key === 'ArrowRight' ? 1 : bs.length - 1)) % bs.length].focus(); }
+  }
+  if (e.key === 'Tab') {
+    const f = [...tb.querySelectorAll('button')]; const i = f.indexOf(document.activeElement);
+    e.preventDefault(); f[(i + (e.shiftKey ? f.length - 1 : 1) + f.length) % f.length].focus();
+  }
+});
+
+(() => {
+  let p = null, timer = 0, pressT = 0;
+  const reset = () => { clearTimeout(timer); clearTimeout(pressT); if (p && p.b) p.b.classList.remove('pressing'); };
+  scroller.addEventListener('pointerdown', e => {
+    if (e.button > 0 || tbState) return;
+    const b = e.target.closest('.b');
+    p = { x: e.clientX, y: e.clientY, b: b && !b.classList.contains('typing') ? b : null, swipe: false, id: e.pointerId, dx: 0 };
+    if (p.b) {
+      pressT = setTimeout(() => p && p.b && p.b.classList.add('pressing'), 110);
+      timer = setTimeout(() => { if (p && p.b) { const bb = p.b; reset(); p = null; openTapback(bb); } }, 460);
+    }
+  });
+  scroller.addEventListener('pointermove', e => {
+    if (!p || e.pointerId !== p.id) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    if (!p.swipe) {
+      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) reset();
+      if (dx < -10 && Math.abs(dx) > Math.abs(dy) * 1.3 && e.pointerType !== 'mouse') {
+        p.swipe = true; log.classList.add('dragging');
+        try { scroller.setPointerCapture(e.pointerId); } catch (_) {}
+      } else if (Math.abs(dy) > 10 && !p.swipe) { if (!p.b || Math.abs(dy) > 10) { /* vertical scroll */ } }
+    }
+    if (p.swipe) {
+      const d = Math.min(0, dx + 10);
+      const off = -72 * (1 - Math.exp(d / 100));
+      p.dx = off; log.style.setProperty('--sx', off.toFixed(1) + 'px');
+    }
+  });
+  const end = () => {
+    reset();
+    if (p && p.swipe) {
+      const from = p.dx, t0 = performance.now(), dur = MOTION ? 380 : 1;
+      log.classList.remove('dragging');
+      const step = now => {
+        const k = Math.min(1, (now - t0) / dur), e2 = 1 - Math.pow(1 - k, 3);
+        log.style.setProperty('--sx', (from * (1 - e2)).toFixed(1) + 'px');
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+    p = null;
+  };
+  scroller.addEventListener('pointerup', end); scroller.addEventListener('pointercancel', end);
+  scroller.addEventListener('scroll', () => { if (p && !p.swipe) reset(); }, { passive: true });
+  scroller.addEventListener('contextmenu', e => { const b = e.target.closest('.b'); if (b && !b.classList.contains('typing')) { e.preventDefault(); reset(); p = null; openTapback(b); } });
+  /* trackpads: a horizontal two-finger swipe peeks at timestamps too */
+  let wx = 0, wT = 0;
+  scroller.addEventListener('wheel', e => {
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+    wx = clamp(wx - e.deltaX, -72, 0); log.style.setProperty('--sx', wx + 'px');
+    clearTimeout(wT); wT = setTimeout(() => { wx = 0; log.style.setProperty('--sx', '0px'); }, 650);
+  }, { passive: true });
+})();
+
+/* keyboard: the log is one tab stop; arrows move between bubbles */
+log.addEventListener('keydown', e => {
+  const bs = [...log.querySelectorAll('.row:not(.typing-row) > .b')];
+  if (!bs.length) return;
+  let i = bs.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+    e.preventDefault();
+    i = e.key === 'Home' ? 0 : e.key === 'End' ? bs.length - 1 : i < 0 ? bs.length - 1 : clamp(i + (e.key === 'ArrowDown' ? 1 : -1), 0, bs.length - 1);
+    bs.forEach(b => b.tabIndex = -1); bs[i].tabIndex = 0; bs[i].focus(); bs[i].scrollIntoView({ block: 'nearest' });
+  } else if ((e.key === 'Enter' || e.key === ' ' || e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && i >= 0) { e.preventDefault(); openTapback(bs[i]); }
+});
+log.addEventListener('focus', () => {
+  const bs = log.querySelectorAll('.row:not(.typing-row) > .b'); const b = bs[bs.length - 1];
+  if (b) { b.tabIndex = 0; b.focus(); }
+});
+log.tabIndex = 0;
+
+/* global keys */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (tbState) return;
+    if (sEl.classList.contains('on')) { e.preventDefault(); closeSearch(); $('#searchBtn').focus(); return; }
+    if (openSheetEl) { e.preventDefault(); closeSheet(); return; }
+  }
+  if (e.key === 'Tab' && (openSheetEl || sEl.classList.contains('on'))) {
+    const root = openSheetEl || sEl;
+    const f = [...root.querySelectorAll('a[href], button:not([hidden]), input')].filter(n => n.offsetParent !== null);
+    if (!f.length) return;
+    const i = f.indexOf(document.activeElement);
+    if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+    else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+  }
+  if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || (e.key === '/' && document.activeElement === document.body)) { e.preventDefault(); openSearch(); }
+});
+
+/* ================================================================
+   Boot: restore, greet, deep links
+   ================================================================ */
+const HASH = { about: 'about', j: 'j', eden: 'eden', contact: 'contact', links: 'links', writing: 'writing', notes: 'notes', fun: 'fun' };
+function hashIntent() {
+  const h = decodeURIComponent(location.hash.slice(1)).toLowerCase();
+  if (!h) return null;
+  if (h.startsWith('post/')) { const s = h.slice(5); return POSTS.some(p => slugOf(p) === s) ? 'post:' + s : 'writing'; }
+  return HASH[h] || null;
+}
+function clearHash() { if (location.hash) try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} }
+async function greet() {
+  const run = runId;
+  busy = true; setChips(null);
+  const p = plan('greet');
+  await wait(MOTION ? 450 : 100);
+  for (const burst of p.bursts) {
+    if (run !== runId) return;
+    showTyping(); await wait(typeMs(burst) * .8); hideTyping();
+    if (run !== runId) return;
+    for (let i = 0; i < burst.length; i++) { addMsg(Object.assign({ who: 'them', intent: 'greet' }, burst[i]), { s0: .86 }); if (i < burst.length - 1) await wait(MOTION ? 170 : 60); }
+    await wait(MOTION ? 260 : 80);
+  }
+  state.last = 'greet'; save();
+  busy = false;
+  if (queue.length) pump(); else setChips(chipList(), true);
+}
+function askFromHash() {
+  const i = hashIntent(); if (!i) return false;
+  clearHash();
+  const q = i.startsWith('post:') ? ((POSTS.find(p => 'post:' + slugOf(p) === i) || {}).title || INTENTS.writing.q) : INTENTS[i].q;
+  addMsg({ who: 'me', type: 'text', text: q }, {});
+  queue.push({ intent: i });
+  return true;
+}
+load();
+if (state.msgs.length) {
+  renderAll();
+  requestAnimationFrame(() => { scroller.scrollTop = scroller.scrollHeight; onScroll(); });
+  if (!askFromHash()) setChips(chipList(), false); else pump();
+} else {
+  const deep = hashIntent();
+  if (deep) {
+    /* deep link: a one-line hello, then the question is already asked */
+    (async () => {
+      busy = true;
+      await wait(MOTION ? 300 : 50);
+      showTyping(); await wait(MOTION ? 700 : 200); hideTyping();
+      addMsg({ who: 'them', type: 'text', text: FIRST ? `Hey! I’m ${FIRST}.` : 'Hey!', intent: 'greet' }, { s0: .86 });
+      await wait(MOTION ? 450 : 100);
+      busy = false;
+      askFromHash();
+      pump();
+    })();
+  } else greet();
+}
+window.addEventListener('hashchange', () => { if (askFromHash()) pump(); });
+requestAnimationFrame(onScroll);
+})();
+
+</script>
+</body>
+</html>
