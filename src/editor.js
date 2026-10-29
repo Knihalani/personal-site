@@ -734,4 +734,5 @@ T.apps.edit = def('edit', 'edit a text file (nano-style)');
 T.apps.nano = def('nano', 'edit a text file (same as edit)', true);
 T.apps.vi = def('vi', 'edit a text file (nano-style, same as edit)', true);
 T.apps.vim = def('vim', 'edit a text file (nano-style, same as edit)', true);
+for (const n of ['edit', 'nano', 'vi', 'vim']) T.apps[n].ctrlC = true;   // the editor keeps ctrl+c for itself
 })();

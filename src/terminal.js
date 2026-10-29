@@ -174,7 +174,16 @@ function createFS(getCwd, onWrite){
   const mk = () => ({ c: {}, m: Date.now() });
   const isD = n => !!(n && n.c);
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const badName = n => !n || n === '__proto__' || n === 'constructor' || n === 'prototype';
   if (!root) root = mk();
+  (function heal(d){                            // saved data from an older or hand-edited visit: drop anything that is not a dir or a file
+    if (!d.c || typeof d.c !== 'object' || Array.isArray(d.c)) d.c = {};
+    for (const k of Object.keys(d.c)){
+      const n = d.c[k];
+      if (n && typeof n === 'object' && n.c && typeof n.c === 'object' && !Array.isArray(n.c)) heal(n);
+      else if (!n || typeof n !== 'object' || typeof n.t !== 'string' || badName(k)) delete d.c[k];
+    }
+  })(root);
   function resolve(path, cwd){
     path = String(path == null ? '' : path);
     if (path === '~' || path.startsWith('~/')) path = HOME + path.slice(1);
@@ -203,7 +212,6 @@ function createFS(getCwd, onWrite){
     if (isD(n)) for (const k of Object.keys(n.c)){ const r = lockedIn(join(abs, k)); if (r) return r; }
     return null;
   }
-  const badName = n => !n || n === '__proto__' || n === 'constructor' || n === 'prototype';
   function fail(m){ api.lastError = m; return false; }
   function put(abs, text, app){
     const { dir, name } = parent(abs);
@@ -264,6 +272,7 @@ function createFS(getCwd, onWrite){
       if (!isD(dir)) return fail('no such file or directory');
       if (badName(name)) return fail('invalid name');
       if (own(dir.c, name) && isD(dir.c[name])) return fail('is a directory');
+      if (own(dir.c, name) && isD(n)) return fail('cannot overwrite a file with a directory');
       const from = parent(A); delete from.dir.c[from.name];
       delete n.g; dir.c[name] = n; dir.m = from.dir.m = Date.now(); changed(); return true;
     },
@@ -287,6 +296,7 @@ function createFS(getCwd, onWrite){
        they are rewritten from MAC.CONTENT (recreated if an older visit removed them). */
     seed(dirs, files){
       if (!root.seeded) for (const d of dirs) mkdir(d, true);
+      if (!isD(get(HOME))){ const p = get('/home'); if (p && !isD(p)) delete root.c.home; mkdir(HOME, true); }
       for (const f of files){
         const n = get(f.path);
         if (isD(n)) continue;
@@ -1245,8 +1255,17 @@ M.createTerminal = function createTerminal(opts){
     if (argv.length < 2){ for (const k of Object.keys(ALIASES).sort()) io.write('alias ' + k + "='" + ALIASES[k] + "'\n"); return; }
     for (const a of argv.slice(1)){
       const m = /^([^=\s]+)=(.*)$/s.exec(a);
+      if (m && !m[2]){ delete ALIASES[m[1]]; continue; }            // alias name= removes it
       if (!m){ if (hasAlias(a)) io.write('alias ' + a + "='" + ALIASES[a] + "'\n"); else { io.err('alias: ' + a + ': not found\n'); io.exit(1); } continue; }
       ALIASES[m[1]] = m[2];
+    }
+    saveAliases();
+  } });
+  def('unalias', { g: 'shell', desc: 'remove an alias', usage: 'unalias name | -a', ex: ['unalias hi'], run(argv, io){
+    if (argv.length < 2){ io.err('usage: unalias name   (alias lists them)\n'); return 1; }
+    for (const a of argv.slice(1)){
+      if (a === '-a'){ for (const k of Object.keys(ALIASES)) delete ALIASES[k]; continue; }
+      if (hasAlias(a)) delete ALIASES[a]; else { io.err('unalias: ' + a + ': not found\n'); io.exit(1); }
     }
     saveAliases();
   } });
@@ -1325,8 +1344,9 @@ M.createTerminal = function createTerminal(opts){
   } });
   def('sudo', { g: 'misc', hidden: true, desc: 'not needed here', usage: 'sudo', run(argv, io){ io.write('sudo: not needed here\n', 'dim'); } });
   def('exit', { g: 'misc', desc: 'leave', usage: 'exit', run(argv, io){ io.write('to leave, close the tab\n', 'dim'); } });
-  const SHELL_BUILTIN = ['cd', 'alias', 'history', 'exit', 'help', 'echo', 'pwd'];
-  for (const [n, c] of Object.entries(B)) if (!M.TERM.cmds[n]) M.TERM.cmds[n] = c;
+  const SHELL_BUILTIN = ['cd', 'alias', 'unalias', 'history', 'exit', 'help', 'echo', 'pwd'];
+  // a later terminal (the flat layout after a context loss) replaces the earlier one's built-ins, which close over its state
+  for (const [n, c] of Object.entries(B)){ const had = M.TERM.cmds[n]; if (!had || had._b){ c._b = true; M.TERM.cmds[n] = c; } }
   const CONTENT_KW = { about: ['bio', 'kaiav', 'me'], eden: ['agents', 'context'], j: ['rising', 'rising founder', 'jose'], writing: ['blog', 'posts', 'essays'], links: ['linkedin', 'twitter', 'social', 'contact'] };
   /* everything you can type as a command, read fresh each time so late registrations count */
   function cmdItems(){
@@ -1339,7 +1359,7 @@ M.createTerminal = function createTerminal(opts){
 
   /* ---- expansion ---- */
   function expandVars(s){
-    return s.replace(/\$(\?|\$|[A-Za-z_]\w*|\{[A-Za-z_]\w*\})/g, (m, n) => n === '?' ? String(status) : n === '$' ? '84' : (ENV[n.replace(/[{}]/g, '')] || ''));
+    return s.replace(/\$(\?|\$|[A-Za-z_]\w*|\{[A-Za-z_]\w*\})/g, (m, n) => n === '?' ? String(status) : n === '$' ? '84' : (Object.prototype.hasOwnProperty.call(ENV, n = n.replace(/[{}]/g, '')) ? ENV[n] : ''));
   }
   function globMatch(pat){            // pat: literal * and ? from quotes arrive as \x01 \x02
     const abs = pat.startsWith('/');
@@ -1417,7 +1437,7 @@ M.createTerminal = function createTerminal(opts){
     });
     return j;
   }
-  async function runLine(raw, noHist){
+  async function runLine(raw, noHist, real){
     job = newJob();
     const j = job;
     let list;
@@ -1425,7 +1445,7 @@ M.createTerminal = function createTerminal(opts){
       const line = bang(raw);
       if (line !== raw) tty.write(line + '\n', 'dim');
       record(line, noHist);
-      list = parse(applyAliases(lex(line)));
+      list = parse(real ? lex(line) : applyAliases(lex(line)));
     } catch (e){
       record(raw, noHist);
       errLine(tty, 'sh: ' + (e.message || e) + '\n'); status = 2; finishJob(j); return;
@@ -1631,10 +1651,13 @@ M.createTerminal = function createTerminal(opts){
       const ok = !!(M.reader && M.reader.open(it.post));
       card.foot = ok ? [['  ', 'b', null, 'out'], ['reading ', 'd'], [it.value, 'b']] : [['read ' + it.post, 'b'], ['  (the reader did not open)', 'f']];
       said = ok ? 'Opened ' + it.value + ' in the reader. Escape comes back.' : 'The reader is not available.';
+    } else if (it.copy && !(typeof it.copy === 'function' ? it.copy() : it.copy)){   // a vault row after the vault locked
+      card.foot = [['locked. run ', 'd'], ['vault', 'b'], [' again', 'd']]; said = 'The vault is locked.'; sfx('error');
     } else if (it.copy){
-      const ok = copyText(it.copy); sfx('beep');
-      const what = it.secret ? it.label : it.copy;            // a secret (a vault password) is never drawn or read out
-      card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [what, 'b']] : it.secret ? [['could not reach the clipboard', 'd']] : [['select and copy: ', 'd'], [it.copy, 'b']];
+      const text = typeof it.copy === 'function' ? it.copy() : it.copy;
+      const ok = copyText(text); sfx('beep');
+      const what = it.secret ? it.label : text;               // a secret (a vault password) is never drawn or read out
+      card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [what, 'b']] : it.secret ? [['could not reach the clipboard', 'd']] : [['select and copy: ', 'd'], [text, 'b']];
       said = (ok ? 'Copied ' : 'Could not copy ') + what + '.';
     } else {
       const ok = openTarget(it.url);
@@ -2019,7 +2042,7 @@ M.createTerminal = function createTerminal(opts){
     page = cmd;
     if (note) mirror(note); else mirror('', cmd);
     eatBlank = true;
-    runLine(forgive(cmd), noHist);
+    runLine(forgive(cmd), noHist, true);   // a chip or page means the real command, whatever is aliased over it
   }
   function goHome(note){
     leave(); pages = []; page = '';
@@ -2086,6 +2109,7 @@ M.createTerminal = function createTerminal(opts){
     const ctrl = e.ctrlKey, alt = e.altKey, c = k.toLowerCase();
     if (app){                                   // apps get keys first
       const st = app;
+      if (ctrl && !alt && c === 'c' && !(M.TERM.apps[st.name] || {}).ctrlC){ interrupt(); return true; }   // ctrl+c stops every app but the editor
       const used = appCall('key', e);
       if (used){ if (app === st) st.dirty = true; return true; }
       if (ctrl && c === 'c' && app === st) interrupt();

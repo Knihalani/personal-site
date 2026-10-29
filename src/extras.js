@@ -1045,6 +1045,7 @@ async function vUnlock(io){
       const key = await vDerive(p, unb64(blob.salt), blob.iter || VITER);
       const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(blob.iv) }, key, unb64(blob.ct));
       const data = JSON.parse(new TextDecoder().decode(pt));
+      if (document.hidden) return false;                 // the tab was hidden while deriving: stay locked
       V.key = key; V.salt = blob.salt; V.iter = blob.iter || VITER; V.items = Array.isArray(data.items) ? data.items : [];
       vTouch(); return true;
     } catch (e){ if (tries > 1) io.out('  wrong passphrase. try again\n', 'dim'); }
@@ -1130,7 +1131,7 @@ T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this brow
       }
       if (!io.tty){ io.out(V.items.map(it => it.label + '  ' + it.created).join('\n') + '\n'); return; }
       const o = io.ui(); o.blank().card({ title: 'VAULT', note: V.items.length + (V.items.length === 1 ? ' password' : ' passwords'), verb: 'copy',
-        items: V.items.map(it => ({ label: it.label, value: 'saved ' + it.created, copy: it.pw, secret: true, hint: 'copy' })) }).blank();
+        items: V.items.map(it => ({ label: it.label, value: 'saved ' + it.created, copy: () => it.pw, secret: true, hint: 'copy' })) }).blank();
       io.rich(o); await io.pick(o.lastCard); return;
     }
     if (sub === 'add'){
@@ -1159,12 +1160,14 @@ T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this brow
       const it = need('rm'); if (!it) return 1;
       const k = await io.ask([['remove ' + it.label + '? ', 'n'], ['y', 'b'], [' yes  ·  any other key no', 'f']], { keys: ['y'] });
       if (k !== 'y'){ io.out('  kept\n', 'dim'); return; }
+      if (!V.key){ io.err('vault: it locked while waiting. run that again\n'); return 1; }
       V.items = V.items.filter(x => x !== it); it.pw = ''; await vSeal(); io.out('  removed ' + it.label + '\n', 'dim'); return;
     }
     if (sub === 'rename'){
       const it = need('rename'); if (!it) return 1;
       const to = cleanLabel(argv[3] || await io.ask('new label  '));
-      if (!to) return 1; if (vFind(to) && vFind(to) !== it){ io.err('vault: ' + to + ' is taken\n'); return 1; }
+      if (!to) return 1; if (!V.key){ io.err('vault: it locked while waiting. run that again\n'); return 1; }
+      if (vFind(to) && vFind(to) !== it){ io.err('vault: ' + to + ' is taken\n'); return 1; }
       const was = it.label; it.label = to; await vSeal(); io.out('  ' + was + ' is now ' + to + '\n', 'dim'); return;
     }
   } };
