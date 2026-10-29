@@ -44,7 +44,63 @@ noscript{ position: fixed; inset: 0; z-index: 4; display: grid; place-content: c
 noscript h1{ margin: 0; font: 500 18px var(--mono) } noscript p{ margin: 0; color: var(--dim) } noscript a{ color: #8dffb4 }
 /* the flat terminal on a desktop (no WebGL, or three.js did not load): one centred column, sized by main.js */
 body.flat #stage .phone-term{ right: 0; margin: 0 auto }
-@media (prefers-reduced-motion: reduce){ #hint, #loading, #stage .phone-term{ transition: none } }
+/* phones (body.touch, main.js flat()): a thumb-reach dock under the terminal (the main pages; the words that match
+   while typing; arrows and esc while a game runs; the on-screen keyboard), riding above the keyboard when it is open.
+   Drawn like the terminal: VT323, the phosphor greens, chips underlined as on the tube. Plus a copied note, the
+   swipe-back cue and a "more" tab when a page runs on below */
+body.touch{ --hdr: calc(env(safe-area-inset-top, 0px) + 36px); --dock-h: 52px; --g: #8dffb4; --gd: #6b9061; --gn: #c8f5b8; --gf: #43603c;
+  overscroll-behavior: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none }
+body.touch.land{ --hdr: calc(env(safe-area-inset-top, 0px) + 6px); --dock-h: 44px }
+body.touch #mute{ top: env(safe-area-inset-top, 0px); right: max(6px, env(safe-area-inset-right, 0px)); height: 36px; padding: 0 12px; border: 0; gap: 8px;
+  font: 20px/1 VT323, monospace; letter-spacing: .02em; color: var(--gd); -webkit-tap-highlight-color: transparent }
+body.touch #mute::after{ inset: -2px -6px -6px -10px }   /* a 44 px target */
+body.touch #mute::before{ width: 7px; height: 7px }
+body.touch #mute:active{ color: var(--gn) }
+body.touch.land #mute{ top: auto; bottom: env(safe-area-inset-bottom, 0px); height: var(--dock-h); right: max(8px, env(safe-area-inset-right, 0px)); z-index: 3 }
+body.touch.land.kb #mute, body.touch.reading #mute{ display: none }
+#dock{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 4px; box-sizing: border-box;
+  height: calc(var(--dock-h) + env(safe-area-inset-bottom, 0px)); padding: 0 max(6px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(6px, env(safe-area-inset-left, 0px));
+  background: #0a0f0a; border-top: 1px solid rgba(141,255,180,.09); font: 22px/1 VT323, monospace; color: var(--gd) }
+body.kb #dock{ height: var(--dock-h); padding-bottom: 0 }
+body.touch.land #dock{ padding-right: calc(max(8px, env(safe-area-inset-right, 0px)) + 96px) }
+body.touch.land.kb #dock{ padding-right: max(6px, env(safe-area-inset-right, 0px)) }
+#dock[hidden], body.reading #dock{ display: none }
+#dock .keys{ flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; justify-content: space-between; overflow-x: auto; scrollbar-width: none; touch-action: pan-x }
+#dock .keys.over{ -webkit-mask: linear-gradient(90deg, #000 calc(100% - 18px), transparent); mask: linear-gradient(90deg, #000 calc(100% - 18px), transparent) }
+#dock .keys::-webkit-scrollbar{ display: none }
+#dock.sug .keys{ justify-content: flex-start; gap: 2px }
+#dock .k{ flex: 0 0 auto; min-width: 38px; height: 44px; padding: 0 7px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; cursor: pointer;
+  text-decoration: underline 1px rgba(107,144,97,.55); text-underline-offset: 5px; transition: background-color .35s, color .35s, text-shadow .35s; -webkit-tap-highlight-color: transparent; touch-action: manipulation }
+#dock.sug .k{ flex: 0 0 auto }
+@media (max-width: 370px){ #dock{ font-size: 19px; gap: 2px; padding-left: max(4px, env(safe-area-inset-left, 0px)); padding-right: max(4px, env(safe-area-inset-right, 0px)) } #dock .k{ min-width: 28px; padding: 0 3px } #dock .k.ico{ min-width: 36px } #dock .kb{ width: 40px } }
+#dock .k.on{ color: var(--gn); text-decoration-color: rgba(200,245,184,.5) }
+#dock .k b{ font-weight: inherit; color: var(--gn) }
+#dock .k.hit{ background: rgba(141,255,180,.14); color: #f0ffe8; text-shadow: 0 0 9px rgba(141,255,180,.75); transition: none }
+#dock .k svg, #dock .kb svg{ width: 22px; height: 22px; display: block; margin: auto; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round }
+#dock .k.ico{ text-decoration: none; min-width: 42px; padding: 0 6px }
+#dock .note{ padding: 0 10px; color: var(--gf); white-space: nowrap }
+#dock .kb{ flex: 0 0 auto; width: 46px; height: 44px; border: 0; border-left: 1px solid rgba(141,255,180,.1); border-radius: 0; background: none; color: var(--gd); padding: 0 0 0 4px; cursor: pointer; -webkit-tap-highlight-color: transparent }
+#dock .kb.hit{ color: #f0ffe8; filter: drop-shadow(0 0 6px rgba(141,255,180,.7)) }
+#dock .kb .up{ display: none } body.kb #dock .kb .up{ display: block } body.kb #dock .kb .dn{ display: none }
+#more{ position: absolute; left: 50%; top: 0; transform: translate(-50%, -60%); height: 26px; padding: 0 12px 0 10px; border: 1px solid rgba(141,255,180,.28); border-radius: 13px; background: #0a0f0a;
+  color: var(--g); font: 19px/1 VT323, monospace; display: flex; align-items: center; gap: 4px; box-shadow: 0 0 14px rgba(141,255,180,.12); opacity: 0; pointer-events: none; transition: opacity .25s; -webkit-tap-highlight-color: transparent }
+#more::after{ content: ""; position: absolute; inset: -9px -4px }
+#more svg{ width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+#more.on{ opacity: 1; pointer-events: auto }
+#toast{ position: absolute; left: 50%; bottom: calc(100% + 14px); transform: translate(-50%, 10px); max-width: calc(100vw - 32px); box-sizing: border-box; display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px 9px 12px; border: 1px solid rgba(141,255,180,.35); border-radius: 6px; background: #0d160e; box-shadow: 0 0 0 1px #0a0f0a, 0 0 26px rgba(141,255,180,.16);
+  font: 21px/1 VT323, monospace; color: var(--gd); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1) }
+#toast b{ font-weight: inherit; color: #f0ffe8; overflow: hidden; text-overflow: ellipsis }
+#toast svg{ flex: none; width: 18px; height: 18px; stroke: var(--g); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 4px rgba(141,255,180,.6)) }
+#toast.show{ opacity: 1; transform: translate(-50%, 0) }
+#swipe{ position: fixed; left: max(10px, env(safe-area-inset-left, 0px)); top: 50%; z-index: 2; display: flex; align-items: center; gap: 6px; height: 40px; margin-top: -20px; padding: 0 12px 0 8px;
+  border: 1px solid rgba(141,255,180,.3); border-radius: 20px; background: #0a0f0a; color: var(--gd); font: 20px/1 VT323, monospace; pointer-events: none;
+  opacity: var(--p, 0); transform: translateX(calc(var(--p, 0) * 18px - 18px)) }
+#swipe svg{ width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+#swipe.go{ color: #f0ffe8; border-color: rgba(141,255,180,.7); box-shadow: 0 0 18px rgba(141,255,180,.3) }
+#swipe.off{ transition: opacity .25s, transform .25s }
+body.touch #stage .phone-term.drag{ transition: none }
+@media (prefers-reduced-motion: reduce){ #hint, #loading, #stage .phone-term, #toast, #more, #dock .k{ transition: none } }
 /* high contrast: the sound toggle's dot keeps showing its state in system colours */
 @media (forced-colors: active){ #mute::before{ forced-color-adjust: none; border-color: ButtonText } #mute[aria-pressed="true"]::before{ background: ButtonText; box-shadow: none } }
 </style>
@@ -76,6 +132,8 @@ for (const n of ['localStorage', 'sessionStorage']){
 <div id="hint" class="ui" aria-hidden="true" hidden>move the cursor down to lean back</div>
 <textarea id="kbd" aria-label="Terminal: type a command, like help, and press Enter" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
 <button id="mute" class="ui" type="button" aria-pressed="true">sound</button>
+<nav id="dock" aria-label="Pages" hidden><div class="keys"></div><button class="kb" type="button" aria-label="Keyboard"><svg class="dn" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7.5 14h9"/></svg><svg class="up" viewBox="0 0 24 24"><rect x="2.5" y="3.5" width="19" height="10" rx="2"/><path d="M6 7.5h.01M9.5 7.5h.01M13 7.5h.01M16.5 7.5h.01M8.5 17.5l3.5 3 3.5-3"/></svg></button><button id="more" type="button" tabindex="-1" aria-hidden="true">more<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><div id="toast" role="status" aria-live="polite"></div></nav>
+<div id="swipe" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>back</div>
 <main class="sr">
   <h1>Kaiav Nihalani</h1>
   <p>Co-founder of J: Rising Founder, a free remote program for founders aged 23 and under. Founder of Eden, giving agents context. This site is a working terminal: type help.</p>

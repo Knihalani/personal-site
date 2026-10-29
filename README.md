@@ -15,7 +15,7 @@ demoscene-style intro on the screen (a chrome 3D "KN", copper bars, a sine scrol
 | **type** | everything goes to the terminal. Start with `help`, or click a highlighted word |
 | **move the cursor** | look around. Move it down to lean back and see the whole desk and the hands |
 | **scroll** | scroll back through the terminal (also Page Up / Page Down, or Space when the prompt is empty) |
-| **phones** | just the terminal, full screen. Tap to type, drag to scroll, tap an email to copy it |
+| **phones** | just the terminal, full screen, with a dock for the thumb: the main pages, then the matching commands as you type (tap one to run it), arrows and esc while a game runs, and the keyboard key. Drag or flick to scroll, swipe right (or the phone's back) to go back, tap an email to copy it |
 
 Without WebGL the desktop gets the same terminal-only page. Deep links run a page on load:
 `#about`, `#j`, `#eden`, `#writing`, `#contact`, `#links`, `#help`, and `#post/<slug>` opens a post.
