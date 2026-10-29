@@ -58,14 +58,14 @@ footer { color: var(--muted); font: 12px var(--mono); padding-block: 0 16px; tex
 <header>
   <div>
     <h1>Kaiav Phone Site</h1>
-    <p class="sub">The phone site: a conversation with Kaiav, with search built in. The phone is live: tap the suggestions, type a question, search, long-press a message.</p>
+    <p class="sub">The phone site: an infinite zoom. The phone is live: pinch or scroll to dive in, drag to look around, double-tap or press Dive to go deeper.</p>
   </div>
 </header>
 
 <main id="stage">
-  <figure data-id="chat">
-    <div class="slot"><div class="device"><div class="screen"><div class="sbar" aria-hidden="true"><span class="clock">9:41</span><svg width="68" height="13" viewBox="0 0 68 13" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="6" width="3" height="6" rx="1"/><rect x="10" y="3.5" width="3" height="8.5" rx="1"/><rect x="15" y="1" width="3" height="11" rx="1"/><path d="M29 4.2a8 8 0 0 1 11 0l-1.3 1.3a6.2 6.2 0 0 0-8.4 0zM31.6 6.8a4.4 4.4 0 0 1 5.8 0l-1.3 1.3a2.6 2.6 0 0 0-3.2 0zM34.5 9.4l1.2 1.2-1.2 1.2-1.2-1.2z"/><rect x="45" y="1" width="20" height="11" rx="3" fill="none" stroke="currentColor" opacity=".45"/><rect x="47" y="3" width="16" height="7" rx="1.6"/><rect x="66" y="4.5" width="1.6" height="4" rx=".8" opacity=".45"/></svg></div><iframe src="chat.html" title="Chat phone site" loading="eager"></iframe></div><div class="island"></div><div class="homebar"></div></div></div>
-    <figcaption><b>Chat</b><span>Suggested replies keep it moving; typing or searching jumps straight to an answer.</span><br><a href="chat.html" target="_blank" rel="noopener">open on its own &#8599;</a></figcaption>
+  <figure data-id="zoom">
+    <div class="slot"><div class="device"><div class="screen"><div class="sbar" aria-hidden="true"><span class="clock">9:41</span><svg width="68" height="13" viewBox="0 0 68 13" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="6" width="3" height="6" rx="1"/><rect x="10" y="3.5" width="3" height="8.5" rx="1"/><rect x="15" y="1" width="3" height="11" rx="1"/><path d="M29 4.2a8 8 0 0 1 11 0l-1.3 1.3a6.2 6.2 0 0 0-8.4 0zM31.6 6.8a4.4 4.4 0 0 1 5.8 0l-1.3 1.3a2.6 2.6 0 0 0-3.2 0zM34.5 9.4l1.2 1.2-1.2 1.2-1.2-1.2z"/><rect x="45" y="1" width="20" height="11" rx="3" fill="none" stroke="currentColor" opacity=".45"/><rect x="47" y="3" width="16" height="7" rx="1.6"/><rect x="66" y="4.5" width="1.6" height="4" rx=".8" opacity=".45"/></svg></div><iframe src="zoom.html" title="Infinite zoom phone site" loading="eager"></iframe></div><div class="island"></div><div class="homebar"></div></div></div>
+    <figcaption><b>Infinite zoom</b><span>Start at About, then pinch into any part of it to go deeper: Hong Kong, J, Eden, agents, squash and BJJ, notes, contact, and round again.</span><br><a href="zoom.html" target="_blank" rel="noopener">open on its own &#8599;</a></figcaption>
   </figure>
 </main>
 <footer>390 &times; 844 pt, an iPhone-sized screen, drawn to scale and shrunk to fit your window</footer>
@@ -120,7 +120,7 @@ footer { color: var(--muted); font: 12px var(--mono); padding-block: 0 16px; tex
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => setTimeout(tint, 50)); } catch (e){}
   btns.forEach(b => b.addEventListener('click', () => show(b.dataset.view)));
   addEventListener('resize', fit);
-  addEventListener('hashchange', () => show(['chat'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'all'));
-  show(['chat'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'all');
+  addEventListener('hashchange', () => show(['zoom'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'all'));
+  show(['zoom'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'all');
 })();
 </script>
