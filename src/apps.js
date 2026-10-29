@@ -480,8 +480,11 @@ T.apps.snake = {
 
 /* =====================================================================================
    BREAKOUT: a wall of bricks, a paddle and a ball. Where the ball meets the paddle sets its angle.
-   The field is in cell units; a cell is about twice as tall as it is wide, so vertical speeds are halved
-   to make the ball move evenly on the glass.
+   The ball and the paddle are drawn as vectors at float positions (scr.dot, scr.bar), so they glide rather
+   than hop from cell to cell. Physics runs at a fixed 240 Hz in square units (a cell's width; heights are
+   rows times the cell aspect), so 45 degrees looks like 45 degrees and the speed is the same in every
+   direction. The ball is a circle against the bricks' and walls' boxes: it cannot pass through a brick, and
+   it takes at most one per step.
    ===================================================================================== */
 const BREAKOUT_HI = 'kaiav.breakout.hi';
 T.apps.breakout = {
@@ -493,11 +496,15 @@ T.apps.breakout = {
     const PTS = [7, 5, 3, 2, 1], LV = ['bright', 'normal', 'normal', 'dim', 'dim'];
     const SH = r => (r % 2) * 2;                          // odd rows sit half a brick over, so the wall reads as bricks, not columns
     let cols = 0, rows = 0, IW, FH, PR, PW, BT, NR, NB, OFF, bricks = [], left = 0, full = 0;
-    let px = 0, bx = 0, by = 0, vx = 0, vy = 0, speed = 0, target = null;
+    let px = 0, bx = 0, by = 0, vx = 0, vy = 0, speed = 0, target = null, A = 2.25, acc = 0;   // bx, by: the ball's centre in cells; vx, vy in square units per second
+    const RB = 0.34, STEP = 1 / 240;                      // the ball's radius in cell widths; the physics step
+    const GLOW = [null, { fg: 'rgba(200, 245, 184, 0.42)' }, { fg: 'rgba(200, 245, 184, 0.24)' }, { fg: 'rgba(200, 245, 184, 0.12)' }];   // translucent, so a ghost over a brick does not cut it
+    const trail = new Float32Array(8); let tn = 0, pbx = 0, pby = 0;       // the last four drawn positions: the phosphor's afterglow
     let state = 'serve', paused = false, score = 0, balls = 3, level = 1, hi = hiGet(BREAKOUT_HI), newHi = false, t = 0, last = '';
     const held = { l: 0, r: 0 }; let gotUp = false;
     const isHeld = d => held[d] > 0 && (gotUp || t - held[d] < 0.15);
-    const base = () => 20 * Math.min(1.6, 1 + (level - 1) * 0.12);
+    const base = () => 24 * Math.min(1.5, 1 + (level - 1) * 0.1);
+    const padTop = () => (PR + 0.2) * A;                  // the paddle's top edge, square units
     function wall(){
       bricks = []; left = 0;
       for (let r = 0; r < NR; r++){ const row = new Array(NB).fill(false); for (let c = 0; c < NB && OFF + SH(r) + c * 4 + 3 <= IW; c++){ row[c] = true; left++; } bricks.push(row); }
@@ -512,17 +519,10 @@ T.apps.breakout = {
       NB = Math.floor((IW - 1) / 4); OFF = Math.max(0, Math.floor((IW - NB * 4 - 1) / 2));   // (the half-brick stagger takes 2 more columns)
       px = Math.max(0, Math.min(IW - PW, px || (IW - PW) / 2));
     }
-    function serve(){ state = 'serve'; vx = vy = 0; target = null; }
-    function launch(){
-      state = 'play'; speed = base();
-      const a = (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.25);
-      vx = speed * Math.sin(a); vy = -speed * Math.cos(a) * 0.5;
-    }
+    function serve(){ state = 'serve'; vx = vy = 0; target = null; tn = 0; }
+    const aim = a => { vx = speed * Math.sin(a); vy = -speed * Math.cos(a); };   // a: radians from straight up
+    function launch(){ state = 'play'; speed = base(); acc = 0; tn = 0; pbx = bx; pby = by; aim((Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.25)); }
     function restart(){ score = 0; balls = 3; level = 1; newHi = false; paused = false; wall(); serve(); }
-    const brickAt = (x, y) => {
-      const r = Math.floor(y) - BT, c = r >= 0 && r < NR ? Math.floor((x - OFF - SH(r)) / 4) : -1;
-      return r >= 0 && r < NR && c >= 0 && c < NB && bricks[r][c] ? [r, c] : null;
-    };
     function hit([r, c]){
       bricks[r][c] = false; left--; score += PTS[r] * level;
       sound(api, 'beep');
@@ -534,25 +534,35 @@ T.apps.breakout = {
       state = 'over';
       if (score > hi){ hi = score; newHi = true; hiSet(BREAKOUT_HI, hi); }
     }
-    function step(dt){
-      let nx = bx + vx * dt, ny = by + vy * dt;
-      if (nx < 0){ nx = -nx; vx = Math.abs(vx); }
-      if (nx >= IW){ nx = 2 * IW - nx - 1e-3; vx = -Math.abs(vx); }
-      if (ny < 0){ ny = -ny; vy = Math.abs(vy); }
-      let b;
-      if ((b = brickAt(nx, by))){ vx = -vx; nx = bx; hit(b); }
-      else if ((b = brickAt(bx, ny)) || (b = brickAt(nx, ny))){ vy = -vy; ny = by; hit(b); }
-      if (state !== 'play') return;
-      if (vy > 0 && by < PR && ny >= PR && nx >= px - 0.6 && nx < px + PW + 0.6){
-        /* the paddle: the farther from its middle, the steeper the way back out (up to 60 degrees) */
-        const off = Math.max(-1, Math.min(1, (nx - (px + PW / 2)) / (PW / 2 + 0.6)));
-        speed = Math.min(base() * 1.35, speed * 1.012);
-        const a = off * 1.05;
-        vx = speed * Math.sin(a); vy = -speed * Math.cos(a) * 0.5;
-        ny = PR - (ny - PR) - 1e-3;
+    function step(h){
+      let x = bx + vx * h, Y = by * A + vy * h;
+      if (x < RB){ x = RB; vx = Math.abs(vx); }
+      if (x > IW - RB){ x = IW - RB; vx = -Math.abs(vx); }
+      if (Y < RB){ Y = RB; vy = Math.abs(vy); }
+      /* bricks: the first one the ball's circle overlaps, pushed out along the shallower side */
+      const r0 = Math.max(0, Math.floor((Y - RB) / A) - BT), r1 = Math.min(NR - 1, Math.floor((Y + RB) / A) - BT);
+      for (let r = r0; r <= r1; r++){
+        const sx = OFF + SH(r), c0 = Math.max(0, Math.floor((x - RB - sx) / 4)), c1 = Math.min(NB - 1, Math.floor((x + RB - sx) / 4));
+        for (let c = c0; c <= c1; c++){
+          if (!bricks[r][c]) continue;
+          const L = sx + c * 4, T0 = (BT + r) * A, cx = Math.max(L, Math.min(L + 3, x)), cy = Math.max(T0, Math.min(T0 + A, Y));
+          const dx = x - cx, dy = Y - cy;
+          if (dx * dx + dy * dy >= RB * RB) continue;
+          if (Math.abs(dx) > Math.abs(dy)){ if (dx * vx < 0 || !dx) vx = -vx; x = cx + (dx < 0 ? -RB : RB); }
+          else { if (dy * vy < 0 || !dy) vy = -vy; Y = cy + (dy < 0 || (!dy && vy < 0) ? -RB : RB); }
+          bx = x; by = Y / A; hit([r, c]);
+          return;
+        }
       }
-      bx = nx; by = ny;
-      if (by >= FH - 0.5) lose();
+      /* the paddle: the farther from its middle, the steeper the way back out (up to 60 degrees) */
+      const pt = padTop();
+      if (vy > 0 && Y + RB >= pt && by * A + RB <= pt + 0.5 && x >= px - RB && x <= px + PW + RB){
+        const off = Math.max(-1, Math.min(1, (x - (px + PW / 2)) / (PW / 2 + RB)));
+        speed = Math.min(base() * 1.25, speed * 1.01);
+        aim(off * 1.05); Y = pt - RB;
+      }
+      bx = x; by = Y / A;
+      if (Y - RB > FH * A) lose();
     }
     const summary = () => api.print('breakout: ' + score + ' points, level ' + level + ', ' + (newHi ? 'a new best' : 'best ' + Math.max(hi, score)));
     function quit(){ if (score > hi){ hi = score; newHi = true; hiSet(BREAKOUT_HI, score); } if (score) summary(); api.exit(0); }
@@ -575,7 +585,7 @@ T.apps.breakout = {
         }
         if (isQuit(k)){ quit(); return true; }
         const d = k === 'ArrowLeft' || k === 'a' || k === 'A' || k === 'h' ? 'l' : k === 'ArrowRight' || k === 'd' || k === 'D' || k === 'l' ? 'r' : '';
-        if (d){ if (!held[d] || !gotUp){ if (!paused) px = Math.max(0, Math.min(IW - PW, px + (d === 'l' ? -1 : 1))); } held[d] = t || 1e-6; target = null; return true; }
+        if (d){ held[d] = t || 1e-6; target = null; return true; }
         if (k === ' ' || k === 'ArrowUp' || k === 'Enter'){ if (state === 'serve' && !paused) launch(); else if (k === ' ') paused = !paused; return true; }
         if (k === 'p' || k === 'P'){ paused = !paused; return true; }
         return true;
@@ -594,11 +604,17 @@ T.apps.breakout = {
           if (dir) px += dir * 42 * dt;
           else if (target != null){ const d = target - px, s = 60 * dt; px += Math.abs(d) <= s ? d : Math.sign(d) * s; if (Math.abs(d) <= s) target = null; }
           px = Math.max(0, Math.min(IW - PW, px));
-          if (state === 'serve'){ bx = px + PW / 2; by = PR - 1; }
-          else { const n = Math.max(1, Math.ceil(Math.max(Math.abs(vx), Math.abs(vy)) * dt / 0.4)); for (let i = 0; i < n && state === 'play'; i++) step(dt / n); }
+          if (state === 'serve'){ bx = px + PW / 2; by = (padTop() - RB) / A; }
+          else {
+            for (acc += dt; acc >= STEP && state === 'play'; acc -= STEP){ pbx = bx; pby = by; step(STEP); }
+            /* drawn between the last two physics states, so frames that fall between steps still move evenly */
+            const f = state === 'play' ? acc / STEP : 1;
+            trail.copyWithin(2, 0, 6); trail[0] = pbx + (bx - pbx) * f; trail[1] = pby + (by - pby) * f; tn = Math.min(4, tn + 1);
+          }
         }
-        const blink = REDUCED || state === 'play' && !paused ? 0 : Math.floor(t * 2) % 2;
-        const key = [bx | 0, by | 0, Math.round(px), left, score, balls, level, state, paused, blink].join();
+        if (state === 'play' && !paused) return true;             // the ball moves every frame
+        const blink = REDUCED ? 0 : Math.floor(t * 2) % 2;
+        const key = [Math.round(px * 20), left, score, balls, level, state, paused, blink].join();
         if (key === last) return false;
         last = key; return true;
       },
@@ -609,6 +625,7 @@ T.apps.breakout = {
           if (kept || bricks.length !== NR || bricks[0].length !== NB) wall();
           if (state === 'play'){ serve(); paused = true; }
         }
+        if (scr.aspect > 0) A = scr.aspect;                       // (by is in rows, so a new aspect needs nothing else)
         scr.clear(); scr.cursor(0, 0, null);
         const ox = Math.max(0, ((scr.cols - IW - 2) / 2) | 0), x0 = ox + 1, top = 2;
         scr.put(ox, 0, 'BREAKOUT', 'bright');
@@ -620,8 +637,12 @@ T.apps.breakout = {
         scr.put(ox, 1, '+' + '-'.repeat(IW) + '+', 'faint');
         for (let y = 0; y < FH; y++){ scr.put(ox, top + y, '|', 'faint'); scr.put(ox + IW + 1, top + y, '|', 'faint'); }
         for (let r = 0; r < NR; r++) for (let c = 0; c < NB; c++) if (bricks[r][c]) scr.put(x0 + OFF + SH(r) + c * 4, top + BT + r, '   ', brick(LV[r]));
-        scr.put(x0 + Math.round(px), top + PR, ' '.repeat(PW), brick('normal'));
-        if (state !== 'over') scr.put(x0 + Math.min(IW - 1, bx | 0), top + Math.min(FH - 1, by | 0), '\u2022', 'bright');   // drawn as a round dot, not a letter
+        scr.bar(x0 + px, top + PR + 0.2, PW, 0.62, 'normal');
+        if (state === 'play') for (let i = tn - 1; i >= 1; i--) scr.dot(x0 + trail[i * 2], top + trail[i * 2 + 1], RB * (1 - i * 0.12), GLOW[i]);   // afterglow
+        if (state !== 'over'){
+          const dx = x0 + (state === 'play' && tn ? trail[0] : bx), dy = top + (state === 'play' && tn ? trail[1] : by);
+          scr.dot(dx, dy, RB * 1.8, { fg: 'rgba(200, 245, 184, 0.2)' }); scr.dot(dx, dy, RB, 'bright');   // a soft bloom under the ball, as phosphor spreads
+        }
         const cw = Math.min(IW - 2, 30), cx = x0 + ((IW - cw) / 2 | 0), cy = top + BT + NR + Math.max(1, ((PR - BT - NR - 8) / 2) | 0);
         const c = (y, s, st) => scr.put(cx + ((cw - s.length) / 2 | 0), cy + y, s, st);
         const on = REDUCED || Math.floor(t * 2) % 2 === 0;

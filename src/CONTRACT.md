@@ -49,7 +49,8 @@ MAC.createScene(container: HTMLElement) -> {
   resize(w, h),
 }
 ```
-Test hook: with `?debug` in the URL the scene also exposes `api._dbg = { yawS, pitchS, intro, shot, LOOK, lampS }`
+Test hook: with `?debug` in the URL the scene also exposes `api._dbg = { yawS, pitchS, intro, shot, LOOK, lampS, view() }`
+(`view()` returns `{ yawRest, leanAt, leanEnd, fullFov }`)
 (e.g. `pitchS.x = pitchS.t = -LOOK.down` forces the lean-back view). Not present otherwise.
 
 ## typist.js (typist agent)
@@ -98,7 +99,8 @@ stubs missing modules so each can be tested alone (production builds leave it ou
 
 ## View
 There is ONE view: the typist's own eyes (first person). At rest the CRT fills most of the frame and is fully
-legible. Moving the pointer looks around like a seated head would: down (up to ~35°) leans back to the
+legible. Moving the pointer looks around like a seated head would: down past the glass's bottom edge (~87% of the
+window) leans back to the
 whole desk and the hands, a little left/right/up. `setLook(nx, ny)` is the only view control. The typist has no head or torso meshes (the camera is the head); hips/legs never cast shadows.
 The visible parts are the forearms, sleeves and hands, so they must look great from above and behind.
 
@@ -129,7 +131,10 @@ MAC.TERM.apps[name] = { desc, usage, start(api, argv) -> { key(e) -> bool, tick(
                                                           keyUp?(e), insertText?(str) /* phones */, tap?(col, row) -> bool /* phones */ } }
 // api = { cols, rows, fs, env, cwd, exit(code), print(text) /* goes to scrollback after exit */, sound: MAC.sound }
 // scr = { cols, rows, clear(), put(x, y, text, style /* 'normal'|'dim'|'bright'|'faint'|'accent'|'inverse'|{fg, inverse, inset} */),
-//         fill(x, y, w, h, ch, style), cursor(x, y, shape /* 'block'|'bar'|'under'|null */) }
+//         fill(x, y, w, h, ch, style), cursor(x, y, shape /* 'block'|'bar'|'under'|null */),
+//         dot(x, y, r, style), bar(x, y, w, h, style),   // vectors over the grid at FLOAT cell coordinates (dot: centre, radius r in
+//                                                         // cell widths, round whatever the cell shape); for things that glide. clear() drops them
+//         aspect }                                        // a cell's height / width (about 2.25): to move evenly in screen space
 
 // Virtual filesystem (persisted to localStorage, seeded on first run)
 // fs = { resolve(path, cwd) -> abs, exists(p), isDir(p), read(p) -> string|null, write(p, text), append(p, text),

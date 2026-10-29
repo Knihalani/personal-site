@@ -5,7 +5,8 @@ Eden (context for agents).
 
 It is a room at night. A beige 1980s computer sits on a desk under a lamp, and its green phosphor
 screen is a working terminal. When you type, the hands on the desk type the same keys on the 3D
-keyboard, and you hear a real Topre switch for every press and release.
+keyboard, and you hear a real Topre switch for every press and release. Each visit opens on a slowly turning
+3D "KN" drawn in characters on the screen, until the first command.
 
 ## Using it
 

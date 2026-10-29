@@ -809,6 +809,24 @@ M.createTerminal = function createTerminal(opts){
   if (!FS.isDir(cwd)) cwd = '/';
 
   /* ---- documents ---- */
+  /* the landing: every load opens on the monogram, turning, with one line under it. The first command (typed,
+     clicked or a deep link) clears it for good this visit; home and back then show the plain welcome. */
+  let landing = null;
+  function landingRows(){
+    const o = out();
+    o.viz(Math.max(4, ROWS - 2), (x, y, w, h, age, t) => KN.draw(x, y, w, h, age, t), () => 22);
+    if (TAP) o.at(2, ['tap here or type help to get started', 'd', { cmd: 'help' }]);
+    else o.at(2, ['type ', 'f'], chip('help', 'b'), [' and press enter to get started', 'f']);
+    landing = { viz: o.rows[0], note: o.rows[1] };
+    return o;
+  }
+  function dismissLanding(){
+    if (!landing) return;
+    const l = landing; landing = null;
+    rows = rows.filter(r => r !== l.viz && r !== l.note); shown = Math.min(shown, rows.length); partial = 0;
+    if (pageRow === l.viz) pageRow = null;
+    dirty = true;
+  }
   function welcome(o){
     return o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line([TAP ? 'tap a word below, or type one' : 'type a word and press enter, or click one', 'd'])
@@ -1311,6 +1329,99 @@ M.createTerminal = function createTerminal(opts){
     return [['OS', 'KNOS 1.04'], ['Host', 'KN-84'], ['Uptime', uptimeStr()], ['Shell', 'sh, ' + ncmd + ' commands'], ['Terminal', 'vt320, ' + COLS + 'x' + ROWS],
       ['Font', 'VT323'], ['Files', files + ' in ~'], ['User', C.name || 'Kaiav'], ...roles.map((r, i) => [i ? '' : 'Role', r])];
   }
+  /* ---- the landing: Kaiav's monogram, KN, as solid extruded letters turning slowly on the tube ----
+     Ray cast per character cell (two samples down each cell, which is about twice as tall as wide), against
+     the letters as convex prisms (Cyrus-Beck clipping: nearest entering face wins, so it is z-buffered for
+     free), shaded by the face normal against a light from the upper left, like the desk lamp. The geometry
+     and the sample buffers are made once; a frame allocates nothing but the strings it draws. */
+  const KN = (() => {
+    const RAMP = '.,-:;=+*#%@', NR = RAMP.length;
+    const sw = 1.4, D = 0.75, F = 34;                    // stroke width, half the extrusion depth, eye distance (object units)
+    const K = x0 => { const xs = x0 + sw, x1 = x0 + 5; return [
+      [[x0, -3.5], [xs, -3.5], [xs, 3.5], [x0, 3.5]],                          // stem
+      [[xs, -0.9], [x1, 3.5], [x1 - 1.9, 3.5], [xs, 1.0]],                     // arm
+      [[x1 - 1.9, -3.5], [x1, -3.5], [xs + 1.6, 0.6], [xs + 0.2, 0]]]; };      // leg
+    const N = x0 => { const x1 = x0 + 5; return [
+      [[x0, -3.5], [x0 + sw, -3.5], [x0 + sw, 3.5], [x0, 3.5]],
+      [[x1 - sw, -3.5], [x1, -3.5], [x1, 3.5], [x1 - sw, 3.5]],
+      [[x1 - 1.65, -3.5], [x1, -3.5], [x0 + 1.65, 3.5], [x0, 3.5]]]; };
+    /* two layouts: side by side (landscape) or stacked (a phone held upright) */
+    const shift = (polys, dx, dy) => polys.map(p => p.map(([x, y]) => [x + dx, y + dy]));
+    const LAY = {
+      row: { polys: [...K(-5.75), ...N(0.75)], w: 11.5, h: 7 },
+      stack: { polys: [...shift(K(-2.5), 0, 3.95), ...shift(N(-2.5), 0, -3.95)], w: 5, h: 14.9 },
+    };
+    for (const L of Object.values(LAY)){               // planes: n.p <= c inside; 6 per prism (4 sides, 2 caps)
+      const pl = []; for (const poly of L.polys){
+        for (let i = 0; i < 4; i++){ const [ax, ay] = poly[i], [bx, by] = poly[(i + 1) % 4], ex = bx - ax, ey = by - ay, l = Math.hypot(ex, ey), nx = ey / l, ny = -ex / l; pl.push(nx, ny, 0, nx * ax + ny * ay); }
+        pl.push(0, 0, -1, D, 0, 0, 1, D);
+      }
+      L.pl = new Float32Array(pl); L.n = L.polys.length;
+    }
+    let lay = LAY.row, cols = 0, rows = 0, scale = 1, fitW = 0, fitH = 0, lev = new Int8Array(0);
+    function fit(c, r, wpx, hpx){
+      lay = hpx > wpx * 1.15 ? LAY.stack : LAY.row;
+      scale = Math.min(wpx * 0.8 / lay.w, hpx * 0.84 / (lay.h + 0.5));
+      if (c * r > lev.length) lev = new Int8Array(c * r);
+      cols = c; rows = r; fitW = wpx; fitH = hpx;
+    }
+    /* level (-1: nothing) for every cell at time t: yaw swings, pitch nods, never far enough to read backwards */
+    function frame(t, fade){
+      const a = 0.5 * Math.sin(t * 0.42), b = 0.12 + 0.12 * Math.sin(t * 0.29 + 1.1);
+      const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+      /* R = Ry(a) Rx(b); rays and the light go into object space with R transposed */
+      const r00 = ca, r01 = sa * sb, r02 = sa * cb, r10 = 0, r11 = cb, r12 = -sb, r20 = -sa, r21 = ca * sb, r22 = ca * cb;
+      const ox = r20 * -F, oy = r21 * -F, oz = r22 * -F;                         // R^T (0, 0, -F)
+      const Lx = -16, Ly = 14, Lz = -22;                                          // a point light, the lamp: up and left of the viewer
+      const lx = r00 * Lx + r10 * Ly + r20 * Lz, ly = r01 * Lx + r11 * Ly + r21 * Lz, lz = r02 * Lx + r12 * Ly + r22 * Lz;
+      const pl = lay.pl, np = lay.n;
+      for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++){
+        let sum = 0, hits = 0;
+        for (let s = 0; s < 2; s++){
+          const wx = ((col + 0.5) - cols / 2) * cw / scale, wy = -((row + 0.25 + s * 0.5) - rows / 2) * ch / scale;
+          const dx = r00 * wx + r10 * wy + r20 * F, dy = r01 * wx + r11 * wy + r21 * F, dz = r02 * wx + r12 * wy + r22 * F;
+          let best = 1e9, bn = -1;
+          for (let p = 0; p < np; p++){
+            let tE = 0, tX = 1e9, en = -1;
+            for (let k = 0; k < 6; k++){
+              const q = (p * 6 + k) * 4, nx = pl[q], ny = pl[q + 1], nz = pl[q + 2];
+              const den = nx * dx + ny * dy + nz * dz, num = pl[q + 3] - (nx * ox + ny * oy + nz * oz);
+              if (den === 0){ if (num < 0){ tE = 2e9; break; } continue; }
+              const tt = num / den;
+              if (den < 0){ if (tt > tE){ tE = tt; en = q; } } else if (tt < tX) tX = tt;
+              if (tE > tX) break;
+            }
+            if (en >= 0 && tE <= tX && tE < best){ best = tE; bn = en; }
+          }
+          if (bn >= 0){                                   // light falls off across each face, so the faces read as surfaces, not stencils
+            hits++;
+            const vx = lx - (ox + best * dx), vy = ly - (oy + best * dy), vz = lz - (oz + best * dz), il = 1 / Math.sqrt(vx * vx + vy * vy + vz * vz);
+            const d = (pl[bn] * vx + pl[bn + 1] * vy + pl[bn + 2] * vz) * il;
+            sum += 0.06 + 0.84 * Math.max(0, d) * Math.min(1, 31 * il);
+          }
+        }
+        lev[row * cols + col] = hits ? Math.min(NR - 1, Math.round(sum / hits * fade * (NR - 1) * (hits === 2 ? 1 : 0.8))) : -1;
+      }
+    }
+    const tone = l => l < 3 ? P.faint : l < 6 ? P.dim : l < 9 ? P.normal : P.bright;
+    function draw(x, top, w, h, age, t){
+      const c = COLS, r = Math.round(h / ch);
+      if (c !== cols || r !== rows || fitW !== X(COLS) - X(0) || fitH !== h) fit(c, r, X(COLS) - X(0), h);   // (refits after a resize)
+      frame(REDUCED ? 2.2 : t, REDUCED ? 1 : ease(age / 1.2));
+      setFont();
+      for (let row = 0; row < rows; row++){                  // runs of one tone: a string with spaces in it, one fill
+        const y = top + row * ch + fs * 0.68;
+        for (let col = 0; col < cols;){
+          const l = lev[row * cols + col]; if (l < 0){ col++; continue; }
+          const tn = tone(l); let s = '', k = col;
+          while (k < cols && lev[row * cols + k] >= 0 && tone(lev[row * cols + k]) === tn){ s += RAMP[lev[row * cols + k]]; k++; }
+          g.fillStyle = tn; fillT(s, X(col), y); col = k;
+        }
+      }
+    }
+    return { draw };
+  })();
+
   /* the KN-84 itself, in outline: a compact all-in-one with its screen lit, and a keyboard; the card beside it.
      Under 50 columns the drawing goes and the card starts at the margin */
   function drawFetch(x, y, w, h, age, t){
@@ -1817,9 +1928,15 @@ M.createTerminal = function createTerminal(opts){
   const BLANK = cellStyle('normal');
   const grid = []; for (let y = 0; y < ROWS; y++){ grid.push(new Array(COLS)); }
   let gridCursor = null;
+  const overlay = [];                  // scr.dot / scr.bar, six slots each: kind, x, y, a, b, colour (no objects per frame)
   const scr = {
     cols: COLS, rows: ROWS,
-    clear(){ for (const r of grid) for (let x = 0; x < COLS; x++) r[x] = [' ', BLANK]; },
+    clear(){ for (const r of grid) for (let x = 0; x < COLS; x++) r[x] = [' ', BLANK]; overlay.length = 0; },
+    aspect: 2.25,                                   // a cell's height over its width (set from the font metrics)
+    /* vectors over the grid at FLOAT cell coordinates, for things that move smoothly (a ball, a paddle):
+       dot(x, y, r): a round dot centred at (x, y), radius r in cell widths; bar(x, y, w, h): a filled box */
+    dot(x, y, r, style){ overlay.push(0, +x, +y, +r, 0, cellStyle(style).fg); },
+    bar(x, y, w, h, style){ overlay.push(1, +x, +y, +w, +h, cellStyle(style).fg); },
     put(x, y, text, style){
       x = Math.floor(x); y = Math.floor(y); const x0 = x; const s = cellStyle(style);
       for (const c of String(text == null ? '' : text)){
@@ -1835,7 +1952,7 @@ M.createTerminal = function createTerminal(opts){
     },
     cursor(x, y, shape){ gridCursor = shape === null || shape === false || x == null ? null : { x: Math.floor(x), y: Math.floor(y), shape: shape || 'block' }; },
   };
-  scr.clear();
+  scr.clear(); scr.aspect = ch / cw;
   function launchApp(name, argv, ctx, j){
     const def = M.TERM.apps[name];
     return new Promise(resolve => {
@@ -1921,6 +2038,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function said(cmd){ rows.push({ k: 't', i: 0, s: [['\u2192 ', 'f'], [cmd, 'd']] }); shown = rows.length; partial = 0; return cmd; }
   function execute(raw, programmatic){
+    if (landing && raw.trim()) dismissLanding();   // the first command clears the landing, then runs on a clean screen
     ttyRows([...promptSpans(), [raw, 'n']]);
     openRow = null;
     input = ''; cur = 0; suggestion = ''; tabState = null; disarm();
@@ -2051,7 +2169,7 @@ M.createTerminal = function createTerminal(opts){
     const next = clamp(scrollOff + units, 0, max);
     if (next !== scrollOff){ scrollOff = next; dirty = true; }
   }
-  function clearScreen(){ rows = []; shown = 0; partial = 0; disarm(); openRow = null; pageRow = null; toBottom(); dirty = true; }
+  function clearScreen(){ landing = null; rows = []; shown = 0; partial = 0; disarm(); openRow = null; pageRow = null; toBottom(); dirty = true; }
 
   /* ---- pages ---- */
   /* a fresh page: what was on screen scrolls off above (still there, scrolling up), the prompt line is reset */
@@ -2084,6 +2202,7 @@ M.createTerminal = function createTerminal(opts){
   /* a chip: back and home, a full-screen app as before (it returns to this page), anything else a new page */
   function nav(cmd, noHist){
     cmd = String(cmd || '').trim(); if (!cmd) return;
+    dismissLanding();
     if (cmd === 'back') return goBack();
     if (cmd === 'home') return goHome();
     const w = cmd.split(/\s+/)[0];
@@ -2261,9 +2380,9 @@ M.createTerminal = function createTerminal(opts){
   function endBoot(){
     booting = false; rows = []; shown = 0; partial = 0;
     store.set(BOOT_KEY, 1);
-    const w = welcome(out()); if (w.rows[0]) w.rows[0].wel = true;
-    pageRow = w.rows[0] || null; page = ''; pages = [];
-    emit(w, (C.name || '') + '. ' + (A.role || '') + '. Type help to begin.');
+    const w = landingRows();
+    pageRow = null; page = ''; pages = [];
+    emit(w, (C.name || '') + '. ' + (A.role || '') + '. The letters K N turn slowly on the screen. Type help and press Enter to get started.');
     blinkT0 = now; dirty = true;
   }
 
@@ -2386,7 +2505,7 @@ M.createTerminal = function createTerminal(opts){
     return out;
   }
   const promptVisible = () => !booting && !typing() && !job && !app;
-  const nudgeOn = () => fresh && !nudgeOff && okRuns === 0 && !armed && promptVisible() && idleT0 >= 0 && now - idleT0 > 8;
+  const nudgeOn = () => !landing && fresh && !nudgeOff && okRuns === 0 && !armed && promptVisible() && idleT0 >= 0 && now - idleT0 > 8;
 
   /* a one-key question wraps like any other line (nothing is typed on it); a typed answer stays on one line */
   const askRows = () => job.ask.one ? fitRow(job.ask.spans, COLS - job.ask.i) : [null];
@@ -2437,8 +2556,8 @@ M.createTerminal = function createTerminal(opts){
   let drawnCards = [], drawnHits = [];   // what is on screen and can be clicked or tapped
   let hoverKey = '', lastFirst = -1, lastTotal = 0;   // the clickable thing under the mouse; the view, to notice it move
   const cardKeyOf = (top, it) => 'c' + Math.round(top) + ':' + it.ai, spanKeyOf = (x0, top) => 's' + Math.round(x0) + ':' + Math.round(top);
-  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\u2022\ue000~]/g;
-  const SPAN_VEC = /[\u2190-\u2193\u2022\ue000~]/, SPAN_VEC_G = /[\u2190-\u2193\u2022\ue000~]/g;
+  const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\u2022\u25cf\ue000~]/g;
+  const SPAN_VEC = /[\u2190-\u2193\u2022\u25cf\ue000~]/, SPAN_VEC_G = /[\u2190-\u2193\u2022\u25cf\ue000~]/g;
   function vecGlyph(c, col, top, colr){
     const cx = X(col) + cw / 2, cy = top + ch * 0.5, a = cw * 0.36;
     g.fillStyle = colr;
@@ -2451,6 +2570,7 @@ M.createTerminal = function createTerminal(opts){
       g.stroke(); g.lineCap = 'butt'; g.lineJoin = 'miter';
       return;
     }
+    if (c === '\u25cf'){ g.beginPath(); g.arc(cx, cy, cw * 0.38, 0, 6.2832); g.fill(); return; }   // a ball (breakout): round whatever the cell shape
     if (c === '\u2022'){ g.beginPath(); g.arc(cx, cy + 1, cw * 0.19, 0, 6.2832); g.fill(); return; }   // a masked character
     if (c === LOCK){                                       // a small padlock: shackle and body
       const bw = cw * 0.72, bh = ch * 0.3, bx = cx - bw / 2, by = cy - bh * 0.2;
@@ -2484,6 +2604,14 @@ M.createTerminal = function createTerminal(opts){
         VEC_RE.lastIndex = 0;
         x = x1;
       }
+    }
+    for (let i = 0; i < overlay.length; i += 6){
+      const x = X(overlay[i + 1]), y = PADY + overlay[i + 2] * ch, a = overlay[i + 3], b = overlay[i + 4];
+      g.fillStyle = overlay[i + 5];
+      if (overlay[i] === 1){ g.fillRect(x, y, a * cw, b * ch); continue; }
+      const rad = Math.max(0.5, a * cw);
+      g.beginPath(); g.arc(x, y, rad, 0, 6.2832); g.fill();
+      lumAcc += 3.1416 * rad * rad * lumOf(overlay[i + 5]);
     }
     const c = gridCursor;
     if (c && blinkOn && c.x >= 0 && c.x < COLS && c.y >= 0 && c.y < ROWS){
@@ -2659,8 +2787,9 @@ M.createTerminal = function createTerminal(opts){
     fontStr = {}; curFont = ''; noShaping();
     ENV.COLUMNS = String(COLS); ENV.LINES = String(ROWS);
     grid.length = 0; for (let y = 0; y < ROWS; y++) grid.push(new Array(COLS));
-    scr.cols = COLS; scr.rows = ROWS; scr.clear();
+    scr.cols = COLS; scr.rows = ROWS; scr.aspect = ch / cw; scr.clear();
     if (app){ if (app.api){ app.api.cols = COLS; app.api.rows = ROWS; } if (gridCursor && (gridCursor.x >= COLS || gridCursor.y >= ROWS)) gridCursor = null; app.dirty = true; }
+    if (landing) landing.viz.h = Math.max(4, ROWS - 2);   // the monogram refits to the new tube
     const next = []; let pageAt = -1;
     for (let a = 0; a < rows.length; a++){
       const r = rows[a];
