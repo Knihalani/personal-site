@@ -814,7 +814,7 @@ M.createTerminal = function createTerminal(opts){
   let landing = null;
   function landingRows(){
     const o = out();
-    o.viz(Math.max(4, ROWS - 2), (x, y, w, h, age, t) => KN.draw(x, y, w, h, age, t), () => 22);
+    o.viz(Math.max(4, ROWS - 2), (x, y, w, h, age, t) => KN.draw(x, y, w, h, age, t), KN.live);
     if (TAP) o.at(2, ['tap here or type help to get started', 'd', { cmd: 'help' }]);
     else o.at(2, ['type ', 'f'], chip('help', 'b'), [' and press enter to get started', 'f']);
     landing = { viz: o.rows[0], note: o.rows[1] };
@@ -1329,14 +1329,18 @@ M.createTerminal = function createTerminal(opts){
     return [['OS', 'KNOS 1.04'], ['Host', 'KN-84'], ['Uptime', uptimeStr()], ['Shell', 'sh, ' + ncmd + ' commands'], ['Terminal', 'vt320, ' + COLS + 'x' + ROWS],
       ['Font', 'VT323'], ['Files', files + ' in ~'], ['User', C.name || 'Kaiav'], ...roles.map((r, i) => [i ? '' : 'Role', r])];
   }
-  /* ---- the landing: Kaiav's monogram, KN, as solid extruded letters turning slowly on the tube ----
-     Ray cast per character cell (two samples down each cell, which is about twice as tall as wide), against
-     the letters as convex prisms (Cyrus-Beck clipping: nearest entering face wins, so it is z-buffered for
-     free), shaded by the face normal against a light from the upper left, like the desk lamp. The geometry
-     and the sample buffers are made once; a frame allocates nothing but the strings it draws. */
+  /* ---- the landing: Kaiav's monogram, KN, as solid extruded letters on the tube ----
+     A ray per sample, six samples to a character cell (2 across, 3 down), against the letters as convex prisms
+     (Cyrus-Beck clipping: the nearest entering face wins, so it is z-buffered for free). Each sample is lit by the
+     lamp (upper left: diffuse, a specular glint, a rim on faces turning edge-on, a little fog with depth); the six
+     values pick the character whose own shape, measured once from VT323, matches best, so silhouettes come out
+     as / \ | _ and faces as a density ramp; brightness picks one of the four phosphor levels.
+     Entrance: a field of characters streams out toward the viewer, then each one flies to its own spot on the
+     letters and locks in, the letters swing round and settle, and a glint crosses the faces. After that it
+     idles: a slow sway, the head turning a little toward the pointer, a ripple for each key, now and then a glint.
+     Geometry, glyph shapes, particles and buffers are made once; a frame allocates only the strings it draws. */
   const KN = (() => {
-    const RAMP = '.,-:;=+*#%@', NR = RAMP.length;
-    const sw = 1.4, D = 0.75, F = 34;                    // stroke width, half the extrusion depth, eye distance (object units)
+    const sw = 1.4, D = 0.75, F = 34;                     // stroke width, half the extrusion depth, eye distance (object units)
     const K = x0 => { const xs = x0 + sw, x1 = x0 + 5; return [
       [[x0, -3.5], [xs, -3.5], [xs, 3.5], [x0, 3.5]],                          // stem
       [[xs, -0.9], [x1, 3.5], [x1 - 1.9, 3.5], [xs, 1.0]],                     // arm
@@ -1345,47 +1349,150 @@ M.createTerminal = function createTerminal(opts){
       [[x0, -3.5], [x0 + sw, -3.5], [x0 + sw, 3.5], [x0, 3.5]],
       [[x1 - sw, -3.5], [x1, -3.5], [x1, 3.5], [x1 - sw, 3.5]],
       [[x1 - 1.65, -3.5], [x1, -3.5], [x0 + 1.65, 3.5], [x0, 3.5]]]; };
-    /* two layouts: side by side (landscape) or stacked (a phone held upright) */
-    const shift = (polys, dx, dy) => polys.map(p => p.map(([x, y]) => [x + dx, y + dy]));
-    const LAY = {
-      row: { polys: [...K(-5.75), ...N(0.75)], w: 11.5, h: 7 },
-      stack: { polys: [...shift(K(-2.5), 0, 3.95), ...shift(N(-2.5), 0, -3.95)], w: 5, h: 14.9 },
-    };
-    for (const L of Object.values(LAY)){               // planes: n.p <= c inside; 6 per prism (4 sides, 2 caps)
-      const pl = []; for (const poly of L.polys){
-        for (let i = 0; i < 4; i++){ const [ax, ay] = poly[i], [bx, by] = poly[(i + 1) % 4], ex = bx - ax, ey = by - ay, l = Math.hypot(ex, ey), nx = ey / l, ny = -ex / l; pl.push(nx, ny, 0, nx * ax + ny * ay); }
-        pl.push(0, 0, -1, D, 0, 0, 1, D);
+    const POLYS = [...K(-5.75), ...N(0.75)], NP = POLYS.length, LW = 11.5, LH = 7;
+    /* planes, n.p <= c inside, 6 per prism (4 sides, 2 caps); a bounding sphere per prism skips most rays early */
+    const pl = new Float32Array(NP * 24), sph = new Float32Array(NP * 3);
+    POLYS.forEach((poly, p) => {
+      let cx = 0, cy = 0; poly.forEach(([x, y]) => { cx += x / 4; cy += y / 4; });
+      let r = 0; poly.forEach(([x, y]) => { r = Math.max(r, Math.hypot(x - cx, y - cy)); });
+      sph[p * 3] = cx; sph[p * 3 + 1] = cy; sph[p * 3 + 2] = Math.hypot(r, D) + 0.01;
+      for (let i = 0; i < 4; i++){
+        const [ax, ay] = poly[i], [bx, by] = poly[(i + 1) % 4], ex = bx - ax, ey = by - ay, l = Math.hypot(ex, ey), nx = ey / l, ny = -ex / l, q = (p * 6 + i) * 4;
+        pl[q] = nx; pl[q + 1] = ny; pl[q + 2] = 0; pl[q + 3] = nx * ax + ny * ay;
       }
-      L.pl = new Float32Array(pl); L.n = L.polys.length;
+      pl.set([0, 0, -1, D, 0, 0, 1, D], (p * 6 + 4) * 4);
+    });
+    /* a small seeded random, so every visit gets the same choreography */
+    let seed = 7;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    const hash = (i, j) => { let h = (i * 374761393 + j * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+    /* when the surface at (x, y) locks in: patches in a loose order out from the middle, ~1.2 s from first to last */
+    const LAND0 = 1.25, LAND1 = 1.15;
+    const landAt = (x, y) => LAND0 + LAND1 * (0.6 * hash(Math.floor(x / 0.9 + 64), Math.floor(y / 0.9 + 64)) + 0.4 * Math.min(1, Math.hypot(x / 6, y / 4)));
+
+    /* ---- glyph shapes: VT323's ink in a 2x3 grid of each cell, every axis scaled to its largest value ---- */
+    const GL = " .,'`-_:;=+/\\|*#%@", NG = GL.length, QL = 6;
+    let gv = null; const lut = new Int8Array(QL ** 6).fill(-1);
+    function shapes(){
+      gv = new Float32Array(NG * 6);
+      try {
+        const S = 60, w = Math.max(8, Math.round(S * advance)), h = Math.round(S * LINE), c = document.createElement('canvas'); c.width = w; c.height = h;
+        const x = c.getContext('2d', { willReadFrequently: true }); x.font = S + 'px ' + FONT; x.textBaseline = 'alphabetic'; x.fillStyle = '#fff';
+        for (let i = 0; i < NG; i++){
+          x.clearRect(0, 0, w, h); x.fillText(GL[i], 0, S * 0.68);
+          const d = x.getImageData(0, 0, w, h).data;
+          for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) gv[i * 6 + (px * 2 / w | 0) + 2 * (py * 3 / h | 0)] += d[(py * w + px) * 4 + 3];
+        }
+        for (let k = 0; k < 6; k++){ let m = 1; for (let i = 0; i < NG; i++) m = Math.max(m, gv[i * 6 + k]); for (let i = 0; i < NG; i++) gv[i * 6 + k] /= m; }
+      } catch (e){ for (let i = 0; i < NG; i++) for (let k = 0; k < 6; k++) gv[i * 6 + k] = i / NG; }
     }
-    let lay = LAY.row, cols = 0, rows = 0, scale = 1, fitW = 0, fitH = 0, lev = new Int8Array(0);
-    function fit(c, r, wpx, hpx){
-      lay = hpx > wpx * 1.15 ? LAY.stack : LAY.row;
-      scale = Math.min(wpx * 0.8 / lay.w, hpx * 0.84 / (lay.h + 0.5));
-      if (c * r > lev.length) lev = new Int8Array(c * r);
-      cols = c; rows = r; fitW = wpx; fitH = hpx;
+    const sv = new Float32Array(6);
+    function pick(){                                         // sv (0..1, six of them) -> glyph index, memoised on a 6-level grid
+      let mx = 0; for (let k = 0; k < 6; k++) if (sv[k] > mx) mx = sv[k];
+      if (mx < 0.03) return 0;
+      let idx = 0;
+      for (let k = 5; k >= 0; k--){ const v = Math.pow(sv[k] / mx, 1.7) * mx; idx = idx * QL + Math.min(QL - 1, Math.round(v * (QL - 1))); }   // edges sharpened toward the brightest sample
+      let r = lut[idx];
+      if (r < 0){
+        let best = 1e9, q = idx; const v = [];
+        for (let k = 0; k < 6; k++){ v.push((q % QL) / (QL - 1)); q = q / QL | 0; }
+        for (let i = 0; i < NG; i++){ let d = 0; for (let k = 0; k < 6; k++){ const e = v[k] - gv[i * 6 + k]; d += e * e; } if (d < best){ best = d; r = i; } }
+        lut[idx] = r;
+      }
+      return r;
     }
-    /* level (-1: nothing) for every cell at time t: yaw swings, pitch nods, never far enough to read backwards */
-    function frame(t, fade){
-      const a = 0.5 * Math.sin(t * 0.42), b = 0.12 + 0.12 * Math.sin(t * 0.29 + 1.1);
-      const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
-      /* R = Ry(a) Rx(b); rays and the light go into object space with R transposed */
-      const r00 = ca, r01 = sa * sb, r02 = sa * cb, r10 = 0, r11 = cb, r12 = -sb, r20 = -sa, r21 = ca * sb, r22 = ca * cb;
-      const ox = r20 * -F, oy = r21 * -F, oz = r22 * -F;                         // R^T (0, 0, -F)
-      const Lx = -16, Ly = 14, Lz = -22;                                          // a point light, the lamp: up and left of the viewer
-      const lx = r00 * Lx + r10 * Ly + r20 * Lz, ly = r01 * Lx + r11 * Ly + r21 * Lz, lz = r02 * Lx + r12 * Ly + r22 * Lz;
-      const pl = lay.pl, np = lay.n;
-      for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++){
-        let sum = 0, hits = 0;
-        for (let s = 0; s < 2; s++){
-          const wx = ((col + 0.5) - cols / 2) * cw / scale, wy = -((row + 0.25 + s * 0.5) - rows / 2) * ch / scale;
+
+    /* ---- particles: each owns a spot on the letters' front faces and knows when that spot locks in ---- */
+    const NPART = 230, NDUST = 70, NALL = NPART + NDUST;
+    const pa = new Float32Array(NALL * 8);   // tx, ty, land, sx, sy, zphase, glyph, (spare)
+    const PG = '+*:#%@=.';
+    {
+      const areas = POLYS.map(p => { let a = 0; for (let i = 0; i < 4; i++){ const [ax, ay] = p[i], [bx, by] = p[(i + 1) % 4]; a += ax * by - bx * ay; } return Math.abs(a / 2); });
+      const tot = areas.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < NALL; i++){
+        const o = i * 8;
+        if (i < NPART){
+          let u = rnd() * tot, p = 0; while (p < NP - 1 && u > areas[p]){ u -= areas[p]; p++; }
+          const P = POLYS[p], tri = rnd() < 0.5 ? [P[0], P[1], P[2]] : [P[0], P[2], P[3]];
+          let a = rnd(), b = rnd(); if (a + b > 1){ a = 1 - a; b = 1 - b; }
+          pa[o] = tri[0][0] + a * (tri[1][0] - tri[0][0]) + b * (tri[2][0] - tri[0][0]);
+          pa[o + 1] = tri[0][1] + a * (tri[1][1] - tri[0][1]) + b * (tri[2][1] - tri[0][1]);
+          pa[o + 2] = landAt(pa[o], pa[o + 1]);
+        } else pa[o + 2] = 1.3 + rnd() * 0.6;              // dust: just streams by and fades
+        const ang = rnd() * 6.2832, rad = 2.5 + rnd() * 14;
+        pa[o + 3] = Math.cos(ang) * rad; pa[o + 4] = Math.sin(ang) * rad * 0.8; pa[o + 5] = rnd(); pa[o + 6] = (rnd() * PG.length) | 0;
+      }
+    }
+    const ZFAR = F * 4.2, ZNEAR = F * 0.22, ZSPAN = ZFAR - ZNEAR, WARP = F * 2.6;   // the stream: depth range, speed (units/s)
+    const FLY = 0.8;                                         // seconds from the stream to the letters
+    const streamZ = (o, t) => ZFAR - ((pa[o + 5] * ZSPAN + t * WARP) % ZSPAN);
+
+    /* ---- pose: a scripted entrance plus a spring the pointer and the keys push on ---- */
+    let yaw = 0, pit = 0, zoom = 1, oy = 0, oyv = 0, op = 0, opv = 0, ptx = null, pty = 0, lastT = -1;
+    const pulses = new Float32Array(4); let pn = 0; pulses.fill(-9);
+    const backOut = x => { if (x <= 0) return 0; if (x >= 1) return 1; const c = 1.9, u = x - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
+    const ENTRY = 2.75;                                      // the entrance is over (the settle has settled) by here
+    const idleYaw = t => 0.3 * Math.sin(t * 0.27) + 0.07 * Math.sin(t * 0.71 + 2), idlePit = t => 0.13 + 0.05 * Math.sin(t * 0.21 + 1.3);
+    function pose(age, t, dt){
+      const u = backOut((age - 0.9) / 1.75);                 // swings in from the side while the characters land
+      const wIdle = clamp((age - 1.6) / 2.5, 0, 1);
+      yaw = -1.25 * (1 - u) + idleYaw(t) * wIdle - 0.08 * (1 - wIdle);
+      pit = 0.42 * (1 - u) + idlePit(t) * wIdle + 0.13 * (1 - wIdle);
+      zoom = 0.82 + 0.18 * u;
+      if (dt > 0){                                           // the spring: toward the pointer, kicked by keys
+        const tyw = ptx == null ? 0 : clamp((ptx - 0.5) * 1.3, -0.6, 0.6), tp = ptx == null ? 0 : clamp((pty - 0.42) * 0.9, -0.35, 0.35);
+        const K2 = 26, C2 = 4.2;
+        for (let s = 0, n = Math.ceil(dt / 0.01), h = dt / n; s < n; s++){
+          oyv += (K2 * (tyw - oy) - C2 * oyv) * h; oy += oyv * h;
+          opv += (K2 * (tp - op) - C2 * opv) * h; op += opv * h;
+        }
+      }
+      yaw += oy; pit += op;
+    }
+
+    /* ---- the grid this drawing uses: the terminal's own, or a finer one where the tube is short (a phone on its side) ---- */
+    let gk = 1, gcw = 0, gch = 0, gcols = 0, grows = 0, gx0 = 0, scale = 1, cyF = 0.5, fitKey = '';
+    let cg = new Int8Array(0), ct = new Int8Array(0), ghG = new Int8Array(0), ghL = new Float32Array(0);
+    function fit(x0, wpx, hpx){
+      const nat = hpx / ch;
+      gk = nat >= 13 ? 1 : Math.max(0.55, nat / 14);
+      gcw = cw * gk; gch = ch * gk;
+      gcols = Math.floor(wpx / gcw); grows = Math.floor(hpx / gch);
+      gx0 = x0 + (wpx - gcols * gcw) / 2;
+      const tall = hpx > wpx * 1.2;
+      scale = Math.min(wpx * (tall ? 0.9 : 0.74) / LW, hpx * 0.8 / (LH + 1));
+      cyF = tall ? 0.42 : 0.5;
+      const n = gcols * grows;
+      if (n > cg.length){ cg = new Int8Array(n); ct = new Int8Array(n); ghG = new Int8Array(n); ghL = new Float32Array(n); }
+      ghL.fill(0);
+    }
+
+    /* every cell at this pose: cg = glyph index (0: blank), ct = tone 0..3 */
+    let r00, r01, r02, r10, r11, r12, r20, r21, r22, ox, oy0, oz, lx, ly, lz;
+    function frame(age, t, still){
+      const ca = Math.cos(yaw), sa = Math.sin(yaw), cb = Math.cos(pit), sb = Math.sin(pit);
+      r00 = ca; r01 = sa * sb; r02 = sa * cb; r10 = 0; r11 = cb; r12 = -sb; r20 = -sa; r21 = ca * sb; r22 = ca * cb;   // R = Ry(yaw) Rx(pit)
+      ox = r20 * -F; oy0 = r21 * -F; oz = r22 * -F;           // the eye, in object space
+      const Lx = -16, Ly = 14, Lz = -22;                     // the lamp: up and left of the viewer
+      lx = r00 * Lx + r10 * Ly + r20 * Lz; ly = r01 * Lx + r11 * Ly + r21 * Lz; lz = r02 * Lx + r12 * Ly + r22 * Lz;
+      const breath = still ? 1 : 1 + 0.05 * Math.sin(t * 1.3);
+      const glintAt = still ? -9 : age < 6 ? 2.35 : 2.35 + 9 * Math.floor((age - 2.35) / 9);   // a glint as it lands, then every ~9 s
+      const gs = (age - glintAt) / 0.85;
+      const gpos = -9 + 18 * gs, gon = gs > 0 && gs < 1;
+      const sc = scale * zoom, cyc = grows * cyF;
+      for (let row = 0; row < grows; row++) for (let col = 0; col < gcols; col++){
+        for (let s = 0; s < 6; s++){
+          const wx = ((col + 0.25 + (s & 1) * 0.5) - gcols / 2) * gcw / sc, wy = -((row + (1 + 2 * (s >> 1)) / 6) - cyc) * gch / sc;
           const dx = r00 * wx + r10 * wy + r20 * F, dy = r01 * wx + r11 * wy + r21 * F, dz = r02 * wx + r12 * wy + r22 * F;
+          const dl = 1 / Math.sqrt(dx * dx + dy * dy + dz * dz);
           let best = 1e9, bn = -1;
-          for (let p = 0; p < np; p++){
+          for (let p = 0; p < NP; p++){
+            const qx = sph[p * 3] - ox, qy = sph[p * 3 + 1] - oy0, qz = -oz, pr = (qx * dx + qy * dy + qz * dz) * dl;
+            const rr = sph[p * 3 + 2]; if (qx * qx + qy * qy + qz * qz - pr * pr > rr * rr) continue;
             let tE = 0, tX = 1e9, en = -1;
             for (let k = 0; k < 6; k++){
               const q = (p * 6 + k) * 4, nx = pl[q], ny = pl[q + 1], nz = pl[q + 2];
-              const den = nx * dx + ny * dy + nz * dz, num = pl[q + 3] - (nx * ox + ny * oy + nz * oz);
+              const den = nx * dx + ny * dy + nz * dz, num = pl[q + 3] - (nx * ox + ny * oy0 + nz * oz);
               if (den === 0){ if (num < 0){ tE = 2e9; break; } continue; }
               const tt = num / den;
               if (den < 0){ if (tt > tE){ tE = tt; en = q; } } else if (tt < tX) tX = tt;
@@ -1393,33 +1500,106 @@ M.createTerminal = function createTerminal(opts){
             }
             if (en >= 0 && tE <= tX && tE < best){ best = tE; bn = en; }
           }
-          if (bn >= 0){                                   // light falls off across each face, so the faces read as surfaces, not stencils
-            hits++;
-            const vx = lx - (ox + best * dx), vy = ly - (oy + best * dy), vz = lz - (oz + best * dz), il = 1 / Math.sqrt(vx * vx + vy * vy + vz * vz);
-            const d = (pl[bn] * vx + pl[bn + 1] * vy + pl[bn + 2] * vz) * il;
-            sum += 0.06 + 0.84 * Math.max(0, d) * Math.min(1, 31 * il);
+          if (bn < 0){ sv[s] = 0; continue; }
+          const hx = ox + best * dx, hy = oy0 + best * dy, hz = oz + best * dz;
+          const land = still ? 0 : landAt(hx, hy);
+          if (age < land){ sv[s] = 0; continue; }
+          const nx = pl[bn], ny = pl[bn + 1], nz = pl[bn + 2];
+          let vx = lx - hx, vy = ly - hy, vz = lz - hz; const il = 1 / Math.sqrt(vx * vx + vy * vy + vz * vz); vx *= il; vy *= il; vz *= il;
+          const ex = -dx * dl, ey = -dy * dl, ez = -dz * dl;                   // toward the eye
+          const dif = Math.max(0, nx * vx + ny * vy + nz * vz) * Math.min(1, 31 * il);
+          let hhx = vx + ex, hhy = vy + ey, hhz = vz + ez; const hl = 1 / Math.sqrt(hhx * hhx + hhy * hhy + hhz * hhz);
+          const sp = Math.max(0, (nx * hhx + ny * hhy + nz * hhz) * hl), spec = sp * sp * sp * sp; const spec2 = spec * spec * spec * spec;
+          const ndv = nx * ex + ny * ey + nz * ez, rim = Math.pow(1 - Math.min(1, Math.abs(ndv)), 3);
+          const fog = 1 - clamp((best * F - F + 2) / 10, 0, 1) * 0.45;      // the far parts a little dimmer
+          let v = (0.08 + 0.78 * dif * breath + 0.55 * spec2 + 0.28 * rim) * fog;
+          const since = age - land;
+          if (since < 0.3) v += 0.6 * (1 - since / 0.3);                     // a flare as each spot locks in
+          if (gon && nz < 0){ const e = hx * 0.85 + hy * 0.5 - gpos; v += 0.75 * Math.exp(-e * e * 0.9); }
+          for (let k = 0; k < 4; k++){ const pt = age - pulses[k]; if (pt > 0 && pt < 0.9){ const e = Math.hypot(hx, hy) - pt * 13; v += 0.5 * (1 - pt / 0.9) * Math.exp(-e * e * 0.8); } }
+          sv[s] = Math.min(1, v);
+        }
+        const i = row * gcols + col, gi = pick();
+        let mx = 0, mean = 0; for (let k = 0; k < 6; k++){ mean += sv[k] / 6; if (sv[k] > mx) mx = sv[k]; }
+        const lvl = 0.6 * mx + 0.4 * mean;
+        cg[i] = gi; ct[i] = lvl < 0.2 ? 0 : lvl < 0.42 ? 1 : lvl < 0.72 ? 2 : 3;
+        if (gi){ ghG[i] = gi; ghL[i] = 1; } else if (!still) ghL[i] *= 0.45;   // phosphor: what was lit lingers a frame or two
+      }
+    }
+    const TONES = [P.faint, P.dim, P.normal, P.bright];
+    function drawCells(top){
+      const base = top + fs * gk * 0.68;
+      setFont(gk);
+      for (let tn = -1; tn < 4; tn++){
+        g.fillStyle = tn < 0 ? P.faint : TONES[tn];
+        for (let row = 0; row < grows; row++){
+          const y = base + row * gch;
+          for (let col = 0; col < gcols;){
+            const i = row * gcols + col;
+            const on = tn < 0 ? !cg[i] && ghL[i] > 0.3 : cg[i] && ct[i] === tn;
+            if (!on){ col++; continue; }
+            let s = '', k = col;
+            for (; k < gcols; k++){ const j = row * gcols + k, o2 = tn < 0 ? !cg[j] && ghL[j] > 0.3 : cg[j] && ct[j] === tn; if (!o2 && k > col + 0) break; s += tn < 0 ? GL[ghG[j]] : GL[cg[j]]; }
+            fillT(s, gx0 + col * gcw, y); col = k;
           }
         }
-        lev[row * cols + col] = hits ? Math.min(NR - 1, Math.round(sum / hits * fade * (NR - 1) * (hits === 2 ? 1 : 0.8))) : -1;
       }
     }
-    const tone = l => l < 3 ? P.faint : l < 6 ? P.dim : l < 9 ? P.normal : P.bright;
-    function draw(x, top, w, h, age, t){
-      const c = COLS, r = Math.round(h / ch);
-      if (c !== cols || r !== rows || fitW !== X(COLS) - X(0) || fitH !== h) fit(c, r, X(COLS) - X(0), h);   // (refits after a resize)
-      frame(REDUCED ? 2.2 : t, REDUCED ? 1 : ease(age / 1.2));
-      setFont();
-      for (let row = 0; row < rows; row++){                  // runs of one tone: a string with spaces in it, one fill
-        const y = top + row * ch + fs * 0.68;
-        for (let col = 0; col < cols;){
-          const l = lev[row * cols + col]; if (l < 0){ col++; continue; }
-          const tn = tone(l); let s = '', k = col;
-          while (k < cols && lev[row * cols + k] >= 0 && tone(lev[row * cols + k]) === tn){ s += RAMP[lev[row * cols + k]]; k++; }
-          g.fillStyle = tn; fillT(s, X(col), y); col = k;
+    /* the stream and the flight in: characters at their depth, bigger and brighter as they come close */
+    const PT = [P.faint, P.dim, P.normal, P.bright];
+    function drawParticles(age, top, hpx){
+      if (age > LAND0 + LAND1 + 0.05) return;
+      const cx = gx0 + gcols * gcw / 2, cy = top + grows * gch * cyF, sc = scale * zoom;
+      const ca = Math.cos(yaw), sa = Math.sin(yaw), cb = Math.cos(pit), sb = Math.sin(pit);
+      g.textBaseline = 'middle';
+      for (let i = 0; i < NALL; i++){
+        const o = i * 8, land = pa[o + 2], dust = i >= NPART;
+        let X, Y, Z;
+        const t0 = land - FLY;
+        const zs = streamZ(o, Math.min(age, dust ? age : t0));
+        X = pa[o + 3]; Y = pa[o + 4]; Z = zs;
+        let alpha = 1;
+        if (dust){ if (age > land) continue; alpha = 1 - clamp((age - land + 0.5) / 0.5, 0, 1); }
+        else if (age > t0){
+          if (age >= land) continue;
+          const u = (age - t0) / FLY, e = u * u * (3 - 2 * u);
+          const px = pa[o], py = pa[o + 1], pz = -D;                           // the spot, posed: R p, then F further on
+          const wx = ca * px + sa * sb * py + sa * cb * pz, wy = cb * py - sb * pz, wz = -sa * px + ca * sb * py + ca * cb * pz + F;
+          const arc = Math.sin(u * 3.1416) * 3;                                // a little swirl on the way in
+          X = X + (wx - X) * e + arc * Math.cos(i); Y = Y + (wy - Y) * e + arc * Math.sin(i); Z = Z + (wz - Z) * e;
         }
+        if (Z < F * 0.15) continue;
+        const k = F / Z, sx = cx + X * k * sc, sy = cy - Y * k * sc;
+        if (sx < -40 || sx > W + 40 || sy < top - 40 || sy > top + hpx + 40) continue;
+        const size = clamp(k * gk, 0.25, 2.6);
+        const tn = Math.min(3, Math.floor(clamp((k - 0.25) / 0.45, 0, 3.99) * alpha));
+        g.fillStyle = PT[tn];
+        g.setTransform(size, 0, 0, size, sx, sy);
+        g.fillText(PG[pa[o + 6]], -cw * 0.5, 0);
       }
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.textBaseline = 'alphabetic';
     }
-    return { draw };
+    function draw(x, top, w, h, age, t){
+      const x0 = X(0), wpx = X(COLS) - X(0), key = x0 + ':' + wpx + ':' + h + ':' + cw + ':' + ch;
+      if (!gv) shapes();
+      if (key !== fitKey){ fitKey = key; fit(x0, wpx, h); }
+      const still = REDUCED, dt = lastT < 0 ? 0 : clamp(t - lastT, 0, 0.1); lastT = t;
+      if (still){ age = 30; t = 2.2; }
+      pose(age, t, still ? 0 : dt);
+      frame(age, t, still);
+      setFont(1);
+      drawCells(top);
+      if (!still){ curFont = ''; setFont(1); drawParticles(age, top, h); }
+    }
+    return {
+      draw,
+      live: age => (M.reader && M.reader.isOpen) ? 0 : age < ENTRY ? 30 : 20,
+      poke(){ pulses[pn] = -9; pn = (pn + 1) % 4; },   // (set below with the draw's clock)
+      key(age){ pulses[pn] = age; pn = (pn + 1) % 4; oyv += (rnd() < 0.5 ? -1 : 1) * 2.2; opv -= 1.1; },
+      pointer(fx, fy){ if (fx < 0 || fx > 1 || fy < 0 || fy > 1) ptx = null; else { ptx = fx; pty = fy; } },
+      shapes,
+    };
   })();
 
   /* the KN-84 itself, in outline: a compact all-in-one with its screen lit, and a keyboard; the card beside it.
