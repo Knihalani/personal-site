@@ -420,7 +420,7 @@ function start(api, argv, flavor){
     if (m.type === 'quit' || m.type === 'overwrite'){
       const c = k.toLowerCase();
       if (m.type === 'quit'){
-        if (c === 'y'){ mode = null; saveCmd(() => finish('saved')); return true; }
+        if (c === 'y' || (ctrl && c === 's')){ mode = null; saveCmd(() => finish('saved')); return true; }   // ^S here means yes, save
         if (c === 'n'){ mode = null; finish('discard'); return true; }
       } else {
         if (c === 'y'){ mode = null; save(m.abs, m.then); return true; }

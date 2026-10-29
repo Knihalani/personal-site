@@ -812,9 +812,10 @@ M.createTerminal = function createTerminal(opts){
   function welcome(o){
     return o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line([TAP ? 'tap a word below, or type one' : 'type a word and press enter, or click one', 'd'])
-      .flow(['about', 'j', 'eden', 'writing', 'contact', 'links'].map(w => [chip(w, 'b')]), '  ')
+      .flow(PAGE_WORDS.map(w => [chip(w, 'b')]), '  ')
       .blank();
   }
+  const PAGE_WORDS = ['about', 'j', 'eden', 'writing', 'contact', 'links'];   // the welcome's words: each opens as a page, clicked or typed
   /* a command chip: a word that, clicked or tapped, types and runs itself. A faint underline marks it. */
   const TAP = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   function chip(w, st = 'n', cmd){ return [w, st, { cmd: cmd || w }]; }
@@ -960,7 +961,7 @@ M.createTerminal = function createTerminal(opts){
     io.rich(o); return io.pick(o.lastCard);
   } });
   def('back', { g: 'read', desc: 'the page before this one', usage: 'back',
-    more: 'clears the screen and shows the page you were on before, fresh. pages are what a click or a tap opens (about, eden, j, contact...); the last 20 are kept. with nothing before, the welcome. a click on the back arrow at the top of a page does the same, and so do esc or backspace on an empty line. what scrolled away is still up above.',
+    more: 'clears the screen and shows the page you were on before, fresh. pages are what a click or a tap opens, and the words on the welcome (about, j, eden, writing, contact, links) or help, typed alone; the last 20 are kept. with nothing before, the welcome. a click on the back arrow at the top of a page does the same, and so do esc or backspace on an empty line. what scrolled away is still up above.',
     ex: ['back', 'home'], run(argv, io){ if (io.tty) pendingNav = 'back'; } });
   def('home', { g: 'read', desc: 'the welcome screen, cleanly', usage: 'home',
     more: 'clears the screen and shows the welcome, and forgets the pages behind it (back starts over from there). what scrolled away is still up above.',
@@ -1202,14 +1203,15 @@ M.createTerminal = function createTerminal(opts){
     o.at(0, ['SYNOPSIS', 'b']).at(4, [c.usage || name, 'n']).blank();
     if (c.more){ o.at(0, ['DESCRIPTION', 'b']); o.para(c.more, 'n', COLS - 6, 4); o.blank(); }
     if (c.opts && c.opts.length){ o.at(0, ['OPTIONS', 'b']); const w = Math.max(...c.opts.map(x => x[0].length)) + 3; for (const [f, d] of c.opts){ const ls = wrap(d, Math.max(12, COLS - 4 - w)); o.at(4, [pad(f, w), 'b'], [ls[0], 'n']); for (const l of ls.slice(1)) o.at(4 + w, [l, 'n']); } o.blank(); }
-    if (c.ex && c.ex.length){ o.at(0, ['EXAMPLES', 'b']); for (const x of c.ex) o.at(4, [x, 'd']); o.blank(); }
+    /* an example that is a whole command line runs when clicked or tapped (a placeholder, a note or a !bang does not) */
+    if (c.ex && c.ex.length){ o.at(0, ['EXAMPLES', 'b']); for (const x of c.ex) o.at(4, !/[<]|\s{2,}|^!/.test(x) && x.length <= COLS - 6 ? chip(x, 'd') : [x, 'd']); o.blank(); }
     if (hasAlias(n) && n !== name) o.at(0, ['(' + n + ' is an alias for ' + ALIASES[n] + ')', 'f']).blank();
     if (io.tty) io.rich(o); else io.write(o.rows.map(textOf).join('\n') + '\n');
   } });
   /* help: a short, curated page by default (everything a visitor is likely to want, fitting one screen);
      help all lists every command, grouped by its g; help <cmd> is man */
   /* plain help is for someone who has never used a terminal: what you can do, in words, with commands to click */
-  const HELP_TOP = [['about ' + ((C.name || 'Kaiav').split(' ')[0]), 'who he is, what he builds', ['about', 'j', 'eden', 'writing', 'contact', 'links']]];
+  const HELP_TOP = [['about ' + ((C.name || 'Kaiav').split(' ')[0]), 'who he is, what he builds', PAGE_WORDS]];
   const HELP_ALSO = ['edit', 'todo', 'tetris', 'snake', 'weather'];
   const HELP_ALL = [['read', 'about'], ['net', 'net'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
   def('help', { g: 'system', desc: 'what you can type here', usage: 'help [all | command]', ex: ['help', 'help all', 'help weather'], run(argv, io){
@@ -1247,13 +1249,23 @@ M.createTerminal = function createTerminal(opts){
       for (const n of names){
         if (line.length && w + 2 + n.length > room) flush();
         if (line.length){ line.push(['  ', 'f']); w += 2; }
-        line.push(chip(n, label === 'about' ? 'b' : 'n')); w += n.length;
+        line.push(chip(n, label === 'about' ? 'b' : 'n', label !== 'about' && needsArg(n) ? 'man ' + n : n)); w += n.length;
       }
       if (line.length) flush();
     }
     o.blank().flow([[['man <cmd>', 'n'], [' details', 'f']], ...(TAP ? [] : [[['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']]])], '   ').blank();
     io.rich(o);
   } });
+  /* a command that does nothing useful bare (grep, cp, timer...): its chip in help all opens the manual
+     instead, with examples, rather than a usage error. Read from the usage line: a word outside [brackets]
+     after the name, or (for a plain command) an optional [file] or [text] that it then wants from a pipe */
+  function needsArg(n){
+    const c = M.TERM.cmds[n], isApp = !c && !!M.TERM.apps[n], d = c || M.TERM.apps[n] || {};
+    let s = String(d.usage || n).replace(/^\S+\s*/, '');
+    if (!isApp) s = s.replace(/\[(file|text|expression)(\.\.\.)?\]/g, 'x');
+    for (let k = 0; k < 4 && /\[[^[\]]*\]/.test(s); k++) s = s.replace(/\[[^[\]]*\]/g, '');
+    return /[^\s.|]/.test(s);
+  }
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
     if (argv[1] === '-c'){ history = []; hIdx = 0; store.set(HIST_KEY, []); return; }
     if (!history.length){ io.write('no history yet\n', 'dim'); return; }
@@ -1792,11 +1804,11 @@ M.createTerminal = function createTerminal(opts){
   const styleCache = new Map();
   function cellStyle(st){
     let key;
-    if (st && typeof st === 'object') key = 'o:' + (st.fg || 'normal') + ':' + (st.inverse ? 1 : 0);
+    if (st && typeof st === 'object') key = 'o:' + (st.fg || 'normal') + ':' + (st.inverse ? 1 : 0) + (st.inset ? ':i' : '');
     else key = 's:' + (st || 'normal');
     let r = styleCache.get(key);
     if (!r){
-      if (st && typeof st === 'object') r = { fg: LEVEL[st.fg] || (typeof st.fg === 'string' && /^(#|rgb|hsl)/.test(st.fg) ? st.fg : P.normal), inv: !!st.inverse };
+      if (st && typeof st === 'object') r = { fg: LEVEL[st.fg] || (typeof st.fg === 'string' && /^(#|rgb|hsl)/.test(st.fg) ? st.fg : P.normal), inv: !!st.inverse, inset: !!st.inset };
       else r = { fg: LEVEL[st] || P.normal, inv: st === 'inverse' };
       styleCache.set(key, r);
     }
@@ -1868,7 +1880,7 @@ M.createTerminal = function createTerminal(opts){
   /* forgiveness for people new to shells: a copied "$ " prompt, cd.., and a few plain-English questions */
   const PHRASES = [
     [/^(hi|hello|hey|hiya|yo|sup|howdy|hola|good (morning|afternoon|evening)|gm)( there)?$/, 'hello'],
-    [/^(who are you|who is (this|kaiav|he)|who'?s kaiav|about (you|me|kaiav)|tell me about (yourself|kaiav)|bio)$/, 'about'],
+    [/^(who are you|who is (this|kaiav|he)|who'?s kaiav|about (you|me|kaiav)|tell me about (yourself|kaiav)|bio|what do you do|what does (he|kaiav) do|what are you (building|working on|up to))$/, 'about'],
     [/^(what is this|what'?s this|what is this place|what can i do|what do i do|how does this work|how do i use this|commands|menu|start|instructions|h)$/, 'help'],
     [/^(contact( me)?|email|e-?mail me|get in touch|reach out|hire|hire (you|me|kaiav)|say hi)$/, 'contact'],
     [/^(games?|play|play a game|fun)$/, 'games'],
@@ -1914,9 +1926,14 @@ M.createTerminal = function createTerminal(opts){
     input = ''; cur = 0; suggestion = ''; tabState = null; disarm();
     hIdx = history.length; hDraft = '';
     if (!raw.trim()){ toBottom(); dirty = true; return; }
+    /* one of the welcome's words (or help), typed alone, opens the same page a click does (back, esc and backspace work
+       the same way), and so does a phrase that means one ("who are you"); the line typed stays above it in the
+       scrollback. An alias of the word wins. */
+    const line = forgive(raw), w = line.trim().toLowerCase().replace(/\s+/g, ' '), w0 = w.split(' ')[0];
+    if (!programmatic && (PAGE_WORDS.includes(w) || w === 'help' || w === 'help all') && !hasAlias(w0) && M.TERM.cmds[w0] === B[w0]){ nav(w); return; }
     pageKeys = false;
     mirror('', raw);
-    runLine(forgive(raw), programmatic);
+    runLine(line, programmatic);
   }
 
   /* ---- completion and typeahead ---- */
@@ -2099,7 +2116,7 @@ M.createTerminal = function createTerminal(opts){
     if (e.ctrlKey && c === 'r'){ if (s.q){ const i = searchFrom(s.i - 1, s.q); if (i >= 0) searchSet(i); else { s.fail = true; sfx('beep'); } } touched(); return true; }
     if (e.ctrlKey && (c === 'g' || c === 'c')) return done(false);
     if (k === 'Escape') return done(false);
-    if (k === 'Enter'){ const keep = !s.fail && s.q && s.i < history.length; rs = null; if (keep){ execute(input); touched(); return true; } return done(false); }
+    if (k === 'Enter'){ const keep = !s.fail && s.q && s.i < history.length; rs = null; if (keep){ touched(); execute(input); return true; } return done(false); }
     if (k === 'Backspace'){ s.q = s.q.slice(0, -1); searchSet(searchFrom(history.length - 1, s.q)); touched(); return true; }
     if (k.length === 1 && !e.ctrlKey && !e.altKey){ s.q += k; const i = searchFrom(s.i, s.q); if (i >= 0) searchSet(i); else { s.fail = true; } touched(); return true; }
     if (/^(Arrow|Home|End|Tab)/.test(k) || (e.ctrlKey && (c === 'a' || c === 'e'))){   // take the match and keep editing
@@ -2124,7 +2141,7 @@ M.createTerminal = function createTerminal(opts){
       return true;
     }
     if (job && job.ask){ if (typing()) revealAll(); return askKey(e); }
-    if (typing()){ revealAll(); if (!input && (k === 'Enter' || k === 'Escape' || k === ' ')) return true; }   // a key skips the typing-out; a typed line still runs
+    if (typing()){ revealAll(); if (!input && (k === 'Enter' || (k === 'Escape' && !(pageKeys && page && !job)) || k === ' ')) return true; }   // a key skips the typing-out; a typed line still runs (esc on a page still goes back)
     if (job){                                   // a command is running: only ctrl+c, ctrl+l and scrolling
       if (ctrl && c === 'c'){ interrupt(); return true; }
       if (ctrl && c === 'l'){ clearScreen(); return true; }
@@ -2159,8 +2176,8 @@ M.createTerminal = function createTerminal(opts){
     }
     switch (k){
       case 'Enter': {
-        if (!input && suggestion){ const s = suggestion; execute(s); touched(); return true; }
-        execute(input); touched(); return true;
+        if (!input && suggestion){ const s = suggestion; touched(); execute(s); return true; }
+        touched(); execute(input); return true;   // (touched first: a page that opens stays at its top)
       }
       case 'Backspace':
         if (!input && !alt && pageKeys && page){ touched(); goBack(); return true; }   // on a page, nothing typed yet: back
@@ -2190,6 +2207,9 @@ M.createTerminal = function createTerminal(opts){
         if (!input && pageKeys && page){ touched(); goBack(); return true; }
         suggestion = ''; tabState = null; touched(); return true;
     }
+    /* space on an empty line while scrolled up reads on a screen at a time, as in a pager (shift+space goes back):
+       laptops often have no page keys */
+    if (k === ' ' && !input && !alt && (scrollOff > 0 || (e.shiftKey && totalUnits() > ROWS))){ scrollBy(e.shiftKey ? ROWS - 2 : -(ROWS - 2)); return true; }
     if (k.length === 1 && !ctrl){ insert(k); touched(); return true; }
     return false;
   }
@@ -2220,9 +2240,8 @@ M.createTerminal = function createTerminal(opts){
     if (rs){ for (const ch of String(str)) searchKey({ key: ch === '\n' ? 'Enter' : ch, ctrlKey: false, altKey: false }); return; }
     if (typing()) revealAll();
     const parts = String(str).replace(/\t/g, ' ').split(/\r\n?|\n/);
-    insert(parts[0]);
+    insert(parts[0]); touched();
     if (parts.length > 1){ execute(input); ahead = parts.slice(1).join('\n').slice(0, 4000); if (!job) flushAhead(); }   // a pasted script: one line at a time
-    touched();
   }
   function run(cmd){
     cmd = String(cmd || '').trim(); if (!cmd) return;
@@ -2459,7 +2478,7 @@ M.createTerminal = function createTerminal(opts){
         const s = r[x][1]; let x1 = x, str = '';
         while (x1 < COLS && r[x1][1] === s){ str += r[x1][0]; x1++; }
         const plain = str.replace(VEC_RE, ' ');
-        if (s.inv){ g.fillStyle = s.fg; g.fillRect(X(x), top, (x1 - x) * cw + 0.5, ch); if (plain.trim()){ g.fillStyle = P.bg; fillT(plain, X(x), top + fs * 0.68); } }
+        if (s.inv){ const p = s.inset ? Math.round(ch * 0.14) : 0; g.fillStyle = s.fg; g.fillRect(X(x), top + p, (x1 - x) * cw + 0.5, ch - 2 * p); if (plain.trim()){ g.fillStyle = P.bg; fillT(plain, X(x), top + fs * 0.68); } }
         else if (plain.trim()){ g.fillStyle = s.fg; fillT(plain, X(x), top + fs * 0.68); }
         if (plain !== str) for (let k = 0; k < str.length; k++) if (VEC_RE.test(str[k])){ VEC_RE.lastIndex = 0; vecGlyph(str[k], x + k, top, s.inv ? P.bg : s.fg); }
         VEC_RE.lastIndex = 0;
@@ -2496,7 +2515,7 @@ M.createTerminal = function createTerminal(opts){
     const raw = rawUnits(), pu = pageUnits();
     const lift = !TAP && aspect > 1 && pageRow && pageRow.wel && pu >= 0 && !scrollOff ? clamp(ROWS - (raw - pu), 0, Math.min(4, Math.round(ROWS / 6))) : 0;
     g.save(); g.beginPath(); g.rect(0, PADY - 4, W, ROWS * ch + 8); g.clip();
-    let u = 0;
+    let u = 0, lastEnd = 0;                     // lastEnd: how far the bottom row of the view is written (the scroll note fits after it)
     const last = Math.min(rows.length - 1, shown);
     for (let i = 0; i <= last; i++){
       const r = rows[i]; const h = heightOf(r);
@@ -2504,6 +2523,7 @@ M.createTerminal = function createTerminal(opts){
       if (isPartial && partial <= 0 && r.k !== 'viz' && r.k !== 'card') break;
       if (u + h > first && u < first + ROWS){
         const top = PADY + (u - first + lift) * ch;
+        if (u + h >= first + ROWS) lastEnd = r.k === 't' ? (r.i || 0) + rowLen(r) - /\s*$/.exec(r.s.map(s => s[0]).join(''))[0].length : r.k === 'big' ? (r.i || 0) + lenOf(r) * 2 : COLS;
         const lim = isPartial ? Math.floor(partial) : 1e9;
         if (r.k === 't') drawSpans(r, top, lim);
         else if (r.k === 'big') drawSpans(r, top, isPartial ? Math.floor(partial / 2) : 1e9, 2);
@@ -2539,10 +2559,14 @@ M.createTerminal = function createTerminal(opts){
       const th = Math.max(24, railH * ROWS / total), ty = railTop + (railH - th) * (first / Math.max(1, total - ROWS));
       g.fillStyle = P.dim; g.fillRect(railX - 2, ty, 6, th);
       const below = raw - first - ROWS;          // (under a short page the view runs on past the end: nothing more, just back down)
-      const note = '  ' + (below > 0 ? below + ' more below' : 'back down') + (COLS >= 46 && !TAP ? '  pgdn ' : ' ');
+      /* the longest note that fits after what the bottom row says, so it never sits over a word or a chip */
+      const end = u >= first + ROWS ? lastEnd : promptVisible() && u === first + ROWS - 1 - lift ? promptLen() + input.length + 1 : 0;
+      const what = below > 0 ? below + ' more below' : 'back down';
+      const note = ['  ' + what + (COLS >= 46 && !TAP ? '  space ' : ' '), '  ' + what + ' ', '  ' + (below > 0 ? below + ' more' : 'down') + ' ', ' ↓ ']
+        .find(s => COLS - s.length >= end + 1) || ' ↓ ';
       const nx = COLS - note.length, top = PADY + (ROWS - 1) * ch;
       g.fillStyle = P.bg; g.fillRect(X(nx) - 8, top - 4, note.length * cw + 8, ch + 8);
-      setFont(); g.fillStyle = P.dim; fillT(note, X(nx), top + fs * 0.68);
+      text(note, nx, top, 'd');
       drawnHits = drawnHits.filter(h => h.bot <= top - 4 || h.x1 <= X(nx) - 8);                         // what the note covers is not tappable
       drawnHits.push({ x0: X(nx + 2), x1: X(COLS - 1), top, bot: top + ch, link: { bottom: true } });   // a tap on it goes back down
     }

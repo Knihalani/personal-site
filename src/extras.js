@@ -164,7 +164,6 @@ const WMO = { 0: ['Clear', 'sun'], 1: ['Mostly clear', 'part'], 2: ['Partly clou
   71: ['Light snow', 'snow'], 73: ['Snow', 'snow'], 75: ['Heavy snow', 'snow'], 77: ['Snow grains', 'snow'], 80: ['Showers', 'rain'], 81: ['Showers', 'rain'],
   82: ['Heavy showers', 'rain'], 85: ['Snow showers', 'snow'], 86: ['Snow showers', 'snow'], 95: ['Thunderstorm', 'storm'], 96: ['Thunder and hail', 'storm'], 99: ['Thunder and hail', 'storm'] };
 const DAYS3 = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const WX_CITY = 'kaiav.weather.city';
 /* ---- the network: one helper that tells "blocked" apart from "offline", CORS, timeouts and HTTP errors ---- */
 class NetError extends Error { constructor(kind, msg, status){ super(msg); this.kind = kind; this.status = status; } }
 const SANDBOXED = (() => { try { return /claude(usercontent)?\.(ai|com)$/i.test(location.hostname) || location.protocol === 'about:'; } catch (e){ return false; } })();
@@ -231,29 +230,42 @@ const net = {
 };
 const HTTP_TEXT = { 200: 'OK', 201: 'Created', 204: 'No Content', 301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified', 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 405: 'Method Not Allowed', 429: 'Too Many Requests', 500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable' };
 const host = u => { try { return new URL(u).host; } catch (e){ return String(u); } };
+/* the visitor's approximate place from the live site's /api/where (functions/api/where.js); null anywhere else */
+async function here(io){
+  if (SANDBOXED || !/^https?:$/.test(location.protocol)) return null;
+  if (io && io.tty) io.out('finding where you are...\n', 'faint');
+  try {
+    const p = await net.json('/api/where', { timeout: 3000 });
+    if (!p || !isFinite(p.latitude) || !isFinite(p.longitude) || !p.name) return null;
+    try { if (/^[A-Z]{2}$/.test(p.country)) p.country = new Intl.DisplayNames(['en'], { type: 'region' }).of(p.country); } catch (e){}
+    return p;
+  } catch (e){ return null; }
+}
 T.cmds.weather = { g: 'net', desc: 'the weather where you are, or anywhere', usage: 'weather [-c | -f] [city]',
   opts: [['-c', 'Celsius'], ['-f', 'Fahrenheit']], ex: ['weather', 'weather tokyo', 'weather -f new york'],
   complete: () => ['london', 'tokyo', 'paris', 'mumbai', 'sydney', 'singapore', 'berlin', 'dubai', 'toronto', 'nairobi', 'seoul', 'reykjavik'],
-  more: 'asks open-meteo.com for the weather now and the next three days. with no city it guesses yours from your time zone, then remembers the last city you named. nothing about you leaves the browser except the city name.',
+  more: 'asks open-meteo.com for the weather now and the next three days. with no city it shows where you are: the site asks its host for the rough location of your connection (the city, never your exact position), or guesses from your time zone. visitors in the US get °F.',
   async run(argv, io){
     let a = argv.slice(1), unit = null;
     while (a[0] === '-c' || a[0] === '-f'){ unit = a[0] === '-f' ? 'F' : 'C'; a = a.slice(1); }
     if (a[0] && /^-/.test(a[0])){ io.err('weather: no ' + a[0] + ' option  (try: weather -f tokyo)\n'); return 2; }
-    if (!unit) unit = 'C';   // Celsius unless -f is asked for
     let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e){}
-    let q = a.join(' ').trim(), guessed = false;
-    if (q) lsSet(WX_CITY, q);
-    else q = lsGet(WX_CITY, '');
-    if (!q && /^[A-Za-z]+\/[A-Za-z_\-]+/.test(tz) && !/^Etc\//.test(tz)){ q = tz.split('/').pop().replace(/_/g, ' '); guessed = true; }
-    if (!q && io.tty && io.ask){ q = String((await io.ask('which city?  ')) || '').trim(); if (q) lsSet(WX_CITY, q); }
-    if (!q){ io.err('weather: which city?  (try: weather london)\n'); return 1; }
-    if (io.tty){ io.out('checking the weather in ' + q + '...\n', 'faint'); }
-    let place, wx;
+    let q = a.join(' ').trim(), guessed = false, place = null, wx;
+    if (!q){                                     // no city: where the visitor is, from the site's own /api/where (Cloudflare's IP lookup)
+      place = await here(io);
+      if (!place && /^[A-Za-z]+\/[A-Za-z_\-]+/.test(tz) && !/^Etc\//.test(tz)){ q = tz.split('/').pop().replace(/_/g, ' '); guessed = true; }   // else the time zone's city
+      if (!place && !q && io.tty && io.ask) q = String((await io.ask('which city?  ')) || '').trim();
+      if (!place && !q){ io.err('weather: which city?  (try: weather london)\n'); return 1; }
+    }
+    if (!unit) unit = place && place.country === 'United States' ? 'F' : 'C';   // Fahrenheit for visitors in the US, else Celsius
+    if (io.tty && !place) io.out('checking the weather in ' + q + '...\n', 'faint');
     try {
-      const g = await net.json('https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=' + encodeURIComponent(q), { timeout: 6000 });
-      const rs = (g && g.results) || [];
-      place = (guessed && rs.find(r => r.timezone === tz)) || rs[0];
-      if (!place){ lsSet(WX_CITY, ''); io.err('weather: no place called ' + q + '  (try: weather london)\n'); return 1; }
+      if (!place){
+        const g = await net.json('https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=' + encodeURIComponent(q), { timeout: 6000 });
+        const rs = (g && g.results) || [];
+        place = (guessed && rs.find(r => r.timezone === tz)) || rs[0];
+        if (!place){ io.err('weather: no place called ' + q + '  (try: weather london)\n'); return 1; }
+      }
       wx = await net.json('https://api.open-meteo.com/v1/forecast?latitude=' + place.latitude + '&longitude=' + place.longitude +
         '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day' +
         '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=4' +

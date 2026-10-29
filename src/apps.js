@@ -1,5 +1,5 @@
 /* apps.js: full-screen apps and small commands for the terminal (see CONTRACT.md, "Terminal extension API").
-   tetris, snake, donut (full-screen) and lamp (plain command).
+   tetris, snake, breakout (full-screen) and lamp (plain command).
 
    Drawing: VT323 has no block-element glyphs, so solid cells are drawn the way a real VT did it: inverse
    video spaces. A block's brightness comes from { fg: level, inverse: true } where level is one of the
@@ -12,6 +12,7 @@ T.cmds = T.cmds || {}; T.apps = T.apps || {};
 
 /* ---- shared helpers ---- */
 const blk = level => ({ fg: level, inverse: true });
+const brick = level => ({ fg: level, inverse: true, inset: true });   // a gap above and below, so rows of bricks stay apart
 const secs = dt => (dt > 1 ? dt / 1000 : dt) || 0;          // accept seconds (or ms, defensively)
 const hiGet = k => +T.store.get(k, 0) || 0, hiSet = T.store.set;   // terminal.js
 const sound = (api, name) => { try { (api.sound || M.sound)?.event(name); } catch (e) {} };
@@ -478,111 +479,172 @@ T.apps.snake = {
 };
 
 /* =====================================================================================
-   DONUT: a1k0n's spinning torus, luminance mapped to phosphor levels
+   BREAKOUT: a wall of bricks, a paddle and a ball. Where the ball meets the paddle sets its angle.
+   The field is in cell units; a cell is about twice as tall as it is wide, so vertical speeds are halved
+   to make the ball move evenly on the glass.
    ===================================================================================== */
-const LUM = '.,-:;=+!*#$@';      // VT323 draws ~ as a squiggle, so it is left out
-const LUM_STYLE = ['faint', 'faint', 'faint', 'dim', 'dim', 'dim', 'normal', 'normal', 'normal', 'bright', 'bright', 'bright'];
-T.apps.donut = {
+const BREAKOUT_HI = 'kaiav.breakout.hi';
+T.apps.breakout = {
   g: 'fun',
-  desc: 'a spinning ascii donut, after a1k0n',
-  usage: 'donut',
-  more: 'hold the arrows to spin it. space pauses, + and - change the idle speed, r resets, q quits.',
+  desc: 'knock out the bricks',
+  usage: 'breakout',
+  more: 'keep the ball in play with the paddle and clear the wall. where the ball lands on the paddle sets its angle. arrows (or a and d) move, space serves and pauses, q quits. three balls; each wall cleared brings a faster one. on a phone, tap where the paddle should go.',
   start(api){
-    const IDLE_A = REDUCED ? 0 : 1.0, IDLE_B = REDUCED ? 0 : 0.5, SPIN = 3.4;   // idle drift (none with reduced motion) and held-arrow spin (rad/s)
-    let A = 1, B = 0, vA = IDLE_A, vB = IDLE_B;     // angles and spin speeds (rad/s)
-    let idle = 1, paused = false, t = 0, gotUp = false, note = '', noteT = 0;
-    const held = { up: 0, down: 0, left: 0, right: 0 };   // time of the last keydown, 0 when released
-    const DIR = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right' };
-    // without keyup events, a held key is assumed released ~150 ms after its last auto-repeat
+    const PTS = [7, 5, 3, 2, 1], LV = ['bright', 'normal', 'normal', 'dim', 'dim'];
+    const SH = r => (r % 2) * 2;                          // odd rows sit half a brick over, so the wall reads as bricks, not columns
+    let cols = 0, rows = 0, IW, FH, PR, PW, BT, NR, NB, OFF, bricks = [], left = 0, full = 0;
+    let px = 0, bx = 0, by = 0, vx = 0, vy = 0, speed = 0, target = null;
+    let state = 'serve', paused = false, score = 0, balls = 3, level = 1, hi = hiGet(BREAKOUT_HI), newHi = false, t = 0, last = '';
+    const held = { l: 0, r: 0 }; let gotUp = false;
     const isHeld = d => held[d] > 0 && (gotUp || t - held[d] < 0.15);
-    const say = s => { note = s; noteT = t; };
-    let cols = api.cols || 72, rows = api.rows || 23;
-    let chars = [], styles = [], acc = 0;
-    function frame(){
-      const n = cols * rows;
-      const out = new Array(n).fill(' '), lv = new Array(n).fill(-1), z = new Float32Array(n);
-      const cA = Math.cos(A), sA = Math.sin(A), cB = Math.cos(B), sB = Math.sin(B);
-      const R1 = 1, R2 = 2, K2 = 5;
-      // scale so the donut fills the grid height; character cells are ~2x taller than wide
-      const h = rows - 1;                                   // bottom row holds the hint
-      let K1y = h * K2 * 3 / (8 * (R1 + R2)) * 1.02;
-      const K1x = Math.min(K1y * 2.05, cols * K2 * 3 / (8 * (R1 + R2)) * 1.02);
-      K1y = Math.min(K1y, K1x / 2.05);                      // keep it round on tall, narrow (phone) grids
-      for (let th = 0; th < 6.283; th += 0.05){
-        const ct = Math.cos(th), st = Math.sin(th);
-        for (let ph = 0; ph < 6.283; ph += 0.015){
-          const cp = Math.cos(ph), sp = Math.sin(ph);
-          const cx = R2 + R1 * ct, cy = R1 * st;
-          const x = cx * (cB * cp + sA * sB * sp) - cy * cA * sB;
-          const y = cx * (sB * cp - sA * cB * sp) + cy * cA * cB;
-          const zz = K2 + cA * cx * sp + cy * sA;
-          const ooz = 1 / zz;
-          const xp = (cols / 2 + K1x * ooz * x) | 0;
-          const yp = (h / 2 - K1y * ooz * y) | 0;
-          if (xp < 0 || xp >= cols || yp < 0 || yp >= h) continue;
-          const L = cp * ct * sB - cA * ct * sp - sA * st + cB * (cA * st - ct * sA * sp);
-          const i = xp + yp * cols;
-          if (ooz > z[i]){
-            z[i] = ooz;
-            const li = L > 0 ? Math.min(11, (L * 8) | 0) : 0;
-            out[i] = LUM[li]; lv[i] = li;
-          }
-        }
-      }
-      chars = out; styles = lv;
+    const base = () => 20 * Math.min(1.6, 1 + (level - 1) * 0.12);
+    function wall(){
+      bricks = []; left = 0;
+      for (let r = 0; r < NR; r++){ const row = new Array(NB).fill(false); for (let c = 0; c < NB && OFF + SH(r) + c * 4 + 3 <= IW; c++){ row[c] = true; left++; } bricks.push(row); }
+      full = left;
     }
-    frame();
+    function layout(c, r){
+      cols = c; rows = r;
+      IW = Math.min(c - 2, 62); FH = r - 3;               // inner field: rows 2..r-2; the bottom row lists the keys
+      PW = IW < 44 ? 6 : 8;
+      PR = FH - (TOUCH ? 3 : 2);                          // phones keep the paddle clear of the tap-to-quit row
+      NR = FH >= 16 ? 5 : 4; BT = FH >= 26 ? 3 : 1;
+      NB = Math.floor((IW - 1) / 4); OFF = Math.max(0, Math.floor((IW - NB * 4 - 1) / 2));   // (the half-brick stagger takes 2 more columns)
+      px = Math.max(0, Math.min(IW - PW, px || (IW - PW) / 2));
+    }
+    function serve(){ state = 'serve'; vx = vy = 0; target = null; }
+    function launch(){
+      state = 'play'; speed = base();
+      const a = (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.25);
+      vx = speed * Math.sin(a); vy = -speed * Math.cos(a) * 0.5;
+    }
+    function restart(){ score = 0; balls = 3; level = 1; newHi = false; paused = false; wall(); serve(); }
+    const brickAt = (x, y) => {
+      const r = Math.floor(y) - BT, c = r >= 0 && r < NR ? Math.floor((x - OFF - SH(r)) / 4) : -1;
+      return r >= 0 && r < NR && c >= 0 && c < NB && bricks[r][c] ? [r, c] : null;
+    };
+    function hit([r, c]){
+      bricks[r][c] = false; left--; score += PTS[r] * level;
+      sound(api, 'beep');
+      if (!left){ level++; wall(); serve(); }
+    }
+    function lose(){
+      balls--; sound(api, 'error');
+      if (balls > 0){ serve(); return; }
+      state = 'over';
+      if (score > hi){ hi = score; newHi = true; hiSet(BREAKOUT_HI, hi); }
+    }
+    function step(dt){
+      let nx = bx + vx * dt, ny = by + vy * dt;
+      if (nx < 0){ nx = -nx; vx = Math.abs(vx); }
+      if (nx >= IW){ nx = 2 * IW - nx - 1e-3; vx = -Math.abs(vx); }
+      if (ny < 0){ ny = -ny; vy = Math.abs(vy); }
+      let b;
+      if ((b = brickAt(nx, by))){ vx = -vx; nx = bx; hit(b); }
+      else if ((b = brickAt(bx, ny)) || (b = brickAt(nx, ny))){ vy = -vy; ny = by; hit(b); }
+      if (state !== 'play') return;
+      if (vy > 0 && by < PR && ny >= PR && nx >= px - 0.6 && nx < px + PW + 0.6){
+        /* the paddle: the farther from its middle, the steeper the way back out (up to 60 degrees) */
+        const off = Math.max(-1, Math.min(1, (nx - (px + PW / 2)) / (PW / 2 + 0.6)));
+        speed = Math.min(base() * 1.35, speed * 1.012);
+        const a = off * 1.05;
+        vx = speed * Math.sin(a); vy = -speed * Math.cos(a) * 0.5;
+        ny = PR - (ny - PR) - 1e-3;
+      }
+      bx = nx; by = ny;
+      if (by >= FH - 0.5) lose();
+    }
+    const summary = () => api.print('breakout: ' + score + ' points, level ' + level + ', ' + (newHi ? 'a new best' : 'best ' + Math.max(hi, score)));
+    function quit(){ if (score > hi){ hi = score; newHi = true; hiSet(BREAKOUT_HI, score); } if (score) summary(); api.exit(0); }
+    layout(api.cols || 54, api.rows || 18); wall(); serve();
     return {
+      tap(col, row){
+        if (TOUCH && row >= rows - 1){ if (state === 'over' || paused) return false; paused = true; return true; }   // the bottom edge: pause, then quit
+        if (state === 'over'){ restart(); return true; }
+        if (paused){ paused = false; return true; }
+        if (state === 'serve'){ launch(); return true; }
+        target = col - 1 - Math.floor((cols - 2 - IW) / 2) - PW / 2;   // glide the paddle's middle to the tap
+        return true;
+      },
       key(e){
         const k = e.key;
-        if (DIR[k]){ held[DIR[k]] = t || 1e-6; return true; }
-        if (isQuit(k)){ api.exit(0); return true; }
-        if (k === ' '){ paused = !paused; say(paused ? 'paused' : ''); return true; }
-        if (k === '+' || k === '='){ idle = Math.min(4, idle * 1.4); say('idle speed x' + idle.toFixed(1)); return true; }
-        if (k === '-' || k === '_'){ idle = Math.max(0.15, idle / 1.4); say('idle speed x' + idle.toFixed(1)); return true; }
-        if (k === 'r' || k === 'R'){ A = 1; B = 0; vA = IDLE_A; vB = IDLE_B; idle = 1; paused = false; say('reset'); frame(); return true; }
-        return true;                         // everything else is ignored, not a way out
+        if (state === 'over'){
+          if (k === 'Enter' || k === ' ' || k === 'r' || k === 'R') restart();
+          else if (isQuit(k)){ summary(); api.exit(0); }
+          return true;
+        }
+        if (isQuit(k)){ quit(); return true; }
+        const d = k === 'ArrowLeft' || k === 'a' || k === 'A' || k === 'h' ? 'l' : k === 'ArrowRight' || k === 'd' || k === 'D' || k === 'l' ? 'r' : '';
+        if (d){ if (!held[d] || !gotUp){ if (!paused) px = Math.max(0, Math.min(IW - PW, px + (d === 'l' ? -1 : 1))); } held[d] = t || 1e-6; target = null; return true; }
+        if (k === ' ' || k === 'ArrowUp' || k === 'Enter'){ if (state === 'serve' && !paused) launch(); else if (k === ' ') paused = !paused; return true; }
+        if (k === 'p' || k === 'P'){ paused = !paused; return true; }
+        return true;
       },
       keyUp(e){
         gotUp = true;
-        const d = DIR[e.key]; if (d) held[d] = 0;
+        const k = e.key;
+        if (k === 'ArrowLeft' || k === 'a' || k === 'A' || k === 'h') held.l = 0;
+        if (k === 'ArrowRight' || k === 'd' || k === 'D' || k === 'l') held.r = 0;
         return false;
       },
       tick(dt){
         dt = Math.min(secs(dt), 0.1); t += dt;
-        const ay = (isHeld('up') ? 1 : 0) - (isHeld('down') ? 1 : 0);
-        const bx = (isHeld('right') ? 1 : 0) - (isHeld('left') ? 1 : 0);
-        const restA = paused ? 0 : IDLE_A * idle, restB = paused ? 0 : IDLE_B * idle;
-        // held: snap quickly to a firm spin; released: coast, easing back to the idle drift
-        vA += ((ay ? ay * SPIN : restA) - vA) * Math.min(1, dt * (ay ? 10 : 1.1));
-        vB += ((bx ? bx * SPIN : restB) - vB) * Math.min(1, dt * (bx ? 10 : 1.1));
-        A += vA * dt; B += vB * dt;
-        acc += dt;
-        const noteDirty = note && note !== 'paused' && t - noteT > 1.6 ? (note = '', true) : false;
-        if (Math.abs(vA) + Math.abs(vB) < 1e-3 && !noteDirty) return false;
-        if (acc < 1 / 40 && !noteDirty) return false;     // ~40 fps is plenty for a phosphor tube
-        acc = 0; frame();
-        return true;
+        if (state !== 'over' && !paused){
+          const dir = (isHeld('r') ? 1 : 0) - (isHeld('l') ? 1 : 0);
+          if (dir) px += dir * 42 * dt;
+          else if (target != null){ const d = target - px, s = 60 * dt; px += Math.abs(d) <= s ? d : Math.sign(d) * s; if (Math.abs(d) <= s) target = null; }
+          px = Math.max(0, Math.min(IW - PW, px));
+          if (state === 'serve'){ bx = px + PW / 2; by = PR - 1; }
+          else { const n = Math.max(1, Math.ceil(Math.max(Math.abs(vx), Math.abs(vy)) * dt / 0.4)); for (let i = 0; i < n && state === 'play'; i++) step(dt / n); }
+        }
+        const blink = REDUCED || state === 'play' && !paused ? 0 : Math.floor(t * 2) % 2;
+        const key = [bx | 0, by | 0, Math.round(px), left, score, balls, level, state, paused, blink].join();
+        if (key === last) return false;
+        last = key; return true;
       },
       render(scr){
-        if (scr.cols !== cols || scr.rows !== rows){ cols = scr.cols; rows = scr.rows; frame(); }
-        scr.clear(); scr.cursor(0, 0, null);
-        for (let y = 0; y < rows; y++){
-          // emit runs of one brightness level
-          let x = 0;
-          while (x < cols){
-            const i = y * cols + x, l = styles[i];
-            if (l < 0){ x++; continue; }
-            const st = LUM_STYLE[l];
-            let s = '';
-            while (x < cols && styles[y * cols + x] >= 0 && LUM_STYLE[styles[y * cols + x]] === st){ s += chars[y * cols + x]; x++; }
-            scr.put(x - s.length, y, s, st);
-          }
+        if (scr.cols !== cols || scr.rows !== rows){            // the grid changed (a phone turned): the same game on a new field
+          const fx = IW ? (px + PW / 2) / IW : 0.5, kept = left === full;
+          layout(scr.cols, scr.rows); px = Math.max(0, Math.min(IW - PW, fx * IW - PW / 2));
+          if (kept || bricks.length !== NR || bricks[0].length !== NB) wall();
+          if (state === 'play'){ serve(); paused = true; }
         }
-        const hint = TOUCH ? 'tap here to quit' : note ? note + '  \u00b7  ' + (paused ? 'space resumes' : 'q quit')
-          : cols >= 46 ? '\u2190\u2191\u2193\u2192 spin \u00b7 space pause \u00b7 +/- speed \u00b7 q quit'
-          : '\u2190\u2191\u2193\u2192 spin \u00b7 space \u00b7 +/- \u00b7 q';
-        center(scr, rows - 1, hint, note ? 'dim' : 'faint');
+        scr.clear(); scr.cursor(0, 0, null);
+        const ox = Math.max(0, ((scr.cols - IW - 2) / 2) | 0), x0 = ox + 1, top = 2;
+        scr.put(ox, 0, 'BREAKOUT', 'bright');
+        scr.put(ox + 10, 0, 'score ' + score, 'normal');
+        if (IW >= 40) scr.put(ox + 22, 0, 'level ' + level, 'dim');
+        const bs = 'best ' + Math.max(hi, score), lv = 'o '.repeat(Math.max(0, balls - (state === 'serve' ? 1 : 0))).trim();
+        scr.put(ox + IW + 2 - bs.length, 0, bs, score > hi && hi > 0 ? 'bright' : 'dim');
+        if (lv) scr.put(ox + IW + 2 - bs.length - lv.length - 3, 0, lv, 'dim');
+        scr.put(ox, 1, '+' + '-'.repeat(IW) + '+', 'faint');
+        for (let y = 0; y < FH; y++){ scr.put(ox, top + y, '|', 'faint'); scr.put(ox + IW + 1, top + y, '|', 'faint'); }
+        for (let r = 0; r < NR; r++) for (let c = 0; c < NB; c++) if (bricks[r][c]) scr.put(x0 + OFF + SH(r) + c * 4, top + BT + r, '   ', brick(LV[r]));
+        scr.put(x0 + Math.round(px), top + PR, ' '.repeat(PW), brick('normal'));
+        if (state !== 'over') scr.put(x0 + Math.min(IW - 1, bx | 0), top + Math.min(FH - 1, by | 0), '\u2022', 'bright');   // drawn as a round dot, not a letter
+        const cw = Math.min(IW - 2, 30), cx = x0 + ((IW - cw) / 2 | 0), cy = top + BT + NR + Math.max(1, ((PR - BT - NR - 8) / 2) | 0);
+        const c = (y, s, st) => scr.put(cx + ((cw - s.length) / 2 | 0), cy + y, s, st);
+        const on = REDUCED || Math.floor(t * 2) % 2 === 0;
+        if (state === 'over'){
+          box(scr, cx, cy, cw, 8, 'normal');
+          c(1, 'G A M E   O V E R', 'bright');
+          c(3, score + ' points  ·  level ' + level, 'normal');
+          c(4, newHi ? 'new high score' : 'best ' + hi, newHi ? 'accent' : 'dim');
+          c(6, TOUCH ? 'tap again' : 'enter again  ·  q quit', on ? 'normal' : 'dim');
+        } else if (paused){
+          box(scr, cx, cy, cw, 5, 'dim');
+          c(1, 'PAUSED', 'bright'); c(3, TOUCH ? 'tap to resume' : 'space to resume', 'dim');
+        } else if (state === 'serve'){
+          const head = level > 1 && left === full ? 'L E V E L   ' + level : score ? balls + (balls === 1 ? ' ball left' : ' balls left') : 'B R E A K O U T';
+          c(1, head, 'bright');
+          c(3, TOUCH ? 'tap to serve' : 'space to serve', on ? 'normal' : 'dim');
+          if (!score && level === 1) c(4, TOUCH ? 'then tap where the paddle goes' : '← → move the paddle', 'faint');
+        }
+        if (TOUCH) center(scr, scr.rows - 1, state === 'over' || paused ? ' tap here to quit ' : ' tap here to pause ', 'faint');
+        else if (state !== 'over'){
+          const ks = cols >= 46 ? '←→ move  ·  space ' + (state === 'serve' ? 'serve' : 'pause') + '  ·  q quit' : '←→  ·  space  ·  q quit';
+          center(scr, scr.rows - 1, ks, 'faint');
+        }
       },
     };
   },
@@ -598,6 +660,7 @@ const lamp = {
   ex: ['lamp', 'lamp off', 'lamp status'],
   more: 'the lamp on the desk in the 3D room. with no argument it flips: on goes off, off goes on.',
   complete: args => args.length ? null : ['on', 'off', 'status'],
+  get hidden(){ return !(M.world && typeof M.world.lamp === 'function'); },   // no room (phones, the flat layout): not listed, still answers
   run(argv, io){
     const w = M.world;
     const arg = (argv[1] || '').toLowerCase();
@@ -628,7 +691,7 @@ const lamp = {
 T.cmds.lamp = lamp;
 /* games: what there is to play, as words to click */
 T.cmds.games = { g: 'fun', hidden: true, desc: 'what you can play', usage: 'games', run(argv, io){
-  const list = [['tetris', 'the falling blocks'], ['snake', 'eat and grow'], ['typing', 'how fast you type'], ['donut', 'a spinning torus']].filter(([n]) => T.apps[n] || T.cmds[n]);
+  const list = [['tetris', 'the falling blocks'], ['snake', 'eat and grow'], ['breakout', 'clear the wall'], ['typing', 'how fast you type']].filter(([n]) => T.apps[n] || T.cmds[n]);
   if (!io.tty){ io.out(list.map(x => x[0]).join('\n') + '\n'); return; }
   const o = io.ui(); o.blank();
   for (const [n, d] of list) o.at(2, [n, 'b', { cmd: n }], [' '.repeat(Math.max(2, 9 - n.length)) + d, 'f']);

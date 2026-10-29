@@ -13,7 +13,7 @@ keyboard, and you hear a real Topre switch for every press and release.
 |---|---|
 | **type** | everything goes to the terminal. Start with `help`, or click a highlighted word |
 | **move the cursor** | look around. Move it down to lean back and see the whole desk and the hands |
-| **scroll** | scroll back through the terminal (also Page Up / Page Down) |
+| **scroll** | scroll back through the terminal (also Page Up / Page Down, or Space when the prompt is empty) |
 | **phones** | just the terminal, full screen. Tap to type, drag to scroll, tap an email to copy it |
 
 Without WebGL the desktop gets the same terminal-only page. Deep links run a page on load:
@@ -23,10 +23,10 @@ Without WebGL the desktop gets the same terminal-only page. Deep links run a pag
 
 - **About Kaiav:** `about`, `j`, `eden`, `writing` (posts open in a typeset reader), `contact`
   (copies an address), `links`, `linkedin`, `x`, `gh`, `open <name|url>`, `neofetch`
-- **Do something:** `edit` (a nano-style editor), `todo`, `weather [city]`, `timer`, `clock`, `qr`, `pass` and an
+- **Do something:** `edit` (a nano-style editor), `todo`, `weather [city]` (where you are, by default), `timer`, `clock`, `qr`, `pass` and an
   encrypted `vault` (kept only in your browser), `cal`, `bc`, `convert`, `roll`, `countdown`
 - **The network** (live site only; the claude.ai preview blocks it): `curl`, `hn`, `wiki`, `define`
-- **Play:** `tetris`, `snake` (tap controls on phones), `typing` (a WPM test), `donut`, `lamp`
+- **Play:** `tetris`, `snake` (tap controls on phones), `breakout`, `typing` (a WPM test), `lamp`
 - **A real little shell:** pipes, `>` `>>` `<` redirection, `&&` `||` `;`, globs, `$VAR`, aliases,
   history (`!!`, `!n`, ctrl+r), Tab completion, "did you mean", plain phrases like "who are you".
   Also `ls` `cd` `cat` `grep` `sort` `wc` `head` `tail` `tree` `cp` `mv` `rm` `mkdir` `touch` `man`,
@@ -50,13 +50,15 @@ src/
   room.js        set dressing: shelf, books, cork board, prints, curtains, radio clock
   typist.js      the hands: arm and finger IK, strike timing synced to key travel and sound
   terminal.js    the shell, the virtual filesystem and the canvas renderer the CRT displays
-  apps.js        full-screen apps: tetris, snake, donut, lamp
+  apps.js        full-screen apps: tetris, snake, breakout, lamp
   extras.js      weather, todo, timer, clock, typing test, qr, pass/vault, the network commands and small tools
   editor.js      edit / nano / vi / vim
   reader.js      the typeset post reader
   main.js        input routing, the terminal-only layout (phones, no WebGL), fallbacks, the loop
   CONTRACT.md    how the modules talk to each other, and the terminal extension API
-build.py         concatenates src/ into index.html, 404.html and site.html (an embeddable fragment)
+build.py         concatenates src/ into index.html, 404.html and site.html (an embeddable fragment), minified, plus _headers
+functions/
+  api/where.js   a Cloudflare Pages Function: the visitor's rough location (from Cloudflare), for weather
 tools/
   copy-desk.html the private Copy Desk (all site copy and posts, with a TipTap editor), published as a claude.ai artifact
 ```
@@ -89,5 +91,4 @@ Full-screen apps register on `MAC.TERM.apps` with `start(api) -> { key, tick, re
   licence (notice reproduced in `src/keysamples.js`)
 - [three.js](https://github.com/mrdoob/three.js), MIT
 - Fonts: [VT323](https://fonts.google.com/specimen/VT323), IBM Plex Mono and Caveat via Google Fonts (OFL)
-- The donut is after [a1k0n's donut.c](https://www.a1k0n.net/2011/07/20/donut-math.html)
 - Weather data from [Open-Meteo](https://open-meteo.com)
