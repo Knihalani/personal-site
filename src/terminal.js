@@ -1330,14 +1330,29 @@ M.createTerminal = function createTerminal(opts){
       ['Font', 'VT323'], ['Files', files + ' in ~'], ['User', C.name || 'Kaiav'], ...roles.map((r, i) => [i ? '' : 'Role', r])];
   }
   /* ---- the landing: a demoscene intro, drawn straight onto the tube ----
-     An Amiga-style intro in one phosphor. A chunky extruded "KN" (bevelled, flat-shaded facets, chrome front faces
-     with bright vector edges; back faces culled, the rest painter-sorted, letter by letter) falls in from far away,
-     spinning, and slams into place with a flash and a jolt; then it spins and bobs over swinging copper bars, a 3D
-     starfield and a perspective grid floor that takes its shadow. A sine scroller in a C64-style bitmap font carries
-     the facts from content.js across the floor, mirrored in it. Each key flashes the next copper bar and kicks the
-     logo; the pointer (term.pointer) tilts it and a drag spins it. Under reduced motion it is one composed frame.
-     Geometry, the shade ramp, the font strip and the stars are made once; a frame allocates nothing. */
-  const DEMO = (() => {
+     An Amiga-style intro in one phosphor, cut to an imaginary 120 bpm soundtrack. The opening (about 7 s): the
+     raster opens from a line; stars drift, then accelerate into hyperspace behind a title card typed out in a
+     C64-style bitmap font ("KAIAV NIHALANI", then PRESENTS rastered in), which shuts to a dot; copper bars drop in
+     on the eighth notes; the grid floor rolls out; and out of the vanishing point comes a chunky extruded "KN"
+     (bevelled, flat-shaded facets, chrome front faces, bright vector edges; back faces culled, the rest
+     painter-sorted, letter by letter), tumbling, pulling back for a breath and slamming in on the beat, with a
+     flash, a jolt, a shockwave through the floor and a glint across the chrome. Then the sine scroller of facts
+     from content.js starts along the floor, mirrored in it.
+     After that it keeps evolving without getting busy: the logo sways and bobs, and every few bars does one move
+     (a full turn, a bounce on the floor, a twist of the letters against each other, a slow flip, a zoom back
+     into the distance and in again); the copper bars change pattern (a rotating cylinder, a scrolling copper list,
+     a breathing fan); the floor sometimes rushes or rolls in a wave; the scroller's wave drifts and the letters
+     sometimes hop. Keys spin the logo (one way, with a soft detent back to the front) and make it hop under
+     gravity, flash the next bar and push the stars; all of it capped, so a held or mashed key just spins it
+     faster. The pointer (term.pointer) tilts it and a drag spins it. Under reduced motion it is one still frame.
+     It draws into its own canvas, rastered on the CPU, and lands on the tube as one image per frame: a GPU-backed
+     2D canvas fed hundreds of paths and clips a frame can fall behind on a weak (or software) GPU. Geometry, the
+     shade ramp, the font strips and the stars are made once; a frame allocates nothing. */
+  const DEMO = (tg => {
+    let g = null, off = null, rawFill = null, rk = 1;
+    /* every canvas the demo draws with is a CPU raster (willReadFrequently): copying from a GPU-backed sprite into a
+       CPU canvas is a GPU readback per drawImage, and the scroller makes a couple of hundred of those a frame */
+    const CPU = { willReadFrequently: true };
     /* the phosphor as a 64-step ramp, bg -> faint -> dim -> normal -> bright (v 0..1), with each step's luminance */
     const rgb = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
     const STOPS = [P.bg, P.faint, P.dim, P.normal, P.bright].map(rgb), NS = 64, SH = [], SL = new Float32Array(NS);
@@ -1347,6 +1362,8 @@ M.createTerminal = function createTerminal(opts){
     }
     const si = v => v <= 0 ? 0 : v >= 1 ? NS - 1 : (v * (NS - 1) + .5) | 0;
     const sstep = (a, b, x) => { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
+    const bump = (x, a, b, e) => sstep(a, a + e, x) * (1 - sstep(b - e, b, x));   // 0 -> 1 over [a, a+e], back to 0 over [b-e, b]
+    const TAU = 6.2832;
     let seed = 11;
     const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 
@@ -1360,12 +1377,13 @@ M.createTerminal = function createTerminal(opts){
     const LET = OUTL.map((o, li) => {
       const n = o.length, p = o.map(([x, y]) => [x + OX[li] + SHEAR * y, y]);
       const en = p.map((a, i) => { const b = p[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy); return [dy / l, -dx / l]; });   // outward
-      const v = new Float32Array(n * 9);            // rings: the bevel's inner edge (the front face), its outer edge, the back
+      const cxl = p.reduce((s, q) => s + q[0] / n, 0);
+      const v = new Float32Array(n * 9);            // rings, about the letter's own centre: the bevel's inner edge (the front face), its outer edge, the back
       p.forEach(([x, y], i) => {
         const a = en[(i + n - 1) % n], b = en[i], d = 1 + a[0] * b[0] + a[1] * b[1];
-        v.set([x - BV * (a[0] + b[0]) / d, y - BV * (a[1] + b[1]) / d, -DZ], i * 3);
-        v.set([x, y, -DZ + BD], (n + i) * 3);
-        v.set([x, y, DZ], (2 * n + i) * 3);
+        v.set([x - cxl - BV * (a[0] + b[0]) / d, y - BV * (a[1] + b[1]) / d, -DZ], i * 3);
+        v.set([x - cxl, y, -DZ + BD], (n + i) * 3);
+        v.set([x - cxl, y, DZ], (2 * n + i) * 3);
       });
       const bl = Math.hypot(BD, BV), f = [];         // quads: kind (0 side, 1 bevel), normal, four corners
       for (let i = 0; i < n; i++){
@@ -1373,23 +1391,28 @@ M.createTerminal = function createTerminal(opts){
         f.push(0, ex, ey, 0, n + i, n + j, 2 * n + j, 2 * n + i);
         f.push(1, ex * BD / bl, ey * BD / bl, -BV / bl, j, i, n + i, n + j);
       }
-      const L = { n, v, f: Float32Array.from(f), nf: 2 * n, o: NV, cx: p.reduce((s, q) => s + q[0] / n, 0) };
+      const L = { n, v, f: Float32Array.from(f), nf: 2 * n, o: NV, cx: cxl };
       NV += 3 * n; return L;
     });
     const wx = new Float32Array(NV), wy = new Float32Array(NV), wz = new Float32Array(NV), qx = new Float32Array(NV), qy = new Float32Array(NV);
     const ordF = new Int16Array(64), ordD = new Float32Array(64);
-    let m00, m01, m02, m10, m11, m12, m20, m21, m22, F = 1000, cx = 640, hy = 500;
-    function xform(yaw, pit, rol, px, py, pz, sc){
+    const LM = new Float32Array(18), LC = new Float32Array(6);   // each letter's matrix (the logo's, then its own twist) and its centre's place
+    let m20 = 0, F = 1000, cx = 640, hy = 500;
+    function xform(yaw, pit, rol, px, py, pz, tw0, tw1){
       const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pit), sp = Math.sin(pit), cr = Math.cos(rol), sr = Math.sin(rol);
-      const a10 = sp * sy, a11 = cp, a12 = -sp * cy;  // Rx(pit) Ry(yaw); then Rz(rol)
-      m00 = cr * cy - sr * a10; m01 = -sr * a11; m02 = cr * sy - sr * a12;
-      m10 = sr * cy + cr * a10; m11 = cr * a11; m12 = sr * sy + cr * a12;
-      m20 = -cp * sy; m21 = sp; m22 = cp * cy;
-      for (const L of LET){
-        const v = L.v;
+      const a10 = sp * sy, a11 = cp, a12 = -sp * cy;  // Rz(rol) Rx(pit) Ry(yaw)
+      const m00 = cr * cy - sr * a10, m01 = -sr * a11, m02 = cr * sy - sr * a12;
+      const m10 = sr * cy + cr * a10, m11 = cr * a11, m12 = sr * sy + cr * a12;
+      const m21 = sp, m22 = cp * cy; m20 = -cp * sy;
+      for (let li = 0; li < 2; li++){
+        const L = LET[li], v = L.v, tw = li ? tw1 : tw0, c = Math.cos(tw), s2 = Math.sin(tw), b = li * 9;
+        const l00 = m00 * c - m02 * s2, l02 = m00 * s2 + m02 * c, l10 = m10 * c - m12 * s2, l12 = m10 * s2 + m12 * c, l20 = m20 * c - m22 * s2, l22 = m20 * s2 + m22 * c;
+        LM[b] = l00; LM[b + 1] = m01; LM[b + 2] = l02; LM[b + 3] = l10; LM[b + 4] = m11; LM[b + 5] = l12; LM[b + 6] = l20; LM[b + 7] = m21; LM[b + 8] = l22;
+        const ox = m00 * L.cx + px, oy = m10 * L.cx + py, oz = m20 * L.cx + pz;
+        LC[li * 3] = ox; LC[li * 3 + 1] = oy; LC[li * 3 + 2] = oz;
         for (let i = 0, k = L.o; i < L.n * 3; i++, k++){
-          const x = v[i * 3] * sc, y = v[i * 3 + 1] * sc, z = v[i * 3 + 2] * sc;
-          const X1 = m00 * x + m01 * y + m02 * z + px, Y1 = m10 * x + m11 * y + m12 * z + py, Z1 = Math.max(.5, m20 * x + m21 * y + m22 * z + pz);
+          const x = v[i * 3], y = v[i * 3 + 1], z = v[i * 3 + 2];
+          const X1 = l00 * x + m01 * y + l02 * z + ox, Y1 = l10 * x + m11 * y + l12 * z + oy, Z1 = Math.max(.5, l20 * x + m21 * y + l22 * z + oz);
           wx[k] = X1; wy[k] = Y1; wz[k] = Z1; qx[k] = cx + F * X1 / Z1; qy[k] = hy - F * Y1 / Z1;
         }
       }
@@ -1403,55 +1426,62 @@ M.createTerminal = function createTerminal(opts){
     let chrome = null;
     function makeChrome(){
       chrome = document.createElement('canvas'); chrome.width = 1; chrome.height = 64;
-      const c = chrome.getContext('2d');
+      const c = chrome.getContext('2d', CPU);
       for (let y = 0; y < 64; y++){
         const u = y / 63, v = u < .5 ? 1 - .42 * u / .5 : u < .56 ? .34 : .5 + .42 * (u - .56) / .44;
         c.fillStyle = SH[si(v)]; c.fillRect(0, y, 1, 1);
       }
     }
-    let glint = 0;
-    function drawLogo(alpha, lw){
-      /* letters far to near; in each, the visible sides and bevels far to near, then the cap that faces us */
-      const zc0 = m20 * LET[0].cx, zc1 = m20 * LET[1].cx;
+    function drawLogo(alpha, lw, sweep){
+      /* letters far to near; in each, the visible sides and bevels far to near, then the cap that faces us.
+         sweep 0..1: a glint crossing the chrome (left to right), off outside that */
       let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
       for (const L of LET) for (let i = 0; i < L.n; i++){ const k = L.o + i; if (qx[k] < bx0) bx0 = qx[k]; if (qx[k] > bx1) bx1 = qx[k]; if (qy[k] < by0) by0 = qy[k]; if (qy[k] > by1) by1 = qy[k]; }
-      g.lineJoin = 'round';
+      const lit = sweep > 0 && sweep < 1 ? 1 - Math.abs(2 * sweep - 1) : 0;
+      g.lineJoin = 'bevel';
       for (let pass = 0; pass < 2; pass++){
-        const L = LET[(zc0 > zc1) === (pass === 0) ? 0 : 1], f = L.f, o = L.o;
+        const li = (LC[2] > LC[5]) === (pass === 0) ? 0 : 1, L = LET[li], f = L.f, o = L.o, b9 = li * 9;
+        const l00 = LM[b9], l01 = LM[b9 + 1], l02 = LM[b9 + 2], l10 = LM[b9 + 3], l11 = LM[b9 + 4], l12 = LM[b9 + 5], l20 = LM[b9 + 6], l21 = LM[b9 + 7], l22 = LM[b9 + 8];
         let nv = 0;
         for (let q = 0; q < L.nf; q++){
           const b = q * 8, nx = f[b + 1], ny = f[b + 2], nz = f[b + 3], i0 = o + f[b + 4];
-          const Nx = m00 * nx + m01 * ny + m02 * nz, Ny = m10 * nx + m11 * ny + m12 * nz, Nz = m20 * nx + m21 * ny + m22 * nz;
+          const Nx = l00 * nx + l01 * ny + l02 * nz, Ny = l10 * nx + l11 * ny + l12 * nz, Nz = l20 * nx + l21 * ny + l22 * nz;
           if (Nx * wx[i0] + Ny * wy[i0] + Nz * wz[i0] >= 0) continue;   // facing away
           const i1 = o + f[b + 5], i2 = o + f[b + 6], i3 = o + f[b + 7];
           let k = nv++; const d = wz[i0] + wz[i1] + wz[i2] + wz[i3];
           while (k > 0 && ordD[k - 1] < d){ ordD[k] = ordD[k - 1]; ordF[k] = ordF[k - 1]; k--; }
           ordD[k] = d; ordF[k] = q;
         }
-        for (let s = 0; s < nv; s++){
-          const b = ordF[s] * 8, kind = f[b], nx = f[b + 1], ny = f[b + 2], nz = f[b + 3];
-          const Nx = m00 * nx + m01 * ny + m02 * nz, Ny = m10 * nx + m11 * ny + m12 * nz, Nz = m20 * nx + m21 * ny + m22 * nz;
+        for (let s2 = 0; s2 < nv; s2++){
+          const b = ordF[s2] * 8, kind = f[b], nx = f[b + 1], ny = f[b + 2], nz = f[b + 3];
+          const Nx = l00 * nx + l01 * ny + l02 * nz, Ny = l10 * nx + l11 * ny + l12 * nz, Nz = l20 * nx + l21 * ny + l22 * nz;
           const i0 = o + f[b + 4], i1 = o + f[b + 5], i2 = o + f[b + 6], i3 = o + f[b + 7];
           const dif = Math.max(0, Nx * LX + Ny * LY + Nz * LZ);
-          let hx = LX - wx[i0] / wz[i0] * .7, hy2 = LY - wy[i0] / wz[i0] * .7, hz = LZ - .7; const hl = 1 / Math.hypot(hx, hy2, hz);
+          const hx = LX - wx[i0] / wz[i0] * .7, hy2 = LY - wy[i0] / wz[i0] * .7, hz = LZ - .7, hl = 1 / Math.hypot(hx, hy2, hz);
           const sp = Math.max(0, (Nx * hx + Ny * hy2 + Nz * hz) * hl), spec = Math.pow(sp, 18);
-          const v = (kind ? .22 : .1) + (kind ? .55 : .42) * dif + .45 * spec + (kind ? glint * .35 : 0);
+          const v = (kind ? .18 : .07) + (kind ? .46 : .34) * dif + .45 * spec + (kind ? lit * .3 : 0);
           const c = si(v * alpha);
           quad(i0, i1, i2, i3); g.fillStyle = SH[c]; g.fill();
           g.strokeStyle = SH[si((v + (kind ? .22 : .14)) * alpha)]; g.lineWidth = lw * .6; g.stroke();
           lumAcc += area4(i0, i1, i2, i3) * SL[c];
         }
         /* the cap: the front face in chrome, lit by how it faces the lamp; the back plain */
-        const front = -(m02 * wx[o] + m12 * wy[o] + m22 * wz[o]) < 0 ? true : false;
-        if (front){
-          const dif = Math.max(0, -(m02 * LX + m12 * LY + m22 * LZ));
+        if (-(l02 * wx[o] + l12 * wy[o] + l22 * wz[o]) < 0){
+          const dif = Math.max(0, -(l02 * LX + l12 * LY + l22 * LZ)), al = clamp((.36 + .38 * dif) * alpha, 0, 1);
           ring(o, L.n); g.fillStyle = P.bg; g.fill();
-          g.save(); g.clip(); g.globalAlpha = clamp((.42 + .45 * dif + glint * .3) * alpha, 0, 1);
-          g.drawImage(chrome, 0, 0, 1, 64, bx0, by0, bx1 - bx0, by1 - by0); g.restore();
-          lumAcc += ringArea(o, L.n) * .75 * (.42 + .45 * dif) * alpha;
+          g.save(); g.clip(); g.globalAlpha = al;
+          g.drawImage(chrome, 0, 0, 1, 64, bx0, by0, bx1 - bx0, by1 - by0);
+          if (lit > 0){                               // the glint: a slanted band of light
+            const bw = (bx1 - bx0) * .1, sk = (by1 - by0) * .45, gx = bx0 - bw + (bx1 - bx0 + 2 * bw + sk) * sweep;
+            g.globalAlpha = .75 * alpha; g.fillStyle = P.bright; g.beginPath();
+            g.moveTo(gx, by0); g.lineTo(gx + bw, by0); g.lineTo(gx + bw - sk, by1); g.lineTo(gx - sk, by1); g.closePath(); g.fill();
+            lumAcc += bw * (by1 - by0) * .5;
+          }
+          g.restore();
+          lumAcc += ringArea(o, L.n) * .75 * al;
           ring(o, L.n); g.strokeStyle = alpha > .6 ? P.bright : SH[si(alpha)]; g.lineWidth = lw; g.stroke();
         } else {
-          const b = o + 2 * L.n, dif = Math.max(0, m02 * LX + m12 * LY + m22 * LZ), c = si((.18 + .4 * dif) * alpha);
+          const b = o + 2 * L.n, dif = Math.max(0, l02 * LX + l12 * LY + l22 * LZ), c = si((.16 + .36 * dif) * alpha);
           ring(b, L.n); g.fillStyle = SH[c]; g.fill(); g.strokeStyle = SH[si((.5 + .3 * dif) * alpha)]; g.lineWidth = lw * .8; g.stroke();
           lumAcc += ringArea(b, L.n) * SL[c];
         }
@@ -1464,7 +1494,7 @@ M.createTerminal = function createTerminal(opts){
     function sring(o, n){ g.moveTo(sqx[o], sqy[o]); for (let i = 1; i < n; i++) g.lineTo(sqx[o + i], sqy[o + i]); g.closePath(); }
     function drawShadow(alpha){
       for (let k = 0; k < NV; k++){
-        const t = wy[k] + FY, x = wx[k] + SX * t, z = Math.max(1, wz[k] + SZ * t);
+        const t = Math.max(0, wy[k] + FY), x = wx[k] + SX * t, z = Math.max(1, wz[k] + SZ * t);
         sqx[k] = cx + F * x / z; sqy[k] = hy + F * FY / z;
       }
       g.fillStyle = SH[si(.02 + .03 * (1 - alpha))];
@@ -1505,8 +1535,8 @@ M.createTerminal = function createTerminal(opts){
       '(': '    ##  |   ##   |  ##    |  ##    |  ##    |   ##   |    ##  ', ')': '  ##    |   ##   |    ##  |    ##  |    ##  |   ##   |  ##    ',
     };
     const GW = 8, GH = 8;
-    const ROWV = [1, .96, .86, .74, .6, .72, .86, .9];   // the letters' own copper: bright crown, a darker waist
-    let strip = null, stripR = null, stripW = 0, text = '', nameAt = 0, title = null, sub = null;
+    const ROWV = [.95, .9, .8, .68, .55, .66, .8, .84];   // the letters' own copper: bright crown, a darker waist
+    let strip = null, stripR = null, stripW = 0, text = '', nameAt = 0, title = null, sub = null, titleN = 0;
     function scrollText(){
       const bl = String((A.body || []).join('\n')).split('\n').map(s => s.replace(/^\s*[-*\u2022]\s*/, '').trim()).filter(Boolean);
       const pick = re => bl.find(b => re.test(b));
@@ -1522,7 +1552,7 @@ M.createTerminal = function createTerminal(opts){
         gl.split('|').forEach((row, y) => { for (let x = 0; x < GW; x++) if (row[x] === '#') lit[y * w + i * GW + x] = 1; });
       }
       const mk = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-      const face = mk(), da = face.getContext('2d').createImageData(w, h), refl = mirror ? mk() : null, db = mirror ? refl.getContext('2d').createImageData(w, h) : null;
+      const face = mk(), da = face.getContext('2d', CPU).createImageData(w, h), refl = mirror ? mk() : null, db = mirror ? refl.getContext('2d', CPU).createImageData(w, h) : null;
       const cache = {};
       const put = (d, i, v) => { const k = si(v), c = cache[k] || (cache[k] = rgb(SH[k])); d.data[i * 4] = c[0]; d.data[i * 4 + 1] = c[1]; d.data[i * 4 + 2] = c[2]; d.data[i * 4 + 3] = 255; };
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
@@ -1530,84 +1560,138 @@ M.createTerminal = function createTerminal(opts){
         if (lit[i]){ put(da, i, ROWV[y] || .8); if (db && y < GH) put(db, (GH - 1 - y) * w + x, (ROWV[y] || .8) * .42); }
         else if (x > 0 && y > 0 && lit[i - w - 1]) put(da, i, .12);
       }
-      face.getContext('2d').putImageData(da, 0, 0); if (refl) refl.getContext('2d').putImageData(db, 0, 0);
+      face.getContext('2d', CPU).putImageData(da, 0, 0); if (refl) refl.getContext('2d', CPU).putImageData(db, 0, 0);
       return { face, refl, w: w - 1 };
     }
     function makeStrip(){
       text = fontText(scrollText()); nameAt = text.search(/\S/);
       const b = bake(text, true); strip = b.face; stripR = b.refl; stripW = b.w;
-      title = bake(fontText(C.name || 'KN')); sub = bake('PRESENTS');
+      const tn = fontText(C.name || 'KN'); titleN = tn.length; title = bake(tn); sub = bake('PRESENTS');
     }
-    /* the title card while the stars rush past: the name, then PRESENTS; it opens out from a line and shuts back to one */
-    function titleCard(age){
-      if (age < .12 || age > 1.3) return;
+    /* ---- the title card: the name typed out letter by letter with a block cursor, PRESENTS rastered in under it on
+       the beat; then it squashes to a line, and the line to a dot ---- */
+    const T_TYPE = 1.0, T_LET = .085, T_SUB = 2.5, T_SHUT = 3.4;
+    function titleCard(a){
+      if (a < T_TYPE - .05 || a > 4.0) return;
       if (!strip) makeStrip();
-      const open = sstep(.12, .3, age) * (1 - sstep(1.08, 1.26, age)), k = Math.max(3, Math.round(s * .8)), k2 = Math.max(2, Math.round(k * .55));
-      const cy = top + h * .3, tw = title.w * k, sw = sub.w * k2, th = (GH + 1) * k + k2 * 2 + (GH + 1) * k2;
-      const hh = Math.max(2, Math.round(th * open)), y0 = Math.round(cy - hh / 2);
-      g.save(); g.beginPath(); g.rect(0, y0, W, hh); g.clip();
+      const k = Math.max(2, Math.min(Math.round(s * .75), Math.floor(W * .8 / ((titleN + 1) * GW)))), k2 = Math.max(2, Math.round(k * .55));
+      const cyT = h * .3, tw = title.w * k, sw = sub.w * k2, th = (GH + 1) * k + k2 * 3 + (GH + 1) * k2;
+      const yt = Math.round(cyT - th / 2), xt = Math.round(cx - tw / 2), xs = Math.round(cx - sw / 2), yb = yt + (GH + 1) * k + k2 * 3;
+      if (a >= T_SHUT + .25){                         // the line closes to a dot, which fades
+        const u = (a - T_SHUT - .25) / .35, wl = Math.max(6, tw * (1 - sstep(0, .55, u))), al = 1 - sstep(.55, 1, u);
+        g.globalAlpha = al; g.fillStyle = P.bright; g.fillRect(Math.round(cx - wl / 2), Math.round(cyT) - 2, Math.round(wl), 4); g.globalAlpha = 1;
+        return;
+      }
+      const sq = 1 - sstep(T_SHUT, T_SHUT + .25, a);
+      g.save();
+      if (sq < 1){ g.translate(0, cyT); g.scale(1, Math.max(.03, sq)); g.translate(0, -cyT); }
       g.imageSmoothingEnabled = false;
-      const yt = Math.round(cy - th / 2);
-      g.drawImage(title.face, 0, 0, title.w + 1, GH + 1, Math.round(cx - tw / 2), yt, tw + k, (GH + 1) * k);
-      if (age > .45){ g.globalAlpha = sstep(.45, .6, age) * .8; g.drawImage(sub.face, 0, 0, sub.w + 1, GH + 1, Math.round(cx - sw / 2), yt + (GH + 1) * k + k2 * 2, sw + k2, (GH + 1) * k2); g.globalAlpha = 1; }
+      const typed = (a - T_TYPE) / T_LET, n = clamp(Math.floor(typed) + 1, 0, titleN);
+      if (n > 0) g.drawImage(title.face, 0, 0, n * GW + 1, GH + 1, xt, yt, (n * GW + 1) * k, (GH + 1) * k);
+      if (n > 0 && typed < titleN){ const f = typed - Math.floor(typed); g.globalAlpha = .7 * (1 - f); g.fillStyle = P.bright; g.fillRect(xt + (n - 1) * GW * k + k, yt, 6 * k, 7 * k); g.globalAlpha = 1; }   // each letter burns in
+      const done = T_TYPE + titleN * T_LET;
+      if (a < done + .9 && (a < done || ((a - done) * 4 | 0) % 2 === 0)){ g.fillStyle = SH[si(.8)]; g.fillRect(xt + n * GW * k + k, yt, 6 * k, 7 * k); }   // the cursor, blinking on the beat once the name is in
+      if (a >= T_SUB){                                // PRESENTS, rastered in row by row with a hot scan line
+        const rows = Math.min(GH + 1, Math.floor((a - T_SUB) / .3 * (GH + 1)) + 1);
+        g.drawImage(sub.face, 0, 0, sub.w + 1, rows, xs, yb, (sub.w + 1) * k2, rows * k2);
+        if (rows < GH + 1){ g.fillStyle = P.bright; g.fillRect(xs - k2 * 2, yb + rows * k2, (sub.w + 4) * k2, Math.max(2, k2 >> 1)); }
+      }
       g.imageSmoothingEnabled = true; g.restore();
-      if (open < .98){ g.fillStyle = SH[si(.85)]; g.fillRect(Math.round(cx - tw * (.3 + .7 * open) / 2), Math.round(cy) - 1, Math.round(tw * (.3 + .7 * open)), 2); }   // the line it opens from
-      lumAcc += tw * hh * .25;
+      lumAcc += tw * (GH + 1) * k * .25 * sq;
     }
 
     /* ---- stars: a box of them flying at the viewer ---- */
     const NST = 200, ZR = 110, stx = new Float32Array(NST), sty = new Float32Array(NST), stz = new Float32Array(NST);
     for (let i = 0; i < NST; i++){ stx[i] = (rnd() * 2 - 1) * 70; sty[i] = .5 + rnd() * 70; stz[i] = rnd() * ZR; }
     const starZ = (i, dist) => ZR + 1.5 - ((stz[i] + dist) % ZR);
-    function drawStars(dist, speed, zmin, zmax, top){
-      const streak = speed > 45, k = streak ? Math.min(.09, speed / 2400) : 0;
-      if (streak){ g.lineWidth = 2; g.strokeStyle = SH[si(.5)]; g.beginPath(); }
+    function drawStars(dist, speed, zmin, zmax, bright){
+      const streak = speed > 40, k = streak ? Math.min(.12, speed / 2600) : 0;
+      if (streak){ g.lineWidth = 2; g.strokeStyle = SH[si(.3 + .3 * bright)]; g.beginPath(); }
       for (let i = 0; i < NST; i++){
         const z = starZ(i, dist); if (z < zmin || z >= zmax) continue;
         const x = cx + F * stx[i] / z, y = hy - F * sty[i] / z;
-        if (y > hy - 3 || y < top || x < -8 || x > W + 8) continue;
+        if (y > hy - 3 || y < 0 || x < -8 || x > W + 8) continue;
         if (streak){ const z2 = z + speed * k; g.moveTo(x, y); g.lineTo(cx + F * stx[i] / z2, hy - F * sty[i] / z2); continue; }
         const n = 1 - z / ZR, sz = Math.round(clamp(2 + 4 * n * n, 2, 6));
-        g.fillStyle = SH[si(.2 + .8 * n)]; g.fillRect(Math.round(x), Math.round(y), sz, sz);
+        g.fillStyle = SH[si((.15 + .75 * n) * bright)]; g.fillRect(Math.round(x), Math.round(y), sz, sz);
       }
       if (streak){ g.stroke(); lumAcc += NST * 30 * SL[si(.5)]; }
     }
 
-    /* ---- layout: everything sized from the drawing's own box, so a phone on its side and a tall phone both work ---- */
-    let fitKey = '', top = 0, h = 0, s = 8, amp = 20, ys = 0, Z0 = 30, logoY = 4, zN = 2, gradV = null, bh = 24;
-    function fit(t0, hh){
-      const key = t0 + ':' + hh + ':' + W; if (key === fitKey) return; fitKey = key;
-      top = t0; h = hh; cx = W / 2;
+    /* ---- layout: sized from the drawing's own box (its own canvas: y = 0 is the top of the drawing) ---- */
+    let fitKey = '', h = 0, s = 8, amp = 20, ys = 0, Z0 = 30, logoY = 4, zN = 2, gradV = null, bh = 24;
+    function fit(hh){
+      const k = Math.min(1, Math.sqrt(7.5e5 / (W * hh))), ow = Math.round(W * k), oh = Math.round(hh * k);   // drawn at about 0.75 MP and scaled up: the tube shows it at roughly that size
+      if (!off || off.width !== ow || off.height !== oh){
+        off = document.createElement('canvas'); off.width = ow; off.height = oh;
+        g = off.getContext('2d', { alpha: false, willReadFrequently: true });
+        rawFill = g.fillRect.bind(g);
+        g.fillRect = (x, y, w, h2) => { lumAcc += Math.abs(w * h2) * lumOf(g.fillStyle) * g.globalAlpha; rawFill(x, y, w, h2); };
+        fitKey = '';
+      }
+      rk = k;
+      const key = hh + ':' + W; if (key === fitKey) return; fitKey = key;
+      h = hh; cx = W / 2;
       const tall = W / h < .9;
-      hy = top + Math.round(h * (tall ? .6 : .58));
-      F = Math.min(.4 * h * Z0 / 8, (tall ? .74 : .62) * W * Z0 / 15.5);
-      logoY = (hy - (top + h * (tall ? .33 : .3))) * Z0 / F;
+      hy = Math.round(h * (tall ? .6 : .58));
+      F = Math.min(.38 * h * Z0 / 8, (tall ? .72 : .6) * W * Z0 / 15.5);
+      logoY = (hy - h * (tall ? .33 : .3)) * Z0 / F;
       s = clamp(Math.floor(Math.min(h * .021, W / 100)), 4, 13);
       amp = Math.round(Math.min(h * .04, s * 3.2));
-      ys = Math.round(Math.min(top + h * .74, top + h - (4 * s + amp + 4.6 * s + 6)));   // the scroller's middle, its reflection still on the tube
-      zN = F * FY / (top + h - hy);
+      ys = Math.round(Math.min(h * .74, h - (4 * s + amp * 1.3 + 4.6 * s + 6)));   // the scroller's middle, its reflection still on the tube
+      zN = F * FY / (h - hy);
       bh = Math.max(16, Math.round(h * .046 / 8) * 8);
-      gradV = g.createLinearGradient(0, hy, 0, top + h);
-      gradV.addColorStop(0, P.bg); gradV.addColorStop(.25, SH[si(.2)]); gradV.addColorStop(1, SH[si(.5)]);
+      gradV = g.createLinearGradient(0, hy, 0, h);
+      gradV.addColorStop(0, P.bg); gradV.addColorStop(.25, SH[si(.18)]); gradV.addColorStop(1, SH[si(.42)]);
     }
 
-    /* ---- the show ---- */
-    const SLAM = 1.35, SCROLL0 = 1.05, GPS = 3.6;   // the logo lands; the scroller starts; its speed in glyphs a second
+    /* ---- the show: the opening (age a, seconds), then the loop (L = a - SLAM) ---- */
+    const T_BARS = 3.75, T_FLOOR = 4.0, T_LOGO = 4.6, T_HOLD = 6.0, T_RUSH = 6.5, SLAM = 7.0, SCROLL0 = 7.25, GPS = 3.6;
+    const MOVE0 = 6, MOVE_GAP = 8.5, MOVE_LEN = 2.8, MOVES = 5;   // turn, bounce, twist, flip, zoom
     const NB = 5, bp = new Float32Array(NB), bo = new Int8Array(NB), bY = new Float32Array(NB), bD = new Float32Array(NB);
-    let lastT = -1, dist = 0, floorD = 0, kick = 0, nextBar = 0, keyN = 0;
-    let oy = 0, oyv = 0, op = 0, opv = 0, spin = 0, spinV = 0, pu = -1, pv = -1, down = false, lastU = -1;
+    let lastT = -1, dist = 0, floorD = 0, kick = 0, nextBar = 0, lastKey = 0, keyGlint = -9;
+    let oy = 0, oyv = 0, op = 0, opv = 0, spin = 0, spinV = 0, hop = 0, hopV = 0, pu = -1, pv = -1, down = false, lastU = -1, ageNow = 0;
     const backOut = x => { if (x <= 0) return 0; if (x >= 1) return 1; const c = 1.7, u = x - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
-    function bars(T, age, still){
-      const sky0 = top + 4, sky1 = hy - 6, mid = (sky0 + sky1) / 2 - bh * .5, am = (sky1 - sky0) * .36;
+    const eOut = x => 1 - Math.pow(1 - clamp(x, 0, 1), 3), eIn = x => Math.pow(clamp(x, 0, 1), 4);
+    /* the move under way at loop time L: { m: which, p: seconds into it } (m = -1: none) */
+    let mvM = -1, mvP = 0;
+    function move(L){
+      mvM = -1; const t = L - MOVE0; if (t < 0) return;
+      const i = Math.floor(t / MOVE_GAP), p = t - i * MOVE_GAP;
+      if (p < MOVE_LEN){ mvM = i % MOVES; mvP = p; }
+    }
+    /* the last impact (the slam, a landing from a bounce, the end of a zoom): seconds since, and how hard; for the flash and the floor's shockwave */
+    let shT = 9, shS = 0;
+    function impact(a, L){
+      shT = 9; shS = 0;
+      if (a >= SLAM && L < 3){ shT = L; shS = 1; }
+      if (mvM === 1 && mvP > .42){ shT = mvP - .42; shS = .55; }
+      else if (mvM === 4 && mvP > 2.3){ shT = mvP - 2.3; shS = .45; }
+    }
+    function bars(T, a, L, still){
+      const sky0 = 4, sky1 = hy - 6, span = sky1 - sky0, mid = (sky0 + sky1) / 2 - bh * .5, am = span * .36;
+      /* three patterns, crossfaded every 20 s: the rotating cylinder, a copper list scrolling down, a breathing fan */
+      let wA = 1, wB = 0, wC = 0;
+      if (!still && L > 14){
+        const seg = Math.floor((L - 14) / 20), u = sstep(0, 3, (L - 14) - seg * 20), cur = (seg + 1) % 3, prev = seg % 3;
+        wA = (cur === 0 ? u : 0) + (prev === 0 ? 1 - u : 0); wB = (cur === 1 ? u : 0) + (prev === 1 ? 1 - u : 0); wC = (cur === 2 ? u : 0) + (prev === 2 ? 1 - u : 0);
+      }
+      const beat = still || L < 0 ? 0 : .06 * Math.exp(-((L % 2) / .18));   // a soft accent on each bar's downbeat
       for (let i = 0; i < NB; i++){
         const ph = T * 1.55 + i * .58;
-        bY[i] = mid + am * Math.sin(ph); bD[i] = Math.cos(ph);
-        if (!still && age < 1.2) bY[i] = sky0 - bh - 8 + (bY[i] - sky0 + bh + 8) * backOut((age - .05 - i * .09) / .55);   // they drop in, one after another
-        let k = i; while (k > 0 && bD[bo[k - 1]] > bD[i]){ bo[k] = bo[k - 1]; k--; } bo[k] = i;
+        let y = mid + am * Math.sin(ph), d = Math.cos(ph);
+        if (wB > 0 || wC > 0){
+          const yb = sky0 - bh + ((i * (span + bh) / NB + L * 55) % (span + bh)), db = Math.cos((yb - mid) / (span * .5) * 1.4) - .3;
+          const yc = mid + (i - 2) * am * .45 * (.55 + .45 * Math.sin(L * .9)) + am * .25 * Math.sin(L * .55), dc = .6 * Math.cos(L * 1.2 + i * 1.3);
+          y = y * wA + yb * wB + yc * wC; d = d * wA + db * wB + dc * wC;
+        }
+        if (!still && a < T_BARS + 1.6) y = sky0 - bh - 12 + (y - sky0 + bh + 12) * backOut((a - T_BARS - i * .25) / .45);   // they drop in on the eighth notes
+        bY[i] = y; bD[i] = d;
+        let k = i; while (k > 0 && bD[bo[k - 1]] > d){ bo[k] = bo[k - 1]; k--; } bo[k] = i;
       }
       const nb = 8, st = bh / nb;                      // copper: eight hard steps, dark rim to a hot middle
       for (let r = 0; r < NB; r++){
-        const i = bo[r], d = bD[i], peak = clamp(.28 + .15 * d + .6 * bp[i], 0, 1), y0 = Math.round(bY[i]);
+        const i = bo[r], d = bD[i], peak = clamp(.18 + .1 * d + .55 * bp[i] + beat, 0, 1), y0 = Math.round(bY[i]);
         for (let k = 0; k < nb; k++){
           const e = 1 - Math.abs(2 * (k + .5) / nb - 1), v = peak * (.12 + .88 * e * e);
           const y = y0 + k * st; if (y < sky0 || y + st > sky1) continue;
@@ -1615,115 +1699,177 @@ M.createTerminal = function createTerminal(opts){
         }
       }
     }
-    function floor(age, still){
-      const reveal = still ? 1 : sstep(.1, .9, age), bot = top + h, y1 = hy + (bot - hy) * reveal;
-      /* the horizon glows a little, as if lit from beyond */
-      for (let k = 0; k < 6; k++){ g.fillStyle = SH[si(.22 - k * .035)]; g.fillRect(0, hy - 4 - k * 4, W, 4); }
-      const gs = 4, nz = 40, span = nz * gs, zf = zN + span;
-      for (let k = 0; k < nz; k++){
-        const z = zN + ((k * gs - floorD) % span + span) % span, y = hy + F * FY / z;
-        if (y > y1 || y > bot) continue;
-        const n = 1 - (z - zN) / span;
-        g.fillStyle = SH[si(.05 + .4 * n * n * n)]; g.fillRect(0, Math.round(y), W, 2);
+    function floor(a, L, zl, still){
+      const reveal = still ? 1 : sstep(T_FLOOR, T_FLOOR + 1, a), bot = h, y1 = hy + (bot - hy) * reveal;
+      const hw = still ? 1 : sstep(T_FLOOR - .2, T_FLOOR + .3, a);   // the horizon draws out from the middle first
+      for (let k = 0; k < 5; k++){ g.fillStyle = SH[si((.17 - k * .032) * hw)]; g.fillRect(cx - W * hw / 2, hy - 4 - k * 4, W * hw, 4); }
+      if (reveal > 0){
+        const gs = 4, nz = 40, span = nz * gs, zf = zN + span;
+        const wave = still ? 0 : bump(L % 26, 3, 8.5, 1.2) * 1;   // now and then the floor rolls
+        for (let k = 0; k < nz; k++){
+          const z = zN + ((k * gs - floorD) % span + span) % span; let y = hy + F * FY / z, v = .04 + .26 * Math.pow(1 - (z - zN) / span, 3);
+          if (wave > 0) y += wave * Math.sin(z * .32 - L * 3.2) * F / z * .45;
+          if (shS > 0 && shT < 2.5){ const d = Math.abs(z - zl) - shT * 50, e = shS * Math.exp(-d * d / 40) * Math.exp(-shT * 1.6); y -= e * F / z * .5; v += .4 * e; }
+          if (y > y1 || y > bot || y < hy) continue;
+          g.fillStyle = SH[si(v)]; g.fillRect(0, Math.round(y), W, 2);
+        }
+        g.save(); g.beginPath(); g.rect(0, hy, W, y1 - hy); g.clip();
+        g.strokeStyle = gradV; g.lineWidth = 2; g.beginPath();
+        for (let k = -26; k <= 26; k++){ const x = k * gs; g.moveTo(cx + F * x / zN, bot); g.lineTo(cx + F * x / zf, hy + F * FY / zf); }
+        g.stroke();
+        const fy = hy + F * FY / zf;                   // haze where the floor runs out toward the horizon
+        for (let y = hy; y < fy; y += 4){ g.fillStyle = SH[si(.1 * (1 - (y - hy) / (fy - hy)))]; g.fillRect(0, y, W, 4); }
+        g.restore();
+        lumAcc += (bot - hy) * 2 * 30 * .2 * reveal;
       }
-      g.save(); g.beginPath(); g.rect(0, hy, W, y1 - hy); g.clip();
-      g.strokeStyle = gradV; g.lineWidth = 2; g.beginPath();
-      const nx = 26;
-      for (let k = -nx; k <= nx; k++){
-        const x = k * gs, xa = cx + F * x / zN, xb = cx + F * x / zf;
-        g.moveTo(xa, bot); g.lineTo(xb, hy + F * FY / zf);
-      }
-      g.stroke();
-      /* haze where the floor runs out toward the horizon */
-      const fy = hy + F * FY / zf;
-      for (let y = hy, k = 0; y < fy; y += 4, k++){ g.fillStyle = SH[si(.16 * (1 - (y - hy) / (fy - hy)))]; g.fillRect(0, y, W, 4); }
-      g.restore();
-      lumAcc += (bot - hy) * 2 * 30 * .25;
-      g.fillStyle = SH[si(.55)]; g.fillRect(0, hy - 1, W, 2);
+      g.fillStyle = SH[si(.5)]; g.fillRect(cx - W * hw / 2, hy - 1, W * hw, 2);
     }
-    function scroller(age, T, still){
+    function scroller(a, L, still){
       if (!strip) makeStrip();
-      const s0 = s; if (still) s = Math.max(3, Math.min(s, Math.floor(W * .9 / ((String(C.name || '').length + 1) * GW))));   // the still frame: the whole name
+      const s0 = s; if (still) s = Math.max(3, Math.min(s, Math.floor(W * .9 / ((titleN + 1) * GW))));   // the still frame: the whole name
       const cols = Math.ceil(W / s) + 1;
-      let pos = still ? (nameAt + String(C.name || '').length / 2) * GW - cols / 2 : (age - SCROLL0) * GPS * GW - cols;
-      if (!still && pos < -cols) return;
+      const pos = still ? (nameAt + titleN / 2) * GW - cols / 2 : (a - SCROLL0) * GPS * GW - cols;
+      if (!still && pos < -cols){ s = s0; return; }
       const ip = Math.floor(pos), fr = pos - ip, gh = (GH + 1) * s, rh = Math.round(gh * .5), y0 = ys - 4 * s;
-      const wl = W * .95, ph = still ? 2.1 : T * 2.6;
+      /* the wave drifts: its height and length breathe; now and then the letters hop, one after another */
+      const am = still ? amp : amp * (.75 + .3 * Math.sin(L * .23)), wl = W * (still ? .95 : .9 + .22 * Math.sin(L * .11)), ph = still ? 2.1 : a * 2.6;
+      const hopB = still ? 0 : bump(L % 30, 19, 25, 1) * s * 2.4;
       g.imageSmoothingEnabled = false;
       let n = 0;
       for (let j = 0; j < cols; j++){
         let src = ip + j; if (src < 0) continue;
         src %= stripW;
-        const x = Math.round((j - fr) * s), y = Math.round(y0 + amp * Math.sin(x / wl * 6.2832 - ph));
+        const x = Math.round((j - fr) * s);
+        let y = y0 + am * Math.sin(x / wl * TAU - ph);
+        if (hopB > 0) y -= hopB * Math.abs(Math.sin(L * 4.4 - ((src / GW) | 0) * .6));
+        y = Math.round(y);
         g.drawImage(strip, src, 0, 1, GH + 1, x, y, s, gh);
         g.drawImage(stripR, src, 0, 1, GH + 1, x, y + 8 * s + Math.round(s * .6), s, rh);
         n++;
       }
       g.imageSmoothingEnabled = true;
-      lumAcc += n * s * gh * .3 * .8;
-      /* the floor under the letters is water: dark lines across their reflection */
-      g.fillStyle = P.bg;
-      for (let y = Math.round(ys + 4 * s - amp + s * .6); y < Math.min(top + h, ys + 4 * s + amp + s * .6 + rh); y += 6) g.fillRect(0, y, W, 2);
+      lumAcc += n * s * gh * .3 * .75;
+      g.fillStyle = P.bg;                             // the floor under the letters is water: dark lines across their reflection
+      for (let y = Math.round(ys + 4 * s - am * 1.3 + s * .6); y < Math.min(h, ys + 4 * s + am + s * .6 + rh); y += 6) rawFill(0, y, W, 2);
       s = s0;
     }
-    function draw(x, t0, w, hh, age, t){
+
+    function draw(x, t0, w, hh, a, t){
       const still = REDUCED;
       if (!chrome) makeChrome();
-      fit(t0, hh);
+      fit(hh);
       const dt = lastT < 0 || still ? 0 : clamp(t - lastT, 0, .1); lastT = t;
-      if (still) age = 30;
-      const T = still ? 7.3 : age;
-      /* springs and decays */
+      if (still) a = 40;
+      ageNow = a;
+      const L = a - SLAM, T = still ? 7.3 : a;
+      move(still ? -1 : L); impact(a, L);
+      /* the physical bits: the pointer's lean, the spin (with a soft detent back to the front once it is slow), the hop */
       if (dt > 0){
         const tyaw = pu < 0 ? 0 : clamp((pu - .5) * .8, -.38, .38), tpit = pv < 0 ? 0 : clamp((pv - .35) * .5, -.2, .2);
         for (let k = 0, n = Math.ceil(dt / .01), hs = dt / n; k < n; k++){
           oyv += (24 * (tyaw - oy) - 5 * oyv) * hs; oy += oyv * hs;
           opv += (24 * (tpit - op) - 5 * opv) * hs; op += opv * hs;
+          if (!down){
+            const kd = 7 * clamp(1 - Math.abs(spinV) / 2.4, 0, 1), tgt = Math.round(spin / TAU) * TAU;
+            spinV += (kd * (tgt - spin) - (1 + 2.6 * Math.sqrt(kd)) * spinV * (kd > 0 ? 1 : .35)) * hs;
+            spin += spinV * hs;
+          }
+          hopV -= 34 * hs; hop += hopV * hs;
+          if (hop < 0){ hop = 0; hopV = hopV < -1.2 ? -hopV * .32 : 0; } else if (hop > 1){ hop = 1; hopV = Math.min(hopV, 0); }
         }
-        if (!down){ spin += spinV * dt; spinV *= Math.exp(-dt * 1.6); }
-        const decay = Math.exp(-dt * 5); for (let i = 0; i < NB; i++) bp[i] *= decay;
-        kick *= Math.exp(-dt * 4);
-        glint *= Math.exp(-dt * 3);
+        const decay = Math.exp(-dt * 4.5); for (let i = 0; i < NB; i++) bp[i] *= decay;
+        kick *= Math.exp(-dt * 2.5);
       }
-      /* the stars: hyperspace at first, slowing to a drift; a key gives a burst */
-      const speed = still ? 0 : 9 + 260 * (1 - sstep(.2, 1.5, age)) + 40 * kick;
-      dist += speed * dt; floorD += (still ? 0 : 3.2 + 14 * kick) * dt;
-      /* the logo: falls in from far away, spinning, and slams in at SLAM; then spins, bobs and sways */
-      let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, alpha = 1, flash = 0, shake = 0;
-      if (!still && age < SLAM){
-        const u = clamp((age - .25) / (SLAM - .25), 0, 1), e = u * u * u;
-        z = 520 + (Z0 - 520) * e; yaw = -(1 - u) * (1 - u) * 9.5; pit = -.28 - (1 - u) * .9; rol = (1 - u) * .5;
-        alpha = sstep(.25, .6, age);
+      if (Math.abs(spin) > 1e4){ spin %= TAU; }
+      /* stars: drift, hyperspace behind the title, back to a drift; the floor's rush, a zoom and keys push them */
+      const rush = still ? 0 : bump(L % 26, 15, 19, 1.2);
+      let speed = still ? 0 : a < 1.6 ? 4 : a < 3.6 ? 4 + 320 * Math.pow((a - 1.6) / 2, 2.4) : a < SLAM ? 9 + 315 * (1 - sstep(3.6, 4.9, a)) : 9 + 60 * rush;
+      if (mvM === 4) speed += 70 * bump(mvP, 1.6, 2.4, .3);
+      speed += 70 * kick;
+      dist += speed * dt; floorD += (still ? 0 : 3 + 12 * rush + 6 * kick) * dt;
+      /* the logo */
+      let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, alpha = 1, flash = 0, shake = 0, tw0 = 0, tw1 = 0, sweep = -1;
+      if (!still && a < SLAM){
+        alpha = sstep(T_LOGO, T_LOGO + .5, a);
+        if (a < T_HOLD){                               // out of the vanishing point, tumbling, slowing as it comes
+          const u = eOut((a - T_LOGO) / (T_HOLD - T_LOGO));
+          z = 900 + (2.6 * Z0 - 900) * u; yaw = (1 - u) * 3 * Math.PI - .2 * u; pit = -.28 + (1 - u) * TAU * .5; rol = (1 - u) * .6;
+        } else if (a < T_RUSH){                       // a breath: it drifts back and winds up
+          const u = sstep(T_HOLD, T_RUSH, a);
+          z = 2.6 * Z0 + .5 * Z0 * u; yaw = -.2 - .25 * u; pit = -.28 + .12 * u;
+        } else {                                      // and rushes in on the beat
+          const u = eIn((a - T_RUSH) / (SLAM - T_RUSH));
+          z = 3.1 * Z0 + (Z0 - 3.1 * Z0) * u; yaw = -.45 * (1 - u); pit = -.16 - .12 * u;
+        }
+        y = logoY + (1 - alpha) * 2;
       } else {
-        const a = age - SLAM, wI = still ? 1 : sstep(0, 1.6, a);
-        if (!still){ flash = Math.exp(-a * 8) * .42; shake = Math.exp(-a * 7) * Math.sin(a * 46) * h * .018; z -= Z0 * .14 * Math.exp(-a * 5.5) * Math.cos(a * 15); }
-        const ts = a - 7, sp = ts > 0 && ts % 13 < 1.9 ? 6.2832 * sstep(0, 1.9, ts % 13) : 0;   // now and then a full turn
-        yaw = wI * (.52 * Math.sin(T * .55) + .1 * Math.sin(T * 1.3)) + sp;
-        pit = -.28 + wI * .14 * Math.sin(T * .8 + .6);
-        rol = wI * .055 * Math.sin(T * .43);
-        y = logoY + wI * .7 * Math.sin(T * 1.25);
-        z += wI * 2.2 * Math.sin(T * .37);
-        if (still){ yaw = -.42; pit = -.3; rol = .03; }
+        const wI = still ? 1 : sstep(0, 2, L);
+        if (!still){ shake = Math.exp(-L * 7) * Math.sin(L * 46) * h * .02; z -= Z0 * .14 * Math.exp(-L * 5.5) * Math.cos(L * 15); }
+        yaw = wI * (.42 * Math.sin(L * .5) + .08 * Math.sin(L * 1.3));
+        pit = -.28 + wI * .12 * Math.sin(L * .7 + .6);
+        rol = wI * .05 * Math.sin(L * .43);
+        y = logoY + wI * .6 * Math.sin(L * 1.2);
+        z += wI * 2 * Math.sin(L * .33);
+        if (mvM >= 0){
+          const p = mvP, e = sstep(0, MOVE_LEN, p);
+          if (mvM === 0) yaw += TAU * e;                                       // a full turn
+          else if (mvM === 1){                                                 // a drop onto the floor and a few bounces
+            const yb = -FY + 4.4, y0 = y;
+            z += 2.2 * Z0 * (sstep(0, .5, p) - sstep(2.1, MOVE_LEN, p));          // (it hops back first, to land clear of the scroller)
+            y = p < .42 ? y0 + (yb - y0) * (p / .42) * (p / .42) : p < 2.1 ? yb + (y0 - yb) * .5 * Math.abs(Math.sin(Math.PI * (p - .42) / .56)) * Math.exp(-(p - .42) * 1.5) : yb + (y0 - yb) * sstep(2.1, MOVE_LEN, p);
+          }
+          else if (mvM === 2){ tw0 = TAU * e; tw1 = -TAU * e; }                // the letters twist against each other
+          else if (mvM === 3) pit += TAU * sstep(0, MOVE_LEN, p);              // a slow flip
+          else {                                                               // back into the distance, and in again
+            z += p < 1.3 ? 2.4 * Z0 * eOut(p / 1.3) : p < 1.8 ? 2.4 * Z0 : 2.4 * Z0 * (1 - eIn((p - 1.8) / .5));
+            yaw += .5 * Math.sin(Math.PI * clamp(p / 2.3, 0, 1));
+          }
+        }
+        if (shS > 0) flash = (shS >= 1 ? .4 : .14 * shS) * Math.exp(-shT * 8);
+        if (!still && L < 1) sweep = (L - .05) / .8;
+        if (mvM === 4 && mvP > 2.3) shake += Math.exp(-(mvP - 2.3) * 9) * Math.sin((mvP - 2.3) * 46) * h * .007;
       }
-      yaw += oy + spin + kick * .12 * (keyN & 1 ? 1 : -1); pit += op - kick * .05; y += kick * .25;
-      if (!still && age >= SLAM && age - SLAM < .05 && glint < .5) glint = 1;
-      g.save(); if (shake) g.translate(0, Math.round(shake));
-      bars(still ? 3.1 : T, age, still);
-      floor(age, still);
-      xform(yaw, pit, rol, 0, y, z, 1);
-      drawStars(dist + (still ? 37 : 0), speed, z, 1e9, top);
-      if (alpha > .02) drawShadow(alpha);
-      if (alpha > .02) drawLogo(alpha, clamp(F / z * .1, 1.5, 4.5));
-      drawStars(dist + (still ? 37 : 0), speed, 0, z, top);
-      if (still || age > SCROLL0 - 1) scroller(age, T, still);
-      if (!still) titleCard(age);
+      if (!still && a - keyGlint < .7) sweep = (a - keyGlint) / .7;
+      yaw += oy + spin; pit += op; y += hop;
+      /* the camera, in the opening: tilted and craned, righting itself as the logo arrives */
+      const cam = still ? 0 : 1 - sstep(T_BARS, SLAM, a);
+      g.setTransform(rk, 0, 0, rk, 0, 0);
+      g.fillStyle = P.bg; rawFill(0, 0, W, h);
+      g.save();
+      if (cam > .001){ g.translate(cx, h * .5); g.rotate(-.07 * cam); g.scale(1 + .1 * cam, 1 + .1 * cam); g.translate(-cx, -h * .5 + h * .05 * cam); }
+      if (shake) g.translate(0, Math.round(shake));
+      if (still || a >= T_BARS) bars(still ? 3.1 : T, a, L, still);
+      if (still || a >= T_FLOOR - .2) floor(a, L, z, still);
+      xform(yaw, pit, rol, 0, y, z, tw0, tw1);
+      const sb = still ? 1 : sstep(.4, 1.2, a);
+      drawStars(dist + (still ? 37 : 0), speed, z, 1e9, sb);
+      if (alpha > .02){ drawShadow(alpha); drawLogo(alpha, clamp(F / z * .1, 1.5, 4.5), sweep); }
+      drawStars(dist + (still ? 37 : 0), speed, 0, z, sb);
+      if (still || a > SCROLL0 - .5) scroller(a, L, still);
       g.restore();
-      if (flash > .01){ g.globalAlpha = flash; g.fillStyle = P.bright; g.fillRect(0, top, W, h); g.globalAlpha = 1; }
+      if (!still) titleCard(a);
+      if (flash > .01){ g.globalAlpha = flash; g.fillStyle = P.bright; g.fillRect(0, 0, W, h); g.globalAlpha = 1; }
+      if (!still && a < .75){                          // the raster opens out from a line
+        const lw = W * sstep(0, .25, a), oh = h * .5 * Math.pow(sstep(.2, .75, a), 2), m = h * .5;
+        g.fillStyle = P.bg; rawFill(0, 0, W, Math.max(0, m - oh)); rawFill(0, m + oh, W, h - m - oh);
+        g.fillStyle = P.bright; g.fillRect(cx - lw / 2, m - oh - 2, lw, 3); if (oh > 2) g.fillRect(cx - lw / 2, m + oh - 1, lw, 3);
+      }
+      tg.imageSmoothingEnabled = true;
+      tg.drawImage(off, 0, 0, off.width, off.height, 0, t0, W, hh);
     }
     return {
       draw,
       live: () => (M.reader && M.reader.isOpen) ? 0 : 30,
-      key(){ bp[nextBar] = 1; nextBar = (nextBar + 1) % NB; kick = Math.min(1.6, kick + .7); keyN++; oyv += (keyN & 1 ? 1 : -1) * 1.6; opv -= .6; glint = Math.max(glint, .6); },
+      /* a key: the logo spins on (one way, capped) and hops (capped), the stars surge; the next bar flashes and a glint
+         crosses the chrome at most ~8 times a second. Held keys don't repeat here (handleKey passes no repeats) */
+      key(){
+        spinV = Math.min(5, Math.max(spinV, 0) + 1.3);
+        if (hop < .12) hopV = Math.max(hopV, 4.6);   // a hop only from the ground: mashing keeps it bouncing, never climbing
+        kick = Math.min(1.2, kick + .35);
+        const now = performance.now(); if (now - lastKey < 120) return; lastKey = now;
+        bp[nextBar] = 1; nextBar = (nextBar + 1) % NB;
+        if (ageNow - keyGlint > .7) keyGlint = ageNow;
+      },
       pointer(u, v, isDown){
         const on = u >= 0 && u <= 1 && v >= 0 && v <= 1;
         if (on && isDown && down && lastU >= 0){ const du = u - lastU; spin += du * 7; spinV = clamp(du * 7 * 30, -9, 9); }
@@ -1731,7 +1877,7 @@ M.createTerminal = function createTerminal(opts){
         if (on){ pu = u; pv = v; } else { pu = pv = -1; }
       },
     };
-  })();
+  })(g);
 
   /* the KN-84 itself, in outline: a compact all-in-one with its screen lit, and a keyboard; the card beside it.
      Under 50 columns the drawing goes and the card starts at the margin */
@@ -2561,7 +2707,7 @@ M.createTerminal = function createTerminal(opts){
     if (e.metaKey) return false;
     if (/^F\d+$/.test(k)) return false;
     if (booting){ skipBoot(); if (k === 'Escape' || k === 'Enter' || k === ' ') return true; }   // any other key skips the boot AND counts
-    if (landing && !app) DEMO.key();              // the intro answers each key (a bar flashes, the logo jumps)
+    if (landing && !app && !e.repeat) DEMO.key();              // the intro answers each key (held keys: once)
     const ctrl = e.ctrlKey, alt = e.altKey, c = k.toLowerCase();
     if (app){                                   // apps get keys first
       const st = app;
