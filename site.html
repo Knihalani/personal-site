@@ -3166,6 +3166,16 @@ M.createTerminal = function createTerminal(opts){
   let app = null;                      // the full-screen app, if any
   let openRow = null;                  // the output row still being written to
   let status = 0;
+  /* pages: a chip (or a deep link) opens its command as a fresh page at the top of the tube, under a back
+     chip; the scrollback stays above it. back re-runs the page before; '' is the welcome. */
+  const PAGES_MAX = 20;
+  let pages = [];           // the commands of the pages before this one, oldest first
+  let page = '';            // the page on screen ('' = the welcome)
+  let pageRow = null;       // the row the page starts at: laid out at the top of the tube while it fits
+  let pageKeys = true;      // nothing typed since the page opened: esc / backspace on the empty prompt go back
+  let pendingNav = null;    // 'back' | 'home', typed: done once the command line finishes
+  let eatBlank = false;     // a page's own leading blank line gives way to the back chip
+  let pinned = false;       // a page taller than the tube opens at its top, until a key or a scroll moves the view
 
   /* ---- shell state ---- */
   const FS = createFS(() => cwd, diskSound);
@@ -3173,8 +3183,9 @@ M.createTerminal = function createTerminal(opts){
   const ENV = { HOME, USER: 'kaiav', LOGNAME: 'kaiav', HOSTNAME: 'kn84', SHELL: '/bin/sh', TERM: 'vt320', PATH: '/bin:/usr/bin:/usr/games',
     PWD: HOME, LANG: 'en_US.UTF-8', COLUMNS: String(COLS), LINES: String(ROWS) };
   const ALIAS_KEY = 'kaiav.term.alias';
-  let ALIASES = { ll: 'ls -l', la: 'ls -a', l: 'ls', dir: 'ls', cls: 'clear', less: 'cat', more: 'cat', quit: 'exit', logout: 'exit', '?': 'help', home: 'welcome' };
+  let ALIASES = { ll: 'ls -l', la: 'ls -a', l: 'ls', dir: 'ls', cls: 'clear', less: 'cat', more: 'cat', quit: 'exit', logout: 'exit', '?': 'help' };
   { const a = store.get(ALIAS_KEY, null); if (a && typeof a === 'object') ALIASES = Object.assign(Object.create(null), a); }
+  if (ALIASES.home === 'welcome') delete ALIASES.home;     // (an older default, saved with the aliases: home is a command now)
   const saveAliases = () => store.set(ALIAS_KEY, ALIASES);
   const hasAlias = n => Object.prototype.hasOwnProperty.call(ALIASES, n);
   function setCwd(p){ ENV.OLDPWD = cwd; cwd = p; ENV.PWD = p; }
@@ -3292,7 +3303,7 @@ M.createTerminal = function createTerminal(opts){
   }
   const typing = () => shown < rows.length;
   function revealAll(){ const t = now; for (let i = shown; i < rows.length; i++) if (rows[i].k === 'viz' && rows[i].t0 < 0) rows[i].t0 = t - (REDUCED ? 99 : 0); shown = rows.length; partial = 0; carry = 0; dirty = true; }
-  function toBottom(){ scrollOff = 0; wheelAcc = 0; }
+  function toBottom(){ scrollOff = 0; wheelAcc = 0; pinned = false; }
 
   /* ---- streams: the tty writes styled spans into rows; buffers collect text for pipes and files ---- */
   const STY = { normal: 'n', dim: 'd', bright: 'b', faint: 'f', accent: 'a', inverse: 'i', n: 'n', d: 'd', b: 'b', f: 'f', a: 'a', i: 'i' };
@@ -3343,6 +3354,7 @@ M.createTerminal = function createTerminal(opts){
     tty: true,
     write(t, style){
       t = clean(t); if (!t) return;
+      eatBlank = false;
       const st = STY[style] || 'n';
       if (job) job.plain += t.replace(/\n/g, ' ');
       const segs = t.split('\n');
@@ -3355,7 +3367,9 @@ M.createTerminal = function createTerminal(opts){
     },
     rich(o){
       openRow = null;
-      for (const r of o.rows) rows.push(r);
+      let k0 = 0;
+      if (eatBlank){ eatBlank = false; const r0 = o.rows[0]; if (r0 && r0.k === 't' && !r0.s.length) k0 = 1; }
+      for (let k = k0; k < o.rows.length; k++) rows.push(o.rows[k]);
       if (job) job.plain += plainRows(o.rows) + ' ';
       dirty = true;
     },
@@ -3521,7 +3535,8 @@ M.createTerminal = function createTerminal(opts){
          the reader; one with only a url opens the link */
       o.card({ title: 'POSTS', note: ps.length + (ps.length === 1 ? ' post' : ' posts'), verb: 'read', items: ps.map(p => ({
         label: p.date || '', value: p.title || 'Untitled', post: p.html ? slugOf(p) : null, url: p.html ? null : p.url || null,
-        full: p.title || '', sub: p.summary || '', hint: p.html ? 'read' : p.url ? 'open' : '' })) }).blank();
+        full: p.title || '', sub: p.summary || '', hint: p.html ? 'read' : p.url ? 'open' : '' })) }).blank()
+        .line(['see also  ', 'f'], ...chips(['about', 'eden', 'j', 'contact'], 'n')).blank();
       return o;
     },
     links(o){
@@ -3625,9 +3640,16 @@ M.createTerminal = function createTerminal(opts){
   def('x', linkCmd('x', 'X (Twitter)'));
   def('contact', { g: 'read', desc: 'email addresses', usage: 'contact', run(argv, io){
     if (!io.tty){ io.write(EMAILS.map(e => pad(e.label, 20) + e.email).join('\n') + '\n'); return; }
-    const o = out().blank().card({ title: 'CONTACT', note: 'email', verb: 'copy', items: EMAILS.map(e => ({ label: e.label, value: e.email, copy: e.email, hint: 'copy' })) }).blank();
+    const o = out().blank().card({ title: 'CONTACT', note: 'email', verb: 'copy', items: EMAILS.map(e => ({ label: e.label, value: e.email, copy: e.email, hint: 'copy' })) }).blank()
+      .line(['see also  ', 'f'], ...chips(['about', 'links', 'j'], 'n')).blank();
     io.rich(o); return io.pick(o.lastCard);
   } });
+  def('back', { g: 'read', desc: 'the page before this one', usage: 'back',
+    more: 'clears the screen and shows the page you were on before, fresh. pages are what a click or a tap opens (about, eden, j, contact...); the last 20 are kept. with nothing before, the welcome. a click on the back arrow at the top of a page does the same, and so do esc or backspace on an empty line. what scrolled away is still up above.',
+    ex: ['back', 'home'], run(argv, io){ if (io.tty) pendingNav = 'back'; } });
+  def('home', { g: 'read', desc: 'the welcome screen, cleanly', usage: 'home',
+    more: 'clears the screen and shows the welcome, and forgets the pages behind it (back starts over from there). what scrolled away is still up above.',
+    ex: ['home', 'back'], run(argv, io){ if (io.tty) pendingNav = 'home'; else io.write((C.name || '') + '\n'); } });
   def('welcome', { g: 'read', hidden: true, desc: 'the first screen', usage: 'welcome', run(argv, io){ if (io.tty) io.rich(welcome(out())); else io.write(C.name + '\n'); } });
 
   /* files */
@@ -4129,12 +4151,12 @@ M.createTerminal = function createTerminal(opts){
   function finishJob(j){
     if (job !== j) return;
     for (const t of j.timers) clearTimeout(t);
-    job = null; openRow = null;
+    job = null; openRow = null; eatBlank = false;
     if (status === 0 && !j.dead) okRuns++;
     if (j.hint){ suggestion = j.hint; tty.rich(out().at(0, ['did you mean ', 'd'], chip(j.hint, 'b'), ['?  ' + (TAP ? 'tap it' : 'press enter'), 'f'])); j.plain += ' Did you mean ' + j.hint + '? Press Enter to run it.'; }
     if (ahead) flushAhead();
-    const held = scrollOff;                    // someone reading back up keeps their place; any key or the note brings them down
-    trim(); mirror(j.plain || ''); if (j.tail) mirror(j.tail); touched(); scrollOff = held;
+    const held = scrollOff, pin = pinned;      // someone reading back up (or a page opened at its top) keeps their place; any key or the note brings them down
+    trim(); mirror(j.plain || ''); if (j.tail) mirror(j.tail); touched(); scrollOff = held; pinned = pin;
     if (REDUCED) revealAll();
   }
   async function execList(list, j){
@@ -4364,10 +4386,9 @@ M.createTerminal = function createTerminal(opts){
       if (h.link.bottom){ toBottom(); dirty = true; return true; }
       if (h.link.cmd){
         if (app || job) return false;
-        disarm(); nudgeOff = true;
-        revealAll(); const line = h.link.cmd;
-        if (job) ahead = line + '\n'; else { input = ''; cur = 0; execute(line); }
-        sfx('beep'); touched(); return true;
+        nudgeOff = true; touched();
+        nav(h.link.cmd);
+        sfx('beep'); return true;
       }
       const w = openTarget(h.link.url); const o = out(); o.at(0, ['opening ', 'd'], [bare(h.link.url), 'n']); if (!w) o.at(0, ['if nothing opened, the address is above', 'f']);
       if (!job) emit(o); touched(); return true;
@@ -4564,6 +4585,7 @@ M.createTerminal = function createTerminal(opts){
     input = ''; cur = 0; suggestion = ''; tabState = null; disarm();
     hIdx = history.length; hDraft = '';
     if (!raw.trim()){ toBottom(); dirty = true; return; }
+    pageKeys = false;
     mirror('', raw);
     runLine(forgive(raw), programmatic);
   }
@@ -4659,6 +4681,7 @@ M.createTerminal = function createTerminal(opts){
   function insert(s){
     s = s.replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\x7e\u00a0-\uffff]|[\ud800-\udfff\u0300-\u036f\u200b-\u200f\ufe00-\ufe0f]/g, '');   // one cell per char: no emoji, combining marks or zero-width
     if (!s) return;
+    pageKeys = false;
     if (input.length + s.length > 4096) s = s.slice(0, 4096 - input.length);
     input = input.slice(0, cur) + s + input.slice(cur); cur += s.length;
     suggestion = ''; tabState = null;
@@ -4674,10 +4697,56 @@ M.createTerminal = function createTerminal(opts){
   }
   function scrollBy(units){
     const max = Math.max(0, totalUnits() - ROWS);
+    pinned = false;
     const next = clamp(scrollOff + units, 0, max);
     if (next !== scrollOff){ scrollOff = next; dirty = true; }
   }
-  function clearScreen(){ rows = []; shown = 0; partial = 0; disarm(); openRow = null; toBottom(); dirty = true; }
+  function clearScreen(){ rows = []; shown = 0; partial = 0; disarm(); openRow = null; pageRow = null; toBottom(); dirty = true; }
+
+  /* ---- pages ---- */
+  /* a fresh page: what was on screen scrolls off above (still there, scrolling up), the prompt line is reset */
+  function leave(){
+    revealAll(); disarm(); openRow = null; toBottom();
+    input = ''; cur = 0; suggestion = ''; tabState = null; rs = null; hIdx = history.length; hDraft = '';
+    pageKeys = true; nudgeOff = true; hoverKey = ''; dirty = true;
+  }
+  function openPage(cmd, note, noHist){
+    leave();
+    const r = { k: 't', i: 2, s: [['\u2190 back', 'd', { cmd: 'back' }]] };   // (the arrow is drawn: VT323 has none)
+    rows.push(r); pageRow = r; shown = rows.length; partial = 0; trim(); pinned = true;
+    page = cmd;
+    if (note) mirror(note); else mirror('', cmd);
+    eatBlank = true;
+    runLine(forgive(cmd), noHist);
+  }
+  function goHome(note){
+    leave(); pages = []; page = '';
+    const w = welcome(out()); if (w.rows[0]) w.rows[0].wel = true;
+    pageRow = w.rows[0] || null;
+    emit(w, (note ? note + ' ' : '') + (C.name || '') + '. ' + (A.role || '') + '. Type help to begin.');
+  }
+  function goBack(){
+    if (!pages.length){ goHome(page ? 'Back to the welcome.' : ''); return; }
+    const prev = pages.pop();
+    if (!prev){ goHome('Back to the welcome.'); return; }
+    openPage(prev, 'Back to ' + prev + '.', true);
+  }
+  /* a chip: back and home, a full-screen app as before (it returns to this page), anything else a new page */
+  function nav(cmd, noHist){
+    cmd = String(cmd || '').trim(); if (!cmd) return;
+    if (cmd === 'back') return goBack();
+    if (cmd === 'home') return goHome();
+    const w = cmd.split(/\s+/)[0];
+    if (M.TERM.apps[w] && !M.TERM.cmds[w]){ const pk = pageKeys; revealAll(); disarm(); input = ''; cur = 0; execute(cmd, noHist); pageKeys = pk; return; }
+    if (cmd !== page){ pages.push(page); if (pages.length > PAGES_MAX) pages.shift(); }
+    openPage(cmd, null, noHist);
+  }
+  /* where the page starts, in rows from the top of the scrollback; -1 when there is none */
+  function pageUnits(){
+    if (!pageRow) return -1;
+    let u = 0; for (const r of rows){ if (r === pageRow) return u; u += heightOf(r); }
+    return -1;
+  }
 
   /* ---- ctrl+r: search the history, newest first ---- */
   function searchFrom(i, q){
@@ -4760,6 +4829,7 @@ M.createTerminal = function createTerminal(opts){
         execute(input); touched(); return true;
       }
       case 'Backspace':
+        if (!input && !alt && pageKeys && page){ touched(); goBack(); return true; }   // on a page, nothing typed yet: back
         if (alt){ const p = wordLeft(cur); input = input.slice(0, p) + input.slice(cur); cur = p; }
         else if (cur > 0){ input = input.slice(0, cur - 1) + input.slice(cur); cur--; }
         suggestion = ''; tabState = null; touched(); return true;
@@ -4782,7 +4852,9 @@ M.createTerminal = function createTerminal(opts){
       case 'Tab':                                  // completes a line with text; on an empty line (and shift+tab always) focus moves on
         if (e.shiftKey || !input) return false;
         tab(false); touched(); return true;
-      case 'Escape': suggestion = ''; tabState = null; touched(); return true;
+      case 'Escape':
+        if (!input && pageKeys && page){ touched(); goBack(); return true; }
+        suggestion = ''; tabState = null; touched(); return true;
     }
     if (k.length === 1 && !ctrl){ insert(k); touched(); return true; }
     return false;
@@ -4822,8 +4894,7 @@ M.createTerminal = function createTerminal(opts){
     cmd = String(cmd || '').trim(); if (!cmd) return;
     if (booting) skipBoot();
     if (app || job) return;
-    revealAll();
-    execute(cmd, true); touched();
+    touched(); nav(cmd, true);                    // a deep link opens as a page (back: the welcome)
   }
   function scroll(delta){
     if (booting || app) return;
@@ -4838,6 +4909,7 @@ M.createTerminal = function createTerminal(opts){
     booting = false; rows = []; shown = 0; partial = 0;
     store.set(BOOT_KEY, 1);
     const w = welcome(out()); if (w.rows[0]) w.rows[0].wel = true;
+    pageRow = w.rows[0] || null; page = ''; pages = [];
     emit(w, (C.name || '') + '. ' + (A.role || '') + '. Type help to begin.');
     blinkT0 = now; dirty = true;
   }
@@ -4903,7 +4975,7 @@ M.createTerminal = function createTerminal(opts){
       setFont(k); g.fillStyle = selected ? P.bg : hov ? P.bright : color(sp[1]);
       if (k === 1 && SPAN_VEC.test(s)){                // arrows and the lock, drawn: VT323 has neither
         fillT(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
-        for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : color(sp[1]));
+        for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : hov ? P.bright : color(sp[1]));
       } else fillT(s, X(col), top + fs * k * 0.68);
       if (link && !selected){ g.fillStyle = hov ? P.normal : link.cmd || link.stop ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, hov ? 3 : 2); }
       if (link && (link.cmd || link.url || link.stop) && s.trim()) drawnHits.push({ x0: X(col), x1: X(col + s.length * k), top, bot: top + ch * k, link });
@@ -4920,7 +4992,9 @@ M.createTerminal = function createTerminal(opts){
     g.fillStyle = P.faint; g.fillRect(x0, mid, (x1 - x0) * ease((frac - 0.5) * 2), 2);
     if (r.note && frac >= 1) text(r.note, COLS - r.note.length, top, 'f');
   }
-  function totalUnits(){
+  /* a page that fits starts at the top of the tube: the view runs on to a screen below its first row */
+  function totalUnits(){ const raw = rawUnits(), p = pageUnits(); return p >= 0 ? Math.max(raw, p + ROWS) : raw; }
+  function rawUnits(){
     let u = 0; for (let i = 0; i < rows.length && i <= shown; i++) if (i < shown || partial > 0 || rows[i].k === 'viz') u += i < rows.length ? heightOf(rows[i]) : 0;
     return u + (promptVisible() ? 1 + belowPrompt().length : job && job.ask && !app && !typing() ? askRows().length : 0);
   }
@@ -5080,11 +5154,13 @@ M.createTerminal = function createTerminal(opts){
     if (scrollOff > 0 && total > lastTotal) scrollOff += total - lastTotal;   // scrolled up: hold the view while output arrives
     lastTotal = total;
     scrollOff = clamp(scrollOff, 0, Math.max(0, total - ROWS));
+    if (pinned){ const pu0 = pageUnits(); if (pu0 >= 0) scrollOff = Math.max(0, total - ROWS - pu0); else pinned = false; }
     const first = Math.max(0, total - ROWS - scrollOff);
     if (first !== lastFirst){ lastFirst = first; hoverKey = ''; }
     /* a short history (the welcome) sits a little below the top of the tube, not jammed against it */
     // the welcome sits a little lower on the landscape tube; a phone column starts at the top
-    const lift = !TAP && aspect > 1 && rows.length && rows[0].wel ? clamp(ROWS - total, 0, Math.min(4, Math.round(ROWS / 6))) : 0;
+    const raw = rawUnits(), pu = pageUnits();
+    const lift = !TAP && aspect > 1 && pageRow && pageRow.wel && pu >= 0 && !scrollOff ? clamp(ROWS - (raw - pu), 0, Math.min(4, Math.round(ROWS / 6))) : 0;
     g.save(); g.beginPath(); g.rect(0, PADY - 4, W, ROWS * ch + 8); g.clip();
     let u = 0;
     const last = Math.min(rows.length - 1, shown);
@@ -5128,7 +5204,8 @@ M.createTerminal = function createTerminal(opts){
       g.fillStyle = P.faint; g.fillRect(railX, railTop, 2, railH);
       const th = Math.max(24, railH * ROWS / total), ty = railTop + (railH - th) * (first / Math.max(1, total - ROWS));
       g.fillStyle = P.dim; g.fillRect(railX - 2, ty, 6, th);
-      const note = '  ' + scrollOff + ' more below' + (COLS >= 46 && !TAP ? '  pgdn ' : ' ');
+      const below = raw - first - ROWS;          // (under a short page the view runs on past the end: nothing more, just back down)
+      const note = '  ' + (below > 0 ? below + ' more below' : 'back down') + (COLS >= 46 && !TAP ? '  pgdn ' : ' ');
       const nx = COLS - note.length, top = PADY + (ROWS - 1) * ch;
       g.fillStyle = P.bg; g.fillRect(X(nx) - 8, top - 4, note.length * cw + 8, ch + 8);
       setFont(); g.fillStyle = P.dim; fillT(note, X(nx), top + fs * 0.68);
@@ -5199,6 +5276,7 @@ M.createTerminal = function createTerminal(opts){
       if (!typing()) carry = 0, blinkT0 = now;
       changed = true;
     }
+    if (pendingNav && !job && !app){ const n = pendingNav; pendingNav = null; if (n === 'home') goHome(); else goBack(); changed = true; }
     if (runQueued && !job && !app && !rs){ runQueued = false; execute(input); if (!job) flushAhead(); changed = true; }
     if (job && !job.hinted && !app && now - job.t0 > 0.9){ job.hinted = true; changed = true; }
     const on = ((t - blinkT0) % 1.06) < 0.53;
@@ -5225,9 +5303,10 @@ M.createTerminal = function createTerminal(opts){
     grid.length = 0; for (let y = 0; y < ROWS; y++) grid.push(new Array(COLS));
     scr.cols = COLS; scr.rows = ROWS; scr.clear();
     if (app){ if (app.api){ app.api.cols = COLS; app.api.rows = ROWS; } if (gridCursor && (gridCursor.x >= COLS || gridCursor.y >= ROWS)) gridCursor = null; app.dirty = true; }
-    const next = [];
+    const next = []; let pageAt = -1;
     for (let a = 0; a < rows.length; a++){
       const r = rows[a];
+      if (r === pageRow) pageAt = next.length;
       if (r.k === 't'){                          // a line and the rows it wrapped onto: joined, then wrapped again if too wide
         let b = a + 1; while (b < rows.length && rows[b].k === 't' && rows[b].c && (rows[b].i || 0) === (r.i || 0)) b++;
         const grp = rows.slice(a, b); a = b - 1;
@@ -5251,6 +5330,7 @@ M.createTerminal = function createTerminal(opts){
       }
       next.push(r);
     }
+    if (pageAt >= 0 && next[pageAt]){ if (pageRow.wel) next[pageAt].wel = true; pageRow = next[pageAt]; }
     rows = next; revealAll(); toBottom(); hoverKey = ''; lastFirst = -1; tabState = null;
     dirty = true; draw();
   }
