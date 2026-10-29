@@ -237,9 +237,9 @@ const CSS = `
   .rd-sheet{ inset:0; width:auto; left:0; transform:translateY(14px); border-radius:0; box-shadow:none;
     padding-bottom:env(safe-area-inset-bottom, 0px) }
   #reader.rd-in .rd-sheet{ transform:none }
-  .rd-bar{ padding:max(8px, env(safe-area-inset-top, 0px)) 8px 8px 4px }
+  .rd-bar{ padding:max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) 8px max(4px, env(safe-area-inset-left, 0px)) }
   .rd-bar .rd-where{ display:none }
-  .rd-col{ padding:0 max(20px, env(safe-area-inset-left, 0px)) 0 max(20px, env(safe-area-inset-right, 0px)) }
+  .rd-col{ padding:0 max(20px, env(safe-area-inset-right, 0px)) 0 max(20px, env(safe-area-inset-left, 0px)) }
   .rd-head{ padding:2.4rem 0 1.6rem }
   .rd-prose{ padding-top:1.6rem; hyphens:auto; -webkit-hyphens:auto }
   .rd-nav{ grid-template-columns:1fr } .rd-nav .rd-next{ grid-column:1 }
@@ -393,6 +393,7 @@ function open(q){
   }
   // every post opens at its top: render() can't reset a sheet that was still display:none
   sheet.style.scrollBehavior = 'auto'; sheet.scrollTop = 0; sheet.style.scrollBehavior = '';
+  onScroll();   // render() measured a hidden sheet (progress read as full)
   sheet.focus({ preventScroll: true });
   return true;
 }

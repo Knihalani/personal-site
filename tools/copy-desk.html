@@ -21,9 +21,9 @@ header{ grid-column:1 / -1; display:flex; flex-wrap:wrap; align-items:end; justi
 h1{ font:400 44px/1 var(--crt); letter-spacing:.02em; margin:0; text-wrap:balance }
 h1 small{ display:block; font:400 14px/1.4 var(--sans); color:var(--muted); letter-spacing:0; margin-top:8px; max-width:62ch }
 .status{ display:flex; align-items:center; gap:10px; flex-wrap:wrap }
-.pill{ font:500 12px/1 var(--mono); padding:7px 10px; border:1px solid var(--rule); border-radius:999px; color:var(--muted); white-space:nowrap }
+.pill{ font:500 12px/1 var(--mono); padding:7px 10px; font-variant-numeric:tabular-nums; border:1px solid var(--rule); border-radius:999px; color:var(--muted); white-space:nowrap }
 .pill.ok{ color:var(--accent); border-color:color-mix(in srgb, var(--accent) 45%, var(--rule)) }
-.pill.ready{ background:var(--accent); color:var(--paper); border-color:var(--accent) }
+.pill.bad{ color:var(--warn); border-color:color-mix(in srgb, var(--warn) 50%, var(--rule)) }
 button{ font:500 14px/1 var(--sans); padding:10px 14px; border-radius:6px; border:1px solid var(--ink); background:var(--ink); color:var(--paper); cursor:pointer }
 button.ghost{ background:transparent; color:var(--ink); border-color:var(--rule) }
 button.link{ background:none; border:none; color:var(--accent); padding:4px 0; text-decoration:underline; text-underline-offset:3px }
@@ -36,25 +36,57 @@ section > h2 span{ font:400 13px/1.3 var(--sans); letter-spacing:0; text-transfo
 .row{ display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px }
 label{ display:flex; flex-direction:column; gap:6px; min-width:0; font-size:13px; color:var(--muted) }
 label b{ font-weight:500; color:var(--ink) }
+label > .lt{ display:block } label > .lt b{ margin-right:6px }
 input, textarea{ font:15px/1.45 var(--sans); color:var(--ink); background:var(--field); border:1px solid var(--rule); border-radius:6px; padding:9px 11px; width:100%; box-sizing:border-box }
-textarea{ resize:vertical; min-height:90px }
+textarea{ resize:vertical; min-height:2.6em; field-sizing:content; max-height:60vh }
 input.mono{ font-family:var(--mono); font-size:14px }
 .hint{ font-size:12px; color:var(--muted) }
 .count{ font:12px var(--mono); color:var(--muted); align-self:flex-end; font-variant-numeric:tabular-nums }
 .count.over{ color:var(--warn) }
 .list{ display:flex; flex-direction:column; gap:10px }
-.item{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:start; padding:12px; border:1px solid var(--rule); border-radius:8px }
-.item .row{ grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)) }
-.x{ background:none; border:1px solid var(--rule); color:var(--muted); padding:6px 9px; font-size:13px }
+.grid{ display:grid; grid-template-columns:minmax(90px, 2fr) minmax(0, 5fr) 34px; gap:8px; align-items:center }
+.grid.fixed{ grid-template-columns:minmax(110px, 2fr) minmax(0, 4fr) }
+.grid .gh{ font-size:12px; color:var(--muted) }
+.x{ width:34px; height:34px; padding:0; display:grid; place-items:center; background:none; border:1px solid transparent; color:var(--muted); font-size:18px; line-height:1; border-radius:6px }
+.x:hover{ color:var(--warn); border-color:var(--rule) }
+.links{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:8px 12px; align-items:center }
+.links > label{ display:contents } .links > label > b{ font-size:13px }
+@media (max-width: 560px){ .links{ grid-template-columns:minmax(0,1fr); gap:4px } .links > label > b{ margin-top:6px } }
 .monitor{ position:sticky; top:calc(env(safe-area-inset-top, 0px) + 20px); display:flex; flex-direction:column; gap:10px }
 .bezel{ background:linear-gradient(#e9e2cc, #d8cfb5); border-radius:18px; padding:18px; box-shadow:inset 0 1px 0 #fff8, 0 10px 30px #0003 }
-.screen{ background:var(--tube); border-radius:12px; padding:16px 14px; height:520px; overflow:auto; box-shadow:inset 0 0 40px #000c }
-.screen pre{ margin:0; font:20px/1.02 var(--crt); color:var(--ph); white-space:pre; text-shadow:0 0 6px #6dff8a40 }
+.screen{ background:var(--tube); border-radius:12px; padding:16px 14px; height:520px; overflow:auto; box-shadow:inset 0 0 40px #000c; container-type:inline-size; scrollbar-width:thin; scrollbar-color:var(--ph-faint) transparent }
+@media (max-width: 560px){ .screen{ height:min(520px, 70svh) } }
+/* VT323 is 0.4em a column: the font is sized so the tube's 54 (or 40) columns always fit, never clipped */
+.screen pre{ margin:0; font:min(22px, 100cqi / (var(--cols, 54) * .4 + .1))/1.02 var(--crt); color:var(--ph); white-space:pre; text-shadow:0 0 6px #6dff8a40 }
+.screen .big{ font-size:2em; line-height:1.02 }
+.screen .ch{ text-decoration:underline; text-decoration-color:var(--ph-faint); text-underline-offset:.18em }
+.screen .z{ background:var(--ph); color:var(--tube) }
+/* box lines and arrows are drawn, not typed: VT323 has no box-drawing glyphs, and a fallback font's are wider than a column */
+.screen .r{ display:inline-block; height:1.02em; vertical-align:top; color:var(--ph-faint); --g:linear-gradient(currentColor, currentColor) }
+.screen .r.h{ background:var(--g) 0 50% / 100% 2px no-repeat }
+.screen .r.v{ width:.4em; background:var(--g) 50% 0 / 2px 100% no-repeat }
+.screen .r.tl{ width:.4em; background:var(--g) right 50% / 50% 2px no-repeat, var(--g) 50% bottom / 2px 50% no-repeat }
+.screen .r.tr{ width:.4em; background:var(--g) left 50% / calc(50% + 1px) 2px no-repeat, var(--g) 50% bottom / 2px 50% no-repeat }
+.screen .r.bl{ width:.4em; background:var(--g) right 50% / 50% 2px no-repeat, var(--g) 50% top / 2px calc(50% + 1px) no-repeat }
+.screen .r.br{ width:.4em; background:var(--g) left 50% / calc(50% + 1px) 2px no-repeat, var(--g) 50% top / 2px calc(50% + 1px) no-repeat }
+.screen .ar{ display:inline-block; width:.8em; height:1.02em; vertical-align:top; fill:var(--ph) }
+.screen .cur{ display:inline-block; width:.4em; height:.9em; vertical-align:-.05em; background:var(--ph-bright) }
 .screen .f{ color:var(--ph-faint) } .screen .d{ color:var(--ph-dim) } .screen .b{ color:var(--ph-bright) } .screen .w{ color:#ffb36b }
 .tabs{ display:flex; gap:6px; flex-wrap:wrap }
 .tabs button{ font:500 12px/1 var(--mono); padding:7px 9px; background:transparent; color:var(--muted); border:1px solid var(--rule) }
 .tabs button[aria-pressed="true"]{ color:var(--ink); border-color:var(--ink) }
-.toast{ position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom, 0px) + 20px); transform:translateX(-50%); background:var(--ink); color:var(--paper); padding:10px 14px; border-radius:6px; font-size:14px }
+.tabs .sp{ flex:1 }
+button.cmd{ border:none; cursor:pointer; padding:3px 6px; border-radius:4px; font:500 12px/1 var(--mono); color:var(--accent) }
+button.cmd:hover{ background:color-mix(in srgb, var(--accent) 22%, transparent) }
+.toast{ position:fixed; z-index:20000; left:50%; bottom:calc(env(safe-area-inset-bottom, 0px) + 20px); transform:translateX(-50%); width:max-content; max-width:calc(100vw - 32px); box-sizing:border-box; display:flex; gap:14px; align-items:center; background:var(--ink); color:var(--paper); padding:10px 14px; border-radius:6px; font-size:14px; box-shadow:0 8px 24px #0003 }
+.toast[hidden]{ display:none }
+.toast button{ all:unset; cursor:pointer; font-weight:600; text-decoration:underline; text-underline-offset:3px }
+.toast button:focus-visible{ outline:2px solid var(--paper); outline-offset:2px }
+#ready[aria-pressed="true"]{ background:transparent; color:var(--accent); border-color:color-mix(in srgb, var(--accent) 55%, var(--rule)) }
+.banner{ grid-column:1 / -1; display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:12px 14px; border-radius:8px; border:1px solid color-mix(in srgb, var(--warn) 45%, var(--rule)); background:color-mix(in srgb, var(--warn) 9%, transparent); font-size:14px }
+.banner[hidden]{ display:none }
+.banner span{ flex:1 1 280px }
+.banner button{ font-size:13px; padding:8px 11px }
 @media (prefers-reduced-motion: no-preference){ .pill{ transition:color .2s, background .2s } }
 /* ---------- Writing: post list + editor desk ---------- */
 .w-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap }
@@ -96,15 +128,18 @@ input.mono{ font-family:var(--mono); font-size:14px }
 .meta .row{ grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)) }
 .meta label, .meta .hint, .meta details{ font-family:var(--sans) } .meta label{ font-size:12px }
 .meta input:not(.ttl):not(.sub), .meta textarea:not(.ttl):not(.sub){ font-size:14px; padding:7px 9px }
-.meta .hint b{ color:var(--warn); font-weight:500 }
+.meta .hint b{ color:var(--warn); font-weight:500 } .meta .hint code{ font:12px var(--mono); color:var(--ink) }
 .chips{ display:flex; gap:6px; flex-wrap:wrap }
 .chip{ font:12px/1 var(--mono); padding:4px 7px; border-radius:999px; background:color-mix(in srgb, var(--accent) 12%, transparent); color:var(--accent) }
 details.more summary{ cursor:pointer; font-size:13px; color:var(--muted) }
 details.more[open] summary{ margin-bottom:10px }
 
-.tbar{ position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:2px; align-items:center; padding:6px clamp(10px, 4vw, 48px); background:var(--sheet); border-block:1px solid var(--rule); overflow-x:auto; scrollbar-width:thin }
-.tbar .sep{ width:1px; align-self:stretch; background:var(--rule); margin:4px 6px; flex:none }
-.tb{ flex:none; font:500 13px/1 var(--sans); min-width:32px; height:32px; padding:0 8px; border-radius:6px; border:1px solid transparent; background:transparent; color:var(--ink); display:inline-flex; align-items:center; justify-content:center }
+.tbar{ position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:2px; align-items:center; padding:6px clamp(8px, 2vw, 16px); background:var(--sheet); border-block:1px solid var(--rule); overflow-x:auto; scrollbar-width:thin }
+.tbar .sep{ width:1px; align-self:stretch; background:var(--rule); margin:4px 4px; flex:none }
+.tbar[hidden]{ display:none }
+.edfail{ font:15px/1.5 var(--sans); color:var(--muted); display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:12px 14px; border:1px dashed var(--rule); border-radius:8px; margin-bottom:24px }
+.edfail button{ font-size:13px; padding:7px 11px }
+.tb{ flex:none; font:500 13px/1 var(--sans); min-width:30px; height:32px; padding:0 6px; border-radius:6px; border:1px solid transparent; background:transparent; color:var(--ink); display:inline-flex; align-items:center; justify-content:center }
 .tb:hover{ background:color-mix(in srgb, var(--ink) 7%, transparent) }
 .tb[aria-pressed="true"]{ background:color-mix(in srgb, var(--accent) 16%, transparent); color:var(--accent) }
 .tb:disabled{ opacity:.35; cursor:default; background:transparent }
@@ -200,48 +235,49 @@ body.focusing{ overflow:hidden }
   <header>
     <h1>KN-84 Copy Desk<small>Every word on kaiav.pages.dev, in one place. Changes save as you type. When you're happy, press <b>Ready to publish</b> and tell Claude "publish my copy".</small></h1>
     <div class="status">
-      <span id="save" class="pill">loading…</span>
-      <span id="state" class="pill">draft</span>
-      <button id="ready" type="button">Ready to publish</button>
+      <span id="save" class="pill" role="status" aria-live="polite">loading…</span>
+      <button id="ready" type="button" aria-pressed="false" aria-describedby="state">Ready to publish</button>
+      <span id="state" hidden></span>
     </div>
   </header>
+  <div class="banner" id="banner" role="alert" hidden><span id="banner-msg"></span><button type="button" class="ghost" id="banner-retry" hidden>Try again</button></div>
 
   <form id="f" autocomplete="off">
-    <section>
-      <h2>You <span>the welcome screen and <span class="cmd">about</span></span></h2>
+    <section data-view="about">
+      <h2>You <span>the welcome screen and <button type="button" class="cmd" id="go-about" data-go="about" title="Show in the preview">about</button></span></h2>
       <div class="row">
         <label><b>Name</b><input id="name" data-k="name"></label>
         <label><b>Headline</b><input id="about_role" data-k="about.role" data-max="52"><span class="count"></span></label>
       </div>
-      <label><b>Bio</b><textarea id="about_body" data-k="about.body" data-paras rows="7" placeholder="A few short paragraphs. Leave a blank line between paragraphs."></textarea>
-        <span class="hint">Blank line = new paragraph. Short paragraphs read best on the tube.</span></label>
+      <label><b>Bio</b><textarea id="about_body" data-k="about.body" data-paras rows="7" placeholder="A few short paragraphs, or a list: start each line with - "></textarea>
+        <span class="hint">Line breaks stay as you write them. Start a line with - for a bullet; a blank line starts a new paragraph.</span></label>
     </section>
 
-    <section>
-      <h2>Eden <span class="cmd">eden</span></h2>
+    <section data-view="eden">
+      <h2>Eden <button type="button" class="cmd" id="go-eden" data-go="eden" title="Show in the preview">eden</button></h2>
       <div class="row">
         <label><b>Your role</b><input id="eden_role" data-k="eden.role"></label>
         <label><b>One line</b><input id="eden_line" data-k="eden.line" data-max="48"><span class="count"></span></label>
       </div>
-      <label><b>More about Eden</b> (optional)<textarea id="eden_body" data-k="eden.body" rows="3" placeholder="Leave empty to keep Eden to the one line."></textarea></label>
+      <label><span class="lt"><b>More about Eden</b>optional</span><textarea id="eden_body" data-k="eden.body" rows="3" placeholder="Leave empty to keep Eden to the one line."></textarea></label>
     </section>
 
-    <section>
-      <h2>J <span class="cmd">j</span></h2>
+    <section data-view="j">
+      <h2>J <button type="button" class="cmd" id="go-j" data-go="j" title="Show in the preview">j</button></h2>
       <div class="row">
         <label><b>Title</b><input id="j_title" data-k="j.title"></label>
         <label><b>Your role</b><input id="j_role" data-k="j.role"></label>
       </div>
       <label><b>Tagline</b><input id="j_line" data-k="j.line" data-max="52"><span class="count"></span></label>
       <label><b>Description</b><textarea id="j_body" data-k="j.body" rows="3"></textarea></label>
-      <label><b>Website</b><input id="j_url" class="mono" data-k="j.url"></label>
+      <label><b>Website</b><input id="j_url" class="mono" data-k="j.url" type="url" spellcheck="false"></label>
       <div class="list" id="facts"></div>
       <button type="button" class="link" id="addFact">+ add a fact</button>
     </section>
 
-    <section id="writing">
+    <section id="writing" data-view="writing">
       <div class="w-head">
-        <h2>Writing <span class="cmd">writing</span> <span>long-form posts; only published ones reach the terminal</span></h2>
+        <h2>Writing <button type="button" class="cmd" id="go-writing" data-go="writing" title="Show in the preview">writing</button> <span>long-form posts; only published ones reach the terminal</span></h2>
         <button type="button" id="post-new">New post</button>
       </div>
       <div class="plist" id="post-list" aria-label="Posts"></div>
@@ -249,7 +285,7 @@ body.focusing{ overflow:hidden }
       <div class="desk" id="desk" hidden>
         <div class="dbar" id="desk-bar">
           <button type="button" id="post-close" aria-label="Close the editor">← <span class="lbl-long">Posts</span></button>
-          <span id="post-save" class="pill">saved</span>
+          <span id="post-save" class="pill" role="status" aria-live="polite">saved</span>
           <span class="sp"></span>
           <span class="seg" role="group" aria-label="Post status">
             <button type="button" id="post-status-draft" aria-pressed="true">Draft</button>
@@ -276,10 +312,10 @@ body.focusing{ overflow:hidden }
             </div>
             <div class="chips" id="post-chips"></div>
             <span class="hint" id="post-slug-hint"></span>
-            <label><b>Summary</b> shown under the title in the terminal list
+            <label><span class="lt"><b>Summary</b>shown under the title in the terminal list</span>
               <textarea id="post-summary" rows="2" data-soft="140" placeholder="One or two sentences."></textarea><span class="count" id="post-summary-count"></span></label>
             <details class="more" id="post-more"><summary id="post-more-summary">Hosted elsewhere?</summary>
-              <label><b>External link</b> (optional) the terminal links here instead
+              <label><span class="lt"><b>External link</b>optional: the terminal links here instead</span>
                 <input id="post-url" class="mono" placeholder="https://" spellcheck="false"></label>
             </details>
           </div>
@@ -288,18 +324,18 @@ body.focusing{ overflow:hidden }
         </div>
 
         <article class="reader" id="reader" hidden></article>
-        <div class="dfoot"><span id="post-count">0 words</span><span id="post-hint">Type <b>/</b> for blocks · ⌘K link</span></div>
+        <div class="dfoot"><span id="post-count">0 words</span><span id="post-hint">Type <b>/</b> for blocks · <span class="mod">⌘</span>K link · <span class="mod">⌘</span>S save</span></div>
       </div>
     </section>
 
-    <section>
-      <h2>Links <span class="cmd">links</span> <span class="cmd">contact</span></h2>
-      <div class="row">
-        <label><b>LinkedIn</b><input id="l_li" class="mono" data-k="links.linkedin"></label>
-        <label><b>X</b><input id="l_x" class="mono" data-k="links.x"></label>
-        <label><b>GitHub</b><input id="l_gh" class="mono" data-k="links.github"></label>
+    <section data-view="links">
+      <h2>Links <button type="button" class="cmd" id="go-links" data-go="links" title="Show in the preview">links</button> <button type="button" class="cmd" id="go-contact" data-go="contact" title="Show in the preview">contact</button></h2>
+      <div class="links">
+        <label><b>LinkedIn</b><input id="l_li" class="mono" data-k="links.linkedin" type="url" spellcheck="false"></label>
+        <label><b>X</b><input id="l_x" class="mono" data-k="links.x" type="url" spellcheck="false"></label>
+        <label><b>GitHub</b><input id="l_gh" class="mono" data-k="links.github" type="url" spellcheck="false"></label>
       </div>
-      <div class="list" id="emails"></div>
+      <div class="list" id="emails" data-view="contact"></div>
     </section>
 
     <section>
@@ -321,13 +357,15 @@ body.focusing{ overflow:hidden }
       <button type="button" id="pv-j" data-v="j">j</button>
       <button type="button" id="pv-writing" data-v="writing">writing</button>
       <button type="button" id="pv-contact" data-v="contact">contact</button>
-      <button type="button" id="pv-width" data-w aria-pressed="false">phone width</button>
+      <button type="button" id="pv-links" data-v="links">links</button>
+      <span class="sp"></span>
+      <button type="button" id="pv-width" data-w aria-pressed="false" title="40 columns, as on a phone">phone</button>
     </div>
-    <div class="bezel"><div class="screen"><pre id="out"></pre></div></div>
-    <span class="hint">A close preview, not the exact screen: the real terminal draws boxes and highlights more finely.</span>
+    <div class="bezel"><div class="screen" id="screen"><pre id="out" aria-label="Terminal preview"></pre></div></div>
+    <span class="hint">Follows the section you're editing. A close preview: the real tube draws boxes and chips more finely.</span>
   </aside>
 </div>
-<div class="toast" id="toast" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-msg"></span><button type="button" id="toast-act" hidden>Undo</button></div>
 <div class="bubble" id="bubble" role="toolbar" aria-label="Selection formatting"></div>
 <ul class="pop slash" id="slash" role="listbox" aria-label="Insert block" hidden></ul>
 <div class="pop lpop" id="linkpop" hidden>
@@ -419,29 +457,36 @@ const DEFAULTS = {
   memo: ''
 };
 const $ = s => document.querySelector(s), clone = o => JSON.parse(JSON.stringify(o));
-let C = clone(DEFAULTS), status = 'draft', db = null, ref = null, saveT = 0, lastSaved = '', view = 'welcome', W = 54;
+let C = clone(DEFAULTS), status = 'draft', db = null, ref = null, saveT = 0, lastSaved = '', view = 'welcome', W = matchMedia('(max-width: 560px)').matches ? 40 : 54;
+let locked = '';   // '' | 'readonly' (the db refuses this viewer's writes) | 'unloaded' (copy/site could not be read, so saving would overwrite it)
 const lsGet = k => { try { return localStorage.getItem(k); } catch (e){ return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (e){ return false; } };
 const lsDel = k => { try { localStorage.removeItem(k); } catch (e){} };
 
 const get = (o, k) => k.split('.').reduce((a, p) => a == null ? a : a[p], o);
 const set = (o, k, v) => { const ps = k.split('.'); let a = o; ps.slice(0, -1).forEach(p => { a = a[p] = a[p] || {}; }); a[ps.at(-1)] = v; };
-const toast = m => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2200); };
+/* a short message at the bottom; with an action ("Undo") it stays a little longer */
+const toast = (m, act, run) => { const t = $('#toast'), b = $('#toast-act'); $('#toast-msg').textContent = m; b.hidden = !act; b.textContent = act || '';
+  b.onclick = () => { t.hidden = true; run && run(); }; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, act ? 6000 : 2600); };
 const pill = (el, text, cls) => { el.textContent = text; el.className = 'pill' + (cls ? ' ' + cls : ''); };
 
 /* ---------- form <-> state ---------- */
 function fill(){
   document.querySelectorAll('[data-k]').forEach(el => { const v = get(C, el.dataset.k);
     el.value = el.hasAttribute('data-paras') ? (v || []).join('\n\n') : (v ?? ''); count(el); });
-  renderList('facts', C.j.facts, (f, i) => `<div class="row"><label><b>Label</b><input id="fa${i}" data-f="0" value="${esc(f[0])}"></label><label><b>Value</b><input id="fb${i}" data-f="1" value="${esc(f[1])}"></label></div>`);
-  renderList('emails', C.contact, (e, i) => `<div class="row"><label><b>Label</b><input id="el${i}" data-f="label" value="${esc(e.label)}"></label><label><b>Email</b><input id="ee${i}" class="mono" data-f="email" value="${esc(e.email)}"></label></div>`, true);
+  /* facts and emails: one compact row each, headed once */
+  $('#facts').innerHTML = C.j.facts.length ? '<div class="grid"><span class="gh" aria-hidden="true">Card label</span><span class="gh" aria-hidden="true">Value</span><span></span>'
+    + C.j.facts.map((f, i) => `<input id="fa${i}" data-f="0" data-i="${i}" value="${esc(f[0])}" aria-label="Fact ${i + 1} label" spellcheck="false"><input id="fb${i}" data-f="1" data-i="${i}" value="${esc(f[1])}" aria-label="Fact ${i + 1} value"><button type="button" class="x" id="del-facts-${i}" data-del="facts" data-i="${i}" aria-label="Remove fact ${i + 1}${f[0] ? ': ' + esc(f[0]) : ''}" title="Remove">×</button>`).join('') + '</div>'
+    : '<p class="hint">No facts: the J card shows only your role and the site.</p>';
+  $('#emails').innerHTML = '<div class="grid fixed"><span class="gh" aria-hidden="true">Contact label</span><span class="gh" aria-hidden="true">Email</span>'
+    + C.contact.map((e, i) => `<input id="el${i}" data-f="label" data-i="${i}" value="${esc(e.label)}" aria-label="Contact ${i + 1} label"><input id="ee${i}" class="mono" type="email" spellcheck="false" data-f="email" data-i="${i}" value="${esc(e.email)}" aria-label="Contact ${i + 1} email">`).join('') + '</div>';
   $('#notes').innerHTML = C.notes.map((n, i) => `<label><b>Note ${i + 1}</b><textarea id="n${i}" data-n="${i}" rows="3">${esc(n)}</textarea></label>`).join('');
-  renderPostList();
+  renderPostList(); growAll();
 }
-function renderList(id, arr, tpl, fixed){
-  $('#' + id).innerHTML = arr.map((x, i) => `<div class="item" data-i="${i}"><div style="display:flex;flex-direction:column;gap:10px;min-width:0">${tpl(x, i)}</div>${fixed ? '' : `<button type="button" class="x" id="del-${id}-${i}" data-del="${id}" data-i="${i}" aria-label="Remove">remove</button>`}</div>`).join('')
-    || '<p class="hint">None yet.</p>';
-}
+/* textareas fit their text (field-sizing where supported, scrollHeight elsewhere) */
+const sizing = CSS.supports('field-sizing', 'content');
+function growTA(el){ if (sizing || el.closest('.meta')) return; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight + 2, innerHeight * .6) + 'px'; }
+function growAll(){ document.querySelectorAll('#f textarea').forEach(growTA); }
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function count(el){ const m = +el.dataset.max; if (!m) return; const c = el.parentElement.querySelector('.count'); const n = el.value.length; c.textContent = n + ' / ' + m; c.classList.toggle('over', n > m); }
 
@@ -450,105 +495,181 @@ $('#f').addEventListener('input', e => {
   if (el.closest('#writing')) return; // the writing desk saves itself (see below)
   if (el.dataset.k){ set(C, el.dataset.k, el.hasAttribute('data-paras') ? el.value.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean) : el.value); count(el); }
   else if (el.dataset.n != null) C.notes[+el.dataset.n] = el.value;
-  else if (el.dataset.f != null){ const item = el.closest('.item'), list = el.closest('.list').id, i = +item.dataset.i;
+  else if (el.dataset.f != null){ const list = el.closest('.list').id, i = +el.dataset.i;
     if (list === 'facts') C.j.facts[i][+el.dataset.f] = el.value; else C.contact[i][el.dataset.f] = el.value; }
+  if (el.tagName === 'TEXTAREA') growTA(el);
   changed();
 });
 $('#f').addEventListener('submit', e => e.preventDefault());
-$('#f').addEventListener('click', e => { const d = e.target.dataset.del; if (d !== 'facts') return;
-  C.j.facts.splice(+e.target.dataset.i, 1); fill(); changed(); });
-$('#addFact').onclick = () => { C.j.facts.push(['', '']); fill(); changed(); $('#fa' + (C.j.facts.length - 1)).focus(); };
+$('#f').addEventListener('click', e => { const x = e.target.closest('[data-del="facts"]'); if (!x || locked) return;
+  const i = +x.dataset.i, gone = C.j.facts.splice(i, 1)[0]; fill(); changed();
+  const next = $('#del-facts-' + Math.min(i, C.j.facts.length - 1)); (next || $('#addFact')).focus();
+  toast(`Removed “${gone[0] || 'fact'}”.`, 'Undo', () => { C.j.facts.splice(i, 0, gone); fill(); changed(); $('#fb' + i).focus(); }); });
+$('#addFact').onclick = () => { if (locked) return; C.j.facts.push(['', '']); fill(); changed(); $('#fa' + (C.j.facts.length - 1)).focus(); };
 
 /* ---------- saving: copy/site ---------- */
-function changed(){ if (status === 'ready'){ status = 'draft'; } paintState(); preview(); pill($('#save'), 'unsaved'); clearTimeout(saveT); saveT = setTimeout(save, 700); }
-function paintState(){ pill($('#state'), status === 'ready' ? 'ready to publish' : 'draft', status === 'ready' ? 'ready' : ''); }
+function changed(){ if (locked) return preview(); if (status === 'ready'){ status = 'draft'; } paintState(); preview(); pill($('#save'), 'unsaved'); clearTimeout(saveT); saveT = setTimeout(save, 700); }
+/* one button carries the publish state: "Ready to publish" until pressed, then "Marked ready" until the next edit */
+function paintState(){ const on = status === 'ready', b = $('#ready');
+  b.textContent = on ? '✓ Marked ready' : 'Ready to publish'; b.setAttribute('aria-pressed', String(on));
+  b.title = on ? 'Tell Claude “publish my copy”. Any edit puts it back to draft.' : 'Saves everything and marks it for Claude to publish';
+  $('#state').textContent = on ? 'Marked ready to publish.' : 'Draft: not marked ready.'; }
+const savedLabel = () => 'saved ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+/* writes this viewer can't make: the db says invalid_argument to a well-formed set (below the write level), or the grant is gone */
+const isDenied = e => e && ['invalid_argument', 'not_granted', 'revoked', 'capability_disabled', 'capability_removed'].includes(e.code);
+const isFull = e => e && e.code === 'quota_exceeded';
+function lock(why){
+  if (locked === why) return; locked = why; clearTimeout(saveT);
+  for (const s of savers.values()){ clearTimeout(s.t); s.t = 0; }
+  const msg = why === 'readonly' ? 'This copy is read-only for you: changes here won\'t be saved.'
+    : 'Couldn\'t load your saved copy, so editing is paused (saving now would overwrite it with older words).';
+  $('#banner-msg').textContent = msg; $('#banner-retry').hidden = why !== 'unloaded'; $('#banner').hidden = false;
+  pill($('#save'), why === 'readonly' ? 'read-only' : 'not loaded', 'bad');
+  document.querySelectorAll('#f input, #f textarea').forEach(el => { el.readOnly = true; });
+  document.querySelectorAll('#addFact, #post-new, #ready, #post-delete, #post-status-draft, #post-status-published').forEach(el => { el.disabled = true; });
+  editor && editor.setEditable(false);
+}
 let saving = null, saveAgain = false; // one copy/site write in flight; changes made meanwhile go in one follow-up write
 async function save(){
   if (saving){ saveAgain = true; return saving; }
   const body = JSON.stringify({ content: C, status });
   if (body === lastSaved){ pill($('#save'), 'saved', 'ok'); return; }
-  if (!ref){ lsSet('kn-copy', body); pill($('#save'), 'saved on this device'); return; }
+  if (locked) return;
+  if (!ref){ if (lsSet('kn-copy', body)){ lastSaved = body; pill($('#save'), 'saved on this device', 'ok'); } else pill($('#save'), 'not saved: storage blocked', 'bad'); return; }
   pill($('#save'), 'saving…');
   saving = (async () => {
-    try { await ref.set({ ...clone({ content: C, status }), updatedAt: new Date().toISOString() }); lastSaved = body; pill($('#save'), 'saved', 'ok'); }
-    catch (e){ pill($('#save'), 'not saved: ' + (e.code === 'not_granted' ? 'read-only for you' : 'try again')); }
+    try { await ref.set({ ...clone({ content: C, status }), updatedAt: new Date().toISOString() }); lastSaved = body; pill($('#save'), savedLabel(), 'ok'); }
+    catch (e){ if (isDenied(e)) lock('readonly');
+      else { pill($('#save'), isFull(e) ? 'not saved: storage full' : 'not saved: retrying', 'bad'); if (!isFull(e)){ clearTimeout(saveT); saveT = setTimeout(save, 4000); } } }
   })();
   await saving; saving = null;
   if (saveAgain){ saveAgain = false; return save(); }
 }
+/* ⌘S / Ctrl+S: save now (and never the browser's "save page" dialog) */
+document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 's'){ e.preventDefault(); if (locked) return;
+  syncWordCount(); clearTimeout(saveT); flushPosts(); save(); } });
 $('#ready').onclick = async () => {
+  if (locked) return;
   syncWordCount(); await flushPosts();
   status = 'ready'; paintState(); clearTimeout(saveT); await save();
-  toast(ref ? 'Marked ready. Tell Claude: "publish my copy".' : 'Saved on this device only. Tell Claude: "publish my copy".'); };
+  if (locked) return;
+  if (!ref) toast('Saved on this device only: Claude can\'t see it from here. Open the Copy Desk on claude.ai to publish.');
+  else if (lastSaved === JSON.stringify({ content: C, status })) toast('Marked ready. Tell Claude: “publish my copy”.');
+  else toast('Not saved yet: it will retry. Try again in a moment.'); };
 
-/* ---------- phosphor preview ---------- */
-function wrap(s, w, ind = 0){ const out = []; String(s || '').split('\n').forEach(par => { let line = '';
-  par.split(/\s+/).filter(Boolean).forEach(word => { if ((line + ' ' + word).trim().length > w - ind){ out.push(line); line = word; } else line = (line ? line + ' ' : '') + word; }); out.push(line); });
-  return out.map(l => ' '.repeat(ind) + l); }
-const span = (c, t) => `<span class="${c}">${esc(t)}</span>`;
-const L = [], add = (...a) => L.push(a.join(''));
-function box(title, rows){ const w = W - 4; add('  ', span('f', '┌ '), span('b', title.toUpperCase()), span('f', ' ' + '─'.repeat(Math.max(1, w - title.length - 3)) + '┐'));
-  rows.forEach(([k, v]) => { const narrow = W < 46 || (k.length + v.length + 6 > w);
-    if (narrow){ add('  ', span('f', '│ '), span('d', k)); wrap(v, w - 2).forEach(l => add('  ', span('f', '│ '), span('b', l))); }
-    else add('  ', span('f', '│ '), span('d', k.padEnd(16)), span('b', v)); });
-  add('  ', span('f', '└' + '─'.repeat(w) + '┘')); }
-/* the open post, the way `cat` would print it: headings bright, lists and quotes indented */
-function termPost(p){
-  add('  ', span('b', p.title || '(untitled)')); if (p.subtitle) wrap(p.subtitle, W, 2).forEach(l => add(span('d', l)));
-  add('  ', span('d', [p.date, p.tags && p.tags.length ? p.tags.join(', ') : ''].filter(Boolean).join(' · '))); add('');
-  if (p.url && !p.html){ add('  ', span('d', '↗ ' + p.url.replace(/^https?:\/\//, ''))); return; }
-  const body = new DOMParser().parseFromString(p.html || '', 'text/html').body, txt = n => n.textContent.replace(/\s+/g, ' ').trim();
-  const block = (n, ind) => {
-    const t = n.tagName;
-    if (t === 'H2' || t === 'H3'){ wrap(txt(n), W, ind).forEach(l => add(span('b', t === 'H2' ? l.toUpperCase() : l))); add(''); }
-    else if (t === 'P'){ if (txt(n)) { wrap(txt(n), W, ind).forEach(l => add(l)); add(''); } }
-    else if (t === 'UL' || t === 'OL'){ [...n.children].forEach((li, i) => {
-        const task = li.hasAttribute('data-checked'), mark = task ? (li.dataset.checked === 'true' ? '[x] ' : '[ ] ') : t === 'OL' ? (i + 1) + '. ' : '• ';
-        const own = txt(li.querySelector(':scope > p, :scope > div > p') || li);
-        wrap(own, W, ind + mark.length).forEach((l, j) => add(span('d', j ? '' : ' '.repeat(ind) + mark), j ? l : l.slice(ind + mark.length)));
-        li.querySelectorAll(':scope > div > ul, :scope > div > ol, :scope > ul, :scope > ol').forEach(sub => { block(sub, ind + 2); L.pop(); });
-      }); add(''); }
-    else if (t === 'BLOCKQUOTE'){ wrap(txt(n), W - 2, ind).forEach(l => add(span('f', '│ '), span('d', l))); add(''); }
-    else if (t === 'PRE'){ n.textContent.replace(/\n$/, '').split('\n').forEach(l => add(span('d', ' '.repeat(ind + 2) + l))); add(''); }
-    else if (t === 'HR'){ add(span('f', ' '.repeat(Math.max(ind, (W >> 1) - 3)) + '*  *  *')); add(''); }
-    else if (t === 'IMG'){ add(span('f', ' '.repeat(ind) + '[image' + (n.alt ? ': ' + n.alt : '') + ']')); add(''); }
-    else if (txt(n)){ wrap(txt(n), W, ind).forEach(l => add(l)); add(''); }
-  };
-  [...body.children].forEach(n => block(n, 2));
-  if (!body.textContent.trim() && !body.querySelector('img,hr')) add('  ', span('f', '(nothing written yet)'));
+/* ---------- phosphor preview ----------
+   A text rendering of what src/terminal.js draws for each command: the same wrap rules (kept line breaks,
+   "- " bullets with a hanging indent), double-size names, spaced section heads, boxed cards with their
+   footers, and the "see also" chips. W is the tube's columns: 54, or 40 on phones. */
+const PUNCT = /^[.,;:!?)\]}'"’%]+$/;
+function wrapLine(text, width, hang){
+  const out = []; let line = '';
+  for (const w of String(text).split(/\s+/)){
+    if (!w) continue;
+    if (!line) line = (out.length ? hang : '') + w;
+    else if (line.length + 1 + w.length <= width) line += ' ' + w;
+    else { const at = line.lastIndexOf(' ');
+      if (PUNCT.test(w) && at > (out.length ? hang.length : 0)){ out.push(line.slice(0, at)); line = hang + line.slice(at + 1) + ' ' + w; }
+      else { out.push(line); line = hang + w; } }
+  }
+  if (line) out.push(line);
+  return out.length ? out : [''];
 }
-const postFile = p => (p.date ? p.date + '-' : '') + (p.slug || slugify(p.title) || 'post') + '.txt';
+function wrap(text, width){
+  const src = String(text || ''), out = [];
+  if (!/\n/.test(src)) return wrapLine(src, width, '');
+  for (const ln of src.split('\n')){
+    if (!ln.trim()){ out.push(''); continue; }
+    out.push(...(/^\s*[-*•]\s+/.test(ln) ? wrapLine(ln.trim(), width, '  ') : wrapLine(ln, width, '')));
+  }
+  return out.length ? out : [''];
+}
+const span = (c, t) => c ? `<span class="${c}">${esc(t)}</span>` : esc(t);
+const ST = { f: 'f', d: 'd', b: 'b', n: '', w: 'w' };
+const L = [];
+/* a row: [text, style, chip?] spans at indent i */
+/* style 'R' is a drawn rule: t is 'h' (with n columns), 'v', 'tl', 'tr', 'bl' or 'br' */
+const at = (i, ...sp) => L.push(' '.repeat(i) + sp.map(([t, st, x]) => st === 'R' ? `<span class="r ${t}"${t === 'h' ? ` style="width:${x * .4}em"` : ''}></span>`
+  : st === 'A' ? '<svg class="ar" viewBox="0 0 20 25" aria-hidden="true"><path d="M5.5 7 1.5 12.5h3V18h2v-5.5h3zM14.5 18l4-5.5h-3V7h-2v5.5h-3z"/></svg>' : st === 'C' ? '<span class="cur"></span>' : span((ST[st] ?? '') + (x ? ' ch' : ''), t)).join(''));
+const blank = () => L.push('');
+const big = (t, st = 'b') => L.push('  ' + `<span class="big ${ST[st]}">${esc(t)}</span>`);
+const para = (t, st = 'n', i = 2) => wrap(t, W - 6).forEach(l => at(i, [l, st]));
+function head(label, note){ const s = label.toUpperCase().split('').join(' '), rule = Math.max(2, W - 2 - s.length - 2 - (note ? note.length + 2 : 0));
+  at(2, [s, 'd'], ['  ', 'f'], ['h', 'R', rule], [note ? '  ' + note : '', 'f']); }
+/* chips: as many per line as fit, then evened out (terminal flow()) */
+function flow(ws, st, i = 2, lead){
+  const first = lead ? [[lead, 'f']] : [], lw = lead ? lead.length : 0;
+  const lay = max => { const ls = []; let cur = [], w = lw; ws.forEach(x => { if (cur.length && w + 2 + x.length > max){ ls.push(cur); cur = []; w = lw; } w += (cur.length ? 2 : 0) + x.length; cur.push(x); }); if (cur.length) ls.push(cur); return ls; };
+  let lines = lay(W - i);   // as few lines as fit, then evened out so no word sits alone on the last one
+  for (let max = W - i - 1; lines.length > 1 && max > 0; max--){ const t = lay(max); if (t.length > lines.length) break; lines = t; }
+  lines.forEach((ln, k) => at(i + (k ? lw : 0), ...(k ? [] : first), ...ln.flatMap((x, j) => j ? [['  ', 'f'], [x, st, 1]] : [[x, st, 1]])));
+}
+const seeAlso = ws => flow(ws, 'n', 2, 'see also  ');
+const TAP = () => W < 46; // the phone column: the tube says "tap" there
+function card(spec){
+  const items = spec.items.map(it => Object.assign({}, it));
+  const lw = Math.max(0, ...items.map(it => it.label.length)) + 2;
+  const room = it => (W - 3) - (5 + lw) - (it.hint ? it.hint.length + 2 : 0);
+  if (items.some(it => it.value.length > room(it))) items.forEach(it => { it.hint = ''; });
+  const stacked = W < 46 || items.some(it => it.value.length > room(it)), vroom = W - 8, inner = W - 6;
+  const note = spec.note && spec.title.length + spec.note.length + 10 <= W ? spec.note : '';
+  const top = Math.max(1, inner - spec.title.length - 1 - (note ? note.length + 2 : 0));
+  at(1, ['tl', 'R'], ['h', 'R', 1], [spec.title, 'b'], [' ', 'f'], ['h', 'R', top], [note ? ' ' + note + ' ' : '', 'f'], ['h', 'R', 1], ['tr', 'R']);
+  const row = (parts) => { const used = parts.reduce((n, p) => n + p[0].length, 0); at(1, ['v', 'R'], [' ', 'f'], ...parts, [' '.repeat(Math.max(0, inner - used)) + ' ', 'f'], ['v', 'R']); };
+  for (const it of items){
+    const act = it.act ? 'b' : 'n';
+    if (!stacked){ const gap = ' '.repeat(Math.max(0, inner - 2 - lw - it.value.length - (it.hint ? it.hint.length + 1 : 0)));
+      row([['  ' + it.label.padEnd(lw), 'd'], [it.value, act], [it.hint ? gap + it.hint : '', 'f']]); continue; }
+    row([['  ' + it.label, 'd']]);
+    let v = it.value; const parts = [];
+    while (v.length > vroom){ let cut = Math.max(v.lastIndexOf('/', vroom - 1), v.lastIndexOf('.', vroom - 1), v.lastIndexOf('@', vroom - 1), v.lastIndexOf(' ', vroom)); if (cut < vroom / 2) cut = vroom - 1; parts.push(v.slice(0, cut + 1).trimEnd()); v = v.slice(cut + 1).trimStart(); }
+    parts.push(v); parts.forEach(l => row([['  ' + l, act]]));
+    if (it.sub) wrap(it.sub, vroom).slice(0, 3).forEach(l => row([['  ' + l, 'd']]));
+  }
+  at(1, ['bl', 'R'], ['h', 'R', inner + 2], ['br', 'R']);
+  const v = spec.verb || 'open';
+  at(2, ...(TAP() ? [['tap to ' + v, 'f']] : [['↑↓', 'A'], [' choose', 'f'], [' · ', 'f'], ['enter', 'n'], [' ' + v, 'f']]));
+}
+const bare = u => String(u || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+const cmd = c => { at(0, ['kaiav', 'd'], [':', 'f'], ['~', 'n'], [' $ ', 'd'], [c, 'b']); };
 function preview(){
   L.length = 0;
-  const v = view;
-  if (v === 'welcome'){ add(''); add('  ', span('b', C.name)); wrap(C.about.role, W, 2).forEach(l => add(span('', l)));
-    add(''); add('  ', span('f', 'type '), span('', 'help'), span('f', ' to begin, or try'));
-    wrap('about  eden  j  links  contact  weather  tetris', W, 2).forEach(l => add(span('', l)));
-    add(''); add(span('d', 'kaiav:~ $ '), span('b', '█')); }
-  if (v === 'about'){ add(span('d', 'kaiav:~ $ '), 'about'); add(''); add('  ', span('b', C.name)); wrap(C.about.role, W, 2).forEach(l => add(span('d', l))); add('');
-    (C.about.body.length ? C.about.body : ['']).forEach(p => { wrap(p, W, 2).forEach(l => add(span(/^\s*\[/.test(p) ? 'w' : '', l))); add(''); }); }
-  if (v === 'eden'){ add(span('d', 'kaiav:~ $ '), 'eden'); add(''); box('Eden', [['role', C.eden.role], ['what', C.eden.line]].filter(r => r[1]));
-    if (C.eden.body){ add(''); wrap(C.eden.body, W, 2).forEach(l => add(l)); } }
-  if (v === 'j'){ add(span('d', 'kaiav:~ $ '), 'j'); add(''); add('  ', span('b', C.j.title)); wrap(C.j.line, W, 2).forEach(l => add(span('d', l))); add('');
-    wrap(C.j.body, W, 2).forEach(l => add(l)); add(''); box('J', [['role', C.j.role], ...C.j.facts.filter(f => f[0] || f[1]), ['site', C.j.url.replace(/^https?:\/\//, '')]]);
-    add('  ', span('f', 'enter open · other key back')); }
-  if (v === 'writing'){ add(span('d', 'kaiav:~ $ '), 'writing'); add('');
+  const A = C.about, E = C.eden, J = C.j, v = view;
+  if (v === 'welcome'){ blank(); big(C.name || ''); at(2, [A.role || '', 'n']); blank();
+    at(2, [TAP() ? 'tap a word below, or type one' : 'type a word and press enter, or click one', 'd']);
+    flow(['about', 'eden', 'j', 'writing', 'contact', 'links'], 'b'); blank(); at(0, ['kaiav', 'd'], [':', 'f'], ['~', 'n'], [' $ ', 'd'], ['', 'C']); }
+  if (v === 'about'){ cmd('about'); blank(); head('about', 'about.txt'); blank(); big(C.name || ''); at(2, [A.role || '', 'n']); blank();
+    (A.body || []).forEach(p => para(p, /^\[.*\]$/.test(p) ? 'd' : 'n')); blank(); seeAlso(['contact', 'eden', 'j', 'links']); }
+  if (v === 'eden'){ cmd('eden'); blank(); big(E.title || 'Eden'); at(2, [E.role || '', 'd']); blank();
+    if (E.line){ para(E.line, 'b'); blank(); } if (E.body){ para(E.body, 'n'); blank(); } seeAlso(['contact', 'j', 'about']); }
+  if (v === 'j'){ cmd('j'); blank(); big(J.title || 'J'); at(2, [J.role || '', 'd']); blank(); para(J.line || '', 'b'); blank(); para(J.body || '', 'n'); blank();
+    card({ title: 'J', note: 'j.txt', items: [...J.facts.filter(f => f[0] || f[1]).map(f => ({ label: f[0], value: f[1] })), { label: 'site', value: bare(J.url || 'https://risingfounder.net'), act: 1, hint: 'open' }] });
+    blank(); seeAlso(['contact', 'eden', 'about']); }
+  if (v === 'writing'){ cmd('writing'); blank(); head('writing', 'writing/'); blank();
     const all = C.writing.posts, pub = all.filter(p => p.status === 'published').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    add('  ', span('b', 'writing'), span('f', '  writing/')); add('');
-    if (!pub.length) add('  ', span('d', 'No posts yet.'));
-    pub.forEach(p => { add('  ', span('d', (p.date || '').padEnd(12)), span('b', p.title || '(untitled)'));
-      if (p.summary) wrap(p.summary, W - 2, 14).forEach(l => add(l));
-      if (p.url) add(' '.repeat(14), span('d', '↗ ' + p.url.replace(/^https?:\/\//, '')));
-      add(''); });
-    const nd = all.length - pub.length; if (nd) { add('  ', span('f', `${nd} draft${nd > 1 ? 's' : ''} not shown`)); add(''); }
-    if (cur){ add(span('d', 'kaiav:~ $ '), 'cat writing/' + postFile(cur)); add(''); termPost(cur); } }
-  if (v === 'contact'){ add(span('d', 'kaiav:~ $ '), 'contact'); add(''); box('Contact', C.contact.map(e => [e.label, e.email])); add('  ', span('f', '↑↓ select · enter copy · esc back')); }
+    if (!pub.length){ at(2, ['nothing published yet', 'n']); blank(); seeAlso(['about', 'eden', 'j', 'contact']); }
+    else card({ title: 'POSTS', note: pub.length + (pub.length === 1 ? ' post' : ' posts'), verb: 'read', items: pub.map(p => ({ label: p.date || '', value: p.title || 'Untitled', sub: p.summary || '', act: p.html || p.wordCount || p.url ? 1 : 0, hint: p.url && !p.wordCount ? 'open' : 'read' })) });
+    const nd = all.length - pub.length; if (nd){ blank(); at(2, [`(desk note: ${nd} draft${nd > 1 ? 's' : ''} hidden until published)`, 'w']); } }
+  if (v === 'contact'){ cmd('contact'); blank(); card({ title: 'CONTACT', note: 'email', verb: 'copy', items: C.contact.map(e => ({ label: e.label, value: e.email, act: 1, hint: 'copy' })) }); }
+  if (v === 'links'){ const Lk = C.links;
+    cmd('links'); blank(); card({ title: 'LINKS', note: 'links.txt', items: [
+      { label: 'LinkedIn', value: C.name || 'profile', act: 1, hint: 'open' },
+      { label: 'X', value: '@' + bare(Lk.x).replace(/^(x|twitter)\.com\//, ''), act: 1, hint: 'open' },
+      { label: 'GitHub', value: bare(Lk.github).replace(/^github\.com\//, ''), act: 1, hint: 'open' }] });
+    blank(); at(2, ['also  ', 'f'], ['contact', 'n', 1], ['  ', 'f'], ['j', 'n', 1], ['  ', 'f'], ['open <name>', 'n']); }
+  $('#screen').style.setProperty('--cols', W);
   $('#out').innerHTML = L.join('\n');
 }
+function showView(v, scroll){ if (!v || v === view) return; view = v;
+  document.querySelectorAll('.tabs [data-v]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === v))); preview(); $('#screen').scrollTop = 0;
+  if (scroll && matchMedia('(max-width: 960px)').matches) $('.monitor').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
-  if (b.hasAttribute('data-w')){ W = W === 54 ? 40 : 54; b.setAttribute('aria-pressed', String(W === 40)); }
-  else { view = b.dataset.v; document.querySelectorAll('.tabs [data-v]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); }
-  preview(); });
+  if (b.hasAttribute('data-w')){ W = W === 54 ? 40 : 54; b.setAttribute('aria-pressed', String(W === 40)); preview(); }
+  else showView(b.dataset.v); });
+$('#pv-width').setAttribute('aria-pressed', String(W === 40));
+/* the preview follows the section being edited; a section's command chip shows it (and, on narrow screens, scrolls to it) */
+$('#f').addEventListener('focusin', e => { const s = e.target.closest('[data-view]'); if (s && !e.target.closest('.cmd')) showView(s.dataset.view); });
+$('#f').addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g){ view = ''; showView(g.dataset.go, true); } });
 
 /* =====================================================================
    WRITING
@@ -577,26 +698,29 @@ let cur = null, editor = null, deskToken = 0, dbReadyResolve; const dbReady = ne
 const saver = id => savers.get(id) || (savers.set(id, { t: 0, busy: null, dirty: false, err: null }), savers.get(id));
 
 /* one write in flight per post doc; edits during a write queue exactly one follow-up */
-function queuePostSave(id){ const s = saver(id); s.dirty = true; clearTimeout(s.t); s.t = setTimeout(() => { s.t = 0; writePost(id); }, 800); paintPostSave();
+function queuePostSave(id){ if (locked) return; const s = saver(id); s.dirty = true; clearTimeout(s.t); s.t = setTimeout(() => { s.t = 0; writePost(id); }, 800); paintPostSave();
   if (status === 'ready') changed(); }
 async function writePost(id){
   const s = saver(id), p = posts.get(id);
-  if (!p || !s.dirty) return; if (s.busy) return s.busy;
+  if (!p || !s.dirty || locked) return; if (s.busy) return s.busy;
   s.dirty = false; s.err = null;
   const body = clone({ ...p, updatedAt: new Date().toISOString() });
   s.busy = (async () => {
     try { if (db) await db.doc('posts/' + id).set(body);
       else if (!lsSet(POST_KEY(id), JSON.stringify(body))) throw Object.assign(new Error('storage full'), { code: 'local' }); }
-    catch (e){ s.err = e; if (e.code !== 'not_granted') s.dirty = true; }
+    catch (e){ s.err = e; if (!isDenied(e)) s.dirty = true; }
   })();
   paintPostSave();
-  await s.busy; s.busy = null; paintPostSave();
+  await s.busy; s.busy = null;
+  if (s.err && isDenied(s.err)) lock('readonly');
+  paintPostSave();
   if (s.dirty && !s.t && !s.err) return writePost(id);
-  if (s.err && s.err.code !== 'not_granted' && !s.t) s.t = setTimeout(() => { s.t = 0; writePost(id); }, 4000); // retry
+  if (s.err && !isDenied(s.err) && !isFull(s.err) && !s.t) s.t = setTimeout(() => { s.t = 0; writePost(id); }, 4000); // retry
 }
 async function flushPosts(){ for (const [id, s] of savers){ clearTimeout(s.t); s.t = 0; if (s.busy) await s.busy; if (s.dirty) await writePost(id); } }
 function paintPostSave(){ if (!cur) return; const s = saver(cur.id), el = $('#post-save');
-  if (s.err) pill(el, s.err.code === 'not_granted' ? 'read-only for you' : 'not saved: retrying');
+  if (locked) pill(el, locked === 'readonly' ? 'read-only' : 'not loaded', 'bad');
+  else if (s.err) pill(el, isFull(s.err) ? 'not saved: storage full' : 'not saved: retrying', 'bad');
   else if (s.busy) pill(el, 'saving…'); else if (s.dirty) pill(el, 'unsaved');
   else pill(el, db ? 'saved' : 'saved on this device', 'ok'); }
 
@@ -636,9 +760,9 @@ function paintMeta(){
   grow(meta.title); grow(meta.subtitle); paintChips(); paintSlug(); paintSummary(); paintStatus(); paintPostSave(); paintCount(); }
 function paintChips(){ $('#post-chips').innerHTML = cur.tags.map(t => `<span class="chip">${esc(t)}</span>`).join(''); }
 function paintSlug(){ const dup = cur.slug && C.writing.posts.some(p => p.id !== cur.id && p.slug === cur.slug);
-  $('#post-slug-hint').innerHTML = dup ? '<b>Another post already uses this slug.</b>' : cur.slug ? `File in the terminal: writing/${esc(postFile(cur))}` : ''; }
+  $('#post-slug-hint').innerHTML = dup ? '<b>Another post already uses this slug.</b>' : cur.slug ? `Opens in the terminal with <code>read ${esc(cur.slug)}</code>` + (cur.status === 'published' ? '' : ' once published') : ''; }
 function paintSummary(){ const n = cur.summary.length, c = $('#post-summary-count'); c.textContent = n + ' / 140'; c.classList.toggle('over', n > 140); }
-function paintStatus(){ $('#post-status-draft').setAttribute('aria-pressed', String(cur.status !== 'published')); $('#post-status-published').setAttribute('aria-pressed', String(cur.status === 'published')); }
+function paintStatus(){ paintSlug(); $('#post-status-draft').setAttribute('aria-pressed', String(cur.status !== 'published')); $('#post-status-published').setAttribute('aria-pressed', String(cur.status === 'published')); }
 function paintCount(){ const w = cur ? cur.wordCount || 0 : 0, ch = editor ? editor.storage.characterCount.characters() : 0;
   $('#post-count').textContent = `${w.toLocaleString()} word${w === 1 ? '' : 's'} · ${minutes(w)} min read · ${ch.toLocaleString()} characters`; }
 let pvT = 0; const previewSoon = () => { if (view !== 'writing') return; clearTimeout(pvT); pvT = setTimeout(preview, 250); };
@@ -707,7 +831,8 @@ $('#post-focus').onclick = () => { setFocus(!$('#desk').classList.contains('focu
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape' || sl) return; // the slash menu handles its own Escape
   if (!$('#post-confirm').hidden) return hideConfirm();
-  if (!$('#linkpop').hidden || !$('#imgpop').hidden){ closePops(); editor && editor.commands.focus(); return; }
+  if (!$('#linkpop').hidden || !$('#imgpop').hidden){ closePops(); editor && editor.view.focus(); return; }
+  if ($('#post-preview').getAttribute('aria-pressed') === 'true'){ setReader(false); editor && editor.commands.focus(); return; }
   if ($('#desk').classList.contains('focus')) setFocus(false);
 }, true); // capture: ProseMirror swallows Escape inside the editor
 
@@ -716,7 +841,9 @@ let ttP = null;
 const loadTipTap = () => ttP ||= Promise.all(['@tiptap/core', '@tiptap/starter-kit', '@tiptap/extension-link', '@tiptap/extension-underline', '@tiptap/extension-highlight',
   '@tiptap/extension-typography', '@tiptap/extension-placeholder', '@tiptap/extension-character-count', '@tiptap/extension-task-list', '@tiptap/extension-task-item',
   '@tiptap/extension-image', '@tiptap/extension-text-align', '@tiptap/extension-bubble-menu'].map(m => import(m)))
-  .then(([core, ...m]) => ({ Editor: core.Editor, Extension: core.Extension, ext: m.map(x => x.default) }));
+  .then(([core, ...m]) => ({ Editor: core.Editor, Extension: core.Extension, ext: m.map(x => x.default) }))
+  .catch(e => { ttP = null; throw e; }); // a later try can load it again
+let TextSelection = null;
 
 const svg = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const IC = {
@@ -729,13 +856,12 @@ const IC = {
   codeblock: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m9.5 9.5-2.5 2.5 2.5 2.5M14.5 9.5l2.5 2.5-2.5 2.5"/>'),
   hr: svg('<path d="M3 12h18"/><path d="M7 6.5h10M7 17.5h10" opacity=".35"/>'),
   image: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9.5" r="1.6"/><path d="m21 15.5-5-5L6 20"/>'),
-  al: svg('<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>'), ac: svg('<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>'), ar: svg('<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>'),
 };
 const mac = /Mac|iP(hone|ad)/.test(navigator.platform), MOD = mac ? '⌘' : 'Ctrl+';
+document.querySelectorAll('#post-hint .mod').forEach(m => { m.textContent = MOD; });
 /* [key, label html, title, run(chain), active(editor), class] */
 const TOOLS = [
   ['undo', IC.undo, 'Undo (' + MOD + 'Z)', c => c.undo()], ['redo', IC.redo, 'Redo (' + MOD + 'Shift+Z)', c => c.redo()], '|',
-  ['p', '¶', 'Paragraph', c => c.setParagraph(), e => e.isActive('paragraph')],
   ['h2', 'H2', 'Heading (## )', c => c.toggleHeading({ level: 2 }), e => e.isActive('heading', { level: 2 })],
   ['h3', 'H3', 'Subheading (### )', c => c.toggleHeading({ level: 3 }), e => e.isActive('heading', { level: 3 })], '|',
   ['bold', 'B', 'Bold (' + MOD + 'B)', c => c.toggleBold(), e => e.isActive('bold'), 'b'],
@@ -751,10 +877,7 @@ const TOOLS = [
   ['quote', IC.quote, 'Quote (> )', c => c.toggleBlockquote(), e => e.isActive('blockquote')],
   ['codeblock', IC.codeblock, 'Code block (``` )', c => c.toggleCodeBlock(), e => e.isActive('codeBlock')],
   ['hr', IC.hr, 'Divider (---)', c => c.setHorizontalRule()],
-  ['image', IC.image, 'Image from a URL', null], '|',
-  ['left', IC.al, 'Align left', c => c.unsetTextAlign(), e => !e.isActive({ textAlign: 'center' }) && !e.isActive({ textAlign: 'right' })],
-  ['center', IC.ac, 'Align centre', c => c.setTextAlign('center'), e => e.isActive({ textAlign: 'center' })],
-  ['right', IC.ar, 'Align right', c => c.setTextAlign('right'), e => e.isActive({ textAlign: 'right' })],
+  ['image', IC.image, 'Image from a URL', null],
 ];
 const BUBBLE = ['bold', 'italic', 'underline', 'strike', 'code', 'highlight', 'link', '|', 'h2', 'h3', 'quote'];
 const tool = k => TOOLS.find(t => t[0] === k);
@@ -779,8 +902,14 @@ async function mountEditor(p, tok){
   const host = $('#editor');
   if (editor){ editor.destroy(); editor = null; }
   host.innerHTML = '<p class="loading">Loading the editor…</p>';
-  let T; try { T = await loadTipTap(); }
-  catch (e){ console.error('TipTap failed to load', e); host.innerHTML = '<p class="loading">The editor could not load (check the connection), so this post is read-only for now. Nothing is lost: reload to try again.</p>'; return; }
+  $('#toolbar').hidden = false;
+  let T; try { T = await loadTipTap(); TextSelection ||= (await import('@tiptap/pm/state')).TextSelection; }
+  catch (e){ if (tok !== deskToken) return;
+    /* no editor: show the post as it stands, read-only, with a way to try again */
+    console.warn('The editor could not load', e); $('#toolbar').hidden = true;
+    host.innerHTML = `<div class="edfail" role="alert"><span>The editor couldn't load (check the connection). The post is shown as saved; nothing is lost.</span><button type="button" class="ghost" id="editor-retry">Try again</button></div>${p.html || ''}`;
+    host.querySelectorAll('input').forEach(i => { i.disabled = true; });
+    $('#editor-retry').onclick = () => { if (cur) mountEditor(cur, deskToken); }; return; }
   if (tok !== deskToken) return;
   const [StarterKit, Link, Underline, Highlight, Typography, Placeholder, CharacterCount, TaskList, TaskItem, Image, TextAlign, BubbleMenu] = T.ext;
   const DeskKeys = T.Extension.create({ name: 'deskKeys', addKeyboardShortcuts: () => ({ 'Mod-k': () => { openLinkPop(); return true; } }) });
@@ -806,6 +935,7 @@ async function mountEditor(p, tok){
     onBlur: () => setTimeout(() => { if (!$('#slash').contains(document.activeElement)) closeSlash(); }, 120),
   });
   window.__deskEditor = editor; // handy for debugging in the console
+  if (locked) editor.setEditable(false);
   paintTools(); paintCount();
 }
 
@@ -874,16 +1004,16 @@ function openLinkPop(){
 function normUrl(u){ u = u.trim(); if (!u) return '';
   if (/^(https?:|mailto:|tel:|\/|#)/i.test(u)) return u; return (/^[^\s@/]+@[^\s@]+\.[^\s@]+$/.test(u) ? 'mailto:' : 'https://') + u; }
 function applyLink(){
-  const url = normUrl($('#link-url').value), { from, to } = lk; $('#linkpop').hidden = true;
+  const url = normUrl($('#link-url').value), { from, to } = lk; $('#linkpop').hidden = true; editor.view.focus();
   if (!url) return removeLink();
   const c = editor.chain().focus().setTextSelection({ from, to });
   if (from === to) c.insertContent({ type: 'text', text: url.replace(/^(mailto:|https?:\/\/)/, ''), marks: [{ type: 'link', attrs: { href: url } }] })
     .command(({ tr }) => { tr.removeStoredMark(editor.schema.marks.link); return true; }).run();
-  else c.extendMarkRange('link').setLink({ href: url }).run();
+  else c.extendMarkRange('link').setLink({ href: url }).command(({ tr }) => { tr.setSelection(TextSelection.create(tr.doc, tr.selection.to)); tr.removeStoredMark(editor.schema.marks.link); return true; }).run();
 }
-function removeLink(){ $('#linkpop').hidden = true; editor.chain().focus().setTextSelection({ from: lk.from, to: lk.to }).extendMarkRange('link').unsetLink().run(); }
+function removeLink(){ $('#linkpop').hidden = true; editor.view.focus(); editor.chain().focus().setTextSelection({ from: lk.from, to: lk.to }).extendMarkRange('link').unsetLink().run(); }
 $('#link-apply').onclick = applyLink; $('#link-remove').onclick = removeLink;
-$('#link-cancel').onclick = () => { $('#linkpop').hidden = true; editor.commands.focus(); };
+$('#link-cancel').onclick = () => { $('#linkpop').hidden = true; editor.view.focus(); };
 $('#link-open').onclick = () => { const u = normUrl($('#link-url').value); if (u) window.open(u, '_blank', 'noopener'); };
 $('#link-url').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); applyLink(); } });
 
@@ -892,9 +1022,9 @@ function openImagePop(){ if (!editor) return; closePops(); im = editor.state.sel
   $('#img-url').value = ''; $('#img-alt').value = ''; const el = $('#imgpop'); el.hidden = false; place(el, im); $('#img-url').focus(); }
 function applyImage(){ const src = normUrl($('#img-url').value);
   if (!/^https?:\/\//i.test(src)){ $('#img-url').focus(); toast('Paste an image address that starts with https://'); return; }
-  $('#imgpop').hidden = true; // image + an empty paragraph after it, so the caret lands below the picture instead of selecting it
+  $('#imgpop').hidden = true; editor.view.focus(); // image + an empty paragraph after it, so the caret lands below the picture instead of selecting it
   editor.chain().focus().setTextSelection(im).insertContent([{ type: 'image', attrs: { src, alt: $('#img-alt').value.trim() } }, { type: 'paragraph' }]).run(); }
-$('#img-apply').onclick = applyImage; $('#img-cancel').onclick = () => { $('#imgpop').hidden = true; editor.commands.focus(); };
+$('#img-apply').onclick = applyImage; $('#img-cancel').onclick = () => { $('#imgpop').hidden = true; editor.view.focus(); };
 for (const id of ['#img-url', '#img-alt']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); applyImage(); } });
 document.addEventListener('mousedown', e => { for (const id of ['#linkpop', '#imgpop']){ const el = $(id); if (!el.hidden && !el.contains(e.target)) el.hidden = true; } });
 addEventListener('scroll', () => { if (sl) place($('#slash'), sl.from); }, true);
@@ -907,7 +1037,7 @@ function load(data){ let migrated = false;
   migrated = C.writing.posts.some(p => !p.id); C.writing.posts = C.writing.posts.map(normIndex);
   fill(); paintState(); preview(); return migrated; }
 /* any post doc missing from the index (say, a tab closed between the two writes) is put back in the list */
-async function reconcile(){ let found = [];
+async function reconcile(){ let found = []; if (locked) return;
   try { if (db) found = (await db.collection('posts').get()).docs.map(d => d.data());
     else for (let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); if (k.startsWith('kn-post:')) found.push(JSON.parse(localStorage.getItem(k))); } } catch (e){}
   const lost = found.filter(p => p && p.id && !C.writing.posts.some(x => x.id === p.id));
@@ -922,11 +1052,25 @@ pill($('#save'), 'connecting…');
   if (!db){ pill($('#save'), 'saves on this device only'); if (migrated) changed(); }
   else {
     ref = db.doc('copy/site');
-    try { const snap = await ref.get(); if (snap.exists){ migrated = load(snap.data()); lastSaved = JSON.stringify({ content: C, status }); } pill($('#save'), 'saved', 'ok'); if (migrated) changed(); }
-    catch (e){ pill($('#save'), 'could not load: showing defaults'); }
+    /* read it (one quiet retry). If it can't be read, nothing may be saved: a write now would replace the real copy with defaults */
+    let snap = null;
+    for (let i = 0; i < 2 && !snap; i++){ try { snap = await ref.get(); } catch (e){ if (isDenied(e)) break; await new Promise(r => setTimeout(r, 700)); } }
+    if (!snap) lock('unloaded');
+    else { if (snap.exists){ migrated = load(snap.data()); lastSaved = JSON.stringify({ content: C, status }); } pill($('#save'), 'saved', 'ok'); if (migrated) changed(); }
   }
   await reconcile(); dbReadyResolve(); reopen();
   (window.requestIdleCallback || setTimeout)(() => loadTipTap().catch(() => {}));
 })();
-addEventListener('pagehide', () => { syncWordCount(); flushPosts(); });
+addEventListener('pagehide', () => { if (locked) return; syncWordCount(); flushPosts(); });
+$('#banner-retry').onclick = async () => {
+  const b = $('#banner-retry'); b.disabled = true; b.textContent = 'Trying…';
+  let snap = null; try { snap = await ref.get(); } catch (e){}
+  b.disabled = false; b.textContent = 'Try again';
+  if (!snap){ toast('Still can\'t reach it. Check the connection, then try again.'); return; }
+  locked = ''; $('#banner').hidden = true;
+  document.querySelectorAll('#f input, #f textarea').forEach(el => { el.readOnly = false; });
+  document.querySelectorAll('#addFact, #post-new, #ready, #post-delete, #post-status-draft, #post-status-published').forEach(el => { el.disabled = false; });
+  if (snap.exists){ load(snap.data()); lastSaved = JSON.stringify({ content: C, status }); }
+  pill($('#save'), 'saved', 'ok'); editor && editor.setEditable(true); await reconcile(); toast('Loaded. Editing is back on.');
+};
 </script>

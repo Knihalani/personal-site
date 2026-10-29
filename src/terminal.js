@@ -130,14 +130,16 @@ function fitRow(spans, width){
   if (row.length) flush();
   return rows.length ? rows.map(r => r.map(x => x.br ? [x[0], x[1]] : x)) : [[]];
 }
-function wrap(text, width){
-  // written line breaks are kept (a blank line stays blank); "- " bullets wrap with a hanging indent
+function wrap(text, width, cont){
+  // written line breaks are kept (a blank line stays blank); "- " bullets wrap with a hanging indent.
+  // cont, if given, collects one flag per line: true where a line only continues the one before
   const src = String(text), out = [];
-  if (!/\n/.test(src)) return wrapLine(src, width, '');
+  const add = ls => { ls.forEach((l, k) => { out.push(l); if (cont) cont.push(k > 0); }); };
+  if (!/\n/.test(src)){ add(wrapLine(src, width, '')); return out; }
   for (const ln of src.split('\n')){
-    if (!ln.trim()){ out.push(''); continue; }
+    if (!ln.trim()){ add(['']); continue; }
     const b = /^\s*[-*\u2022]\s+/.exec(ln);
-    out.push(...(b ? wrapLine(ln.trim(), width, '  ') : wrapLine(ln, width, '')));
+    add(b ? wrapLine(ln.trim(), width, '  ') : wrapLine(ln, width, ''));
   }
   return out.length ? out : [''];
 }
@@ -478,11 +480,15 @@ M.createTerminal = function createTerminal(opts){
     const r = [], o = {
       rows: r,
       line(...spans){ return o.at(2, ...spans); },
-      at(i, ...spans){ for (const s of fitRow(spans.map(x => typeof x === 'string' ? [x, 'n'] : x), COLS - i)) r.push({ k: 't', i, s }); return o; },
+      at(i, ...spans){ fitRow(spans.map(x => typeof x === 'string' ? [x, 'n'] : x), COLS - i).forEach((s, k) => r.push(k ? { k: 't', i, s, c: 1 } : { k: 't', i, s })); return o; },
       blank(){ r.push({ k: 't', i: 0, s: [] }); return o; },
       big(text, st = 'b'){ r.push({ k: 'big', i: 2, s: [[text, st]] }); return o; },
       head(label, note){ r.push({ k: 'head', i: 2, label, note: note || '' }); return o; },
-      para(text, st = 'n', width = COLS - 6, i = 2){ for (const l of wrap(text, width)) o.at(i, [l, st]); return o; },
+      para(text, st = 'n', width = COLS - 6, i = 2){
+        const cont = [];               // a wrapped line reads on from the one before in the screen-reader log
+        wrap(text, width, cont).forEach((l, k) => { o.at(i, [l, st]); if (cont[k]) r[r.length - 1].c = 1; });
+        return o;
+      },
       /* a square bitmap (true = dark), dark on a lit field with a quiet zone of q modules: QR codes.
          Drawn as vectors so a module is square whatever the cell shape. */
       /* a drawing h rows tall: draw(x, y, w, h, age, t); live(age) -> fps while it moves (none under reduced motion) */
@@ -509,7 +515,7 @@ M.createTerminal = function createTerminal(opts){
         const lay = max => { const ls = []; let cur = null, w = 0; gws.forEach((gw, k) => { if (cur && w + gap.length + gw > max){ ls.push(cur); cur = null; } if (!cur){ cur = []; w = 0; } else w += gap.length; cur.push(k); w += gw; }); if (cur) ls.push(cur); return ls; };
         let best = lay(COLS - i);
         for (let max = COLS - i - 1; best.length > 1 && max > 0; max--){ const t = lay(max); if (t.length > best.length) break; best = t; }
-        for (const ks of best) o.at(i, ...ks.flatMap((k, n) => n ? [[gap, 'f'], ...groups[k]] : groups[k]));
+        best.forEach((ks, l) => { o.at(i, ...ks.flatMap((k, n) => n ? [[gap, 'f'], ...groups[k]] : groups[k])); if (l) r[r.length - 1].c = 1; });
         return o;
       },
       link(label, url, i = 2, labelW = 0, shown){
@@ -524,6 +530,8 @@ M.createTerminal = function createTerminal(opts){
   const costOf = r => r.k === 'viz' || r.k === 'card' ? 40 : r.k === 'big' ? lenOf(r) * 2 + 4 : r.k === 'head' ? 30 : Math.max(3, lenOf(r) - (r.i || 0));
   const plainOf = r => r.k === 't' || r.k === 'big' ? r.s.map(s => s[1] === 'f' ? ' ' : s[0]).join('').replace(/\s+/g, ' ').trim()
     : r.k === 'card' ? r.title + '. ' + r.items.map(it => (it.ai >= 0 ? (it.ai + 1) + ', ' : '') + it.label + ': ' + (it.full || it.value)).join('. ') : '';
+  /* rows as sentences for the screen-reader log: a wrapped continuation reads on with a space, a new row after a period */
+  const plainRows = rows => { let t = ''; for (const r of rows){ const p = plainOf(r); if (!p) continue; t += !t ? p : (r.c || /[.!?:,]$/.test(t) ? ' ' : '. ') + p; } return t; };
   const textOf = r => r.k === 't' ? (' '.repeat(r.i || 0) + r.s.map(s => s[0]).join('')).replace(/\s+$/, '') : r.k === 'big' ? '  ' + r.s[0][0] : r.k === 'head' ? '  ' + r.label.toUpperCase()
     : r.k === 'card' ? r.items.map(it => pad(it.label, r.lw) + (it.full || it.value)).join('\n') : null;
   function makeCard(spec){
@@ -554,7 +562,7 @@ M.createTerminal = function createTerminal(opts){
   function emit(o, mirrorText){            // rich rows straight to the scrollback (outside a job)
     for (const r of o.rows) pushRow(r);
     trim();
-    mirror(mirrorText || o.rows.map(plainOf).filter(Boolean).join('. '));
+    mirror(mirrorText || plainRows(o.rows));
     toBottom(); dirty = true;
     if (REDUCED) revealAll();
   }
@@ -569,7 +577,7 @@ M.createTerminal = function createTerminal(opts){
     const m = document.getElementById('mirror'); if (!m) return;
     const add = t => { const p = document.createElement('p'); p.className = 'mirror-out'; p.textContent = t; m.appendChild(p); };
     if (cmd) add('command: ' + cmd);
-    text = String(text || '').replace(/\s+/g, ' ').replace(/\.\./g, '.').trim();
+    text = String(text || '').replace(/\ue000/g, '').replace(/\s+/g, ' ').replace(/([^.\s])\.\.(?=\s|$)/g, '$1.').trim();   // ("x.." from joins; "..." and a bare ".." stay)
     while (text){
       let cut = text.length;
       if (cut > 320){ cut = text.lastIndexOf('. ', 320); if (cut < 120) cut = text.lastIndexOf(' ', 320); if (cut < 120) cut = 320; else cut++; }
@@ -642,7 +650,7 @@ M.createTerminal = function createTerminal(opts){
     rich(o){
       openRow = null;
       for (const r of o.rows) rows.push(r);
-      if (job) job.plain += o.rows.map(plainOf).filter(Boolean).join('. ') + ' ';
+      if (job) job.plain += plainRows(o.rows) + ' ';
       dirty = true;
     },
   };
@@ -1191,7 +1199,7 @@ M.createTerminal = function createTerminal(opts){
     const o = out(); o.blank().head('every command').blank();
     for (const [label, names] of groups){
       let line = [], w = 0, first = true;
-      const flush = () => { o.at(2, [pad(first ? label : '', LW), 'd'], ...line); line = []; w = 0; first = false; };
+      const flush = () => { o.at(2, [pad(first ? label : '', LW), 'd'], ...line); if (!first) o.rows[o.rows.length - 1].c = 1; line = []; w = 0; first = false; };
       for (const n of names){
         if (line.length && w + 2 + n.length > room) flush();
         if (line.length){ line.push(['  ', 'f']); w += 2; }
@@ -1199,7 +1207,7 @@ M.createTerminal = function createTerminal(opts){
       }
       if (line.length) flush();
     }
-    o.blank().flow([[['man <cmd>', 'n'], [' details', 'f']], [['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']]], '   ').blank();
+    o.blank().flow([[['man <cmd>', 'n'], [' details', 'f']], ...(TAP ? [] : [[['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']]])], '   ').blank();
     io.rich(o);
   } });
   def('history', { g: 'shell', desc: 'commands you have run', usage: 'history [-c]', opts: [['-c', 'forget them']], ex: ['!!   run the last one again', '!3   run number 3'], run(argv, io){
@@ -1417,7 +1425,7 @@ M.createTerminal = function createTerminal(opts){
     for (const t of j.timers) clearTimeout(t);
     job = null; openRow = null;
     if (status === 0 && !j.dead) okRuns++;
-    if (j.hint){ suggestion = j.hint; tty.rich(out().at(0, ['did you mean ', 'd'], chip(j.hint, 'b'), ['?  press enter', 'f'])); j.plain += ' Did you mean ' + j.hint + '?'; }
+    if (j.hint){ suggestion = j.hint; tty.rich(out().at(0, ['did you mean ', 'd'], chip(j.hint, 'b'), ['?  ' + (TAP ? 'tap it' : 'press enter'), 'f'])); j.plain += ' Did you mean ' + j.hint + '? Press Enter to run it.'; }
     if (ahead) flushAhead();
     trim(); mirror(j.plain || ''); if (j.tail) mirror(j.tail); toBottom(); dirty = true; touched();
     if (REDUCED) revealAll();
@@ -1645,6 +1653,8 @@ M.createTerminal = function createTerminal(opts){
     const slack = cw * 0.6;
     for (const h of drawnHits){
       if (px < h.x0 - slack || px > h.x1 + slack || py < h.top - 4 || py >= h.bot + 4) continue;
+      if (h.link.stop){ if (job && !app) interrupt(); touched(); return true; }
+      if (h.link.bottom){ toBottom(); dirty = true; return true; }
       if (h.link.cmd){
         if (app || job) return false;
         disarm(); nudgeOff = true;
@@ -1707,6 +1717,7 @@ M.createTerminal = function createTerminal(opts){
     j.dead = true;
     openRow = null;
     rows.push({ k: 't', i: 0, s: [['^C', 'd']] });
+    j.plain += ' Stopped.';
     status = 130;
     for (const t of j.timers) clearTimeout(t);
     j.kill();
@@ -1822,9 +1833,20 @@ M.createTerminal = function createTerminal(opts){
     ['writing', ['posts', 'post', 'blog', 'writing']], ['links', ['links', 'linkedin', 'twitter', 'x', 'socials', 'social']],
     ['about', ['who', 'about', 'yourself']], ['help', ['help', 'how', 'what can']]];
   /* a rewritten line says what it ran, quietly, before the output */
+  /* spans hard-wrapped at the grid width, as a tty wraps a long command line */
+  function ttyRows(spans){
+    const out = []; let row = [], w = 0;
+    for (const [s0, st] of spans){
+      let t = s0;
+      while (t.length){ if (w >= COLS){ out.push(row); row = []; w = 0; } const n = Math.min(COLS - w, t.length); row.push([t.slice(0, n), st]); w += n; t = t.slice(n); }
+    }
+    out.push(row);
+    for (const s of out) rows.push({ k: 't', i: 0, s });
+    shown = rows.length; partial = 0;
+  }
   function said(cmd){ rows.push({ k: 't', i: 0, s: [['\u2192 ', 'f'], [cmd, 'd']] }); shown = rows.length; partial = 0; return cmd; }
   function execute(raw, programmatic){
-    rows.push({ k: 't', i: 0, s: [...promptSpans(), [raw, 'n']] }); shown = rows.length; partial = 0;
+    ttyRows([...promptSpans(), [raw, 'n']]);
     openRow = null;
     input = ''; cur = 0; suggestion = ''; tabState = null; disarm();
     hIdx = history.length; hDraft = '';
@@ -1907,9 +1929,9 @@ M.createTerminal = function createTerminal(opts){
     const ctx = context(); let list = candidates(ctx);
     if (!list.length){ sfx('beep'); return; }
     if (list.some(x => x.startsWith(ctx.q))) list = list.filter(x => x.startsWith(ctx.q));
-    if (list.length === 1){ accept(list[0], ctx.from, true); tabState = null; return; }
+    if (list.length === 1){ accept(list[0], ctx.from, true); tabState = null; mirror('Completed: ' + input); return; }   // the hidden input field never holds the line, so say it
     if (!list[0].startsWith(ctx.q)){                                    // a typo: take the best guess, as the ghost offered
-      const base = input, bcur = cur; accept(list[0], ctx.from, false);
+      const base = input, bcur = cur; accept(list[0], ctx.from, false); mirror('Completed: ' + input + '. Tab again for others.');
       tabState = { base, cur: bcur, list, i: 0, from: ctx.from, after: input, cyc: true }; return;
     }
     const cp = commonPrefix(list.filter(x => x.startsWith(ctx.q)));
@@ -2004,7 +2026,7 @@ M.createTerminal = function createTerminal(opts){
     if (ctrl && !alt){
       if (c === 'l'){ clearScreen(); touched(); return true; }
       if (c === 'c'){
-        rows.push({ k: 't', i: 0, s: [...promptSpans(), [input, 'n'], ['^C', 'd']] }); shown = rows.length; partial = 0;
+        ttyRows([...promptSpans(), [input, 'n'], ['^C', 'd']]);
         input = ''; cur = 0; suggestion = ''; hIdx = history.length; status = 130; touched(); return true;
       }
       if (c === 'a'){ cur = 0; touched(); return true; }
@@ -2168,8 +2190,8 @@ M.createTerminal = function createTerminal(opts){
         fillT(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
         for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : color(sp[1]));
       } else fillT(s, X(col), top + fs * k * 0.68);
-      if (link && !selected){ g.fillStyle = link.cmd ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, 2); }
-      if (link && (link.cmd || link.url) && s.trim()) drawnHits.push({ x0: X(col), x1: X(col + s.length * k), top, bot: top + ch * k, link });
+      if (link && !selected){ g.fillStyle = link.cmd || link.stop ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, 2); }
+      if (link && (link.cmd || link.url || link.stop) && s.trim()) drawnHits.push({ x0: X(col), x1: X(col + s.length * k), top, bot: top + ch * k, link });
       col += s.length * k;
     }
   }
@@ -2191,7 +2213,7 @@ M.createTerminal = function createTerminal(opts){
   function fitSpans(opts){ const len = f => f.reduce((n, x) => n + x[0].length, 0); return opts.find(f => len(f) <= COLS) || opts[opts.length - 1]; }
   function belowPrompt(){
     if (rs){
-      const q = rs.q, st = rs.fail ? 'a' : 'b';
+      const q = rs.q, st = rs.fail ? 'd' : 'b';
       return [fitSpans([
         [['search ', 'f'], [q, st], [rs.fail ? '  no match' : '', 'f'], ['   ctrl+r older \u00b7 enter run \u00b7 esc', 'f']],
         [['search ', 'f'], [q, st], [rs.fail ? '  no match' : '', 'f'], ['   ^R older \u00b7 esc', 'f']],
@@ -2202,7 +2224,7 @@ M.createTerminal = function createTerminal(opts){
     if (!t || !t.cyc || t.list.length < 2 || t.after !== input){
       if (!nudgeOn()) return [];
       if (input) return [[['press ', 'f'], ['enter', 'd'], [' to run it', 'f']]];
-      return [[['try ', 'f'], chip('about', 'd'), ['  or  ', 'f'], chip('help', 'd')]];
+      return [[['try ', 'f'], chip('about', 'd'), [' or ', 'f'], chip('help', 'd')]];
     }
     const w = Math.min(COLS - 2, Math.max(...t.list.map(x => x.length)) + 2), nc = Math.max(1, Math.floor(COLS / w));
     const lines = Math.ceil(t.list.length / nc), maxL = Math.min(5, Math.max(2, ROWS - 6));
@@ -2246,7 +2268,9 @@ M.createTerminal = function createTerminal(opts){
       const at = input.toLowerCase().indexOf(rs.q.toLowerCase()) - off;
       if (at >= 0 && at < vis.length) body = [[vis.slice(0, at), 'd'], [vis.slice(at, at + rs.q.length), 'b'], [vis.slice(at + rs.q.length), 'd']];
     }
+    if (off > 0){ const k = body.findIndex(x => x[0]); if (k >= 0){ body[k] = [body[k][0].slice(1), body[k][1]]; body.unshift(['\u2190', 'f']); } }   // more to the left
     drawSpans({ i: 0, s: [...promptSpans(), ...body] }, top, 999);
+    if (input.length > off + room && PL + cur - off !== COLS - 1) text('\u2192', COLS - 1, top, 'f');   // more to the right
     promptY = top + ch;
     const cx = X(PL + cur - off);
     if (gh){
@@ -2373,7 +2397,7 @@ M.createTerminal = function createTerminal(opts){
     } else if (job && job.ask && !app && !typing()){
       if (u >= first && u < first + ROWS) drawAsk(PADY + (u - first + lift) * ch);
     } else if (job && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
-      text(COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 0, PADY + (u - first + lift) * ch, 'f');
+      drawSpans({ i: 0, s: [[TAP ? 'tap here to stop' : COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 'f', { stop: true }]] }, PADY + (u - first + lift) * ch, 999);
     }
     g.restore(); curFont = '';
     // scroll position: a thin rail on the right and a quiet note at the bottom
@@ -2382,10 +2406,12 @@ M.createTerminal = function createTerminal(opts){
       g.fillStyle = P.faint; g.fillRect(railX, railTop, 2, railH);
       const th = Math.max(24, railH * ROWS / total), ty = railTop + (railH - th) * (first / Math.max(1, total - ROWS));
       g.fillStyle = P.dim; g.fillRect(railX - 2, ty, 6, th);
-      const note = '  ' + scrollOff + ' more below' + (COLS >= 46 ? '  pgdn ' : ' ');
+      const note = '  ' + scrollOff + ' more below' + (COLS >= 46 && !TAP ? '  pgdn ' : ' ');
       const nx = COLS - note.length, top = PADY + (ROWS - 1) * ch;
       g.fillStyle = P.bg; g.fillRect(X(nx) - 8, top - 4, note.length * cw + 8, ch + 8);
       setFont(); g.fillStyle = P.dim; fillT(note, X(nx), top + fs * 0.68);
+      drawnHits = drawnHits.filter(h => h.bot <= top - 4 || h.x1 <= X(nx) - 8);                         // what the note covers is not tappable
+      drawnHits.push({ x0: X(nx + 2), x1: X(COLS - 1), top, bot: top + ch, link: { bottom: true } });   // a tap on it goes back down
     }
   }
   /* ---- boot screen ---- */

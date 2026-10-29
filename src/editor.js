@@ -81,7 +81,7 @@ function start(api, argv, flavor){
   }
   if (readOnly && (flavor === 'vi' || flavor === 'vim')) say(COLS < 54 ? 'nano-style ' + flavor + '. read-only: :w copies' : 'nano-style ' + flavor + ', read-only file. ^S saves a copy', 'dim', 7);
   else if (readOnly) say(COLS < 54 ? 'built-in file. :w saves a copy, :q quits' : 'built-in file, read-only. ^S saves a copy', 'dim', 7);
-  else if (flavor === 'vi' || flavor === 'vim') say(COLS < 54 ? 'nano-style ' + flavor + '. :w saves, :q quits' : 'this ' + flavor + ' is nano-style: just type. :w or ^S saves, :q quits', 'dim', 7);
+  else if (flavor === 'vi' || flavor === 'vim') say(COLS < 54 ? 'nano-style ' + flavor + '. :w saves, :q quits' : 'a nano-style ' + flavor + ': just type. :w saves, :q quits', 'dim', 7);
   else if (COLS < 54) say('tip: :wq on its own line saves', 'dim', 7);
   else if (isNew) say('new file', 'dim');
 
@@ -371,7 +371,7 @@ function start(api, argv, flavor){
   function finish(how){
     done = true;
     const name = disp(path), n = plural(lines.length, 'line');
-    if (how === 'discard') api.print((path ? 'discarded changes to ' + name : 'discarded untitled buffer') + ' · nothing written');
+    if (how === 'discard') api.print(saves ? 'saved ' + name + ' · later changes not kept' : (path ? 'discarded changes to ' + name : 'discarded untitled buffer') + ' · nothing written');
     else if (saves) api.print('saved ' + name + ' · ' + n);
     else if (path) api.print('closed ' + name + ' · ' + n + (readOnly ? ' · read-only' : ' · no changes'));
     api.exit(0);
@@ -677,7 +677,7 @@ function start(api, argv, flavor){
     }
     if (msg){
       let t = '[ ' + msg.text + ' ]';
-      if (t.length > COLS) t = msg.text.slice(0, COLS);
+      if (t.length > COLS) t = msg.text.length > COLS ? msg.text.slice(0, COLS - 3) + '...' : msg.text;
       scr.put(Math.max(0, Math.floor((COLS - t.length) / 2)), y, t, msg.style);
     }
   }

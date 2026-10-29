@@ -36,7 +36,7 @@ function wrap(text, width){
    (a tap on the bottom row is esc there). */
 const isQuitKey = ([k, d]) => d === 'quit' || k === 'esc' || k === 'q' || k === 'any key';
 function keysLine(scr, y, keys){
-  let ks = TOUCH ? keys.map(x => x[1] === 'quit' ? ['tap here', 'to quit'] : x[0] === 'any key' ? ['tap here', x[1]] : x) : keys.slice();
+  let ks = TOUCH ? keys.map(x => x[1] === 'quit' ? ['tap here', 'to quit'] : x[0] === 'any key' ? ['tap', 'to ' + x[1]] : x[0] === 'space' ? ['tap', x[1]] : x) : keys.slice();
   const len = a => a.reduce((n, [k, d]) => n + k.length + (d ? 1 + d.length : 0), 0) + (a.length - 1) * 3;
   while (ks.length > 1 && len(ks) > scr.cols - 2){
     let i = ks.length - 1; while (i > 0 && (isQuitKey(ks[i]) || ks[i][0] === 'tap here')) i--;
@@ -318,12 +318,15 @@ T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer durati
     if (dur > 86400){ api.print('timer: up to 24 hours'); api.exit(2); return {}; }
     const elapsed = () => (paused ? pausedAt : now()) - t0;
     const finish = () => { api.print('timer: ' + fmtHMS(dur) + (done ? ' done' : ', stopped with ' + fmtHMS(Math.ceil(dur - elapsed())) + ' left')); api.exit(0); };
+    const pause = () => { if (paused){ t0 += now() - pausedAt; paused = false; } else { pausedAt = now(); paused = true; } };
     return {
+      /* phones: a tap pauses and resumes, and closes the finished timer; the bottom row is the way out */
+      tap(col, row){ if (row >= (api.rows || 18) - 1) return false; if (done) finish(); else pause(); return true; },
       key(e){
         if (e.ctrlKey || e.metaKey) return false;
         const k = e.key;
         if (done || isQuit(e)){ finish(); return true; }
-        if (k === ' ' || k === 'p' || k === 'Enter'){ if (paused){ t0 += now() - pausedAt; paused = false; } else { pausedAt = now(); paused = true; } return true; }
+        if (k === ' ' || k === 'p' || k === 'Enter'){ pause(); return true; }
         if (k === 'r' || k === 'R'){ t0 = now(); paused = false; return true; }
         if (k === '+' || k === '='){ dur += 60; return true; }
         if (k === '-'){ dur = Math.max(elapsed() + 1, dur - 60); return true; }
@@ -361,7 +364,7 @@ T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer durati
         scr.fill(bx, y, bw, 1, '·', 'faint'); scr.fill(bx, y, Math.round(bw * frac), 1, ' ', blk(done ? 'bright' : 'dim'));
         y += 2;
         center(scr, y, done ? "time's up" : paused ? 'paused' : fmtHMS(dur) + ' timer', done ? 'bright' : 'normal');
-        keysLine(scr, H - 1, done ? [['any key', 'done']] : [['space', paused ? 'resume' : 'pause'], ['q', 'quit'], ['+/-', 'a minute'], ['r', 'restart']]);
+        keysLine(scr, H - 1, done ? [['any key', 'close']] : [['space', paused ? 'resume' : 'pause'], ['q', 'quit'], ['+/-', 'a minute'], ['r', 'restart']]);
       },
     };
   } };
@@ -438,7 +441,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
     const quit = () => { api.print(done ? 'typing: ' + wpm() + ' wpm, ' + acc() + '% accurate' + (newBest ? ', a new best' : '') : 'typing: stopped'); api.exit(0); };
     return {
       /* phones have no esc: a tap on the keys line (the bottom row) quits */
-      tap(col, row){ if (row >= (api.rows || 18) - 1){ quit(); return true; } return false; },
+      tap(col, row){ if (row >= (api.rows || 18) - 1){ quit(); return true; } if (done){ reset(); return true; } return false; },
       key(e){
         if (e.ctrlKey || e.metaKey || e.altKey) return false;
         const k = e.key;
@@ -482,14 +485,15 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
         if (done){
           scr.cursor(null);
           const y = ty + lines.length * 2 + 1;
-          const n = String(wpm()), f = fitScale(n, W - 20, Math.max(5, H - y - 4)) || { sx: 1, sy: 1, w: bitWidth(DIG3, n), h: 5 };
+          const n = String(wpm()), f = fitScale(n, W - 20, Math.min(10, Math.max(5, H - y - 4))) || { sx: 1, sy: 1, w: bitWidth(DIG3, n), h: 5 };
           const bx = x0, by = y;
           if (y + f.h + 2 < H){ bigText(scr, bx, by, n, f.sx, f.sy, blk('bright')); scr.put(bx + f.w + 2, by + f.h - 1, 'wpm', 'dim'); }
           const sx = bx + f.w + 8 <= x0 + w - 14 ? bx + f.w + 8 : x0, sy = sx === x0 ? by + f.h + 1 : by;
           scr.put(sx, sy, 'accuracy', 'dim'); scr.put(sx + 10, sy, acc() + '%', 'normal');
           scr.put(sx, sy + 1, 'time', 'dim'); scr.put(sx + 10, sy + 1, fmtHMS(secs()), 'normal');
           scr.put(sx, sy + 2, 'best', 'dim'); scr.put(sx + 10, sy + 2, best ? best + ' wpm' + (newBest ? '  new best' : '') : '-', newBest ? 'bright' : 'normal');
-          keysLine(scr, H - 1, [['enter', 'again'], ['q', 'quit']]);
+          if (acc() < 80 && sy + 4 < H - 1) scr.put(sx, sy + 4, 'a best needs 80% accuracy', 'faint');
+          keysLine(scr, H - 1, TOUCH ? [['tap above', 'again'], ['q', 'quit']] : [['enter', 'again'], ['q', 'quit']]);
         } else {
           keysLine(scr, H - 1, TOUCH ? [['esc', 'quit']] : t0 ? [['tab', 'new passage'], ['esc', 'quit']] : [['start typing', ''], ['tab', 'new passage'], ['esc', 'quit']]);
         }
@@ -672,7 +676,7 @@ T.cmds.define = { g: 'net', desc: 'what a word means', usage: 'define word', ex:
     if (!w){ io.err('usage: define word  (try: define serendipity)\n'); return 2; }
     let d;
     try { d = await net.json('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(w.toLowerCase())); }
-    catch (e){ if (e.status === 404){ io.err('define: no entry for ' + w + '\n'); return 1; } return net.fail(io, 'define', e); }
+    catch (e){ if (e.status === 404 || e.kind === 'cors'){ io.err('define: no entry for ' + w + '\n'); return 1; } return net.fail(io, 'define', e); }   // its 404 carries no CORS header
     const e0 = d[0] || {}, ph = e0.phonetic || ((e0.phonetics || []).find(p => p.text) || {}).text || '';
     const means = [];
     for (const e of d) for (const m of e.meanings || []){ const ex = means.find(x => x.pos === m.partOfSpeech); if (ex) ex.defs.push(...m.definitions); else means.push({ pos: m.partOfSpeech, defs: m.definitions.slice() }); }
@@ -795,7 +799,7 @@ T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] 
     if (!q){ io.err('qr: too long for this little encoder (' + new TextEncoder().encode(text).length + ' bytes; ' + (lo ? 271 : 213) + ' max' + (lo ? '' : ', or 271 with -l') + ')\n'); return 1; }
     if (!io.tty){ const qz = 2, n = q.size + qz * 2; let s = ''; for (let y = -qz; y < q.size + qz; y++){ for (let x = -qz; x < q.size + qz; x++) s += (q.modules[y] && q.modules[y][x]) ? '##' : '  '; s += '\n'; } io.out(s); return; }
     const o = io.ui();
-    o.blank().bits(q.modules, 3).blank().at(2, [clip(text.replace(/\s+/g, ' '), io.cols - 14), 'd'], ['   v' + q.version + ' ' + q.ecc, 'f']).blank();
+    o.blank().bits(q.modules, 3).blank().at(2, [clip(text.replace(/\s+/g, ' '), io.cols - 4), 'd']).blank();
     io.rich(o);
   } };
 
@@ -971,6 +975,29 @@ function genPass(len, plain){
   return pw;
 }
 const copy = T.copy;                                   // terminal.js
+/* a short line under a command, indented, wrapping under itself on a narrow screen: spans are [text, 'd'|'n'|'f'|'b'] */
+function say(io, ...spans){
+  if (io.tty && io.ui){ const o = io.ui(); o.at(2, ...spans); io.rich(o); }
+  else io.out('  ' + spans.map(x => x[0]).join('') + '\n');
+}
+/* the export: 'kn84v1:' iterations (blank for the default) . salt . iv . ciphertext, base64 without padding. Short, so it
+   pastes in one go; the older 'kn84vault:' + base64(JSON) form still imports */
+const unpad = x => String(x).replace(/=+$/, ''), repad = x => x + '='.repeat((4 - x.length % 4) % 4);
+const vExport = b => 'kn84v1:' + (b.iter && b.iter !== VITER ? b.iter : '') + '.' + unpad(b.salt) + '.' + unpad(b.iv) + '.' + unpad(b.ct);
+function vParse(s){
+  s = String(s || '').replace(/\s+/g, '');
+  const m = /^kn84v1:(\d*)\.([A-Za-z0-9+/]+)\.([A-Za-z0-9+/]+)\.([A-Za-z0-9+/]+)$/.exec(s);
+  if (m) return { v: 1, kdf: 'PBKDF2-SHA256', iter: m[1] ? +m[1] : VITER, salt: repad(m[2]), iv: repad(m[3]), ct: repad(m[4]) };
+  try { const b = JSON.parse(atob(s.replace(/^kn84vault:/, ''))); if (b && b.ct && b.salt && b.iv) return b; } catch (e){}
+  return null;
+}
+/* the clipboard, if the browser lets the page read it (a permission prompt gets a few seconds) */
+function clipRead(){
+  try {
+    if (!(navigator.clipboard && navigator.clipboard.readText)) return Promise.resolve('');
+    return Promise.race([navigator.clipboard.readText().catch(() => ''), new Promise(res => setTimeout(() => res(''), 6000))]);
+  } catch (e){ return Promise.resolve(''); }
+}
 function vLock(){ if (V.items) for (const it of V.items) it.pw = ''; V.key = null; V.items = null; clearTimeout(V.timer); }
 function vTouch(){ clearTimeout(V.timer); V.timer = setTimeout(vLock, VIDLE); }
 try { document.addEventListener('visibilitychange', () => { if (document.hidden) vLock(); }); } catch (e){}
@@ -1032,13 +1059,13 @@ async function vaultSave(io, pw, label){
   if (vFind(label)){ io.err('vault: ' + label + ' is already saved  (try: vault rm ' + label + ')\n'); return false; }
   V.items.push({ label, pw, created: new Date().toISOString().slice(0, 10) });
   if (!(await vSeal())){ V.items.pop(); io.err('vault: could not store it\n'); return false; }
-  io.out('  saved as ', 'dim'); io.out(label, 'bright'); io.out(' in your vault, encrypted\n', 'dim');
+  say(io, ['saved as ', 'd'], [label, 'b'], [' in your vault, encrypted', 'd']);
   return true;
 }
 const VSUB = ['add', 'get', 'rm', 'rename', 'lock', 'export', 'import', 'reset'];
 T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this browser', usage: 'vault [add | get | rm | rename | lock | export | import | reset] [label]',
   ex: ['vault', 'vault add github', 'vault get github', 'vault rename github gh', 'vault lock', 'pass  then s to save'],
-  more: 'passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. nothing is sent anywhere. clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. it locks after 5 idle minutes or when you leave the tab. handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault so you can keep a copy; vault import takes it back.',
+  more: 'passwords you save are encrypted with your passphrase (AES-256, key from PBKDF2) and stored only in this browser, on this device. nothing is sent anywhere. clearing site data deletes the vault, and a forgotten passphrase cannot be recovered. it locks after 5 idle minutes or when you leave the tab. handy for a scratch password; not a replacement for a real password manager. vault export prints the encrypted vault and copies it; vault import reads it back from the clipboard, or from a paste.',
   complete(args){ if (!args.length) return VSUB; if (['get', 'rm', 'rename'].includes(args[0]) && args.length === 1 && V.items) return V.items.map(it => it.label); return null; },
   async run(argv, io){
     const sub = argv[1] || '', arg = argv[2];
@@ -1049,25 +1076,35 @@ T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this brow
     if (sub === 'lock'){ const was = !!V.key; vLock(); io.out(was ? 'vault locked\n' : 'vault was already locked\n', 'dim'); return; }
     if (sub === 'export'){
       const b = vRead(); if (!b){ io.err('vault: nothing to export yet\n'); return 1; }
-      const s = 'kn84vault:' + btoa(JSON.stringify(b));
+      const s = vExport(b);
       if (!io.tty){ io.out(s + '\n'); return; }
-      io.out('  your vault, still encrypted. keep it somewhere safe;\n  vault import takes it back.\n\n', 'dim');
-      for (let k = 0; k < s.length; k += io.cols - 4) io.out('  ' + s.slice(k, k + io.cols - 4) + '\n', 'faint');
-      const ok = await copy(s); io.out(ok ? '\n  copied to the clipboard\n' : '\n', 'dim'); return;
+      const ok = await copy(s);
+      const o = io.ui(); o.blank().at(2, ['your vault, still encrypted. keep a copy somewhere safe; ', 'd'], ['vault import', 'n'], [' brings it back.', 'd']).blank();
+      for (let k = 0; k < s.length; k += io.cols - 4) o.at(2, [s.slice(k, k + io.cols - 4), 'f']);
+      o.blank(); if (ok) o.at(2, ['copied to the clipboard', 'd']).blank();
+      io.rich(o); return;
     }
     if (sub === 'import'){
-      let s = (argv.slice(2).join('') || io.stdin || '').replace(/\s+/g, '');
-      if (!s && io.ask) s = ((await io.ask('paste the export  ')) || '').replace(/\s+/g, '');
-      let b = null; try { b = JSON.parse(atob(s.replace(/^kn84vault:/, ''))); } catch (e){}
-      if (!b || !b.ct || !b.salt || !b.iv){ io.err('vault: that is not a vault export\n'); return 1; }
-      if (vRead() && io.ask){ const k = await io.ask([['replace the vault on this device? ', 'n'], ['y', 'b'], [' yes  ·  any other key no', 'f']], { keys: ['y'] }); if (k !== 'y'){ io.out('  kept the one you have\n', 'dim'); return; } }
+      let s = (argv.slice(2).join('') || io.stdin || '').replace(/\s+/g, ''), b = s ? vParse(s) : null;
+      if (!s && io.tty && io.ask){                      // the clipboard first (vault export put it there), then a paste
+        const c = await clipRead(); b = vParse(c);
+        if (b) say(io, ['found an export on the clipboard', 'd']);
+        else s = ((await io.ask('paste the export  ')) || '').replace(/\s+/g, '');
+        if (!s && !b){ say(io, ['nothing imported', 'f']); return 1; }
+      }
+      if (!b) b = vParse(s);
+      if (!b){
+        if (s.length >= 250) say(io, ['that paste was cut short. copy the export, then run ', 'd'], ['vault import', 'n'], [' again: it reads the clipboard', 'd']);
+        io.err('vault: that is not a vault export\n'); return 1;
+      }
+      if (vRead() && io.ask){ const k = await io.ask([['replace the vault on this device? ', 'n'], ['y', 'b'], [' yes  ·  any other key no', 'f']], { keys: ['y'] }); if (k !== 'y'){ say(io, ['kept the one you have', 'd']); return; } }
       try { localStorage.setItem(VKEY, JSON.stringify(b)); } catch (e){ io.err('vault: could not store it\n'); return 1; }
-      vLock(); io.out('  imported. it opens with the passphrase it was made with\n', 'dim'); return;
+      vLock(); say(io, ['imported. it opens with the passphrase it was made with', 'd']); return;
     }
     if (sub === 'reset'){
       if (!vRead()){ io.out('no vault here\n', 'dim'); return; }
       if (!io.ask){ io.err('vault: reset needs the screen\n'); return 1; }
-      io.out('  this deletes every saved password on this device, for good.\n', 'normal');
+      say(io, ['this deletes every saved password on this device, for good.', 'n']);
       const t = await io.ask([['type ', 'f'], ['delete', 'b'], [' to confirm  ', 'f']]);
       if (t !== 'delete'){ io.out('  nothing deleted\n', 'dim'); return; }
       vLock(); try { localStorage.removeItem(VKEY); } catch (e){}
@@ -1121,9 +1158,11 @@ T.cmds.vault = { g: 'tools', desc: 'your saved passwords, encrypted in this brow
 
 /* credits: what this page is made of */
 T.cmds.credits = { g: 'misc', desc: 'who made what', usage: 'credits', run(argv, io){
-  io.out('three.js by mrdoob and contributors, MIT\n');
-  if (M.KEY_SAMPLES && M.KEY_SAMPLES.credit) io.out(M.KEY_SAMPLES.credit + '\n', 'dim');
-  io.out('everything else: kaiav\n');
+  const ks = M.KEY_SAMPLES && M.KEY_SAMPLES.credit;
+  if (!io.tty || !io.ui){ io.out('three.js by mrdoob and contributors, MIT\n' + (ks ? ks + '\n' : '') + 'everything else: kaiav\n'); return; }
+  const o = io.ui(); o.blank().at(2, ['three.js', 'n'], [' by mrdoob and contributors, MIT', 'd']);
+  if (ks) o.at(2, [ks, 'd']);
+  o.at(2, ['everything else: ', 'd'], ['kaiav', 'n']).blank(); io.rich(o);
 } };
 
 /* a hello for people who type one */

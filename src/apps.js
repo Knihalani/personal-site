@@ -74,8 +74,10 @@ T.apps.tetris = {
   usage: 'tetris',
   more: 'arrows move, \u2191 or x turns, z turns back, \u2193 drops a row, space drops all the way, c holds, p pauses, q quits. on a phone, tap the sides to move, the top to turn and the bottom to drop.',
   start(api){
-    const STACK = (api.cols || 72) < 47;                               // phones: the panel goes under the well
-    const BH = Math.max(10, Math.min(20, (api.rows || 23) - (STACK ? 15 : 2)));   // well + floor + feet (+ panel) must fit
+    const COLS0 = api.cols || 72, ROWS0 = api.rows || 23;
+    const SIDE = COLS0 < 47 && COLS0 >= 39;                            // phones: a slim panel beside a full-height well
+    const STACK = COLS0 < 39;                                          // narrower still: the panel goes under the well
+    const BH = Math.max(10, Math.min(20, ROWS0 - (STACK ? 15 : TOUCH ? 5 : 2)));   // well + floor + feet (+ panel, + room to tap below) must fit
     const board = Array.from({ length: BH }, () => Array(BW).fill(null));
     let bag = [], queue = [], cur = null, hold = null, canHold = true;
     let score = 0, lines = 0, level = 1, hi = hiGet(TETRIS_HI), newHi = false;
@@ -92,6 +94,7 @@ T.apps.tetris = {
       if (!fits(cur.p, cur.r, cur.x, cur.y)){ cur.y--; if (!fits(cur.p, cur.r, cur.x, cur.y)) gameOver(); }
     }
     function next(){ fill(); spawn(queue.shift()); fill(); canHold = true; }
+    const summary = () => api.print(`tetris: ${score} points, ${lines} lines, ` + (newHi ? 'a new high score' : 'best ' + Math.max(hi, score)));
     function gameOver(){
       over = true;
       if (score > hi){ hi = score; newHi = true; hiSet(TETRIS_HI, hi); }
@@ -142,10 +145,10 @@ T.apps.tetris = {
       next();
     }
     next();
-    let oyDrawn = 0;                                         // where the well was last drawn (for taps)
+    let oyDrawn = 0, bxDrawn = 0;                            // where the well was last drawn (for taps)
 
     return {
-      /* phones: the top of the screen turns, the bottom drops, the left and right thirds move */
+      /* taps: beside the falling piece moves it that way, on it turns it, below the well drops it */
       tap(col, row){
         help = false;
         /* the bottom row is the way out on a phone: the first tap pauses, the next one quits (the terminal
@@ -154,11 +157,10 @@ T.apps.tetris = {
         if (over){ restart(); return true; }
         if (paused){ paused = false; return true; }
         if (!cur || flash) return true;
-        const rows = api.rows || 23, cols = api.cols || 40;
-        if (row < rows * 0.3) rotate(1);
-        else if (row >= Math.min(rows * 0.75, oyDrawn + BH)) hardDrop();
-        else if (col < cols / 3) shift(-1);
-        else if (col >= cols * 2 / 3) shift(1);
+        if (row >= oyDrawn + BH){ hardDrop(); return true; }
+        const xs = cells(cur.p, cur.r, cur.x, cur.y).map(([x]) => bxDrawn + x * 2);
+        if (col < Math.min(...xs)) shift(-1);
+        else if (col > Math.max(...xs) + 1) shift(1);
         else rotate(1);
         return true;
       },
@@ -167,10 +169,10 @@ T.apps.tetris = {
         help = false;
         if (over){
           if (k === 'Enter' || k === 'r' || k === 'R') restart();
-          else if (isQuit(k)) api.exit(0);
+          else if (isQuit(k)){ summary(); api.exit(0); }
           return true;
         }
-        if (isQuit(k)){ api.print(`tetris: score ${score}, ${lines} lines, level ${level}. high score ${Math.max(hi, score)}`); if (score > hi) hiSet(TETRIS_HI, score); api.exit(0); return true; }
+        if (isQuit(k)){ if (score > hi){ hi = score; newHi = true; hiSet(TETRIS_HI, score); } summary(); api.exit(0); return true; }
         if (k === 'p' || k === 'P'){ paused = !paused; return true; }
         if (paused || !cur || flash) return true;
         switch (k){
@@ -204,10 +206,10 @@ T.apps.tetris = {
       render(scr){
         scr.clear(); scr.cursor(0, 0, null);
         const W = BW * 2 + 4;
-        const compact = STACK || scr.cols < 64 || scr.rows < 22;      // one panel, beside the well or under it
-        const ox = STACK ? Math.max(0, ((scr.cols - W) / 2) | 0) : compact ? Math.max(0, ((scr.cols - (W + 3 + 20)) / 2) | 0) : ((scr.cols - W) / 2) | 0;
-        const oy = Math.max(0, ((scr.rows - BH - 2 - (STACK ? 13 : 0)) / 2) | 0); oyDrawn = oy;
-        const bx = ox + 2;  // first board column
+        const compact = STACK || SIDE || scr.cols < 64 || scr.rows < 22;      // one panel, beside the well or under it
+        const ox = STACK ? Math.max(0, ((scr.cols - W) / 2) | 0) : SIDE ? Math.max(0, ((scr.cols - W - 15) / 2) | 0) : compact ? Math.max(0, ((scr.cols - (W + 3 + 20)) / 2) | 0) : ((scr.cols - W) / 2) | 0;
+        const oy = TOUCH && !STACK ? Math.max(0, Math.min(2, scr.rows - BH - 7)) : Math.max(0, ((scr.rows - BH - 2 - (STACK ? 13 : 0)) / 2) | 0); oyDrawn = oy;
+        const bx = ox + 2; bxDrawn = bx;  // first board column
         // well: classic "<!" ... "!>" sides
         for (let y = 0; y < BH; y++){
           scr.put(ox, oy + y, '<!', 'faint'); scr.put(bx + BW * 2, oy + y, '!>', 'faint');
@@ -230,7 +232,17 @@ T.apps.tetris = {
         // mini piece preview
         const mini = (p, x, y, level) => { if (!p) return; const n = SHAPES[p].length; const off = n === 4 ? 0 : 1;
           for (const [cx, cy] of STATES[p][0]) scr.put(x + (cx + off) * 2, y + cy - (p === 'I' ? 1 : 0), '  ', blk(level)); };
-        if (compact){
+        if (SIDE){
+          // a slim column: next, hold, the numbers, then how to play
+          const rx = ox + W + 1, ry = oy;
+          scr.put(rx, ry, 'NEXT', 'dim'); mini(queue[0], rx, ry + 1, 'bright');
+          scr.put(rx, ry + 4, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx, ry + 5, canHold ? 'normal' : 'faint');
+          [['SCORE', score, 'bright'], ['HIGH', Math.max(hi, score), score > hi ? 'bright' : 'normal'], ['LEVEL', level, 'normal'], ['LINES', lines, 'normal']]
+            .forEach(([a, v, st], i) => { scr.put(rx, ry + 8 + i, a.padEnd(6), 'dim'); scr.put(rx + 6, ry + 8 + i, String(v), st); });
+          const ks = TOUCH ? [['tap', ''], ['beside', 'move'], ['on it', 'turn'], ['below', 'drop']]
+            : [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
+          ks.forEach(([a, b], i) => { if (ry + 13 + i >= scr.rows - 1) return; scr.put(rx, ry + 13 + i, a.padEnd(7), b ? 'normal' : 'faint'); scr.put(rx + 7, ry + 13 + i, b, 'faint'); });
+        } else if (compact){
           const rx = STACK ? ox + 2 : ox + W + 3, ry = STACK ? oy + BH + 3 : oy;
           scr.put(rx, ry, 'NEXT', 'dim'); mini(queue[0], rx, ry + 1, 'bright');
           scr.put(rx + 10, ry, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx + 10, ry + 1, canHold ? 'normal' : 'faint');
@@ -238,7 +250,7 @@ T.apps.tetris = {
             .forEach(([a, v, st], i) => { scr.put(rx, ry + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, ry + 4 + i, String(v), st); });
           const ks = [['\u2190\u2192', 'move'], ['\u2191 x', 'turn'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           const ky = ry + 9, two = STACK || scr.rows - ky < ks.length;
-          const short = TOUCH ? [['tap', 'sides move'], ['top', 'turn'], ['low', 'drop']]
+          const short = TOUCH ? [['tap', 'beside: move'], ['on', 'it: turn'], ['low', 'drop']]
             : [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           (two ? short : ks).forEach(([a, b], i) => {
             const x = rx + (two ? (i % 2) * (TOUCH ? 15 : 11) : 0), y = ky + (two ? i >> 1 : i);
@@ -277,11 +289,11 @@ T.apps.tetris = {
           c(6, 'GAME  OVER', 'bright');
           c(8, 'score ' + score, 'normal');
           c(9, lines + ' lines  lvl ' + level, 'dim');
-          c(10, newHi ? '* new high score *' : 'best ' + hi, newHi ? 'accent' : 'dim');
+          c(10, newHi ? 'new high score' : 'best ' + hi, newHi ? 'accent' : 'dim');
           if (REDUCED || Math.floor(t * 2) % 2 === 0) c(12, TOUCH ? 'tap again' : 'enter again', 'normal');
           if (!TOUCH) c(13, 'q quit', 'faint');
         } else if (help && score === 0){
-          scr.put(bx + 3, oy + 3, TOUCH ? ' tap to play' : 'arrows to play', 'dim');
+          scr.put(bx + 3, oy + 3, TOUCH ? 'tap to steer' : 'arrows to play', 'dim');
         }
         if (TOUCH) center(scr, scr.rows - 1, paused || over ? 'tap here to quit' : 'tap here to pause', 'faint');
       },
@@ -304,6 +316,7 @@ T.apps.snake = {
     const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
     const KEYMAP = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right', k: 'up', j: 'down', h: 'left', l: 'right' };
     let body, dir, queue, food, score, step, acc, paused, over, hi = hiGet(SNAKE_HI), newHi, t = 0, started, eaten;
+    const summary = () => api.print(`snake: ${score} points, length ${body.length}, ` + (newHi ? 'a new high score' : 'best ' + Math.max(hi, score)));
     function placeFood(){
       const taken = new Set(body.map(([x, y]) => x + ',' + y));
       if (taken.size >= GW * GH) return null;
@@ -363,10 +376,10 @@ T.apps.snake = {
         const k = e.key;
         if (over){
           if (k === 'Enter' || k === 'r' || k === 'R') reset();
-          else if (isQuit(k)) api.exit(0);
+          else if (isQuit(k)){ summary(); api.exit(0); }
           return true;
         }
-        if (isQuit(k)){ api.print(`snake: ${score} points, length ${body.length}. high score ${Math.max(hi, score)}`); if (score > hi) hiSet(SNAKE_HI, score); api.exit(0); return true; }
+        if (isQuit(k)){ if (score > hi){ hi = score; newHi = true; hiSet(SNAKE_HI, score); } if (started) summary(); api.exit(0); return true; }
         if (k === 'p' || k === 'P' || (k === ' ' && started)){ paused = !paused; return true; }
         const d = KEYMAP[k];
         if (d && !paused){ started = true; turn(d); }
@@ -406,14 +419,15 @@ T.apps.snake = {
         const [hx, hy] = body[0];
         headAt = [ox + 1 + hx * 2, oy + 1 + hy];
         at(hx, hy, over ? 'xx' : '  ', blk('bright'));
-        const cw = 30, cx = ox + 1 + ((GW * 2 - cw) / 2 | 0), cy = oy + ((GH - 9) / 2 | 0) + 1;
+        // the cards sit in the middle; the one before the start sits higher, so the snake shows under it
+        const cw = Math.min(GW * 2 - 2, 34), cx = ox + 1 + ((GW * 2 - cw) / 2 | 0), cy = started || over ? oy + ((GH - 9) / 2 | 0) + 1 : oy + 1;
         const c = (y, s, st) => scr.put(cx + ((cw - s.length) / 2 | 0), cy + y, s, st);
         if (over){
           box(scr, cx, cy, cw, 10, 'normal');
           c(1, 'G A M E   O V E R', 'bright');
           c(3, score + ' points', 'normal');
           c(4, 'length ' + n + '   apples ' + eaten, 'dim');
-          c(6, newHi ? '* new high score *' : 'best ' + hi, newHi ? 'accent' : 'dim');
+          c(6, newHi ? 'new high score' : 'best ' + hi, newHi ? 'accent' : 'dim');
           c(8, TOUCH ? 'tap again' : 'enter again  \u00b7  q quit', REDUCED || Math.floor(t * 2) % 2 === 0 ? 'normal' : 'dim');
         } else if (paused){
           box(scr, cx, cy + 2, cw, 5, 'dim');

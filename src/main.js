@@ -114,8 +114,8 @@ on(stage, 'click', e => {
 });
 
 /* the one hint: shown once, gone after the first lean or ~12 s. Without pointer look (reduced motion) there is none */
-let hintT = 0;
-const hideHint = () => { if (!hintT) return; clearTimeout(hintT); hintT = 0; hint.style.opacity = '0'; setTimeout(() => { hint.hidden = true; }, 1300); };
+let hintT = 0, hintIn = 0;
+const hideHint = () => { if (!hintT) return; clearTimeout(hintT); clearTimeout(hintIn); hintT = 0; hint.style.opacity = '0'; setTimeout(() => { hint.hidden = true; }, 1300); };
 on(window, 'pointermove', e => {
   if (e.pointerType !== 'mouse' || REDUCED || reading()) return;
   const ny = e.clientY / innerHeight * 2 - 1;
@@ -162,7 +162,10 @@ const fromHash = deepLinks(() => term, ac.signal);
 whenReady(() => {
   if (dead) return;
   fromHash(); focusInput(); raf = requestAnimationFrame(frame);
-  if (!REDUCED && !matchMedia('(hover: none)').matches){ hint.hidden = false; hintT = setTimeout(hideHint, 12000); }
+  if (!REDUCED && !matchMedia('(hover: none)').matches){   // fades in once the tube has had a moment, out after ~12 s
+    hint.style.opacity = '0'; hint.hidden = false;
+    hintIn = setTimeout(() => { hint.style.opacity = ''; }, 1800); hintT = setTimeout(hideHint, 14000);
+  }
 });
 
 /* the terminal alone, no 3D. Phones: full width under a header strip, text typed through #kbd. Desktops (a fallback):
@@ -174,13 +177,16 @@ function flat(){
      really changes (a rotation, a desktop window resize). The on-screen keyboard only changes the height on
      phones, so there it never rebuilds: place() lifts the prompt instead */
   const build = () => {
-    const probe = D.createElement('div'); probe.className = 'phone-term'; probe.style.cssText = 'visibility:hidden;padding-bottom:env(safe-area-inset-bottom, 0px)';
+    const probe = D.createElement('div'); probe.className = 'phone-term';
+    probe.style.cssText = 'visibility:hidden;padding:0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)';
     stage.appendChild(probe);
-    const top = probe.offsetTop, inset = parseFloat(getComputedStyle(probe).paddingBottom) || 0; probe.remove();
-    const W = TOUCH ? innerWidth : Math.max(200, Math.min(innerWidth - 32, 760)), H = Math.max(200, innerHeight - top - inset - (TOUCH ? 0 : 16));
+    const cs = getComputedStyle(probe), px = v => parseFloat(v) || 0;
+    const top = probe.offsetTop, inset = px(cs.paddingBottom), sl = TOUCH ? px(cs.paddingLeft) : 0, sr = TOUCH ? px(cs.paddingRight) : 0; probe.remove();
+    // a phone on its side keeps the text clear of the notch and the rounded corners
+    const W = TOUCH ? innerWidth - sl - sr : Math.max(200, Math.min(innerWidth - 32, 760)), H = Math.max(200, innerHeight - top - inset - (TOUCH ? 0 : 16));
     term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols: W < 420 ? 40 : W < 600 ? 46 : 54 });
     if (cv) cv.remove();
-    cv = term.canvas; cv.className = 'phone-term'; cv.style.width = W + 'px'; cv.style.height = H + 'px'; stage.appendChild(cv);
+    cv = term.canvas; cv.className = 'phone-term'; cv.style.width = W + 'px'; if (sl) cv.style.left = sl + 'px'; cv.style.height = H + 'px'; stage.appendChild(cv);
     bw = innerWidth; bh = innerHeight; shift = 0;
   };
   build();
@@ -216,13 +222,30 @@ function flat(){
     if (stage.style.cursor !== want) stage.style.cursor = want;
   });
   stage.addEventListener('click', e => {
+    if (caught){ caught = false; return; }   // that touch stopped a fling: it was not a tap
     const r = cv.getBoundingClientRect();
     if (term.handleTap && term.handleTap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)){ unlock(); return; }   // a card row: copy / open
     kbd.focus();
   });
-  // touch drag scrolls the terminal's history
-  let ty = null; stage.addEventListener('touchstart', e => { ty = e.touches[0].clientY; }, { passive: true });
-  stage.addEventListener('touchmove', e => { if (ty == null || !term.scroll) return; const y = e.touches[0].clientY; term.scroll((ty - y) * 2.5); ty = y; e.preventDefault(); }, { passive: false });
+  /* touch drag scrolls the terminal's history; a flick carries on and eases out, and a touch catches it */
+  let ty = null, tt = 0, vel = 0, fling = 0, caught = false;
+  const glide = () => {
+    fling = 0; vel *= 0.95; if (Math.abs(vel) < 0.05 || !term.scroll) return;
+    term.scroll(vel * 16 * 2.5); fling = requestAnimationFrame(glide);
+  };
+  stage.addEventListener('touchstart', e => {
+    caught = !!fling; cancelAnimationFrame(fling); fling = 0; vel = 0;
+    ty = e.touches[0].clientY; tt = e.timeStamp;
+  }, { passive: true });
+  stage.addEventListener('touchmove', e => {
+    if (ty == null || !term.scroll) return;
+    const y = e.touches[0].clientY, dt = Math.max(1, e.timeStamp - tt);
+    term.scroll((ty - y) * 2.5); vel = 0.8 * ((ty - y) / dt) + 0.2 * vel; ty = y; tt = e.timeStamp; e.preventDefault();
+  }, { passive: false });
+  stage.addEventListener('touchend', e => {
+    ty = null; if (REDUCED || e.timeStamp - tt > 80 || Math.abs(vel) < 0.3) return;   // a held finger, or a slow drag, stops where it is
+    vel = Math.max(-4, Math.min(4, vel)); fling = requestAnimationFrame(glide);
+  }, { passive: true });
   // keep the prompt line above the on-screen keyboard: measured from the canvas's untransformed top
   const place = () => {
     const vv = window.visualViewport, bottom = vv ? vv.offsetTop + vv.height : innerHeight;
