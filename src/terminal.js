@@ -435,6 +435,7 @@ M.createTerminal = function createTerminal(opts){
   const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const P = PALETTE;
   const sfx = name => { try { if (M.sound && M.sound.event) M.sound.event(name); } catch (e){} };
+  const toast = (ok, text) => { try { if (ok && typeof M.toast === 'function') M.toast('copied', text); } catch (e){} };   // a page-level note (phones), when main.js offers one
   let lastDisk = 0;
   const diskSound = () => { const t = performance.now(); if (t - lastDisk > 400){ lastDisk = t; sfx('disk'); } };
 
@@ -880,7 +881,7 @@ M.createTerminal = function createTerminal(opts){
   /* must run inside the keydown that asked for it, or popup blockers step in */
   function openTarget(url){
     try {
-      if (/^mailto:/i.test(url)) return copyText(url.replace(/^mailto:/i, '').split('?')[0]);
+      if (/^mailto:/i.test(url)){ const a = url.replace(/^mailto:/i, '').split('?')[0], ok = copyText(a); toast(ok, a); return ok; }
       const w = window.open(url, '_blank');
       if (w){ try { w.opener = null; } catch (e){} return true; }
     } catch (e){}
@@ -941,7 +942,7 @@ M.createTerminal = function createTerminal(opts){
     if (!io.tty){ io.write(url + '\n'); return; }
     if (/^mailto:/i.test(url)){                         // addresses are copied, never mailto'd
       const addr = url.replace(/^mailto:/i, '').split('?')[0];
-      const ok = copyText(addr); sfx('beep');
+      const ok = copyText(addr); sfx('beep'); toast(ok, addr);
       io.rich(out().at(0, [ok ? 'copied ' : 'copy this: ', 'd'], [addr, 'b'])); return;
     }
     const w = openTarget(url);
@@ -2245,6 +2246,7 @@ M.createTerminal = function createTerminal(opts){
       const text = typeof it.copy === 'function' ? it.copy() : it.copy;
       const ok = copyText(text); sfx('beep');
       const what = it.secret ? it.label : text;               // a secret (a vault password) is never drawn or read out
+      if (!it.secret) toast(ok, text);
       card.foot = ok ? [['  ', 'b', null, 'check'], ['copied ', 'd'], [what, 'b']] : it.secret ? [['could not reach the clipboard', 'd']] : [['select and copy: ', 'd'], [text, 'b']];
       said = (ok ? 'Copied ' : 'Could not copy ') + what + '.';
     } else {
@@ -3285,7 +3287,30 @@ M.createTerminal = function createTerminal(opts){
   draw();
   /* the pointer over the tube (u, v: 0..1 of the canvas, -1 off it; down: a button held): the intro's logo leans toward it */
   function pointer(u, v, down){ if (landing) DEMO.pointer(u, v, down); }
-  return { canvas, handleKey, handleKeyUp, handleTap, hitTest, insertText, update, run, scroll, resize, pointer, get cursorY(){ return promptY / H; },
+  /* phones (main.js's dock): what the word being typed could become, best first (q: match q as a command instead),
+     and taking one. pick() returns true when the line is then a whole command, ready to run */
+  function suggest(q){
+    if (booting || app || rs || (job && q == null)) return [];
+    let ctx;
+    if (q != null) ctx = { kind: 'cmd', q: String(q), from: 0, items: cmdItems() };
+    else { if (!input.trim() || cur !== input.length) return []; ctx = context(); }
+    if (!ctx.q) return [];
+    const l = candidates(ctx);
+    return l.filter(x => x.startsWith(ctx.q)).concat(l.filter(x => !x.startsWith(ctx.q))).slice(0, 8);
+  }
+  function pick(word){
+    if (booting || app || job || rs || !word) return false;
+    const ctx = context(); word = String(word);
+    accept(word, ctx.from, true); tabState = null; suggestion = ''; touched(); mirror('Completed: ' + input);
+    return ctx.kind === 'cmd' && !needsArg(word) && input.trim() === word;
+  }
+  return { canvas, handleKey, handleKeyUp, handleTap, hitTest, insertText, update, run, scroll, resize, pointer, suggest, pick,
+    get line(){ return input; },                          // the line being typed
+    get app(){ return app ? app.name : ''; },             // the full-screen app running, or ''
+    get page(){ return page; },                           // the page on screen ('' = the welcome)
+    get canBack(){ return !booting && !landing && !app && !job && !!(page || pages.length); },   // a page is open: back has somewhere to go
+    get scrollInfo(){ return { off: scrollOff, max: Math.max(0, totalUnits() - ROWS), rowH: ch / H }; },   // off: rows up from the bottom; rowH: a row, 0..1 of the canvas
+    get cursorY(){ return promptY / H; },
     get lum(){ return Math.min(1, lumAcc / (W * H)); },   // 0..1, the mean brightness of the last frame drawn
     get busy(){ return !!(app || job); } };   // a full-screen app or a running command: don't rebuild under it
 };

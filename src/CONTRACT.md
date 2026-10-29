@@ -67,7 +67,7 @@ motion stay in sync. Unknown codes: pick the nearest key or just bob a finger.
 
 ## terminal.js (terminal agent)
 ```js
-MAC.createTerminal({ content, aspect, cols? }) -> {   // cols: 54 on desktop, 40/46 on phones
+MAC.createTerminal({ content, aspect, cols? }) -> {   // cols: 54 on desktop, 40 on phones in portrait, up to 84 on wider touch screens
   canvas,                       // 2D canvas, redrawn only when something changes
   handleKey(e: KeyboardEvent) -> bool,   // true if consumed (call e.preventDefault()); false lets Tab move focus
   handleKeyUp(e),               // passed to a running app's keyUp (games)
@@ -82,6 +82,14 @@ MAC.createTerminal({ content, aspect, cols? }) -> {   // cols: 54 on desktop, 40
   pointer(u, v, down),          // optional: the mouse over the tube (u, v: 0..1 of the canvas, -1, -1 when off it or gone;
                                 // down: the main button held). Only the landing uses it: its logo leans toward the pointer
                                 // and a drag spins it. main.js calls it from pointermove (both layouts) and on leave
+  // read-only state and two helpers for the phone dock (main.js flat()):
+  suggest(q?) -> [names],       // what the word being typed could become, best first (the same completion Tab uses);
+                                // with q, commands matching q. [] while an app, a ctrl+r search or a boot is on
+  pick(name) -> bool,           // takes a suggestion into the line (+ a space); true when the line is then a whole
+                                // command that needs no argument (main.js then sends Enter)
+  line, app, page,              // the line being typed; the running app's name or ''; the page on screen ('' = welcome)
+  canBack,                      // a page is open and nothing is running: back has somewhere to go
+  scrollInfo,                   // { off: rows up from the bottom, max, rowH: a row as 0..1 of the canvas } (1:1 touch scrolling)
 }
 ```
 The landing (every load, until the first command; deep links skip it) is a demoscene-style intro drawn on the canvas:
@@ -95,7 +103,11 @@ Creates the scene, terminal and typist; routes keydown/keyup to terminal + typis
 `term.handleTap`. Hash deep links: #about #eden #j #writing #contact #links #help, and #post/<slug> for the reader
 (anything else in the hash is ignored). One rAF loop, paused when hidden and while the reader is open.
 `flat()` is the terminal-only layout: phones, and desktops without WebGL or three.js, after a context loss or
-repeated render errors. localStorage is swapped for an in-memory store when the browser blocks it (head.html).
+repeated render errors. On touch screens it adds a dock under the terminal (#dock in head.html: the main pages; the
+matching commands while typing, from `term.suggest`; esc, arrows and space while an app runs; a key for the on-screen
+keyboard), which rides above the keyboard (visualViewport); 1:1 drag scrolling with momentum and rubber-band ends; a swipe
+right (and the phone's own back, through one history entry) goes `back`; a "more" tab when a page runs on below; and
+`MAC.toast(label, text)`, which terminal.js calls when it copies an address (never for secrets). localStorage is swapped for an in-memory store when the browser blocks it (head.html).
 
 ## Testing
 Build into your own scratch folder: `python3 build.py --out <dir>`. Add `--dev` to include `src/stubs.js`, which
