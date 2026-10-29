@@ -763,7 +763,7 @@ M.createScene = function createScene(container){
   const D2R = Math.PI / 180;
   const LOOK = { down: 35 * D2R };
   const REST_FILL = .76;                      // glass height / frame height at rest
-  const YAW_REST = 4.5 * D2R, YAW_FULL = 10 * D2R, UP_MAX = 2.5 * D2R;   // how far the head turns: little while reading, more when leaned back
+  const YAW_REST = 7 * D2R, YAW_FULL = 8 * D2R, UP_MAX = 2.5 * D2R;   // how far the head turns: little while reading, more when leaned back
   const flatN = new V3(screenNormal.x, 0, screenNormal.z).normalize();
   const EYE_D = .6, EYE_UP = .125;
   const eyeRest = screenCenter.clone().addScaledVector(flatN, EYE_D); eyeRest.y = screenCenter.y + EYE_UP;
@@ -819,7 +819,9 @@ M.createScene = function createScene(container){
     // the pointer looks around: down leans back toward the full view (the hands), sideways/up turn the head a little
     const down = clamp(-pitchS.x / LOOK.down, 0, 1);
     const k = sstep(0, 1, down);
-    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * lerp(YAW_REST, YAW_FULL, k);
+    // narrow windows turn less, so the glass never leaves more than ~15% of itself out of frame while reading, and
+    // the whole keyboard stays in the lean view at either extreme
+    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * lerp(YAW_REST * Math.min(1, aspect / 1.25), YAW_FULL * Math.min(1, aspect / 1.6), k);
     camera.position.lerpVectors(shot.screen.pos, shot.full.pos, k);
     // the head travels a slight arc (up and back first) rather than a straight dolly
     camera.position.y += Math.sin(k * Math.PI) * .04;
@@ -940,7 +942,7 @@ M.createScene = function createScene(container){
       // yaw is normalised here (-1..1) and scaled in applyCamera: ~4.5 deg while reading, ~10 deg leaned back.
       const ax = Math.abs(nx), sx = sstep(.18, .95, ax);
       yawS.t = -Math.sign(nx) * sx;
-      pitchS.t = ny > 0 ? -sstep(.3, .92, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
+      pitchS.t = ny > 0 ? -sstep(.3, .8, ny) * LOOK.down : sstep(.45, 1, -ny) * UP_MAX;
     },
     /* a keystroke: skips the intro reveal and wakes the (idle-throttled) renderer */
     nudge(){ skipIntro(); sinceMove = 0; },
@@ -949,7 +951,7 @@ M.createScene = function createScene(container){
       const drewLast = drew; drew = false;
       sinceMove += dt; sinceRender += dt;
       if (Math.abs(yawS.v) + Math.abs(pitchS.v) > 2e-3 || Math.abs(yawS.t - yawS.x) + Math.abs(pitchS.t - pitchS.x) > 1e-3) sinceMove = 0;
-      crit(yawS, 3.4, dt); crit(pitchS, 3.1, dt);   // slow, critically damped: glides, never overshoots
+      crit(yawS, 6, dt); crit(pitchS, 5.6, dt);   // critically damped: settles in ~0.8 s, never overshoots
       applyCamera();
       // keys: a stiff spring down, a looser one back up with a small overshoot
       for (const k of activeKeys){

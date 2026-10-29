@@ -117,16 +117,18 @@ on(stage, 'click', e => {
 let hintT = 0, hintIn = 0;
 const hideHint = () => { if (!hintT) return; clearTimeout(hintT); clearTimeout(hintIn); hintT = 0; hint.style.opacity = '0'; setTimeout(() => { hint.hidden = true; }, 1300); };
 on(window, 'pointermove', e => {
-  if (e.pointerType !== 'mouse' || REDUCED || reading()) return;
-  const ny = e.clientY / innerHeight * 2 - 1;
-  look(e.clientX / innerWidth * 2 - 1, ny);
-  if (ny > 0.5) hideHint();
-  // clickable words on the tube get a pointer
+  if (e.pointerType !== 'mouse' || reading()) return;
+  if (!REDUCED){
+    const ny = e.clientY / innerHeight * 2 - 1;
+    look(e.clientX / innerWidth * 2 - 1, ny);
+    if (ny > 0.5) hideHint();
+  }
+  // clickable words on the tube get a pointer (and light up)
   const p = term.hitTest && api.pickScreen ? api.pickScreen(e.clientX, e.clientY) : null;
-  const want = p && term.hitTest(p.u, p.v) ? 'pointer' : '';
+  const want = term.hitTest && term.hitTest(p ? p.u : -1, p ? p.v : -1) ? 'pointer' : '';   // (-1, -1) clears the hover
   if (stage.style.cursor !== want) stage.style.cursor = want;
 });
-on(D.documentElement, 'mouseleave', () => look(0, 0));
+on(D.documentElement, 'mouseleave', () => { look(0, 0); if (term.hitTest) term.hitTest(-1, -1); });
 
 /* the GPU dropped the context (driver reset, GPU switch, too many tabs). three.js r147's restore leaves this scene
    black, so go straight to the flat terminal; a reload brings the room back */
@@ -184,16 +186,17 @@ function flat(){
     const top = probe.offsetTop, inset = px(cs.paddingBottom), sl = TOUCH ? px(cs.paddingLeft) : 0, sr = TOUCH ? px(cs.paddingRight) : 0; probe.remove();
     // a phone on its side keeps the text clear of the notch and the rounded corners
     const W = TOUCH ? innerWidth - sl - sr : Math.max(200, Math.min(innerWidth - 32, 760)), H = Math.max(200, innerHeight - top - inset - (TOUCH ? 0 : 16));
-    term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols: W < 420 ? 40 : W < 600 ? 46 : 54 });
-    if (cv) cv.remove();
+    const cols = W < 420 ? 40 : W < 600 ? 46 : 54;
+    // a rotation or window resize reflows the same terminal (history, files, a running app all kept)
+    if (term && term.resize) term.resize(W / H, cols);
+    else { term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols }); if (cv) cv.remove(); }
     cv = term.canvas; cv.className = 'phone-term'; cv.style.width = W + 'px'; if (sl) cv.style.left = sl + 'px'; cv.style.height = H + 'px'; stage.appendChild(cv);
     bw = innerWidth; bh = innerHeight; shift = 0;
   };
   build();
   let rt = 0;
   addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => {
-    // rebuilding starts a fresh terminal, so it is skipped while an editor, game or command is running
-    if ((Math.abs(innerWidth - bw) > 40 || (!TOUCH && Math.abs(innerHeight - bh) > 40)) && !term.busy){ build(); fromHash(); } else place();
+    if (Math.abs(innerWidth - bw) > 40 || (!TOUCH && Math.abs(innerHeight - bh) > 40)) build(); else place();
   }, 150); });
   const focus = () => { if (!reading()) try { kbd.focus({ preventScroll: true }); } catch (e){} };
   setupMute(TOUCH ? null : focus);
@@ -221,6 +224,7 @@ function flat(){
     const r = cv.getBoundingClientRect(), want = term.hitTest((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height) ? 'pointer' : '';
     if (stage.style.cursor !== want) stage.style.cursor = want;
   });
+  stage.addEventListener('pointerleave', () => { if (term.hitTest) term.hitTest(-1, -1); stage.style.cursor = ''; });
   stage.addEventListener('click', e => {
     if (caught){ caught = false; return; }   // that touch stopped a fling: it was not a tap
     const r = cv.getBoundingClientRect();
