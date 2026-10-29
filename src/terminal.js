@@ -430,8 +430,8 @@ M.createTerminal = function createTerminal(opts){
   const LUM = {}, lumOf = c => LUM[c] != null ? LUM[c] : (LUM[c] = (m => m ? (.299 * parseInt(m[1], 16) + .587 * parseInt(m[2], 16) + .114 * parseInt(m[3], 16)) / 255 : .5)(/^#(..)(..)(..)/.exec(c)));
   let lumAcc = 0;
   { const fr = g.fillRect.bind(g), ft = g.fillText.bind(g);
-    g.fillRect = (x, y, w, h) => { lumAcc += Math.abs(w * h) * lumOf(g.fillStyle); fr(x, y, w, h); };
-    g.fillText = (t, x, y) => { lumAcc += t.length * cw * ch * GLYPH_COVER * lumOf(g.fillStyle); ft(t, x, y); }; }
+    g.fillRect = (x, y, w, h) => { lumAcc += Math.abs(w * h) * lumOf(g.fillStyle) * g.globalAlpha; fr(x, y, w, h); };
+    g.fillText = (t, x, y) => { lumAcc += t.length * cw * ch * GLYPH_COVER * lumOf(g.fillStyle) * g.globalAlpha; ft(t, x, y); }; }
   const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const P = PALETTE;
   const sfx = name => { try { if (M.sound && M.sound.event) M.sound.event(name); } catch (e){} };
@@ -809,12 +809,12 @@ M.createTerminal = function createTerminal(opts){
   if (!FS.isDir(cwd)) cwd = '/';
 
   /* ---- documents ---- */
-  /* the landing: every load opens on the monogram, turning, with one line under it. The first command (typed,
+  /* the landing: every load opens on the demo (DEMO, below), with one line under it. The first command (typed,
      clicked or a deep link) clears it for good this visit; home and back then show the plain welcome. */
   let landing = null;
   function landingRows(){
     const o = out();
-    o.viz(Math.max(4, ROWS - 2), (x, y, w, h, age, t) => KN.draw(x, y, w, h, age, t), KN.live);
+    o.viz(Math.max(4, ROWS - 2), (x, y, w, h, age, t) => DEMO.draw(x, y, w, h, age, t), DEMO.live);
     if (TAP) o.at(2, ['tap here or type help to get started', 'd', { cmd: 'help' }]);
     else o.at(2, ['type ', 'f'], chip('help', 'b'), [' and press enter to get started', 'f']);
     landing = { viz: o.rows[0], note: o.rows[1] };
@@ -1329,276 +1329,407 @@ M.createTerminal = function createTerminal(opts){
     return [['OS', 'KNOS 1.04'], ['Host', 'KN-84'], ['Uptime', uptimeStr()], ['Shell', 'sh, ' + ncmd + ' commands'], ['Terminal', 'vt320, ' + COLS + 'x' + ROWS],
       ['Font', 'VT323'], ['Files', files + ' in ~'], ['User', C.name || 'Kaiav'], ...roles.map((r, i) => [i ? '' : 'Role', r])];
   }
-  /* ---- the landing: Kaiav's monogram, KN, as solid extruded letters on the tube ----
-     A ray per sample, six samples to a character cell (2 across, 3 down), against the letters as convex prisms
-     (Cyrus-Beck clipping: the nearest entering face wins, so it is z-buffered for free). Each sample is lit by the
-     lamp (upper left: diffuse, a specular glint, a rim on faces turning edge-on, a little fog with depth); the six
-     values pick the character whose own shape, measured once from VT323, matches best, so silhouettes come out
-     as / \ | _ and faces as a density ramp; brightness picks one of the four phosphor levels.
-     Entrance: a field of characters streams out toward the viewer, then each one flies to its own spot on the
-     letters and locks in, the letters swing round and settle, and a glint crosses the faces. After that it
-     idles: a slow sway, the head turning a little toward the pointer, a ripple for each key, now and then a glint.
-     Geometry, glyph shapes, particles and buffers are made once; a frame allocates only the strings it draws. */
-  const KN = (() => {
-    const sw = 1.4, D = 0.75, F = 34;                     // stroke width, half the extrusion depth, eye distance (object units)
-    const K = x0 => { const xs = x0 + sw, x1 = x0 + 5; return [
-      [[x0, -3.5], [xs, -3.5], [xs, 3.5], [x0, 3.5]],                          // stem
-      [[xs, -0.9], [x1, 3.5], [x1 - 1.9, 3.5], [xs, 1.0]],                     // arm
-      [[x1 - 1.9, -3.5], [x1, -3.5], [xs + 1.6, 0.6], [xs + 0.2, 0]]]; };      // leg
-    const N = x0 => { const x1 = x0 + 5; return [
-      [[x0, -3.5], [x0 + sw, -3.5], [x0 + sw, 3.5], [x0, 3.5]],
-      [[x1 - sw, -3.5], [x1, -3.5], [x1, 3.5], [x1 - sw, 3.5]],
-      [[x1 - 1.65, -3.5], [x1, -3.5], [x0 + 1.65, 3.5], [x0, 3.5]]]; };
-    const POLYS = [...K(-5.75), ...N(0.75)], NP = POLYS.length, LW = 11.5, LH = 7;
-    /* planes, n.p <= c inside, 6 per prism (4 sides, 2 caps); a bounding sphere per prism skips most rays early */
-    const pl = new Float32Array(NP * 24), sph = new Float32Array(NP * 3);
-    POLYS.forEach((poly, p) => {
-      let cx = 0, cy = 0; poly.forEach(([x, y]) => { cx += x / 4; cy += y / 4; });
-      let r = 0; poly.forEach(([x, y]) => { r = Math.max(r, Math.hypot(x - cx, y - cy)); });
-      sph[p * 3] = cx; sph[p * 3 + 1] = cy; sph[p * 3 + 2] = Math.hypot(r, D) + 0.01;
-      for (let i = 0; i < 4; i++){
-        const [ax, ay] = poly[i], [bx, by] = poly[(i + 1) % 4], ex = bx - ax, ey = by - ay, l = Math.hypot(ex, ey), nx = ey / l, ny = -ex / l, q = (p * 6 + i) * 4;
-        pl[q] = nx; pl[q + 1] = ny; pl[q + 2] = 0; pl[q + 3] = nx * ax + ny * ay;
-      }
-      pl.set([0, 0, -1, D, 0, 0, 1, D], (p * 6 + 4) * 4);
-    });
-    /* a small seeded random, so every visit gets the same choreography */
-    let seed = 7;
+  /* ---- the landing: a demoscene intro, drawn straight onto the tube ----
+     An Amiga-style intro in one phosphor. A chunky extruded "KN" (bevelled, flat-shaded facets, chrome front faces
+     with bright vector edges; back faces culled, the rest painter-sorted, letter by letter) falls in from far away,
+     spinning, and slams into place with a flash and a jolt; then it spins and bobs over swinging copper bars, a 3D
+     starfield and a perspective grid floor that takes its shadow. A sine scroller in a C64-style bitmap font carries
+     the facts from content.js across the floor, mirrored in it. Each key flashes the next copper bar and kicks the
+     logo; the pointer (term.pointer) tilts it and a drag spins it. Under reduced motion it is one composed frame.
+     Geometry, the shade ramp, the font strip and the stars are made once; a frame allocates nothing. */
+  const DEMO = (() => {
+    /* the phosphor as a 64-step ramp, bg -> faint -> dim -> normal -> bright (v 0..1), with each step's luminance */
+    const rgb = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+    const STOPS = [P.bg, P.faint, P.dim, P.normal, P.bright].map(rgb), NS = 64, SH = [], SL = new Float32Array(NS);
+    for (let i = 0; i < NS; i++){
+      const f = i / (NS - 1) * 4, k = Math.min(3, f | 0), u = f - k, c = STOPS[k].map((a, j) => Math.round(a + (STOPS[k + 1][j] - a) * u));
+      SH.push('#' + c.map(v => v.toString(16).padStart(2, '0')).join('')); SL[i] = (.299 * c[0] + .587 * c[1] + .114 * c[2]) / 255;
+    }
+    const si = v => v <= 0 ? 0 : v >= 1 ? NS - 1 : (v * (NS - 1) + .5) | 0;
+    const sstep = (a, b, x) => { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
+    let seed = 11;
     const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-    const hash = (i, j) => { let h = (i * 374761393 + j * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
-    /* when the surface at (x, y) locks in: patches in a loose order out from the middle, ~1.2 s from first to last */
-    const LAND0 = 1.25, LAND1 = 1.15;
-    const landAt = (x, y) => LAND0 + LAND1 * (0.6 * hash(Math.floor(x / 0.9 + 64), Math.floor(y / 0.9 + 64)) + 0.4 * Math.min(1, Math.hypot(x / 6, y / 4)));
 
-    /* ---- glyph shapes: VT323's ink in a 2x3 grid of each cell, every axis scaled to its largest value ---- */
-    const GL = " .,'`-_:;=+/\\|*#%@", NG = GL.length, QL = 6;
-    let gv = null; const lut = new Int8Array(QL ** 6).fill(-1);
-    function shapes(){
-      gv = new Float32Array(NG * 6);
-      try {
-        const S = 60, w = Math.max(8, Math.round(S * advance)), h = Math.round(S * LINE), c = document.createElement('canvas'); c.width = w; c.height = h;
-        const x = c.getContext('2d', { willReadFrequently: true }); x.font = S + 'px ' + FONT; x.textBaseline = 'alphabetic'; x.fillStyle = '#fff';
-        for (let i = 0; i < NG; i++){
-          x.clearRect(0, 0, w, h); x.fillText(GL[i], 0, S * 0.68);
-          const d = x.getImageData(0, 0, w, h).data;
-          for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) gv[i * 6 + (px * 2 / w | 0) + 2 * (py * 3 / h | 0)] += d[(py * w + px) * 4 + 3];
-        }
-        for (let k = 0; k < 6; k++){ let m = 1; for (let i = 0; i < NG; i++) m = Math.max(m, gv[i * 6 + k]); for (let i = 0; i < NG; i++) gv[i * 6 + k] /= m; }
-      } catch (e){ for (let i = 0; i < NG; i++) for (let k = 0; k < 6; k++) gv[i * 6 + k] = i / NG; }
-    }
-    const sv = new Float32Array(6);
-    function pick(){                                         // sv (0..1, six of them) -> glyph index, memoised on a 6-level grid
-      let mx = 0; for (let k = 0; k < 6; k++) if (sv[k] > mx) mx = sv[k];
-      if (mx < 0.03) return 0;
-      let idx = 0;
-      for (let k = 5; k >= 0; k--){ const v = Math.pow(sv[k] / mx, 1.7) * mx; idx = idx * QL + Math.min(QL - 1, Math.round(v * (QL - 1))); }   // edges sharpened toward the brightest sample
-      let r = lut[idx];
-      if (r < 0){
-        let best = 1e9, q = idx; const v = [];
-        for (let k = 0; k < 6; k++){ v.push((q % QL) / (QL - 1)); q = q / QL | 0; }
-        for (let i = 0; i < NG; i++){ let d = 0; for (let k = 0; k < 6; k++){ const e = v[k] - gv[i * 6 + k]; d += e * e; } if (d < best){ best = d; r = i; } }
-        lut[idx] = r;
+    /* ---- the logo: K and N as outlines (8 units tall), slanted, bevelled at the front and extruded ---- */
+    const SHEAR = .24, DZ = 1.35, BV = .38, BD = .5;       // slant; half the depth; the bevel's inset and depth
+    const OUTL = [
+      [[0, -4], [1.9, -4], [1.9, -1.2], [4, -4], [6.4, -4], [3.3, .3], [6.2, 4], [3.8, 4], [1.9, 1.3], [1.9, 4], [0, 4]],   // K
+      [[0, -4], [1.9, -4], [1.9, .3], [4.5, -4], [6.4, -4], [6.4, 4], [4.5, 4], [4.5, -.3], [1.9, 4], [0, 4]],              // N
+    ], OX = [-7, .6];
+    let NV = 0;
+    const LET = OUTL.map((o, li) => {
+      const n = o.length, p = o.map(([x, y]) => [x + OX[li] + SHEAR * y, y]);
+      const en = p.map((a, i) => { const b = p[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy); return [dy / l, -dx / l]; });   // outward
+      const v = new Float32Array(n * 9);            // rings: the bevel's inner edge (the front face), its outer edge, the back
+      p.forEach(([x, y], i) => {
+        const a = en[(i + n - 1) % n], b = en[i], d = 1 + a[0] * b[0] + a[1] * b[1];
+        v.set([x - BV * (a[0] + b[0]) / d, y - BV * (a[1] + b[1]) / d, -DZ], i * 3);
+        v.set([x, y, -DZ + BD], (n + i) * 3);
+        v.set([x, y, DZ], (2 * n + i) * 3);
+      });
+      const bl = Math.hypot(BD, BV), f = [];         // quads: kind (0 side, 1 bevel), normal, four corners
+      for (let i = 0; i < n; i++){
+        const j = (i + 1) % n, [ex, ey] = en[i];
+        f.push(0, ex, ey, 0, n + i, n + j, 2 * n + j, 2 * n + i);
+        f.push(1, ex * BD / bl, ey * BD / bl, -BV / bl, j, i, n + i, n + j);
       }
-      return r;
-    }
-
-    /* ---- particles: each owns a spot on the letters' front faces and knows when that spot locks in ---- */
-    const NPART = 230, NDUST = 70, NALL = NPART + NDUST;
-    const pa = new Float32Array(NALL * 8);   // tx, ty, land, sx, sy, zphase, glyph, (spare)
-    const PG = '+*:#%@=.';
-    {
-      const areas = POLYS.map(p => { let a = 0; for (let i = 0; i < 4; i++){ const [ax, ay] = p[i], [bx, by] = p[(i + 1) % 4]; a += ax * by - bx * ay; } return Math.abs(a / 2); });
-      const tot = areas.reduce((a, b) => a + b, 0);
-      for (let i = 0; i < NALL; i++){
-        const o = i * 8;
-        if (i < NPART){
-          let u = rnd() * tot, p = 0; while (p < NP - 1 && u > areas[p]){ u -= areas[p]; p++; }
-          const P = POLYS[p], tri = rnd() < 0.5 ? [P[0], P[1], P[2]] : [P[0], P[2], P[3]];
-          let a = rnd(), b = rnd(); if (a + b > 1){ a = 1 - a; b = 1 - b; }
-          pa[o] = tri[0][0] + a * (tri[1][0] - tri[0][0]) + b * (tri[2][0] - tri[0][0]);
-          pa[o + 1] = tri[0][1] + a * (tri[1][1] - tri[0][1]) + b * (tri[2][1] - tri[0][1]);
-          pa[o + 2] = landAt(pa[o], pa[o + 1]);
-        } else pa[o + 2] = 1.3 + rnd() * 0.6;              // dust: just streams by and fades
-        const ang = rnd() * 6.2832, rad = 2.5 + rnd() * 14;
-        pa[o + 3] = Math.cos(ang) * rad; pa[o + 4] = Math.sin(ang) * rad * 0.8; pa[o + 5] = rnd(); pa[o + 6] = (rnd() * PG.length) | 0;
-      }
-    }
-    const ZFAR = F * 4.2, ZNEAR = F * 0.22, ZSPAN = ZFAR - ZNEAR, WARP = F * 2.6;   // the stream: depth range, speed (units/s)
-    const FLY = 0.8;                                         // seconds from the stream to the letters
-    const streamZ = (o, t) => ZFAR - ((pa[o + 5] * ZSPAN + t * WARP) % ZSPAN);
-
-    /* ---- pose: a scripted entrance plus a spring the pointer and the keys push on ---- */
-    let yaw = 0, pit = 0, zoom = 1, oy = 0, oyv = 0, op = 0, opv = 0, ptx = null, pty = 0, lastT = -1;
-    const pulses = new Float32Array(4); let pn = 0; pulses.fill(-9);
-    const backOut = x => { if (x <= 0) return 0; if (x >= 1) return 1; const c = 1.9, u = x - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
-    const ENTRY = 2.75;                                      // the entrance is over (the settle has settled) by here
-    const idleYaw = t => 0.3 * Math.sin(t * 0.27) + 0.07 * Math.sin(t * 0.71 + 2), idlePit = t => 0.13 + 0.05 * Math.sin(t * 0.21 + 1.3);
-    function pose(age, t, dt){
-      const u = backOut((age - 0.9) / 1.75);                 // swings in from the side while the characters land
-      const wIdle = clamp((age - 1.6) / 2.5, 0, 1);
-      yaw = -1.25 * (1 - u) + idleYaw(t) * wIdle - 0.08 * (1 - wIdle);
-      pit = 0.42 * (1 - u) + idlePit(t) * wIdle + 0.13 * (1 - wIdle);
-      zoom = 0.82 + 0.18 * u;
-      if (dt > 0){                                           // the spring: toward the pointer, kicked by keys
-        const tyw = ptx == null ? 0 : clamp((ptx - 0.5) * 1.3, -0.6, 0.6), tp = ptx == null ? 0 : clamp((pty - 0.42) * 0.9, -0.35, 0.35);
-        const K2 = 26, C2 = 4.2;
-        for (let s = 0, n = Math.ceil(dt / 0.01), h = dt / n; s < n; s++){
-          oyv += (K2 * (tyw - oy) - C2 * oyv) * h; oy += oyv * h;
-          opv += (K2 * (tp - op) - C2 * opv) * h; op += opv * h;
-        }
-      }
-      yaw += oy; pit += op;
-    }
-
-    /* ---- the grid this drawing uses: the terminal's own, or a finer one where the tube is short (a phone on its side) ---- */
-    let gk = 1, gcw = 0, gch = 0, gcols = 0, grows = 0, gx0 = 0, scale = 1, cyF = 0.5, fitKey = '';
-    let cg = new Int8Array(0), ct = new Int8Array(0), ghG = new Int8Array(0), ghL = new Float32Array(0);
-    function fit(x0, wpx, hpx){
-      const nat = hpx / ch;
-      gk = nat >= 13 ? 1 : Math.max(0.55, nat / 14);
-      gcw = cw * gk; gch = ch * gk;
-      gcols = Math.floor(wpx / gcw); grows = Math.floor(hpx / gch);
-      gx0 = x0 + (wpx - gcols * gcw) / 2;
-      const tall = hpx > wpx * 1.2;
-      scale = Math.min(wpx * (tall ? 0.9 : 0.74) / LW, hpx * 0.8 / (LH + 1));
-      cyF = tall ? 0.42 : 0.5;
-      const n = gcols * grows;
-      if (n > cg.length){ cg = new Int8Array(n); ct = new Int8Array(n); ghG = new Int8Array(n); ghL = new Float32Array(n); }
-      ghL.fill(0);
-    }
-
-    /* every cell at this pose: cg = glyph index (0: blank), ct = tone 0..3 */
-    let r00, r01, r02, r10, r11, r12, r20, r21, r22, ox, oy0, oz, lx, ly, lz;
-    function frame(age, t, still){
-      const ca = Math.cos(yaw), sa = Math.sin(yaw), cb = Math.cos(pit), sb = Math.sin(pit);
-      r00 = ca; r01 = sa * sb; r02 = sa * cb; r10 = 0; r11 = cb; r12 = -sb; r20 = -sa; r21 = ca * sb; r22 = ca * cb;   // R = Ry(yaw) Rx(pit)
-      ox = r20 * -F; oy0 = r21 * -F; oz = r22 * -F;           // the eye, in object space
-      const Lx = -16, Ly = 14, Lz = -22;                     // the lamp: up and left of the viewer
-      lx = r00 * Lx + r10 * Ly + r20 * Lz; ly = r01 * Lx + r11 * Ly + r21 * Lz; lz = r02 * Lx + r12 * Ly + r22 * Lz;
-      const breath = still ? 1 : 1 + 0.05 * Math.sin(t * 1.3);
-      const glintAt = still ? -9 : age < 6 ? 2.35 : 2.35 + 9 * Math.floor((age - 2.35) / 9);   // a glint as it lands, then every ~9 s
-      const gs = (age - glintAt) / 0.85;
-      const gpos = -9 + 18 * gs, gon = gs > 0 && gs < 1;
-      const sc = scale * zoom, cyc = grows * cyF;
-      for (let row = 0; row < grows; row++) for (let col = 0; col < gcols; col++){
-        for (let s = 0; s < 6; s++){
-          const wx = ((col + 0.25 + (s & 1) * 0.5) - gcols / 2) * gcw / sc, wy = -((row + (1 + 2 * (s >> 1)) / 6) - cyc) * gch / sc;
-          const dx = r00 * wx + r10 * wy + r20 * F, dy = r01 * wx + r11 * wy + r21 * F, dz = r02 * wx + r12 * wy + r22 * F;
-          const dl = 1 / Math.sqrt(dx * dx + dy * dy + dz * dz);
-          let best = 1e9, bn = -1;
-          for (let p = 0; p < NP; p++){
-            const qx = sph[p * 3] - ox, qy = sph[p * 3 + 1] - oy0, qz = -oz, pr = (qx * dx + qy * dy + qz * dz) * dl;
-            const rr = sph[p * 3 + 2]; if (qx * qx + qy * qy + qz * qz - pr * pr > rr * rr) continue;
-            let tE = 0, tX = 1e9, en = -1;
-            for (let k = 0; k < 6; k++){
-              const q = (p * 6 + k) * 4, nx = pl[q], ny = pl[q + 1], nz = pl[q + 2];
-              const den = nx * dx + ny * dy + nz * dz, num = pl[q + 3] - (nx * ox + ny * oy0 + nz * oz);
-              if (den === 0){ if (num < 0){ tE = 2e9; break; } continue; }
-              const tt = num / den;
-              if (den < 0){ if (tt > tE){ tE = tt; en = q; } } else if (tt < tX) tX = tt;
-              if (tE > tX) break;
-            }
-            if (en >= 0 && tE <= tX && tE < best){ best = tE; bn = en; }
-          }
-          if (bn < 0){ sv[s] = 0; continue; }
-          const hx = ox + best * dx, hy = oy0 + best * dy, hz = oz + best * dz;
-          const land = still ? 0 : landAt(hx, hy);
-          if (age < land){ sv[s] = 0; continue; }
-          const nx = pl[bn], ny = pl[bn + 1], nz = pl[bn + 2];
-          let vx = lx - hx, vy = ly - hy, vz = lz - hz; const il = 1 / Math.sqrt(vx * vx + vy * vy + vz * vz); vx *= il; vy *= il; vz *= il;
-          const ex = -dx * dl, ey = -dy * dl, ez = -dz * dl;                   // toward the eye
-          const dif = Math.max(0, nx * vx + ny * vy + nz * vz) * Math.min(1, 31 * il);
-          let hhx = vx + ex, hhy = vy + ey, hhz = vz + ez; const hl = 1 / Math.sqrt(hhx * hhx + hhy * hhy + hhz * hhz);
-          const sp = Math.max(0, (nx * hhx + ny * hhy + nz * hhz) * hl), spec = sp * sp * sp * sp; const spec2 = spec * spec * spec * spec;
-          const ndv = nx * ex + ny * ey + nz * ez, rim = Math.pow(1 - Math.min(1, Math.abs(ndv)), 3);
-          const fog = 1 - clamp((best * F - F + 2) / 10, 0, 1) * 0.45;      // the far parts a little dimmer
-          let v = (0.08 + 0.78 * dif * breath + 0.55 * spec2 + 0.28 * rim) * fog;
-          const since = age - land;
-          if (since < 0.3) v += 0.6 * (1 - since / 0.3);                     // a flare as each spot locks in
-          if (gon && nz < 0){ const e = hx * 0.85 + hy * 0.5 - gpos; v += 0.75 * Math.exp(-e * e * 0.9); }
-          for (let k = 0; k < 4; k++){ const pt = age - pulses[k]; if (pt > 0 && pt < 0.9){ const e = Math.hypot(hx, hy) - pt * 13; v += 0.5 * (1 - pt / 0.9) * Math.exp(-e * e * 0.8); } }
-          sv[s] = Math.min(1, v);
-        }
-        const i = row * gcols + col, gi = pick();
-        let mx = 0, mean = 0; for (let k = 0; k < 6; k++){ mean += sv[k] / 6; if (sv[k] > mx) mx = sv[k]; }
-        const lvl = 0.6 * mx + 0.4 * mean;
-        cg[i] = gi; ct[i] = lvl < 0.2 ? 0 : lvl < 0.42 ? 1 : lvl < 0.72 ? 2 : 3;
-        if (gi){ ghG[i] = gi; ghL[i] = 1; } else if (!still) ghL[i] *= 0.45;   // phosphor: what was lit lingers a frame or two
-      }
-    }
-    const TONES = [P.faint, P.dim, P.normal, P.bright];
-    function drawCells(top){
-      const base = top + fs * gk * 0.68;
-      setFont(gk);
-      for (let tn = -1; tn < 4; tn++){
-        g.fillStyle = tn < 0 ? P.faint : TONES[tn];
-        for (let row = 0; row < grows; row++){
-          const y = base + row * gch;
-          for (let col = 0; col < gcols;){
-            const i = row * gcols + col;
-            const on = tn < 0 ? !cg[i] && ghL[i] > 0.3 : cg[i] && ct[i] === tn;
-            if (!on){ col++; continue; }
-            let s = '', k = col;
-            for (; k < gcols; k++){ const j = row * gcols + k, o2 = tn < 0 ? !cg[j] && ghL[j] > 0.3 : cg[j] && ct[j] === tn; if (!o2 && k > col + 0) break; s += tn < 0 ? GL[ghG[j]] : GL[cg[j]]; }
-            fillT(s, gx0 + col * gcw, y); col = k;
-          }
+      const L = { n, v, f: Float32Array.from(f), nf: 2 * n, o: NV, cx: p.reduce((s, q) => s + q[0] / n, 0) };
+      NV += 3 * n; return L;
+    });
+    const wx = new Float32Array(NV), wy = new Float32Array(NV), wz = new Float32Array(NV), qx = new Float32Array(NV), qy = new Float32Array(NV);
+    const ordF = new Int16Array(64), ordD = new Float32Array(64);
+    let m00, m01, m02, m10, m11, m12, m20, m21, m22, F = 1000, cx = 640, hy = 500;
+    function xform(yaw, pit, rol, px, py, pz, sc){
+      const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pit), sp = Math.sin(pit), cr = Math.cos(rol), sr = Math.sin(rol);
+      const a10 = sp * sy, a11 = cp, a12 = -sp * cy;  // Rx(pit) Ry(yaw); then Rz(rol)
+      m00 = cr * cy - sr * a10; m01 = -sr * a11; m02 = cr * sy - sr * a12;
+      m10 = sr * cy + cr * a10; m11 = cr * a11; m12 = sr * sy + cr * a12;
+      m20 = -cp * sy; m21 = sp; m22 = cp * cy;
+      for (const L of LET){
+        const v = L.v;
+        for (let i = 0, k = L.o; i < L.n * 3; i++, k++){
+          const x = v[i * 3] * sc, y = v[i * 3 + 1] * sc, z = v[i * 3 + 2] * sc;
+          const X1 = m00 * x + m01 * y + m02 * z + px, Y1 = m10 * x + m11 * y + m12 * z + py, Z1 = Math.max(.5, m20 * x + m21 * y + m22 * z + pz);
+          wx[k] = X1; wy[k] = Y1; wz[k] = Z1; qx[k] = cx + F * X1 / Z1; qy[k] = hy - F * Y1 / Z1;
         }
       }
     }
-    /* the stream and the flight in: characters at their depth, bigger and brighter as they come close */
-    const PT = [P.faint, P.dim, P.normal, P.bright];
-    function drawParticles(age, top, hpx){
-      if (age > LAND0 + LAND1 + 0.05) return;
-      const cx = gx0 + gcols * gcw / 2, cy = top + grows * gch * cyF, sc = scale * zoom;
-      const ca = Math.cos(yaw), sa = Math.sin(yaw), cb = Math.cos(pit), sb = Math.sin(pit);
-      g.textBaseline = 'middle';
-      for (let i = 0; i < NALL; i++){
-        const o = i * 8, land = pa[o + 2], dust = i >= NPART;
-        let X, Y, Z;
-        const t0 = land - FLY;
-        const zs = streamZ(o, Math.min(age, dust ? age : t0));
-        X = pa[o + 3]; Y = pa[o + 4]; Z = zs;
-        let alpha = 1;
-        if (dust){ if (age > land) continue; alpha = 1 - clamp((age - land + 0.5) / 0.5, 0, 1); }
-        else if (age > t0){
-          if (age >= land) continue;
-          const u = (age - t0) / FLY, e = u * u * (3 - 2 * u);
-          const px = pa[o], py = pa[o + 1], pz = -D;                           // the spot, posed: R p, then F further on
-          const wx = ca * px + sa * sb * py + sa * cb * pz, wy = cb * py - sb * pz, wz = -sa * px + ca * sb * py + ca * cb * pz + F;
-          const arc = Math.sin(u * 3.1416) * 3;                                // a little swirl on the way in
-          X = X + (wx - X) * e + arc * Math.cos(i); Y = Y + (wy - Y) * e + arc * Math.sin(i); Z = Z + (wz - Z) * e;
-        }
-        if (Z < F * 0.15) continue;
-        const k = F / Z, sx = cx + X * k * sc, sy = cy - Y * k * sc;
-        if (sx < -40 || sx > W + 40 || sy < top - 40 || sy > top + hpx + 40) continue;
-        const size = clamp(k * gk, 0.25, 2.6);
-        const tn = Math.min(3, Math.floor(clamp((k - 0.25) / 0.45, 0, 3.99) * alpha));
-        g.fillStyle = PT[tn];
-        g.setTransform(size, 0, 0, size, sx, sy);
-        g.fillText(PG[pa[o + 6]], -cw * 0.5, 0);
+    const LX = -.42, LY = .62, LZ = -.66;            // toward the light: up, left, in front
+    function quad(a, b, c, d){ g.beginPath(); g.moveTo(qx[a], qy[a]); g.lineTo(qx[b], qy[b]); g.lineTo(qx[c], qy[c]); g.lineTo(qx[d], qy[d]); g.closePath(); }
+    const area4 = (a, b, c, d) => Math.abs((qx[a] - qx[c]) * (qy[b] - qy[d]) - (qx[b] - qx[d]) * (qy[a] - qy[c])) / 2;
+    function ring(o, n){ g.beginPath(); g.moveTo(qx[o], qy[o]); for (let i = 1; i < n; i++) g.lineTo(qx[o + i], qy[o + i]); g.closePath(); }
+    function ringArea(o, n){ let a = 0; for (let i = 0; i < n; i++){ const j = o + i, k = o + (i + 1) % n; a += qx[j] * qy[k] - qx[k] * qy[j]; } return Math.abs(a / 2); }
+    /* the front faces' chrome: bright sky, a hard dark horizon just under the middle, a lit floor (a 1 x 64 sprite) */
+    let chrome = null;
+    function makeChrome(){
+      chrome = document.createElement('canvas'); chrome.width = 1; chrome.height = 64;
+      const c = chrome.getContext('2d');
+      for (let y = 0; y < 64; y++){
+        const u = y / 63, v = u < .5 ? 1 - .42 * u / .5 : u < .56 ? .34 : .5 + .42 * (u - .56) / .44;
+        c.fillStyle = SH[si(v)]; c.fillRect(0, y, 1, 1);
       }
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      g.textBaseline = 'alphabetic';
     }
-    function draw(x, top, w, h, age, t){
-      const x0 = X(0), wpx = X(COLS) - X(0), key = x0 + ':' + wpx + ':' + h + ':' + cw + ':' + ch;
-      if (!gv) shapes();
-      if (key !== fitKey){ fitKey = key; fit(x0, wpx, h); }
-      const still = REDUCED, dt = lastT < 0 ? 0 : clamp(t - lastT, 0, 0.1); lastT = t;
-      if (still){ age = 30; t = 2.2; }
-      pose(age, t, still ? 0 : dt);
-      frame(age, t, still);
-      setFont(1);
-      drawCells(top);
-      if (!still){ curFont = ''; setFont(1); drawParticles(age, top, h); }
+    let glint = 0;
+    function drawLogo(alpha, lw){
+      /* letters far to near; in each, the visible sides and bevels far to near, then the cap that faces us */
+      const zc0 = m20 * LET[0].cx, zc1 = m20 * LET[1].cx;
+      let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
+      for (const L of LET) for (let i = 0; i < L.n; i++){ const k = L.o + i; if (qx[k] < bx0) bx0 = qx[k]; if (qx[k] > bx1) bx1 = qx[k]; if (qy[k] < by0) by0 = qy[k]; if (qy[k] > by1) by1 = qy[k]; }
+      g.lineJoin = 'round';
+      for (let pass = 0; pass < 2; pass++){
+        const L = LET[(zc0 > zc1) === (pass === 0) ? 0 : 1], f = L.f, o = L.o;
+        let nv = 0;
+        for (let q = 0; q < L.nf; q++){
+          const b = q * 8, nx = f[b + 1], ny = f[b + 2], nz = f[b + 3], i0 = o + f[b + 4];
+          const Nx = m00 * nx + m01 * ny + m02 * nz, Ny = m10 * nx + m11 * ny + m12 * nz, Nz = m20 * nx + m21 * ny + m22 * nz;
+          if (Nx * wx[i0] + Ny * wy[i0] + Nz * wz[i0] >= 0) continue;   // facing away
+          const i1 = o + f[b + 5], i2 = o + f[b + 6], i3 = o + f[b + 7];
+          let k = nv++; const d = wz[i0] + wz[i1] + wz[i2] + wz[i3];
+          while (k > 0 && ordD[k - 1] < d){ ordD[k] = ordD[k - 1]; ordF[k] = ordF[k - 1]; k--; }
+          ordD[k] = d; ordF[k] = q;
+        }
+        for (let s = 0; s < nv; s++){
+          const b = ordF[s] * 8, kind = f[b], nx = f[b + 1], ny = f[b + 2], nz = f[b + 3];
+          const Nx = m00 * nx + m01 * ny + m02 * nz, Ny = m10 * nx + m11 * ny + m12 * nz, Nz = m20 * nx + m21 * ny + m22 * nz;
+          const i0 = o + f[b + 4], i1 = o + f[b + 5], i2 = o + f[b + 6], i3 = o + f[b + 7];
+          const dif = Math.max(0, Nx * LX + Ny * LY + Nz * LZ);
+          let hx = LX - wx[i0] / wz[i0] * .7, hy2 = LY - wy[i0] / wz[i0] * .7, hz = LZ - .7; const hl = 1 / Math.hypot(hx, hy2, hz);
+          const sp = Math.max(0, (Nx * hx + Ny * hy2 + Nz * hz) * hl), spec = Math.pow(sp, 18);
+          const v = (kind ? .22 : .1) + (kind ? .55 : .42) * dif + .45 * spec + (kind ? glint * .35 : 0);
+          const c = si(v * alpha);
+          quad(i0, i1, i2, i3); g.fillStyle = SH[c]; g.fill();
+          g.strokeStyle = SH[si((v + (kind ? .22 : .14)) * alpha)]; g.lineWidth = lw * .6; g.stroke();
+          lumAcc += area4(i0, i1, i2, i3) * SL[c];
+        }
+        /* the cap: the front face in chrome, lit by how it faces the lamp; the back plain */
+        const front = -(m02 * wx[o] + m12 * wy[o] + m22 * wz[o]) < 0 ? true : false;
+        if (front){
+          const dif = Math.max(0, -(m02 * LX + m12 * LY + m22 * LZ));
+          ring(o, L.n); g.fillStyle = P.bg; g.fill();
+          g.save(); g.clip(); g.globalAlpha = clamp((.42 + .45 * dif + glint * .3) * alpha, 0, 1);
+          g.drawImage(chrome, 0, 0, 1, 64, bx0, by0, bx1 - bx0, by1 - by0); g.restore();
+          lumAcc += ringArea(o, L.n) * .75 * (.42 + .45 * dif) * alpha;
+          ring(o, L.n); g.strokeStyle = alpha > .6 ? P.bright : SH[si(alpha)]; g.lineWidth = lw; g.stroke();
+        } else {
+          const b = o + 2 * L.n, dif = Math.max(0, m02 * LX + m12 * LY + m22 * LZ), c = si((.18 + .4 * dif) * alpha);
+          ring(b, L.n); g.fillStyle = SH[c]; g.fill(); g.strokeStyle = SH[si((.5 + .3 * dif) * alpha)]; g.lineWidth = lw * .8; g.stroke();
+          lumAcc += ringArea(b, L.n) * SL[c];
+        }
+      }
+      g.lineJoin = 'miter';
+    }
+    /* its shadow on the floor (y = -FY), cast by a light high behind the viewer: front and back outlines and the sides between */
+    const FY = 7, SX = .18, SZ = .95;
+    const sqx = new Float32Array(NV), sqy = new Float32Array(NV);
+    function sring(o, n){ g.moveTo(sqx[o], sqy[o]); for (let i = 1; i < n; i++) g.lineTo(sqx[o + i], sqy[o + i]); g.closePath(); }
+    function drawShadow(alpha){
+      for (let k = 0; k < NV; k++){
+        const t = wy[k] + FY, x = wx[k] + SX * t, z = Math.max(1, wz[k] + SZ * t);
+        sqx[k] = cx + F * x / z; sqy[k] = hy + F * FY / z;
+      }
+      g.fillStyle = SH[si(.02 + .03 * (1 - alpha))];
+      for (const L of LET){
+        const o = L.o, n = L.n;
+        g.beginPath(); sring(o + n, n); sring(o + 2 * n, n); g.fill();
+        for (let i = 0; i < n; i++){
+          const a = o + n + i, b = o + n + (i + 1) % n;
+          g.beginPath(); g.moveTo(sqx[a], sqy[a]); g.lineTo(sqx[b], sqy[b]); g.lineTo(sqx[b + n], sqy[b + n]); g.lineTo(sqx[a + n], sqy[a + n]); g.closePath(); g.fill();
+        }
+      }
+    }
+
+    /* ---- the font: 8 x 8, C64 style, upper case; the scroll text is drawn once into a strip, with a drop shadow ---- */
+    const FONT8 = {
+      A: '   ##   |  ####  | ##  ## | ###### | ##  ## | ##  ## | ##  ## ', B: ' #####  | ##  ## | ##  ## | #####  | ##  ## | ##  ## | #####  ',
+      C: '  ####  | ##  ## | ##     | ##     | ##     | ##  ## |  ####  ', D: ' ####   | ## ##  | ##  ## | ##  ## | ##  ## | ## ##  | ####   ',
+      E: ' ###### | ##     | ##     | ####   | ##     | ##     | ###### ', F: ' ###### | ##     | ##     | ####   | ##     | ##     | ##     ',
+      G: '  ####  | ##  ## | ##     | ## ### | ##  ## | ##  ## |  ####  ', H: ' ##  ## | ##  ## | ##  ## | ###### | ##  ## | ##  ## | ##  ## ',
+      I: '  ####  |   ##   |   ##   |   ##   |   ##   |   ##   |  ####  ', J: '   #### |    ##  |    ##  |    ##  |    ##  | ## ##  |  ###   ',
+      K: ' ##  ## | ## ##  | ####   | ###    | ####   | ## ##  | ##  ## ', L: ' ##     | ##     | ##     | ##     | ##     | ##     | ###### ',
+      M: ' ##   ##| ### ###| #######| ## # ##| ##   ##| ##   ##| ##   ##', N: ' ##  ## | ### ## | ###### | ###### | ## ### | ##  ## | ##  ## ',
+      O: '  ####  | ##  ## | ##  ## | ##  ## | ##  ## | ##  ## |  ####  ', P: ' #####  | ##  ## | ##  ## | #####  | ##     | ##     | ##     ',
+      Q: '  ####  | ##  ## | ##  ## | ##  ## | ##  ## |  ####  |    ### ', R: ' #####  | ##  ## | ##  ## | #####  | ####   | ## ##  | ##  ## ',
+      S: '  ####  | ##  ## | ##     |  ####  |     ## | ##  ## |  ####  ', T: ' ###### |   ##   |   ##   |   ##   |   ##   |   ##   |   ##   ',
+      U: ' ##  ## | ##  ## | ##  ## | ##  ## | ##  ## | ##  ## |  ####  ', V: ' ##  ## | ##  ## | ##  ## | ##  ## | ##  ## |  ####  |   ##   ',
+      W: ' ##   ##| ##   ##| ##   ##| ## # ##| #######| ### ###| ##   ##', X: ' ##  ## | ##  ## |  ####  |   ##   |  ####  | ##  ## | ##  ## ',
+      Y: ' ##  ## | ##  ## | ##  ## |  ####  |   ##   |   ##   |   ##   ', Z: ' ###### |     ## |    ##  |   ##   |  ##    | ##     | ###### ',
+      0: '  ####  | ##  ## | ## ### | ###### | ### ## | ##  ## |  ####  ', 1: '   ##   |  ###   |   ##   |   ##   |   ##   |   ##   | ###### ',
+      2: '  ####  | ##  ## |     ## |    ##  |  ##    | ##     | ###### ', 3: '  ####  | ##  ## |     ## |   ###  |     ## | ##  ## |  ####  ',
+      4: '     ## |    ### |   #### | ##  ## | #######|     ## |     ## ', 5: ' ###### | ##     | #####  |     ## |     ## | ##  ## |  ####  ',
+      6: '  ####  | ##  ## | ##     | #####  | ##  ## | ##  ## |  ####  ', 7: ' ###### | ##  ## |    ##  |   ##   |   ##   |   ##   |   ##   ',
+      8: '  ####  | ##  ## | ##  ## |  ####  | ##  ## | ##  ## |  ####  ', 9: '  ####  | ##  ## | ##  ## |  ##### |     ## | ##  ## |  ####  ',
+      '.': '|||||   ##   |   ##   ', ',': '|||||   ##   |   ##   |  ##    ', "'": '   ##   |   ##   |  ##    ', '-': '|||  #### ',
+      '·': '|||   ##   |   ##   ', ':': '|   ##   |   ##   ||   ##   |   ##   ', '!': '   ##   |   ##   |   ##   |   ##   ||   ##   ',
+      '?': '  ####  | ##  ## |     ## |    ##  |   ##   ||   ##   ', '/': '      ##|     ## |    ##  |   ##   |  ##    | ##     |##      ',
+      '+': '|   ##   |   ##   | ###### |   ##   |   ##   ', '&': '  ###   | ## ##  |  ###   | ### ## | ## ### | ##  ## |  ### ##',
+      '(': '    ##  |   ##   |  ##    |  ##    |  ##    |   ##   |    ##  ', ')': '  ##    |   ##   |    ##  |    ##  |    ##  |   ##   |  ##    ',
+    };
+    const GW = 8, GH = 8;
+    const ROWV = [1, .96, .86, .74, .6, .72, .86, .9];   // the letters' own copper: bright crown, a darker waist
+    let strip = null, stripR = null, stripW = 0, text = '', nameAt = 0, title = null, sub = null;
+    function scrollText(){
+      const bl = String((A.body || []).join('\n')).split('\n').map(s => s.replace(/^\s*[-*\u2022]\s*/, '').trim()).filter(Boolean);
+      const pick = re => bl.find(b => re.test(b));
+      const parts = [C.name, A.role, J.line && (J.title ? J.title + ' - ' : '') + J.line, E.line && (E.title ? E.title + ' - ' : '') + E.line, pick(/^born/i), pick(/squash|bjj/i)];
+      return '  ' + parts.filter(Boolean).join('  \u00b7\u00b7\u00b7  ') + '  \u00b7\u00b7\u00b7  ';
+    }
+    const fontText = t => String(t).toUpperCase().replace(/[^A-Z0-9 .,'\-\u00b7:!?/+&()]/g, ' ');
+    /* a line of text in the font: its face (with a drop shadow, down and right) and, if asked, its dimmer mirror image */
+    function bake(t, mirror){
+      const w = t.length * GW + 1, h = GH + 1, lit = new Uint8Array(w * h);
+      for (let i = 0; i < t.length; i++){
+        const gl = FONT8[t[i]]; if (!gl) continue;
+        gl.split('|').forEach((row, y) => { for (let x = 0; x < GW; x++) if (row[x] === '#') lit[y * w + i * GW + x] = 1; });
+      }
+      const mk = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+      const face = mk(), da = face.getContext('2d').createImageData(w, h), refl = mirror ? mk() : null, db = mirror ? refl.getContext('2d').createImageData(w, h) : null;
+      const cache = {};
+      const put = (d, i, v) => { const k = si(v), c = cache[k] || (cache[k] = rgb(SH[k])); d.data[i * 4] = c[0]; d.data[i * 4 + 1] = c[1]; d.data[i * 4 + 2] = c[2]; d.data[i * 4 + 3] = 255; };
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+        const i = y * w + x;
+        if (lit[i]){ put(da, i, ROWV[y] || .8); if (db && y < GH) put(db, (GH - 1 - y) * w + x, (ROWV[y] || .8) * .42); }
+        else if (x > 0 && y > 0 && lit[i - w - 1]) put(da, i, .12);
+      }
+      face.getContext('2d').putImageData(da, 0, 0); if (refl) refl.getContext('2d').putImageData(db, 0, 0);
+      return { face, refl, w: w - 1 };
+    }
+    function makeStrip(){
+      text = fontText(scrollText()); nameAt = text.search(/\S/);
+      const b = bake(text, true); strip = b.face; stripR = b.refl; stripW = b.w;
+      title = bake(fontText(C.name || 'KN')); sub = bake('PRESENTS');
+    }
+    /* the title card while the stars rush past: the name, then PRESENTS; it opens out from a line and shuts back to one */
+    function titleCard(age){
+      if (age < .12 || age > 1.3) return;
+      if (!strip) makeStrip();
+      const open = sstep(.12, .3, age) * (1 - sstep(1.08, 1.26, age)), k = Math.max(3, Math.round(s * .8)), k2 = Math.max(2, Math.round(k * .55));
+      const cy = top + h * .3, tw = title.w * k, sw = sub.w * k2, th = (GH + 1) * k + k2 * 2 + (GH + 1) * k2;
+      const hh = Math.max(2, Math.round(th * open)), y0 = Math.round(cy - hh / 2);
+      g.save(); g.beginPath(); g.rect(0, y0, W, hh); g.clip();
+      g.imageSmoothingEnabled = false;
+      const yt = Math.round(cy - th / 2);
+      g.drawImage(title.face, 0, 0, title.w + 1, GH + 1, Math.round(cx - tw / 2), yt, tw + k, (GH + 1) * k);
+      if (age > .45){ g.globalAlpha = sstep(.45, .6, age) * .8; g.drawImage(sub.face, 0, 0, sub.w + 1, GH + 1, Math.round(cx - sw / 2), yt + (GH + 1) * k + k2 * 2, sw + k2, (GH + 1) * k2); g.globalAlpha = 1; }
+      g.imageSmoothingEnabled = true; g.restore();
+      if (open < .98){ g.fillStyle = SH[si(.85)]; g.fillRect(Math.round(cx - tw * (.3 + .7 * open) / 2), Math.round(cy) - 1, Math.round(tw * (.3 + .7 * open)), 2); }   // the line it opens from
+      lumAcc += tw * hh * .25;
+    }
+
+    /* ---- stars: a box of them flying at the viewer ---- */
+    const NST = 200, ZR = 110, stx = new Float32Array(NST), sty = new Float32Array(NST), stz = new Float32Array(NST);
+    for (let i = 0; i < NST; i++){ stx[i] = (rnd() * 2 - 1) * 70; sty[i] = .5 + rnd() * 70; stz[i] = rnd() * ZR; }
+    const starZ = (i, dist) => ZR + 1.5 - ((stz[i] + dist) % ZR);
+    function drawStars(dist, speed, zmin, zmax, top){
+      const streak = speed > 45, k = streak ? Math.min(.09, speed / 2400) : 0;
+      if (streak){ g.lineWidth = 2; g.strokeStyle = SH[si(.5)]; g.beginPath(); }
+      for (let i = 0; i < NST; i++){
+        const z = starZ(i, dist); if (z < zmin || z >= zmax) continue;
+        const x = cx + F * stx[i] / z, y = hy - F * sty[i] / z;
+        if (y > hy - 3 || y < top || x < -8 || x > W + 8) continue;
+        if (streak){ const z2 = z + speed * k; g.moveTo(x, y); g.lineTo(cx + F * stx[i] / z2, hy - F * sty[i] / z2); continue; }
+        const n = 1 - z / ZR, sz = Math.round(clamp(2 + 4 * n * n, 2, 6));
+        g.fillStyle = SH[si(.2 + .8 * n)]; g.fillRect(Math.round(x), Math.round(y), sz, sz);
+      }
+      if (streak){ g.stroke(); lumAcc += NST * 30 * SL[si(.5)]; }
+    }
+
+    /* ---- layout: everything sized from the drawing's own box, so a phone on its side and a tall phone both work ---- */
+    let fitKey = '', top = 0, h = 0, s = 8, amp = 20, ys = 0, Z0 = 30, logoY = 4, zN = 2, gradV = null, bh = 24;
+    function fit(t0, hh){
+      const key = t0 + ':' + hh + ':' + W; if (key === fitKey) return; fitKey = key;
+      top = t0; h = hh; cx = W / 2;
+      const tall = W / h < .9;
+      hy = top + Math.round(h * (tall ? .6 : .58));
+      F = Math.min(.4 * h * Z0 / 8, (tall ? .74 : .62) * W * Z0 / 15.5);
+      logoY = (hy - (top + h * (tall ? .33 : .3))) * Z0 / F;
+      s = clamp(Math.floor(Math.min(h * .021, W / 100)), 4, 13);
+      amp = Math.round(Math.min(h * .04, s * 3.2));
+      ys = Math.round(Math.min(top + h * .74, top + h - (4 * s + amp + 4.6 * s + 6)));   // the scroller's middle, its reflection still on the tube
+      zN = F * FY / (top + h - hy);
+      bh = Math.max(16, Math.round(h * .046 / 8) * 8);
+      gradV = g.createLinearGradient(0, hy, 0, top + h);
+      gradV.addColorStop(0, P.bg); gradV.addColorStop(.25, SH[si(.2)]); gradV.addColorStop(1, SH[si(.5)]);
+    }
+
+    /* ---- the show ---- */
+    const SLAM = 1.35, SCROLL0 = 1.05, GPS = 3.6;   // the logo lands; the scroller starts; its speed in glyphs a second
+    const NB = 5, bp = new Float32Array(NB), bo = new Int8Array(NB), bY = new Float32Array(NB), bD = new Float32Array(NB);
+    let lastT = -1, dist = 0, floorD = 0, kick = 0, nextBar = 0, keyN = 0;
+    let oy = 0, oyv = 0, op = 0, opv = 0, spin = 0, spinV = 0, pu = -1, pv = -1, down = false, lastU = -1;
+    const backOut = x => { if (x <= 0) return 0; if (x >= 1) return 1; const c = 1.7, u = x - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
+    function bars(T, age, still){
+      const sky0 = top + 4, sky1 = hy - 6, mid = (sky0 + sky1) / 2 - bh * .5, am = (sky1 - sky0) * .36;
+      for (let i = 0; i < NB; i++){
+        const ph = T * 1.55 + i * .58;
+        bY[i] = mid + am * Math.sin(ph); bD[i] = Math.cos(ph);
+        if (!still && age < 1.2) bY[i] = sky0 - bh - 8 + (bY[i] - sky0 + bh + 8) * backOut((age - .05 - i * .09) / .55);   // they drop in, one after another
+        let k = i; while (k > 0 && bD[bo[k - 1]] > bD[i]){ bo[k] = bo[k - 1]; k--; } bo[k] = i;
+      }
+      const nb = 8, st = bh / nb;                      // copper: eight hard steps, dark rim to a hot middle
+      for (let r = 0; r < NB; r++){
+        const i = bo[r], d = bD[i], peak = clamp(.28 + .15 * d + .6 * bp[i], 0, 1), y0 = Math.round(bY[i]);
+        for (let k = 0; k < nb; k++){
+          const e = 1 - Math.abs(2 * (k + .5) / nb - 1), v = peak * (.12 + .88 * e * e);
+          const y = y0 + k * st; if (y < sky0 || y + st > sky1) continue;
+          g.fillStyle = SH[si(v)]; g.fillRect(0, y, W, st);
+        }
+      }
+    }
+    function floor(age, still){
+      const reveal = still ? 1 : sstep(.1, .9, age), bot = top + h, y1 = hy + (bot - hy) * reveal;
+      /* the horizon glows a little, as if lit from beyond */
+      for (let k = 0; k < 6; k++){ g.fillStyle = SH[si(.22 - k * .035)]; g.fillRect(0, hy - 4 - k * 4, W, 4); }
+      const gs = 4, nz = 40, span = nz * gs, zf = zN + span;
+      for (let k = 0; k < nz; k++){
+        const z = zN + ((k * gs - floorD) % span + span) % span, y = hy + F * FY / z;
+        if (y > y1 || y > bot) continue;
+        const n = 1 - (z - zN) / span;
+        g.fillStyle = SH[si(.05 + .4 * n * n * n)]; g.fillRect(0, Math.round(y), W, 2);
+      }
+      g.save(); g.beginPath(); g.rect(0, hy, W, y1 - hy); g.clip();
+      g.strokeStyle = gradV; g.lineWidth = 2; g.beginPath();
+      const nx = 26;
+      for (let k = -nx; k <= nx; k++){
+        const x = k * gs, xa = cx + F * x / zN, xb = cx + F * x / zf;
+        g.moveTo(xa, bot); g.lineTo(xb, hy + F * FY / zf);
+      }
+      g.stroke();
+      /* haze where the floor runs out toward the horizon */
+      const fy = hy + F * FY / zf;
+      for (let y = hy, k = 0; y < fy; y += 4, k++){ g.fillStyle = SH[si(.16 * (1 - (y - hy) / (fy - hy)))]; g.fillRect(0, y, W, 4); }
+      g.restore();
+      lumAcc += (bot - hy) * 2 * 30 * .25;
+      g.fillStyle = SH[si(.55)]; g.fillRect(0, hy - 1, W, 2);
+    }
+    function scroller(age, T, still){
+      if (!strip) makeStrip();
+      const s0 = s; if (still) s = Math.max(3, Math.min(s, Math.floor(W * .9 / ((String(C.name || '').length + 1) * GW))));   // the still frame: the whole name
+      const cols = Math.ceil(W / s) + 1;
+      let pos = still ? (nameAt + String(C.name || '').length / 2) * GW - cols / 2 : (age - SCROLL0) * GPS * GW - cols;
+      if (!still && pos < -cols) return;
+      const ip = Math.floor(pos), fr = pos - ip, gh = (GH + 1) * s, rh = Math.round(gh * .5), y0 = ys - 4 * s;
+      const wl = W * .95, ph = still ? 2.1 : T * 2.6;
+      g.imageSmoothingEnabled = false;
+      let n = 0;
+      for (let j = 0; j < cols; j++){
+        let src = ip + j; if (src < 0) continue;
+        src %= stripW;
+        const x = Math.round((j - fr) * s), y = Math.round(y0 + amp * Math.sin(x / wl * 6.2832 - ph));
+        g.drawImage(strip, src, 0, 1, GH + 1, x, y, s, gh);
+        g.drawImage(stripR, src, 0, 1, GH + 1, x, y + 8 * s + Math.round(s * .6), s, rh);
+        n++;
+      }
+      g.imageSmoothingEnabled = true;
+      lumAcc += n * s * gh * .3 * .8;
+      /* the floor under the letters is water: dark lines across their reflection */
+      g.fillStyle = P.bg;
+      for (let y = Math.round(ys + 4 * s - amp + s * .6); y < Math.min(top + h, ys + 4 * s + amp + s * .6 + rh); y += 6) g.fillRect(0, y, W, 2);
+      s = s0;
+    }
+    function draw(x, t0, w, hh, age, t){
+      const still = REDUCED;
+      if (!chrome) makeChrome();
+      fit(t0, hh);
+      const dt = lastT < 0 || still ? 0 : clamp(t - lastT, 0, .1); lastT = t;
+      if (still) age = 30;
+      const T = still ? 7.3 : age;
+      /* springs and decays */
+      if (dt > 0){
+        const tyaw = pu < 0 ? 0 : clamp((pu - .5) * .8, -.38, .38), tpit = pv < 0 ? 0 : clamp((pv - .35) * .5, -.2, .2);
+        for (let k = 0, n = Math.ceil(dt / .01), hs = dt / n; k < n; k++){
+          oyv += (24 * (tyaw - oy) - 5 * oyv) * hs; oy += oyv * hs;
+          opv += (24 * (tpit - op) - 5 * opv) * hs; op += opv * hs;
+        }
+        if (!down){ spin += spinV * dt; spinV *= Math.exp(-dt * 1.6); }
+        const decay = Math.exp(-dt * 5); for (let i = 0; i < NB; i++) bp[i] *= decay;
+        kick *= Math.exp(-dt * 4);
+        glint *= Math.exp(-dt * 3);
+      }
+      /* the stars: hyperspace at first, slowing to a drift; a key gives a burst */
+      const speed = still ? 0 : 9 + 260 * (1 - sstep(.2, 1.5, age)) + 40 * kick;
+      dist += speed * dt; floorD += (still ? 0 : 3.2 + 14 * kick) * dt;
+      /* the logo: falls in from far away, spinning, and slams in at SLAM; then spins, bobs and sways */
+      let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, alpha = 1, flash = 0, shake = 0;
+      if (!still && age < SLAM){
+        const u = clamp((age - .25) / (SLAM - .25), 0, 1), e = u * u * u;
+        z = 520 + (Z0 - 520) * e; yaw = -(1 - u) * (1 - u) * 9.5; pit = -.28 - (1 - u) * .9; rol = (1 - u) * .5;
+        alpha = sstep(.25, .6, age);
+      } else {
+        const a = age - SLAM, wI = still ? 1 : sstep(0, 1.6, a);
+        if (!still){ flash = Math.exp(-a * 8) * .42; shake = Math.exp(-a * 7) * Math.sin(a * 46) * h * .018; z -= Z0 * .14 * Math.exp(-a * 5.5) * Math.cos(a * 15); }
+        const ts = a - 7, sp = ts > 0 && ts % 13 < 1.9 ? 6.2832 * sstep(0, 1.9, ts % 13) : 0;   // now and then a full turn
+        yaw = wI * (.52 * Math.sin(T * .55) + .1 * Math.sin(T * 1.3)) + sp;
+        pit = -.28 + wI * .14 * Math.sin(T * .8 + .6);
+        rol = wI * .055 * Math.sin(T * .43);
+        y = logoY + wI * .7 * Math.sin(T * 1.25);
+        z += wI * 2.2 * Math.sin(T * .37);
+        if (still){ yaw = -.42; pit = -.3; rol = .03; }
+      }
+      yaw += oy + spin + kick * .12 * (keyN & 1 ? 1 : -1); pit += op - kick * .05; y += kick * .25;
+      if (!still && age >= SLAM && age - SLAM < .05 && glint < .5) glint = 1;
+      g.save(); if (shake) g.translate(0, Math.round(shake));
+      bars(still ? 3.1 : T, age, still);
+      floor(age, still);
+      xform(yaw, pit, rol, 0, y, z, 1);
+      drawStars(dist + (still ? 37 : 0), speed, z, 1e9, top);
+      if (alpha > .02) drawShadow(alpha);
+      if (alpha > .02) drawLogo(alpha, clamp(F / z * .1, 1.5, 4.5));
+      drawStars(dist + (still ? 37 : 0), speed, 0, z, top);
+      if (still || age > SCROLL0 - 1) scroller(age, T, still);
+      if (!still) titleCard(age);
+      g.restore();
+      if (flash > .01){ g.globalAlpha = flash; g.fillStyle = P.bright; g.fillRect(0, top, W, h); g.globalAlpha = 1; }
     }
     return {
       draw,
-      live: age => (M.reader && M.reader.isOpen) ? 0 : age < ENTRY ? 30 : 20,
-      poke(){ pulses[pn] = -9; pn = (pn + 1) % 4; },   // (set below with the draw's clock)
-      key(age){ pulses[pn] = age; pn = (pn + 1) % 4; oyv += (rnd() < 0.5 ? -1 : 1) * 2.2; opv -= 1.1; },
-      pointer(fx, fy){ if (fx < 0 || fx > 1 || fy < 0 || fy > 1) ptx = null; else { ptx = fx; pty = fy; } },
-      shapes,
+      live: () => (M.reader && M.reader.isOpen) ? 0 : 30,
+      key(){ bp[nextBar] = 1; nextBar = (nextBar + 1) % NB; kick = Math.min(1.6, kick + .7); keyN++; oyv += (keyN & 1 ? 1 : -1) * 1.6; opv -= .6; glint = Math.max(glint, .6); },
+      pointer(u, v, isDown){
+        const on = u >= 0 && u <= 1 && v >= 0 && v <= 1;
+        if (on && isDown && down && lastU >= 0){ const du = u - lastU; spin += du * 7; spinV = clamp(du * 7 * 30, -9, 9); }
+        down = !!isDown && on; lastU = on ? u : -1;
+        if (on){ pu = u; pv = v; } else { pu = pv = -1; }
+      },
     };
   })();
 
@@ -2430,6 +2561,7 @@ M.createTerminal = function createTerminal(opts){
     if (e.metaKey) return false;
     if (/^F\d+$/.test(k)) return false;
     if (booting){ skipBoot(); if (k === 'Escape' || k === 'Enter' || k === ' ') return true; }   // any other key skips the boot AND counts
+    if (landing && !app) DEMO.key();              // the intro answers each key (a bar flashes, the logo jumps)
     const ctrl = e.ctrlKey, alt = e.altKey, c = k.toLowerCase();
     if (app){                                   // apps get keys first
       const st = app;
@@ -2521,6 +2653,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function insertText(str){
     if (booting){ skipBoot(); }
+    if (landing && !app && str) DEMO.key();
     if (app){                                   /* phones and IME: an app takes the text whole (app.insertText), or as key events */
       const st = app;
       if (st.inst && typeof st.inst.insertText === 'function'){ if (appCall('insertText', String(str)) !== false && app === st) st.dirty = true; return; }
@@ -2562,7 +2695,7 @@ M.createTerminal = function createTerminal(opts){
     store.set(BOOT_KEY, 1);
     const w = landingRows();
     pageRow = null; page = ''; pages = [];
-    emit(w, (C.name || '') + '. ' + (A.role || '') + '. The letters K N turn slowly on the screen. Type help and press Enter to get started.');
+    emit(w, (C.name || '') + '. ' + (A.role || '') + '. An animated intro: the letters K N spin over copper bars while a message scrolls along the bottom. Type help and press Enter to get started.');
     blinkT0 = now; dirty = true;
   }
 
@@ -2969,7 +3102,7 @@ M.createTerminal = function createTerminal(opts){
     grid.length = 0; for (let y = 0; y < ROWS; y++) grid.push(new Array(COLS));
     scr.cols = COLS; scr.rows = ROWS; scr.aspect = ch / cw; scr.clear();
     if (app){ if (app.api){ app.api.cols = COLS; app.api.rows = ROWS; } if (gridCursor && (gridCursor.x >= COLS || gridCursor.y >= ROWS)) gridCursor = null; app.dirty = true; }
-    if (landing) landing.viz.h = Math.max(4, ROWS - 2);   // the monogram refits to the new tube
+    if (landing) landing.viz.h = Math.max(4, ROWS - 2);   // the intro refits to the new tube
     const next = []; let pageAt = -1;
     for (let a = 0; a < rows.length; a++){
       const r = rows[a];
@@ -3004,7 +3137,9 @@ M.createTerminal = function createTerminal(opts){
 
   if (!booting) endBoot();
   draw();
-  return { canvas, handleKey, handleKeyUp, handleTap, hitTest, insertText, update, run, scroll, resize, get cursorY(){ return promptY / H; },
+  /* the pointer over the tube (u, v: 0..1 of the canvas, -1 off it; down: a button held): the intro's logo leans toward it */
+  function pointer(u, v, down){ if (landing) DEMO.pointer(u, v, down); }
+  return { canvas, handleKey, handleKeyUp, handleTap, hitTest, insertText, update, run, scroll, resize, pointer, get cursorY(){ return promptY / H; },
     get lum(){ return Math.min(1, lumAcc / (W * H)); },   // 0..1, the mean brightness of the last frame drawn
     get busy(){ return !!(app || job); } };   // a full-screen app or a running command: don't rebuild under it
 };

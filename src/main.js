@@ -150,13 +150,14 @@ on(window, 'pointermove', e => {
     look(e.clientX / innerWidth * 2 - 1, p ? Math.min(ny, 0) : ny);
     if (ny > 0.8 && !p) hideHint();   // a real lean (it starts ~0.75)
   }
+  if (term.pointer) term.pointer(p ? p.u : -1, p ? p.v : -1, (e.buttons & 1) === 1);   // the landing's logo leans toward it
   hover(p);
 });
 /* the pointer leaves the window: the head comes back to the tube, unless it left through the bottom edge, which is
    just a lean that overshot (in a window above the dock or taskbar): that keeps the desk in view */
 on(D.documentElement, 'mouseleave', e => {
   if (!(e.clientY >= innerHeight - 4 && e.clientX > 0 && e.clientX < innerWidth)) look(0, 0);
-  px = py = -1; if (term.hitTest) term.hitTest(-1, -1);
+  px = py = -1; if (term.hitTest) term.hitTest(-1, -1); if (term.pointer) term.pointer(-1, -1, false);
 });
 
 /* the GPU dropped the context (driver reset, GPU switch, too many tabs). three.js r147's restore leaves this scene
@@ -252,11 +253,14 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   addEventListener('wheel', e => { if (reading() || !term.scroll || e.ctrlKey) return; term.scroll(wheelPx(e)); e.preventDefault(); }, { passive: false });
   stage.addEventListener('pointerdown', () => { unlock(); });
   stage.addEventListener('pointermove', e => {
-    if (e.pointerType !== 'mouse' || !term.hitTest) return;
-    const r = cv.getBoundingClientRect(), want = term.hitTest((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height) ? 'pointer' : '';
+    if (e.pointerType !== 'mouse') return;
+    const r = cv.getBoundingClientRect(), u = (e.clientX - r.left) / r.width, v = (e.clientY - r.top) / r.height;
+    if (term.pointer) term.pointer(u, v, (e.buttons & 1) === 1);
+    if (!term.hitTest) return;
+    const want = term.hitTest(u, v) ? 'pointer' : '';
     if (stage.style.cursor !== want) stage.style.cursor = want;
   });
-  stage.addEventListener('pointerleave', () => { if (term.hitTest) term.hitTest(-1, -1); stage.style.cursor = ''; });
+  stage.addEventListener('pointerleave', () => { if (term.hitTest) term.hitTest(-1, -1); if (term.pointer) term.pointer(-1, -1, false); stage.style.cursor = ''; });
   stage.addEventListener('click', e => {
     if (caught){ caught = false; return; }   // that touch stopped a fling: it was not a tap
     const r = cv.getBoundingClientRect();

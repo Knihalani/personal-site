@@ -79,8 +79,15 @@ MAC.createTerminal({ content, aspect, cols? }) -> {   // cols: 54 on desktop, 40
   cursorY,                      // bottom of the prompt line, 0..1 of the canvas (phones keep it above the keyboard)
   lum,                          // mean brightness of the last frame drawn, 0..1, tallied while drawing
   busy,                         // an app or command is running (don't rebuild the terminal under it)
+  pointer(u, v, down),          // optional: the mouse over the tube (u, v: 0..1 of the canvas, -1, -1 when off it or gone;
+                                // down: the main button held). Only the landing uses it: its logo leans toward the pointer
+                                // and a drag spins it. main.js calls it from pointermove (both layouts) and on leave
 }
 ```
+The landing (every load, until the first command; deep links skip it) is a demoscene-style intro drawn on the canvas:
+a title card, then an extruded vector "KN" over copper bars, a starfield and a perspective floor, with a sine scroller of
+`MAC.CONTENT` facts. Keys typed while it shows flash a bar and kick the logo; reduced motion gets one still frame. It
+animates at 30 fps through the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open.
 
 ## main.js (integrator)
 Creates the scene, terminal and typist; routes keydown/keyup to terminal + typist; text input through the hidden
