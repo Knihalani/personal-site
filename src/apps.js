@@ -74,12 +74,23 @@ T.apps.tetris = {
   usage: 'tetris',
   more: 'arrows move, \u2191 or x turns, z turns back, \u2193 drops a row, space drops all the way, c holds, p pauses, q quits. on a phone, tap the sides to move, the top to turn and the bottom to drop.',
   start(api){
-    const COLS0 = api.cols || 72, ROWS0 = api.rows || 23;
-    const SIDE = COLS0 < 47 && COLS0 >= 39;                            // phones: a slim panel beside a full-height well
-    const STACK = COLS0 < 39;                                          // narrower still: the panel goes under the well
-    const BH = Math.max(10, Math.min(20, ROWS0 - (STACK ? 15 : TOUCH ? 5 : 2)));   // well + floor + feet (+ panel, + room to tap below) must fit
-    const board = Array.from({ length: BH }, () => Array(BW).fill(null));
+    /* the layout follows the grid, which can change under a running game (a phone turned on its side):
+       SIDE is a slim panel beside a full-height well (phones), STACK puts the panel under the well (narrower still) */
+    let SIDE, STACK, BH, gridC = 0, gridR = 0, board = [];
+    function layout(cols, rows){
+      if (cols === gridC && rows === gridR) return;
+      gridC = cols; gridR = rows;
+      SIDE = cols < 47 && cols >= 39; STACK = cols < 39;
+      const h = Math.max(Math.max(4, Math.min(10, rows - 3)), Math.min(20, rows - (STACK ? 15 : TOUCH ? 5 : 2)));   // well + floor + feet (+ panel, + room to tap below) must fit; a short grid (a phone on its side) gets a shorter well
+      if (h === BH) return;
+      // a new well height keeps the bottom of the stack; the falling piece keeps its height above the floor
+      const d = h - (BH || h);
+      board = board.length ? (d >= 0 ? Array.from({ length: d }, () => Array(BW).fill(null)).concat(board) : board.slice(-d)) : Array.from({ length: h }, () => Array(BW).fill(null));
+      BH = h;
+      if (cur){ cur.y += d; while (!fits(cur.p, cur.r, cur.x, cur.y) && cur.y > -4) cur.y--; }
+    }
     let bag = [], queue = [], cur = null, hold = null, canHold = true;
+    layout(api.cols || 72, api.rows || 23);
     let score = 0, lines = 0, level = 1, hi = hiGet(TETRIS_HI), newHi = false;
     let fall = 0, lockT = 0, lockMoves = 0, paused = false, over = false, flash = null, t = 0, help = true;
 
@@ -153,7 +164,7 @@ T.apps.tetris = {
         help = false;
         /* the bottom row is the way out on a phone: the first tap pauses, the next one quits (the terminal
            treats a tap an app does not use, on that row, as esc) */
-        if (TOUCH && row >= (api.rows || 23) - 1){ if (over || paused) return false; paused = true; return true; }
+        if (TOUCH && row >= gridR - 1){ if (over || paused) return false; paused = true; return true; }
         if (over){ restart(); return true; }
         if (paused){ paused = false; return true; }
         if (!cur || flash) return true;
@@ -204,6 +215,7 @@ T.apps.tetris = {
         return dirty;
       },
       render(scr){
+        layout(scr.cols, scr.rows);
         scr.clear(); scr.cursor(0, 0, null);
         const W = BW * 2 + 4;
         const compact = STACK || SIDE || scr.cols < 64 || scr.rows < 22;      // one panel, beside the well or under it
@@ -312,8 +324,8 @@ T.apps.snake = {
   usage: 'snake',
   more: 'eat, grow, and stay off the walls and your own tail. arrows or wasd turn, p pauses, q quits. on a phone, tap beside the head to turn.',
   start(api){
-    const cols = api.cols || 72, rows = api.rows || 23;
-    const GW = Math.floor((cols - 2) / 2), GH = rows - 3;    // cells are 2 columns wide, so they look square
+    let cols = api.cols || 72, rows = api.rows || 23;
+    let GW = Math.floor((cols - 2) / 2), GH = rows - 3;      // cells are 2 columns wide, so they look square
     const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
     const KEYMAP = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right', k: 'up', j: 'down', h: 'left', l: 'right' };
     let body, dir, queue, food, score, step, acc, paused, over, hi = hiGet(SNAKE_HI), newHi, t = 0, started, eaten;
@@ -396,8 +408,22 @@ T.apps.snake = {
         return dirty;
       },
       render(scr){
+        if (scr.cols !== cols || scr.rows !== rows){            // the grid changed (a phone turned): a new field when the snake fits in it
+          cols = scr.cols; rows = scr.rows;
+          const w = Math.floor((cols - 2) / 2), h = rows - 3;
+          if (!started || over){ GW = w; GH = h; reset(); }
+          else {
+            // slide the snake in if it is small enough for the new field, and pause so the player can find it again
+            const xs = body.map(p => p[0]), ys = body.map(p => p[1]);
+            const dx = Math.min(0, w - 1 - Math.max(...xs)), dy = Math.min(0, h - 1 - Math.max(...ys));
+            if (Math.max(...xs) - Math.min(...xs) < w && Math.max(...ys) - Math.min(...ys) < h){
+              if (dx || dy){ body = body.map(([x, y]) => [x + dx, y + dy]); paused = true; }
+              GW = w; GH = h; if (!food || food[0] >= w || food[1] >= h) food = placeFood();
+            } else paused = true;                               // too long to fit: keep the old field until it fits again
+          }
+        }
         scr.clear(); scr.cursor(0, 0, null);
-        const ox = ((scr.cols - GW * 2 - 2) / 2) | 0, oy = 1;
+        const ox = Math.max(0, ((scr.cols - GW * 2 - 2) / 2) | 0), oy = 1;
         // status line
         scr.put(ox, 0, 'SNAKE', 'bright');
         scr.put(ox + 8, 0, 'score ' + score, 'normal');
@@ -423,13 +449,19 @@ T.apps.snake = {
         // the cards sit in the middle; the one before the start sits higher, so the snake shows under it
         const cw = Math.min(GW * 2 - 2, 34), cx = ox + 1 + ((GW * 2 - cw) / 2 | 0), cy = started || over ? oy + ((GH - 9) / 2 | 0) + 1 : oy + 1;
         const c = (y, s, st) => scr.put(cx + ((cw - s.length) / 2 | 0), cy + y, s, st);
-        if (over){
+        if (over && GH < 12){
+          const m = ' game over \u00b7 ' + score + ' points \u00b7 ' + (TOUCH ? 'tap' : 'enter') + ' again ';
+          scr.put(ox + 1 + Math.max(0, (GW * 2 - m.length) / 2 | 0), oy, m.slice(0, GW * 2), 'bright');
+        } else if (over){
           box(scr, cx, cy, cw, 10, 'normal');
           c(1, 'G A M E   O V E R', 'bright');
           c(3, score + ' points', 'normal');
           c(4, 'length ' + n + '   apples ' + eaten, 'dim');
           c(6, newHi ? 'new high score' : 'best ' + hi, newHi ? 'accent' : 'dim');
           c(8, TOUCH ? 'tap again' : 'enter again  \u00b7  q quit', REDUCED || Math.floor(t * 2) % 2 === 0 ? 'normal' : 'dim');
+        } else if (paused && GH < 12){                          // a short field: say it on the wall, not over the snake
+          const m = ' paused \u00b7 ' + (TOUCH ? 'tap' : 'p') + ' to resume ';
+          scr.put(ox + 1 + ((GW * 2 - m.length) / 2 | 0), oy, m, 'bright');
         } else if (paused){
           box(scr, cx, cy + 2, cw, 5, 'dim');
           c(3, 'PAUSED', 'bright'); c(5, TOUCH ? 'tap to resume' : 'p to resume', 'dim');

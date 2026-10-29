@@ -1705,7 +1705,7 @@ M.createTerminal = function createTerminal(opts){
     if (k === 'Enter'){ endAsk(a.buf); return true; }
     if (k === 'Escape'){ endAsk(null); return true; }
     if (k === 'Backspace' || (ctl && k.toLowerCase() === 'u')){ a.buf = k === 'Backspace' && !e.ctrlKey && !e.altKey ? a.buf.slice(0, -1) : ''; }
-    else if (k.length === 1 && !e.ctrlKey && !e.altKey && a.buf.length < 256 && k >= ' ') a.buf += k;
+    else if (k.length === 1 && !e.ctrlKey && !e.altKey && a.buf.length < 4096 && k >= ' ') a.buf += k;
     blinkT0 = now; blinkOn = true; dirty = true;
     return true;
   }
@@ -1954,7 +1954,7 @@ M.createTerminal = function createTerminal(opts){
   function insert(s){
     s = s.replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\x7e\u00a0-\uffff]|[\ud800-\udfff\u0300-\u036f\u200b-\u200f\ufe00-\ufe0f]/g, '');   // one cell per char: no emoji, combining marks or zero-width
     if (!s) return;
-    if (input.length + s.length > 240) s = s.slice(0, 240 - input.length);
+    if (input.length + s.length > 4096) s = s.slice(0, 4096 - input.length);
     input = input.slice(0, cur) + s + input.slice(cur); cur += s.length;
     suggestion = ''; tabState = null;
   }

@@ -318,10 +318,11 @@ T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer durati
     if (dur > 86400){ api.print('timer: up to 24 hours'); api.exit(2); return {}; }
     const elapsed = () => (paused ? pausedAt : now()) - t0;
     const finish = () => { api.print('timer: ' + fmtHMS(dur) + (done ? ' done' : ', stopped with ' + fmtHMS(Math.ceil(dur - elapsed())) + ' left')); api.exit(0); };
+    let lastRows = api.rows || 18;                     // the grid can change size under the app; render keeps this current
     const pause = () => { if (paused){ t0 += now() - pausedAt; paused = false; } else { pausedAt = now(); paused = true; } };
     return {
       /* phones: a tap pauses and resumes, and closes the finished timer; the bottom row is the way out */
-      tap(col, row){ if (row >= (api.rows || 18) - 1) return false; if (done) finish(); else pause(); return true; },
+      tap(col, row){ if (row >= lastRows - 1) return false; if (done) finish(); else pause(); return true; },
       key(e){
         if (e.ctrlKey || e.metaKey) return false;
         const k = e.key;
@@ -341,7 +342,7 @@ T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer durati
         return false;
       },
       render(scr){
-        scr.clear();
+        scr.clear(); lastRows = scr.rows;
         const W = scr.cols, H = scr.rows;
         let big = fmtHMS(Math.ceil(Math.max(0, dur - elapsed()) - 1e-6)), small = '';
         const frac = Math.min(1, elapsed() / dur), avail = H - 7;
@@ -425,7 +426,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
   more: 'type the passage as it appears. the clock starts on your first key. mistakes light up; backspace fixes them. at the end you get words per minute (five characters to a word, correct ones only) and accuracy. tab gives a new passage, esc quits.',
   start(api){
     let best = lsGet(TYPE_BEST, 0) || 0, order = PASSAGES.map((_, i) => i).sort(() => Math.random() - 0.5), pi = 0;
-    let text, typed, t0, t1, keys, errs, done, newBest, lastShow = -1;
+    let text, typed, t0, t1, keys, errs, done, newBest, lastShow = -1, lastRows = api.rows || 18;
     const now = () => performance.now() / 1000;
     function reset(){ text = PASSAGES[order[pi++ % order.length]]; typed = ''; t0 = 0; t1 = 0; keys = 0; errs = 0; done = false; newBest = false; }
     reset();
@@ -441,7 +442,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
     const quit = () => { api.print(done ? 'typing: ' + wpm() + ' wpm, ' + acc() + '% accurate' + (newBest ? ', a new best' : '') : 'typing: stopped'); api.exit(0); };
     return {
       /* phones have no esc: a tap on the keys line (the bottom row) quits */
-      tap(col, row){ if (row >= (api.rows || 18) - 1){ quit(); return true; } if (done){ reset(); return true; } return false; },
+      tap(col, row){ if (row >= lastRows - 1){ quit(); return true; } if (done){ reset(); return true; } return false; },
       key(e){
         if (e.ctrlKey || e.metaKey || e.altKey) return false;
         const k = e.key;
@@ -458,7 +459,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
       },
       tick(){ const s = t0 && !done ? Math.floor(secs() * 2) : -1; if (s !== lastShow){ lastShow = s; return true; } return false; },
       render(scr){
-        scr.clear();
+        scr.clear(); lastRows = scr.rows;
         const W = scr.cols, H = scr.rows, w = Math.min(W - 4, 60), x0 = ((W - w) / 2) | 0;
         scr.put(x0, 0, spaced('typing'), 'dim');
         const stats = wpm() + ' wpm  ' + acc() + '%  ' + fmtHMS(secs());

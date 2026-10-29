@@ -821,7 +821,7 @@ M.createScene = function createScene(container){
     const k = sstep(0, 1, down);
     // narrow windows turn less, so the glass never leaves more than ~15% of itself out of frame while reading, and
     // the whole keyboard stays in the lean view at either extreme
-    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * lerp(YAW_REST * Math.min(1, aspect / 1.25), YAW_FULL * Math.min(1, aspect / 1.6), k);
+    const lookUp = Math.max(0, pitchS.x), lookYaw = yawS.x * lerp(YAW_REST * Math.min(1, Math.pow(aspect / 1.25, 1.8)), YAW_FULL * Math.min(1, Math.pow(aspect / 1.6, 1.5)), k);
     camera.position.lerpVectors(shot.screen.pos, shot.full.pos, k);
     // the head travels a slight arc (up and back first) rather than a straight dolly
     camera.position.y += Math.sin(k * Math.PI) * .04;
