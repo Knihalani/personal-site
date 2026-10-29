@@ -29,12 +29,12 @@ function openPost(id){
   if (M.reader && !(M.reader.isOpen && M.reader.current === slug)) M.reader.open(slug);
   return true;
 }
-/* deep links: #about, #eden, #j, #writing, #contact, #links, #help run that command; #post/<slug> opens the reader.
+/* deep links: #about, #j, #eden, #writing, #contact, #links, #help run that command; #post/<slug> opens the reader.
    Anything else in the hash is ignored (a link never runs an arbitrary command line) */
 function deepLinks(getTerm, signal){
   const fromHash = () => {
     const id = location.hash.slice(1), t = getTerm();
-    if (!openPost(id) && /^(about|eden|j|writing|contact|links|help)$/.test(id) && t.run) t.run(id);
+    if (!openPost(id) && /^(about|j|eden|writing|contact|links|help)$/.test(id) && t.run) t.run(id);
   };
   addEventListener('hashchange', fromHash, { signal });
   return fromHash;

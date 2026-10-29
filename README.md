@@ -1,7 +1,7 @@
 # kaiav.sh
 
-The personal site of **Kaiav Nihalani**, founder of Eden (context for agents) and co-founder of
-[J](https://risingfounder.net).
+The personal site of **Kaiav Nihalani**, co-founder of [J](https://risingfounder.net) and founder of
+Eden (context for agents).
 
 It is a room at night. A beige 1980s computer sits on a desk under a lamp, and its green phosphor
 screen is a working terminal. When you type, the hands on the desk type the same keys on the 3D
@@ -17,11 +17,11 @@ keyboard, and you hear a real Topre switch for every press and release.
 | **phones** | just the terminal, full screen. Tap to type, drag to scroll, tap an email to copy it |
 
 Without WebGL the desktop gets the same terminal-only page. Deep links run a page on load:
-`#about`, `#eden`, `#j`, `#writing`, `#contact`, `#links`, `#help`, and `#post/<slug>` opens a post.
+`#about`, `#j`, `#eden`, `#writing`, `#contact`, `#links`, `#help`, and `#post/<slug>` opens a post.
 
 ## What's in the terminal
 
-- **About Kaiav:** `about`, `eden`, `j`, `writing` (posts open in a typeset reader), `contact`
+- **About Kaiav:** `about`, `j`, `eden`, `writing` (posts open in a typeset reader), `contact`
   (copies an address), `links`, `linkedin`, `x`, `gh`, `open <name|url>`, `neofetch`
 - **Do something:** `edit` (a nano-style editor), `todo`, `weather [city]`, `timer`, `clock`, `qr`, `pass` and an
   encrypted `vault` (kept only in your browser), `cal`, `bc`, `convert`, `roll`, `countdown`

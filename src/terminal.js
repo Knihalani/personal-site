@@ -794,7 +794,7 @@ M.createTerminal = function createTerminal(opts){
   function welcome(o){
     return o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line([TAP ? 'tap a word below, or type one' : 'type a word and press enter, or click one', 'd'])
-      .flow(['about', 'eden', 'j', 'writing', 'contact', 'links'].map(w => [chip(w, 'b')]), '  ')
+      .flow(['about', 'j', 'eden', 'writing', 'contact', 'links'].map(w => [chip(w, 'b')]), '  ')
       .blank();
   }
   /* a command chip: a word that, clicked or tapped, types and runs itself. A faint underline marks it. */
@@ -805,7 +805,7 @@ M.createTerminal = function createTerminal(opts){
     about(o){
       o.blank().head('about', 'about.txt').blank().big(C.name || '').line([A.role || '', 'n']).blank();
       for (const p of A.body || []) o.para(p, /^\[.*\]$/.test(p) ? 'd' : 'n');
-      o.blank().line(['see also  ', 'f'], ...chips(['contact', 'eden', 'j', 'links'], 'n')).blank();
+      o.blank().line(['see also  ', 'f'], ...chips(['contact', 'j', 'eden', 'links'], 'n')).blank();
       return o;
     },
     eden(o){
@@ -825,13 +825,13 @@ M.createTerminal = function createTerminal(opts){
     writing(o){
       o.blank().head('writing', 'writing/').blank();
       const ps = posts();
-      if (!ps.length) return o.at(2, ['nothing published yet', 'n']).blank().line(['see also  ', 'f'], ...chips(['about', 'eden', 'j', 'contact'], 'n')).blank();
+      if (!ps.length) return o.at(2, ['nothing published yet', 'n']).blank().line(['see also  ', 'f'], ...chips(['about', 'j', 'eden', 'contact'], 'n')).blank();
       /* one row per post: date, title; narrow screens stack them and add the summary. A post with html opens
          the reader; one with only a url opens the link */
       o.card({ title: 'POSTS', note: ps.length + (ps.length === 1 ? ' post' : ' posts'), verb: 'read', items: ps.map(p => ({
         label: p.date || '', value: p.title || 'Untitled', post: p.html ? slugOf(p) : null, url: p.html ? null : p.url || null,
         full: p.title || '', sub: p.summary || '', hint: p.html ? 'read' : p.url ? 'open' : '' })) }).blank()
-        .line(['see also  ', 'f'], ...chips(['about', 'eden', 'j', 'contact'], 'n')).blank();
+        .line(['see also  ', 'f'], ...chips(['about', 'j', 'eden', 'contact'], 'n')).blank();
       return o;
     },
     links(o){
@@ -886,7 +886,7 @@ M.createTerminal = function createTerminal(opts){
   const def = (name, d) => { B[name] = d; };
   const doc = name => ({ g: 'read', desc: name === 'about' ? 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is' : name === 'eden' ? 'Eden. ' + (E.line || '') : name === 'j' ? J.title || 'J' : name === 'writing' ? 'posts' : 'LinkedIn, X and GitHub',
     usage: name, run(argv, io){ if (io.tty){ const o = DOCS[name](out()); io.rich(o); if (o.lastCard && o.lastCard.acts.length) return io.pick(o.lastCard); } else io.write(TEXT[name]()); } });
-  for (const n of ['about', 'eden', 'j', 'writing', 'links']) def(n, doc(n));
+  for (const n of ['about', 'j', 'eden', 'writing', 'links']) def(n, doc(n));
   def('open', { g: 'read', desc: 'open a link: a url, ' + OPEN.map(o => o.name).join(', '), usage: 'open <url | j | gh | linkedin | x>', ex: ['open j', 'open https://risingfounder.net'], run(argv, io){
     if (argv[1] === 'post') return B.read.run(['read', ...argv.slice(2)], io);
     const q = argv.slice(1).join(' ').trim();
@@ -1188,7 +1188,7 @@ M.createTerminal = function createTerminal(opts){
   /* help: a short, curated page by default (everything a visitor is likely to want, fitting one screen);
      help all lists every command, grouped by its g; help <cmd> is man */
   /* plain help is for someone who has never used a terminal: what you can do, in words, with commands to click */
-  const HELP_TOP = [['about ' + ((C.name || 'Kaiav').split(' ')[0]), 'who he is, what he builds', ['about', 'eden', 'j', 'writing', 'contact', 'links']]];
+  const HELP_TOP = [['about ' + ((C.name || 'Kaiav').split(' ')[0]), 'who he is, what he builds', ['about', 'j', 'eden', 'writing', 'contact', 'links']]];
   const HELP_ALSO = ['edit', 'todo', 'tetris', 'snake', 'weather'];
   const HELP_ALL = [['read', 'about'], ['net', 'net'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
   def('help', { g: 'system', desc: 'what you can type here', usage: 'help [all | command]', ex: ['help', 'help all', 'help weather'], run(argv, io){

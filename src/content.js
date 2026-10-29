@@ -40,9 +40,9 @@ MAC.CONTENT = {
   },
   "about": {
     "title": "About",
-    "role": "Founder of Eden · Co-founder of J",
+    "role": "Co-founder of J · Founder of Eden",
     "body": [
-      "- 16 y/o\n- Born in Hong Kong\n- Founder of Eden (giving agents context)\n- Cofounder of J (helping young founders)\n- Done some internships\n- I'm most knowledgeable on agents/LLMs but anything in tech that you find cool I probably do too\n- Reach out for anything! Check out contact, 99.9% chance whoever you are that I will wanna hear from you\n- If I can help you with something (not hiring) please let me know/ask!\n- Main things I do outside school + building are squash and bjj"
+      "- 16 y/o\n- Born in Hong Kong\n- Cofounder of J (helping young founders)\n- Founder of Eden (giving agents context)\n- Done some internships\n- I'm most knowledgeable on agents/LLMs but anything in tech that you find cool I probably do too\n- Reach out for anything! Check out contact, 99.9% chance whoever you are that I will wanna hear from you\n- If I can help you with something (not hiring) please let me know/ask!\n- Main things I do outside school + building are squash and BJJ"
     ]
   },
   "contact": [

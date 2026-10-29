@@ -6,14 +6,14 @@
 <title>Kaiav Nihalani</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="theme-color" content="#0a0f0a">
-<meta name="description" content="Kaiav Nihalani — founder of Eden, co-founder of J: Rising Founder.">
+<meta name="description" content="Kaiav Nihalani — co-founder of J: Rising Founder, founder of Eden.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Kaiav Nihalani">
-<meta property="og:description" content="Founder of Eden · Co-founder of J">
+<meta property="og:description" content="Co-founder of J · Founder of Eden">
 <meta property="og:url" content="https://kaiav.pages.dev">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Kaiav Nihalani">
-<meta name="twitter:description" content="Founder of Eden · Co-founder of J">
+<meta name="twitter:description" content="Co-founder of J · Founder of Eden">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0f0a'/%3E%3Crect x='12' y='8' width='8' height='16' rx='1' fill='%238dffb4'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -73,11 +73,11 @@ for (const n of ['localStorage', 'sessionStorage']){
 <button id="mute" class="ui" type="button" aria-pressed="true">sound</button>
 <main class="sr">
   <h1>Kaiav Nihalani</h1>
-  <p>Founder of Eden, giving agents context. Co-founder of J: Rising Founder, a free remote program for founders aged 23 and under. This site is a working terminal: type help.</p>
+  <p>Co-founder of J: Rising Founder, a free remote program for founders aged 23 and under. Founder of Eden, giving agents context. This site is a working terminal: type help.</p>
   <ul><li><a tabindex="-1" href="https://www.linkedin.com/in/kaiav-nihalani-594703356/">LinkedIn</a></li><li><a tabindex="-1" href="https://x.com/KaiavRNihalani">X</a></li><li><a tabindex="-1" href="https://risingfounder.net">J: Rising Founder</a></li></ul>
   <div id="mirror" role="log" aria-live="polite" aria-label="Terminal output"></div>
 </main>
-<noscript><h1>Kaiav Nihalani</h1><p>Founder of Eden · Co-founder of J: Rising Founder</p><p><a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/">LinkedIn</a> · <a href="https://x.com/KaiavRNihalani">X</a></p><p>This desk needs JavaScript; the links above are the short version.</p></noscript>
+<noscript><h1>Kaiav Nihalani</h1><p>Co-founder of J: Rising Founder · Founder of Eden</p><p><a href="https://www.linkedin.com/in/kaiav-nihalani-594703356/">LinkedIn</a> · <a href="https://x.com/KaiavRNihalani">X</a></p><p>This desk needs JavaScript; the links above are the short version.</p></noscript>
 
 <script>
 /* All copy on the site. Edit here (or in the Copy Desk). */
@@ -122,9 +122,9 @@ MAC.CONTENT = {
   },
   "about": {
     "title": "About",
-    "role": "Founder of Eden · Co-founder of J",
+    "role": "Co-founder of J · Founder of Eden",
     "body": [
-      "- 16 y/o\n- Born in Hong Kong\n- Founder of Eden (giving agents context)\n- Cofounder of J (helping young founders)\n- Done some internships\n- I'm most knowledgeable on agents/LLMs but anything in tech that you find cool I probably do too\n- Reach out for anything! Check out contact, 99.9% chance whoever you are that I will wanna hear from you\n- If I can help you with something (not hiring) please let me know/ask!\n- Main things I do outside school + building are squash and bjj"
+      "- 16 y/o\n- Born in Hong Kong\n- Cofounder of J (helping young founders)\n- Founder of Eden (giving agents context)\n- Done some internships\n- I'm most knowledgeable on agents/LLMs but anything in tech that you find cool I probably do too\n- Reach out for anything! Check out contact, 99.9% chance whoever you are that I will wanna hear from you\n- If I can help you with something (not hiring) please let me know/ask!\n- Main things I do outside school + building are squash and BJJ"
     ]
   },
   "contact": [
@@ -3506,7 +3506,7 @@ M.createTerminal = function createTerminal(opts){
   function welcome(o){
     return o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line([TAP ? 'tap a word below, or type one' : 'type a word and press enter, or click one', 'd'])
-      .flow(['about', 'eden', 'j', 'writing', 'contact', 'links'].map(w => [chip(w, 'b')]), '  ')
+      .flow(['about', 'j', 'eden', 'writing', 'contact', 'links'].map(w => [chip(w, 'b')]), '  ')
       .blank();
   }
   /* a command chip: a word that, clicked or tapped, types and runs itself. A faint underline marks it. */
@@ -3517,7 +3517,7 @@ M.createTerminal = function createTerminal(opts){
     about(o){
       o.blank().head('about', 'about.txt').blank().big(C.name || '').line([A.role || '', 'n']).blank();
       for (const p of A.body || []) o.para(p, /^\[.*\]$/.test(p) ? 'd' : 'n');
-      o.blank().line(['see also  ', 'f'], ...chips(['contact', 'eden', 'j', 'links'], 'n')).blank();
+      o.blank().line(['see also  ', 'f'], ...chips(['contact', 'j', 'eden', 'links'], 'n')).blank();
       return o;
     },
     eden(o){
@@ -3537,13 +3537,13 @@ M.createTerminal = function createTerminal(opts){
     writing(o){
       o.blank().head('writing', 'writing/').blank();
       const ps = posts();
-      if (!ps.length) return o.at(2, ['nothing published yet', 'n']).blank().line(['see also  ', 'f'], ...chips(['about', 'eden', 'j', 'contact'], 'n')).blank();
+      if (!ps.length) return o.at(2, ['nothing published yet', 'n']).blank().line(['see also  ', 'f'], ...chips(['about', 'j', 'eden', 'contact'], 'n')).blank();
       /* one row per post: date, title; narrow screens stack them and add the summary. A post with html opens
          the reader; one with only a url opens the link */
       o.card({ title: 'POSTS', note: ps.length + (ps.length === 1 ? ' post' : ' posts'), verb: 'read', items: ps.map(p => ({
         label: p.date || '', value: p.title || 'Untitled', post: p.html ? slugOf(p) : null, url: p.html ? null : p.url || null,
         full: p.title || '', sub: p.summary || '', hint: p.html ? 'read' : p.url ? 'open' : '' })) }).blank()
-        .line(['see also  ', 'f'], ...chips(['about', 'eden', 'j', 'contact'], 'n')).blank();
+        .line(['see also  ', 'f'], ...chips(['about', 'j', 'eden', 'contact'], 'n')).blank();
       return o;
     },
     links(o){
@@ -3598,7 +3598,7 @@ M.createTerminal = function createTerminal(opts){
   const def = (name, d) => { B[name] = d; };
   const doc = name => ({ g: 'read', desc: name === 'about' ? 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is' : name === 'eden' ? 'Eden. ' + (E.line || '') : name === 'j' ? J.title || 'J' : name === 'writing' ? 'posts' : 'LinkedIn, X and GitHub',
     usage: name, run(argv, io){ if (io.tty){ const o = DOCS[name](out()); io.rich(o); if (o.lastCard && o.lastCard.acts.length) return io.pick(o.lastCard); } else io.write(TEXT[name]()); } });
-  for (const n of ['about', 'eden', 'j', 'writing', 'links']) def(n, doc(n));
+  for (const n of ['about', 'j', 'eden', 'writing', 'links']) def(n, doc(n));
   def('open', { g: 'read', desc: 'open a link: a url, ' + OPEN.map(o => o.name).join(', '), usage: 'open <url | j | gh | linkedin | x>', ex: ['open j', 'open https://risingfounder.net'], run(argv, io){
     if (argv[1] === 'post') return B.read.run(['read', ...argv.slice(2)], io);
     const q = argv.slice(1).join(' ').trim();
@@ -3900,7 +3900,7 @@ M.createTerminal = function createTerminal(opts){
   /* help: a short, curated page by default (everything a visitor is likely to want, fitting one screen);
      help all lists every command, grouped by its g; help <cmd> is man */
   /* plain help is for someone who has never used a terminal: what you can do, in words, with commands to click */
-  const HELP_TOP = [['about ' + ((C.name || 'Kaiav').split(' ')[0]), 'who he is, what he builds', ['about', 'eden', 'j', 'writing', 'contact', 'links']]];
+  const HELP_TOP = [['about ' + ((C.name || 'Kaiav').split(' ')[0]), 'who he is, what he builds', ['about', 'j', 'eden', 'writing', 'contact', 'links']]];
   const HELP_ALSO = ['edit', 'todo', 'tetris', 'snake', 'weather'];
   const HELP_ALL = [['read', 'about'], ['net', 'net'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
   def('help', { g: 'system', desc: 'what you can type here', usage: 'help [all | command]', ex: ['help', 'help all', 'help weather'], run(argv, io){
@@ -8375,12 +8375,12 @@ function openPost(id){
   if (M.reader && !(M.reader.isOpen && M.reader.current === slug)) M.reader.open(slug);
   return true;
 }
-/* deep links: #about, #eden, #j, #writing, #contact, #links, #help run that command; #post/<slug> opens the reader.
+/* deep links: #about, #j, #eden, #writing, #contact, #links, #help run that command; #post/<slug> opens the reader.
    Anything else in the hash is ignored (a link never runs an arbitrary command line) */
 function deepLinks(getTerm, signal){
   const fromHash = () => {
     const id = location.hash.slice(1), t = getTerm();
-    if (!openPost(id) && /^(about|eden|j|writing|contact|links|help)$/.test(id) && t.run) t.run(id);
+    if (!openPost(id) && /^(about|j|eden|writing|contact|links|help)$/.test(id) && t.run) t.run(id);
   };
   addEventListener('hashchange', fromHash, { signal });
   return fromHash;

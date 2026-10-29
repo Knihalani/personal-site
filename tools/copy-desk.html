@@ -446,7 +446,7 @@ body.focusing{ overflow:hidden }
 <script type="module">
 const DEFAULTS = {
   name: 'Kaiav Nihalani',
-  about: { role: 'Founder of Eden · Co-founder of J', body: ['[A longer bio is coming soon.]'] },
+  about: { role: 'Co-founder of J · Founder of Eden', body: ['[A longer bio is coming soon.]'] },
   eden: { role: 'Founder', line: 'Context for agents.', body: '' },
   j: { title: 'J: Rising Founder', role: 'Co-founder, with Jose Cruz-Lopez', line: 'An early chance for extraordinary founders.',
     body: 'A free, remote, three-month program for ambitious founders aged 23 and under, anywhere in the world.',
@@ -639,9 +639,9 @@ function preview(){
   const A = C.about, E = C.eden, J = C.j, v = view;
   if (v === 'welcome'){ blank(); big(C.name || ''); at(2, [A.role || '', 'n']); blank();
     at(2, [TAP() ? 'tap a word below, or type one' : 'type a word and press enter, or click one', 'd']);
-    flow(['about', 'eden', 'j', 'writing', 'contact', 'links'], 'b'); blank(); at(0, ['kaiav', 'd'], [':', 'f'], ['~', 'n'], [' $ ', 'd'], ['', 'C']); }
+    flow(['about', 'j', 'eden', 'writing', 'contact', 'links'], 'b'); blank(); at(0, ['kaiav', 'd'], [':', 'f'], ['~', 'n'], [' $ ', 'd'], ['', 'C']); }
   if (v === 'about'){ cmd('about'); blank(); head('about', 'about.txt'); blank(); big(C.name || ''); at(2, [A.role || '', 'n']); blank();
-    (A.body || []).forEach(p => para(p, /^\[.*\]$/.test(p) ? 'd' : 'n')); blank(); seeAlso(['contact', 'eden', 'j', 'links']); }
+    (A.body || []).forEach(p => para(p, /^\[.*\]$/.test(p) ? 'd' : 'n')); blank(); seeAlso(['contact', 'j', 'eden', 'links']); }
   if (v === 'eden'){ cmd('eden'); blank(); big(E.title || 'Eden'); at(2, [E.role || '', 'd']); blank();
     if (E.line){ para(E.line, 'b'); blank(); } if (E.body){ para(E.body, 'n'); blank(); } seeAlso(['contact', 'j', 'about']); }
   if (v === 'j'){ cmd('j'); blank(); big(J.title || 'J'); at(2, [J.role || '', 'd']); blank(); para(J.line || '', 'b'); blank(); para(J.body || '', 'n'); blank();
@@ -649,7 +649,7 @@ function preview(){
     blank(); seeAlso(['contact', 'eden', 'about']); }
   if (v === 'writing'){ cmd('writing'); blank(); head('writing', 'writing/'); blank();
     const all = C.writing.posts, pub = all.filter(p => p.status === 'published').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    if (!pub.length){ at(2, ['nothing published yet', 'n']); blank(); seeAlso(['about', 'eden', 'j', 'contact']); }
+    if (!pub.length){ at(2, ['nothing published yet', 'n']); blank(); seeAlso(['about', 'j', 'eden', 'contact']); }
     else card({ title: 'POSTS', note: pub.length + (pub.length === 1 ? ' post' : ' posts'), verb: 'read', items: pub.map(p => ({ label: p.date || '', value: p.title || 'Untitled', sub: p.summary || '', act: p.html || p.wordCount || p.url ? 1 : 0, hint: p.url && !p.wordCount ? 'open' : 'read' })) });
     const nd = all.length - pub.length; if (nd){ blank(); at(2, [`(desk note: ${nd} draft${nd > 1 ? 's' : ''} hidden until published)`, 'w']); } }
   if (v === 'contact'){ cmd('contact'); blank(); card({ title: 'CONTACT', note: 'email', verb: 'copy', items: C.contact.map(e => ({ label: e.label, value: e.email, act: 1, hint: 'copy' })) }); }
