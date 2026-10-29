@@ -163,7 +163,7 @@ function degrade(){
 function frame(now){
   raf = requestAnimationFrame(frame);
   const raw = (now - last) / 1000, dt = Math.min(.05, raw); last = now; T += dt;
-  try { if (term.update(dt, T)) api.markScreenDirty(); } catch (e){ oops(e); }
+  try { if (term.update(dt, T)){ api.markScreenDirty(); if (api.setScreenLum && term.lum != null) api.setScreenLum(term.lum); } } catch (e){ oops(e); }
   if (reading()) return;   // the reader sheet covers the room: hold the last frame and save the GPU
   try { typist.update(dt, T); } catch (e){ oops(e); }
   if (gl.isContextLost()) return;   // the contextlost event is on its way (see above)

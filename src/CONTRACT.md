@@ -22,6 +22,7 @@ MAC.createScene(container: HTMLElement) -> {
   renderer, scene, camera,
   setScreenCanvas(canvas),      // the terminal's 2D canvas becomes the CRT image
   markScreenDirty(),            // call when the terminal canvas changed this frame
+  setScreenLum(v),              // 0..1 mean screen brightness from the terminal (term.lum); drives the glow without a pixel readback
   screenAspect: number,         // width / height of the visible screen area (terminal sizes itself to this)
   keyboard: {
     hasKey(code) -> bool,               // KeyboardEvent.code, e.g. 'KeyA', 'Space', 'Enter', 'ShiftLeft'
@@ -75,6 +76,7 @@ MAC.createTerminal({ content, aspect, cols? }) -> {   // cols: 54 on desktop, 40
   run(cmd),                     // run a command programmatically (#hash deep links)
   scroll(dy),                   // wheel / touch scrollback
   cursorY,                      // bottom of the prompt line, 0..1 of the canvas (phones keep it above the keyboard)
+  lum,                          // mean brightness of the last frame drawn, 0..1, tallied while drawing
   busy,                         // an app or command is running (don't rebuild the terminal under it)
 }
 ```

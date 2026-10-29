@@ -16,6 +16,7 @@ const M = window.MAC = window.MAC || {};
 M.TERM = M.TERM || {}; M.TERM.cmds = M.TERM.cmds || {}; M.TERM.apps = M.TERM.apps || {};
 
 /* ---- tunables ---- */
+const GLYPH_COVER = .22;      // the share of a cell a VT323 glyph lights, on average (see lum)
 const PALETTE = {             // one phosphor, four intensities. Retune here to match the scene.
   bg:     '#0a0f0a',
   faint:  '#43603c',          // structure: rules, ghost text, hints
@@ -424,6 +425,13 @@ M.createTerminal = function createTerminal(opts){
   const noShaping = () => { try { g.fontKerning = 'none'; g.textRendering = 'optimizeSpeed'; if ('fontVariantLigatures' in g) g.fontVariantLigatures = 'none'; } catch (e){} };
   noShaping();
   const fillT = (t, x, y) => g.fillText(noLig(t), x, y);
+  /* how bright the screen is, tallied while drawing (the room's glow follows it; reading the pixels back would stall the GPU):
+     each fill adds its area times its colour's luminance, text counts its cells at the share of a cell a glyph lights */
+  const LUM = {}, lumOf = c => LUM[c] != null ? LUM[c] : (LUM[c] = (m => m ? (.299 * parseInt(m[1], 16) + .587 * parseInt(m[2], 16) + .114 * parseInt(m[3], 16)) / 255 : .5)(/^#(..)(..)(..)/.exec(c)));
+  let lumAcc = 0;
+  { const fr = g.fillRect.bind(g), ft = g.fillText.bind(g);
+    g.fillRect = (x, y, w, h) => { lumAcc += Math.abs(w * h) * lumOf(g.fillStyle); fr(x, y, w, h); };
+    g.fillText = (t, x, y) => { lumAcc += t.length * cw * ch * GLYPH_COVER * lumOf(g.fillStyle); ft(t, x, y); }; }
   const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const P = PALETTE;
   const sfx = name => { try { if (M.sound && M.sound.event) M.sound.event(name); } catch (e){} };
@@ -2469,7 +2477,7 @@ M.createTerminal = function createTerminal(opts){
   }
 
   function draw(){
-    g.fillStyle = P.bg; g.fillRect(0, 0, W, H);
+    lumAcc = 0; g.fillStyle = P.bg; g.fillRect(0, 0, W, H);
     g.textBaseline = 'alphabetic';
     animFps = 0;
     if (booting){ drawBoot(); return; }
@@ -2664,6 +2672,7 @@ M.createTerminal = function createTerminal(opts){
   if (!booting) endBoot();
   draw();
   return { canvas, handleKey, handleKeyUp, handleTap, hitTest, insertText, update, run, scroll, resize, get cursorY(){ return promptY / H; },
+    get lum(){ return Math.min(1, lumAcc / (W * H)); },   // 0..1, the mean brightness of the last frame drawn
     get busy(){ return !!(app || job); } };   // a full-screen app or a running command: don't rebuild under it
 };
 })();

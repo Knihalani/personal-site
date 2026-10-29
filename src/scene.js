@@ -844,7 +844,7 @@ M.createScene = function createScene(container){
   }
 
   /* ================= SCREEN TEXTURE & GLOW ================= */
-  let screenTex = null, screenCanvas = null, lumDirty = false, lumTimer = 0, lumTarget = .35, lum = .35;
+  let screenTex = null, screenCanvas = null, lumDirty = false, lumTimer = 0, lumTarget = .35, lum = .35, lumFed = false;
   const lc = document.createElement('canvas'); lc.width = 16; lc.height = 12; const lx = lc.getContext('2d', { willReadFrequently: true });
   function sampleLum(){
     if (!screenCanvas) return; try { lx.drawImage(screenCanvas, 0, 0, 16, 12); const d = lx.getImageData(0, 0, 16, 12).data; let s = 0;
@@ -906,6 +906,7 @@ M.createScene = function createScene(container){
       screenTex.encoding = THREE.LinearEncoding; screenTex.wrapS = screenTex.wrapT = THREE.ClampToEdgeWrapping;
       screenU.uTex.value = screenTex; screenU.uHas.value = 1; screenU.uRes.value.set(c.width, c.height); lumDirty = true;
     },
+    setScreenLum(v){ if (v >= 0 && v <= 1){ lumTarget = v; lumFed = true; } },   // the terminal tallies its own brightness: no pixel readback
     markScreenDirty(){ if (screenTex){ screenTex.needsUpdate = true; lumDirty = true; screenDirty = true; } },
     /* clientX/Y -> where that point lands on the terminal canvas: {u, v} in 0..1 from its top-left, or null off the
        image. Follows the CRT shader's mapping (barrel bow, then the overscan inset), so it matches what is drawn. */
@@ -965,7 +966,7 @@ M.createScene = function createScene(container){
       // tube: flicker, roll, and how much light the text throws into the room
       screenU.uTime.value = t;
       screenU.uFlicker.value = REDUCED ? 1 : 1 + .0045 * Math.sin(t * 2 * Math.PI * 7.7) + .003 * Math.sin(t * 2 * Math.PI * 1.3) + .002 * (Math.random() - .5);
-      lumTimer -= dt; if (lumDirty && lumTimer <= 0){ lumDirty = false; lumTimer = 1.2; sampleLum(); }   // a GPU->CPU readback of the terminal canvas: keep it rare
+      lumTimer -= dt; if (lumDirty && !lumFed && lumTimer <= 0){ lumDirty = false; lumTimer = 1.2; sampleLum(); }   // a GPU->CPU readback of the terminal canvas: keep it rare
       lum += (lumTarget - lum) * (1 - Math.exp(-dt * 4));
       lampLevel(dt);
       if (intro.t < intro.end + .5){
