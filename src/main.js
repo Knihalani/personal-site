@@ -45,9 +45,19 @@ function whenReady(go){
     .then(() => { $('#loading').classList.add('gone'); go(); });
 }
 
-/* phones and small tablets: just the terminal, full screen; and any desktop that cannot draw the room */
-if (small() || !window.THREE || !M.createScene){ if (!small()) console.warn('3D off: three.js did not load'); flat(); return; }
+/* phones and small tablets: just the terminal, full screen (head.html does not even fetch three.js for them) */
+if (small()){ flat(); return; }
+/* three.js comes in on its own (head.html): the room starts when it is here. A desktop where it fails, or has not
+   arrived after 10 s (a hung CDN), gets the terminal alone, as without WebGL */
+const start = () => {
+  if (window.THREE && !M.createScene && M.loadScene) M.loadScene();   // scene.js was parsed before three.js arrived
+  if (!window.THREE || !M.createScene){ console.warn('3D off: three.js did not load'); flat(); return; }
+  room();
+};
+if (window.THREE || !M.three) start();
+else Promise.race([M.three, new Promise(r => setTimeout(r, 10000))]).then(start);
 
+function room(){
 let api;
 try { api = M.createScene(stage); } catch (e){ console.warn('3D off:', e && e.message); stage.textContent = ''; flat(); return; }
 /* everything the 3D layout listens to goes when it is torn down (toFlat) */
@@ -58,7 +68,7 @@ function toFlat(why){
   if (dead) return; dead = true; console.warn('3D off:', why);
   ac.abort(); cancelAnimationFrame(raf); hint.hidden = true;
   try { api.renderer.dispose(); } catch (e){}
-  stage.textContent = ''; flat();
+  stage.textContent = ''; flat(term);   // the same terminal carries on: scrollback, cwd, a running app
 }
 if (M.dressRoom) { try { M.dressRoom(api); } catch (e){ console.error(e); } }
 M.world = {
@@ -103,7 +113,6 @@ on(kbd, 'keydown', e => { if (reading()) return; if (['Enter', 'Backspace', 'Tab
 on(kbd, 'keyup', e => { onUp(e); e.stopPropagation(); });
 /* the wheel scrolls the terminal; the cursor looks around, and moving it down leans back to the whole desk */
 on(window, 'wheel', e => { if (reading()) return; if (term.scroll){ term.scroll(e.deltaY); e.preventDefault(); } }, { passive: false });
-on(window, 'keydown', e => { if (reading()) return; if (e.key === 'PageUp' || e.key === 'PageDown'){ if (term.scroll) term.scroll(e.key === 'PageUp' ? -300 : 300); } });
 on(stage, 'pointerdown', () => unlock());
 /* clicking the tube: command words and card rows on the terminal are clickable (the scene maps the click to the canvas) */
 on(stage, 'click', e => {
@@ -161,22 +170,24 @@ function frame(now){
   try { api.update(dt, T); api.render(); } catch (e){ oops(e); if (++bad > 9) toFlat('the 3D view kept failing'); }
   if ((runT += raw) > 2){ spanT += raw; if (raw > .06) slowT += raw; if (spanT > 5){ if (slowT / spanT > .5) degrade(); spanT = slowT = bad = 0; } }
 }
-on(D, 'visibilitychange', () => { if (D.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame); } });
+let going = false;   // the loop starts once the fonts are in; a tab shown before that must not start a second one
+on(D, 'visibilitychange', () => { cancelAnimationFrame(raf); if (!D.hidden && going){ last = performance.now(); raf = requestAnimationFrame(frame); } });
 const fromHash = deepLinks(() => term, ac.signal);
 whenReady(() => {
   if (dead) return;
-  fromHash(); focusInput(); raf = requestAnimationFrame(frame);
+  fromHash(); focusInput(); going = true; cancelAnimationFrame(raf); raf = requestAnimationFrame(frame);
   if (!REDUCED && !matchMedia('(hover: none)').matches){   // fades in once the tube has had a moment, out after ~12 s
     hint.style.opacity = '0'; hint.hidden = false;
     hintIn = setTimeout(() => { hint.style.opacity = ''; }, 1800); hintT = setTimeout(hideHint, 14000);
   }
 });
+}
 
 /* the terminal alone, no 3D. Phones: full width under a header strip, text typed through #kbd. Desktops (a fallback):
    one centred column of up to 54 columns, and the keyboard read from keydown like the 3D layout */
-function flat(){
+function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives out mid-visit
   D.body.classList.add('phone'); if (!TOUCH) D.body.classList.add('flat');
-  let term = null, cv = null, bw = 0, bh = 0, shift = 0;
+  let term = prev || null, cv = null, bw = 0, bh = 0, shift = 0;
   /* sized to fill the screen below the header strip (and above the home indicator); built again when the size
      really changes (a rotation, a desktop window resize). The on-screen keyboard only changes the height on
      phones, so there it never rebuilds: place() lifts the prompt instead */
@@ -266,6 +277,6 @@ function flat(){
     requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt;
     try { if (term.update(dt, T)) place(); } catch (e){ oops(e); }
   };
-  whenReady(() => { fromHash(); place(); if (!TOUCH) focus(); requestAnimationFrame(frame); });
+  whenReady(() => { if (!prev) fromHash(); place(); if (!TOUCH) focus(); requestAnimationFrame(frame); });
 }
 })();

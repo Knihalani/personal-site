@@ -10,6 +10,7 @@
 <meta name="twitter:title" content="Kaiav Nihalani">
 <meta name="twitter:description" content="Co-founder of J · Founder of Eden">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0f0a'/%3E%3Crect x='12' y='8' width='8' height='16' rx='1' fill='%238dffb4'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Caveat:wght@500&family=VT323&display=swap">
@@ -57,7 +58,18 @@ for (const n of ['localStorage', 'sessionStorage']){
   try { Object.defineProperty(window, n, { configurable: true, value: { getItem: get, setItem: (x, v) => { m.set(k(x), String(v)); }, removeItem: x => { m.set(k(x), null); } } }); } catch (e){}
 }
 </script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script>
+/* three.js loads without holding up the page: the terminal and the rest parse while it downloads, and main.js starts
+   the room when it arrives (or the terminal alone if it fails or hangs). Phones never draw the room, so never fetch it */
+(() => {
+  const M = window.MAC = window.MAC || {};
+  if (window.THREE || matchMedia('(pointer: coarse)').matches) return;
+  const s = document.createElement('script');
+  M.three = new Promise(done => { s.onload = () => done(!!window.THREE); s.onerror = () => done(false); });
+  s.src = 'https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js';
+  document.head.appendChild(s);
+})();
+</script>
 
 <div id="stage" aria-hidden="true"></div>
 <div id="loading">warming up the tube</div>

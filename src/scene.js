@@ -1,10 +1,10 @@
 /* scene.js: the room, the machine, the keyboard and the light. Implements MAC.createScene (see CONTRACT.md).
    Units are metres. The desk top is at y = 0.75; the typist faces -z; the wall is behind the computer.
    Everything procedural is built once at start-up: no image files, no addons. */
-(() => {
+(function sceneModule(){
 'use strict';
 const M = window.MAC = window.MAC || {};
-if (typeof THREE === 'undefined') return;   // three.js did not load: main.js shows the flat terminal instead
+if (typeof THREE === 'undefined'){ M.loadScene = sceneModule; return; }   // three.js loads async (head.html): main.js runs this again once it is here
 
 /* Phosphor: soft green, a desaturated, slightly minty P1. Amber would melt into the room, because the only other
    light is a 2700K lamp. Green sits opposite it on the colour wheel, so the tube separates from the room and the

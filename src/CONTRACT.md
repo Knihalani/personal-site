@@ -5,7 +5,9 @@ CRT shows a working terminal, a keyboard on the desk, and the silhouette of a pe
 visitor types, the silhouette's hands press the same keys on the 3D keyboard, and the keys go down.
 
 Files in `src/` are concatenated into one page by `build.py` (see ORDER there). three.js r147 is loaded as
-the global `THREE` from `https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js`. Addons, if needed,
+the global `THREE` from `https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js`, by a small async loader in
+`head.html` (`MAC.three` is a promise of true/false; touch devices skip it). If scene.js runs before THREE arrives it
+registers `MAC.loadScene` instead, and main.js calls it once three.js is in (or goes terminal-only after 10 s). Addons, if needed,
 load from `https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/...` (they attach to `THREE.*`) and must be
 added to the `<script src>` list in `head.html` by the integrator (ask in your report; don't edit head.html).
 
