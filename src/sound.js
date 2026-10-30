@@ -3,8 +3,7 @@
    keys stay silent. Events (disk seek, terminal bell, error buzz) are synthesised sample-by-sample into
    AudioBuffers on first use. Playback is a BufferSource -> lowpass -> Gain -> Panner per hit.
    Mix: keys/events -> (dry + short generated room reverb) -> glue compressor -> limiter -> mute -> out.
-   The landing intro's sound effects (sfx(name, opts), see SFX) are built live from nodes on their own bus, into the
-   same master chain. There is no music. */
+   The landing intro is silent; there is no music. */
 (() => {
 'use strict';
 const M = window.MAC = window.MAC || {};
@@ -255,7 +254,6 @@ function Engine(ctx){
   const hpf = ctx.createBiquadFilter(); hpf.type = 'highpass'; hpf.frequency.value = 25; hpf.Q.value = 0.7;
   E.master = ctx.createGain(); E.master.gain.value = 0.8;
   E.master.connect(hpf); hpf.connect(tone); tone.connect(glue); glue.connect(lim); lim.connect(E.out); E.out.connect(ctx.destination);
-  E.lim = lim;
 
   /* room reverb send */
   E.verb = ctx.createConvolver(); E.verb.buffer = reverbIR(ctx);
@@ -279,16 +277,6 @@ function Engine(ctx){
   E.warm = () => { for (const n in FX) E.getFx(n); };
   E.voices = 0;
 
-  /* sfx bus (the intro's effects): a highpass and a gentle glue compressor of its own, then straight into the master's
-     limiter and mute stage (not the keys' glue: its low threshold would flatten the effects' dynamics) */
-  E.offline = !!(window.OfflineAudioContext && ctx instanceof window.OfflineAudioContext);
-  E.sfxBus = ctx.createGain(); E.sfxBus.gain.value = 1;
-  const sHp = ctx.createBiquadFilter(); sHp.type = 'highpass'; sHp.frequency.value = 28; sHp.Q.value = 0.7;
-  const sGlue = ctx.createDynamicsCompressor();
-  sGlue.threshold.value = -12; sGlue.knee.value = 6; sGlue.ratio.value = 2.5; sGlue.attack.value = 0.003; sGlue.release.value = 0.15;
-  E.sfxOut = ctx.createGain(); E.sfxOut.gain.value = 0.45;
-  E.sfxBus.connect(sHp); sHp.connect(sGlue); sGlue.connect(E.sfxOut); E.sfxOut.connect(lim);
-  E.sfxVoices = [];
 }
 Engine.prototype.play = function (buf, bus, when, gain, rate, pan, lpF){
   const ctx = this.ctx;
@@ -326,351 +314,6 @@ Engine.prototype.event = function (name, when){
   this.play(buf, this.fxBus, when, lvl, name === 'disk' ? 0.97 + Math.random() * 0.06 : 1, name === 'disk' ? 0.25 : 0);
 };
 
-/* ---------------- intro sound effects: sfx(name, opts) ----------------
-   Built live from Web Audio nodes (oscillators, one shared stereo noise buffer, filters, a tanh saturator), so every
-   call can take its own duration, pan and pitch. Each effect is layered: a transient (a click or crack), a body (a
-   saturated sine or filtered noise, so small speakers hear the low end as harmonics), and a tail (sends into two shared
-   convolvers: a small "room" that glues them into one space and a long dark "hall" for the big hits). Width comes from
-   decorrelated stereo noise, Haas delays and panning; transients and subs stay centred.
-   Each call is a voice: its nodes feed one gain into the sfx bus (glue compressor, limiter, then the master, so mute and
-   the master limiter apply). At most SFX_MAX voices; a new one fades out the oldest. A voice's nodes are disconnected
-   when it ends. The noise buffer, the impulse responses, the reverbs and the saturation curve are made on first use. */
-const SFX_MAX = 8;
-let SAT = null;
-function satCurve(){
-  if (SAT) return SAT;
-  const n = 2048, k = 2.4, c = new Float32Array(n), tk = Math.tanh(k);
-  for (let i = 0; i < n; i++){ const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(k * x) / tk; }
-  return (SAT = c);
-}
-function noiseBuffer(ctx){   // 2 s, two independent channels (wide when used in stereo, mono when summed)
-  const sr = ctx.sampleRate, n = Math.round(2 * sr), b = ctx.createBuffer(2, n, sr);
-  for (let ch = 0; ch < 2; ch++){ const d = b.getChannelData(ch), r = rng(911 + ch * 7); for (let i = 0; i < n; i++) d[i] = r() * 2 - 1; }
-  return b;
-}
-/* stereo decaying noise that darkens as it decays (a one-pole lowpass closing from f0 to f1), with a predelay */
-function impulseBuffer(ctx, secs, tau, f0, f1, pre, seed){
-  const sr = ctx.sampleRate, len = Math.round(secs * sr), p0 = Math.round(pre * sr), b = ctx.createBuffer(2, len, sr);
-  for (let ch = 0; ch < 2; ch++){
-    const r = rng(seed + ch * 101), d = b.getChannelData(ch);
-    let y = 0, y2 = 0, e2 = 0;
-    for (let i = p0; i < len; i++){
-      const t = (i - p0) / sr, a = Math.exp(-TAU * (f1 + (f0 - f1) * Math.exp(-t / (tau * 0.6))) / sr);
-      y = (r() * 2 - 1) * (1 - a) + a * y; y2 = y * (1 - a) + a * y2;   // two poles: a smoother darkening
-      const v = y2 * Math.exp(-t / tau) * Math.min(1, t / 0.01) * (len - i < 2000 ? (len - i) / 2000 : 1);
-      d[i] = v; e2 += v * v;
-    }
-    const g = 0.6 / Math.sqrt(e2 || 1); for (let i = 0; i < len; i++) d[i] *= g;   // fixed energy: the wet level is the send's
-  }
-  return b;
-}
-/* the shared reverbs, made on the first effect: room (1.3 s, bright-ish) and hall (3.6 s, dark), returns into the bus */
-function sfxVerbs(E){
-  if (E.vb) return E.vb;
-  const ctx = E.ctx, mk = (ir, lo, hi, g) => {
-    const c = ctx.createConvolver(); c.normalize = false; c.buffer = ir;
-    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = lo;
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = hi; lp.Q.value = 0.5;
-    const r = ctx.createGain(); r.gain.value = g;
-    c.connect(hp); hp.connect(lp); lp.connect(r); r.connect(E.verbOut); return c;
-  };
-  E.verbOut = ctx.createGain(); E.verbOut.connect(E.sfxBus);
-  return (E.vb = {
-    room: mk(impulseBuffer(ctx, 1.1, 0.2, 7000, 1800, 0.012, 515), 150, 7000, 0.9),
-    hall: mk(impulseBuffer(ctx, 3.6, 0.85, 3200, 380, 0.025, 777), 45, 3500, 1),
-  });
-}
-
-/* one effect's worth of nodes */
-function Voice(E, t){
-  const ctx = E.ctx, vb = sfxVerbs(E);
-  this.E = E; this.ctx = ctx; this.t = t; this.end = t; this.srcs = []; this.dead = false;
-  this.out = ctx.createGain(); this.out.connect(E.sfxBus);
-  this.rs = ctx.createGain(); this.rs.connect(vb.room);   // this voice's sends (cut with it)
-  this.hs = ctx.createGain(); this.hs.connect(vb.hall);
-  this.nodes = [this.out, this.rs, this.hs];
-}
-Voice.prototype = {
-  keep(n){ this.nodes.push(n); return n; },
-  gain(v){ const g = this.keep(this.ctx.createGain()); g.gain.value = v == null ? 1 : v; return g; },
-  mono(v){ const g = this.gain(v); g.channelCount = 1; g.channelCountMode = 'explicit'; return g; },
-  filter(type, f, Q, gdb){ const b = this.keep(this.ctx.createBiquadFilter()); b.type = type; b.frequency.value = f; b.Q.value = Q == null ? 0.707 : Q; if (gdb) b.gain.value = gdb; return b; },
-  sat(drive, post){   // drive into the shared tanh curve
-    const pre = this.gain(drive || 1), ws = this.keep(this.ctx.createWaveShaper()), o = this.gain(post == null ? 0.7 : post);
-    ws.curve = satCurve(); ws.oversample = '4x'; pre.connect(ws); ws.connect(o); return [pre, o];
-  },
-  pan(p){ if (!this.ctx.createStereoPanner) return this.gain(1); const s = this.keep(this.ctx.createStereoPanner()); s.pan.value = clamp(p || 0, -1, 1); return s; },
-  /* Haas: a mono signal to both sides, one side ms later (side -1 delays the left) */
-  wide(ms, side){
-    const i = this.mono(1), d = this.keep(this.ctx.createDelay(0.05)), m = this.keep(this.ctx.createChannelMerger(2));
-    d.delayTime.value = ms / 1000; const late = side < 0 ? 0 : 1;
-    i.connect(m, 0, 1 - late); i.connect(d); d.connect(m, 0, late); return [i, m];
-  },
-  send(n, room, hall){ const o = Array.isArray(n) ? n[1] : n; if (room){ const g = this.gain(room); o.connect(g); g.connect(this.rs); } if (hall){ const g = this.gain(hall); o.connect(g); g.connect(this.hs); } },
-  src(node, t0, t1){ node.start(t0); node.stop(t1); this.srcs.push(node); this.keep(node); if (t1 > this.end) this.end = t1; return node; },
-  osc(type, f, t0, t1){ const o = this.ctx.createOscillator(); o.type = type; o.frequency.value = f; return this.src(o, t0, t1); },
-  noise(t0, t1, rate){
-    const s = this.ctx.createBufferSource(), b = this.E.noiseBuf || (this.E.noiseBuf = noiseBuffer(this.ctx));
-    s.buffer = b; s.loop = true; s.playbackRate.value = rate || 1;
-    s.start(t0, Math.random() * (b.duration - 0.1)); s.stop(t1); this.srcs.push(s); this.keep(s); if (t1 > this.end) this.end = t1; return s;
-  },
-  buf(b, t0, rate){ const s = this.ctx.createBufferSource(); s.buffer = b; s.playbackRate.value = rate || 1; return this.src(s, t0, t0 + b.duration / (rate || 1) + 0.01); },
-  /* a -> b -> c ...; arrays are [in, out] pairs; returns the last node */
-  chain(...ns){ for (let i = 0; i < ns.length - 1; i++){ const a = ns[i], b = ns[i + 1]; (Array.isArray(a) ? a[1] : a).connect(Array.isArray(b) ? b[0] : b); } return ns[ns.length - 1]; },
-  /* attack/decay on a gain param: exponential both ways (never a click), returns the time it is silent */
-  ad(p, t0, att, peak, dec){ p.setValueAtTime(0.0001, t0); p.exponentialRampToValueAtTime(peak, t0 + att); p.exponentialRampToValueAtTime(0.0001, t0 + att + dec); p.setValueAtTime(0, t0 + att + dec + 0.001); return t0 + att + dec + 0.002; },
-  /* a gain with an ad envelope */
-  env(t0, att, peak, dec){ const g = this.gain(0); this.ad(g.gain, t0, att, peak, dec); return g; },
-  /* a smooth swell: rises as x^a to the peak at fraction pk of d, falls as (1-x)^b */
-  swell(p, t0, d, pk, peak, a, b){
-    const n = 64, c = new Float32Array(n);
-    for (let i = 0; i < n; i++){ const x = i / (n - 1); c[i] = peak * (x < pk ? Math.pow(x / pk, a) : Math.pow((1 - x) / (1 - pk), b)); }
-    c[n - 1] = 0; p.setValueCurveAtTime(c, t0, d);
-  },
-  kill(fade, at){
-    if (this.dead) return; this.dead = true;
-    const now = Math.max(this.ctx.currentTime, at || 0);
-    for (const g of [this.out.gain, this.rs.gain, this.hs.gain]) try { g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.linearRampToValueAtTime(0, now + fade); } catch (e){}
-    for (const s of this.srcs) try { s.stop(now + fade + 0.005); } catch (e){}
-    this.end = Math.min(this.end, now + fade + 0.01);
-    clearTimeout(this.timer); this.timer = 0; this.cleanup();
-  },
-  cleanup(){
-    if (this.E.offline || this.timer || !this.nodes.length) return;
-    const tick = () => {
-      const left = this.end - this.ctx.currentTime;
-      if (left > 0){ this.timer = setTimeout(tick, left * 1000 + 80); return; }
-      for (const n of this.nodes) try { n.disconnect(); } catch (e){}
-      this.nodes.length = this.srcs.length = 0; this.dead = true;
-      const V = this.E.sfxVoices, i = V.indexOf(this); if (i >= 0) V.splice(i, 1);
-    };
-    this.timer = setTimeout(tick, Math.max(0, this.end - this.ctx.currentTime) * 1000 + 80);
-  },
-  /* a pitch-dropping sine: f0 -> f1 over drop seconds */
-  dive(type, f0, f1, drop, t0, t1){ const o = this.osc(type, f0, t0, t1); o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f1, t0 + drop); return o; },
-  /* a filtered noise burst: noise -> filters -> ad envelope; returns the envelope gain (route it on) */
-  burst(t0, att, peak, dec, ...flt){ const e = this.env(t0, att, peak, dec), n = this.noise(t0, t0 + att + dec + 0.02); this.chain(n, ...flt, e); return e; },
-};
-/* zap gate patterns: a fixed few, rotated, so a run of zaps varies without sounding random */
-const ZAPS = [
-  { dur: 0.15, f: 3200, hum: 120, mod: 240, pew: 0, seed: 11 },
-  { dur: 0.19, f: 2400, hum: 120, mod: 360, pew: 0, seed: 23 },
-  { dur: 0.13, f: 4200, hum: 180, mod: 240, pew: 1, seed: 37 },
-];
-for (const z of ZAPS){   // on/off segments of 2-9 ms, sparser toward the end
-  const r = rng(z.seed), g = []; let x = 0, on = 1;
-  while (x < z.dur){ const len = (on ? 0.002 + r() * 0.006 : 0.002 + r() * 0.009 * (0.5 + x / z.dur)); g.push([x, on ? 0.45 + r() * 0.55 : 0.04]); x += len; on ^= 1; }
-  z.gate = g;
-}
-
-/* An electric sound world: cracks, crackling arcs, transformer buzz, flyback whine, sizzle, bit-crushed glitches.
-   Bright but never painful (arcs are lowpassed near 8-9 kHz); low end only on the big slam. The building blocks: */
-let CRUSH = null;
-function crushCurve(){   // 4-bit amplitude steps: bit-crush
-  if (CRUSH) return CRUSH;
-  const n = 1024, c = new Float32Array(n);
-  for (let i = 0; i < n; i++){ const x = i / (n - 1) * 2 - 1; c[i] = Math.round(x * 7) / 7; }
-  return (CRUSH = c);
-}
-const EL = {
-  /* random spikes on a gain: rate(x) spikes a second at x in 0..1 of dur, each 0.4-2.5 ms, amplitude amp(x) * 0.3-1 */
-  spikes(p, t, dur, rate, amp){
-    p.setValueAtTime(0, t);
-    for (let x = 0, n = 0; x < dur && n < 600; n++){
-      const u = x / dur, a = amp(u) * (0.3 + Math.random() * 0.7), w = 0.0004 + Math.random() * 0.0021;
-      p.setValueAtTime(a, t + x); p.setValueAtTime(0, t + x + w);
-      x += w + (-Math.log(1 - Math.random() * 0.999) / Math.max(1, rate(u)));
-    }
-  },
-  /* a crackling arc: noise through a band, chopped by spikes, lowpassed; returns its output (route it on) */
-  arc(v, t, dur, rate, amp, f){
-    const g = v.gain(0); EL.spikes(g.gain, t, dur, rate, amp);
-    return v.chain(v.noise(t, t + dur + 0.01), v.filter('highpass', 1200), v.filter('bandpass', f || 4000, 0.6), g, v.filter('lowpass', 8500, 0.5));
-  },
-  /* a sharp crack: a 1-3 ms broadband click and a short bright band; mono, Haas-widened */
-  crack(v, t, a, out){
-    v.chain(v.burst(t, 0.0002, a, 0.003, v.mono(), v.filter('highpass', 1500)), v.wide(0.3, 1), out);
-    v.chain(v.burst(t, 0.0004, a * 0.6, 0.018, v.filter('bandpass', 3500, 0.8)), out);
-  },
-  /* transformer buzz: a sine at hum Hz frequency-modulated at 2x (mains harmonics), saturated, kept above 200 Hz */
-  buzz(v, t, dur, hum, idx){
-    const c = v.osc('sine', hum, t, t + dur + 0.01), m = v.osc('sine', hum * 2, t, t + dur + 0.01), mi = v.gain(hum * (idx || 3));
-    m.connect(mi); mi.connect(c.frequency);
-    return v.chain(c, v.sat(3, 0.5), v.filter('highpass', 220), v.filter('highpass', 220), v.filter('lowpass', 5000, 0.7));
-  },
-};
-
-const SFX = {
-  /* CRT power-on: a crack, the flyback whine zinging up into place, the transformer's buzz surging up and settling, a
-     few sparks. No thud. */
-  boot(v, t){
-    v.out.gain.value = 1.3;
-    EL.crack(v, t, 0.7, v.out);
-    for (const [f0, f1, a, p] of [[1500, 7900, 0.12, -0.3], [3000, 15800, 0.02, 0.3]]){
-      const z = v.dive('sine', f0, f1, 0.25, t, t + 1.5), g = v.gain(0);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(a, t + 0.04); g.gain.exponentialRampToValueAtTime(a * 0.3, t + 0.35); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.45);
-      v.chain(z, g, v.pan(p), v.out); v.send(g, 0.4);
-    }
-    const bz = EL.buzz(v, t, 1.3, 120, 2.5), bg = v.gain(0);
-    bg.gain.setValueAtTime(0.0001, t); bg.gain.exponentialRampToValueAtTime(0.35, t + 0.25); bg.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
-    v.chain(bz, bg, v.out); v.send(bg, 0.3);
-    const a = EL.arc(v, t + 0.02, 0.9, u => 40 * (1 - u) + 4, u => 0.7 * (1 - u), 5000); v.chain(a, v.out); v.send(a, 0.4);
-  },
-  /* one spark of a tube cascade: a few crackles and a tiny whine blip, high and short; sfx() merges tubes that arrive
-     together into one crackling sweep across the stereo field */
-  tubeOn(v, t, o){
-    v.out.gain.value = 1.1;
-    SFX.tubeNote(v, t, o.n | 0);
-  },
-  tubeNote(v, t, n){
-    const p = clamp(-0.75 + (n % 9) * 0.19, -0.8, 0.8), bus = v.pan(p); bus.connect(v.out); v.send(bus, 0.35);
-    v.chain(EL.arc(v, t, 0.03, () => 300, u => 0.6 * (1 - u * 0.6), 4500 + (n % 5) * 600), bus);
-    const f = 6000 + (n % 7) * 350;
-    v.chain(v.dive('sine', f, f * 1.15, 0.03, t, t + 0.05), v.env(t, 0.001, 0.025, 0.035), bus);
-  },
-  /* camera move: bright noise swooshing (a bandpass sweeping up and back, a flanger sweep, rumble cut below 400 Hz)
-     with a sizzling arc riding the same swell, panned fast on an S-curve */
-  whoosh(v, t, o){
-    const d = clamp(+o.dur || 0.6, 0.08, 4), dir = o.dir < 0 ? -1 : o.dir > 0 ? 1 : 0, pk = t + 0.6 * d, e = t + d;
-    v.out.gain.value = 1.1;
-    const env = v.gain(0); v.swell(env.gain, t, d, 0.6, 1, 2.2, 1.4);
-    const p = v.pan(0); if (dir && p.pan){ const c = new Float32Array(32); for (let j = 0; j < 32; j++) c[j] = 0.9 * dir * Math.tanh(4 * (j / 31 - 0.55)) / Math.tanh(2.2); p.pan.setValueCurveAtTime(c, t, d); }
-    const bp = v.filter('bandpass', 900, 0.9); bp.frequency.setValueAtTime(900, t); bp.frequency.exponentialRampToValueAtTime(5000, pk); bp.frequency.exponentialRampToValueAtTime(1600, e);
-    const src = v.chain(v.noise(t, e + 0.02), v.filter('highpass', 400), bp);
-    const fl = v.keep(v.ctx.createDelay(0.02)); fl.delayTime.setValueAtTime(0.004, t); fl.delayTime.exponentialRampToValueAtTime(0.0007, e);
-    src.connect(env); src.connect(fl); v.chain(fl, v.gain(0.8), env);
-    v.chain(EL.arc(v, t, d, u => 60 + 260 * Math.sin(Math.PI * Math.min(1, u / 0.9)), () => 0.5, 5500), env);
-    v.chain(env, v.filter('lowpass', 9000, 0.5), p, v.out); v.send(env, 0.25);
-  },
-  /* whip pan: the same, faster and brighter, with a crack at its peak */
-  whip(v, t, o){
-    const d = clamp(+o.dur || 0.2, 0.06, 1), dir = o.dir < 0 ? -1 : 1, pk = t + 0.45 * d, e = t + d;
-    v.out.gain.value = 1.1;
-    const env = v.gain(0); v.swell(env.gain, t, d, 0.45, 1, 2.6, 1.3);
-    const p = v.pan(-0.9 * dir); if (p.pan){ p.pan.setValueAtTime(-0.9 * dir, t); p.pan.linearRampToValueAtTime(0.9 * dir, e); }
-    const bp = v.filter('bandpass', 2000, 1.2); bp.frequency.setValueAtTime(2000, t); bp.frequency.exponentialRampToValueAtTime(7500, pk); bp.frequency.exponentialRampToValueAtTime(3500, e);
-    const src = v.chain(v.noise(t, e + 0.02), v.filter('highpass', 1000), bp);
-    const fl = v.keep(v.ctx.createDelay(0.02)); fl.delayTime.setValueAtTime(0.003, t); fl.delayTime.exponentialRampToValueAtTime(0.0005, e);
-    src.connect(env); src.connect(fl); v.chain(fl, v.gain(0.8), env);
-    v.chain(EL.arc(v, t, d, () => 350, () => 0.6, 6000), env);
-    v.chain(env, v.filter('lowpass', 9000, 0.5), p, v.out); v.send(env, 0.2);
-    EL.crack(v, pk - 0.002, 0.3, v.out);
-  },
-  /* glitch zap: a crack, then a square wave jumping between random pitches (sample-and-hold), a burst of arc and a
-     transformer buzz, all chopped by a fast stutter and bit-crushed; ~0.1-0.15 s. Three stutter patterns rotate. */
-  zap(v, t, o){
-    const z = ZAPS[(o.v != null ? o.v | 0 : (v.E.zapN = ((v.E.zapN | 0) + 1) % ZAPS.length)) % ZAPS.length], dur = z.dur * 0.8, e = t + dur;
-    v.out.gain.value = 1.2;
-    EL.crack(v, t, 0.6, v.out);
-    const gate = v.gain(0); for (const [x, a] of z.gate) if (x < dur) gate.gain.setValueAtTime(a > 0.2 ? 1 : 0.05, t + x); gate.gain.setValueAtTime(0, e);
-    const cr = v.keep(v.ctx.createWaveShaper()); cr.curve = crushCurve();
-    gate.connect(cr); v.chain(cr, v.filter('highpass', 300), v.filter('lowpass', 8500, 0.6), v.out); v.send(cr, 0.3);
-    const r = rng(z.seed * 3), sq = v.osc('square', 900, t, e + 0.01);
-    for (let x = 0; x < dur; x += 0.01 + r() * 0.012) sq.frequency.setValueAtTime(300 * Math.pow(2, r() * 4), t + x);
-    v.chain(sq, v.gain(0.16), gate);
-    v.chain(EL.buzz(v, t, dur, z.hum, 4), v.gain(0.35), gate);
-    v.chain(EL.arc(v, t, dur, () => 500, () => 1, z.f), gate);
-  },
-  /* a small hit: a tiny spark (a crack and a couple of crackles); quiet */
-  tick(v, t){
-    v.out.gain.value = 0.8;
-    EL.crack(v, t, 0.5, v.out);
-    const a = EL.arc(v, t + 0.003, 0.025, () => 250, () => 0.5, 6000); v.chain(a, v.out); v.send(a, 0.3);
-  },
-  /* charge-up into the hit at t + dur: an electric whine rising (a saw and its fifth, 300 Hz -> 3.2 kHz, with a vibrato
-     speeding up), the transformer buzz rising with it, crackle growing denser, a noise swell; everything cuts at the hit */
-  riser(v, t, o){
-    const d = clamp(+o.dur || 1.2, 0.2, 8), e = t + d;
-    v.out.gain.value = 1.3;
-    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, e - 0.004); env.gain.linearRampToValueAtTime(0, e + 0.004);
-    env.connect(v.out); v.send(env, 0.35);
-    const vib = v.osc('sine', 6, t, e + 0.01), vd = v.gain(0);
-    vib.frequency.setValueAtTime(6, t); vib.frequency.exponentialRampToValueAtTime(22, e); vd.gain.setValueAtTime(5, t); vd.gain.linearRampToValueAtTime(40, e); vib.connect(vd);
-    const lp = v.filter('lowpass', 1500, 2); lp.frequency.setValueAtTime(1500, t); lp.frequency.exponentialRampToValueAtTime(8000, e);
-    for (const [m, p] of [[1, -0.4], [1.5, 0.4]]){ const s = v.dive('sawtooth', 300 * m, 3200 * m, d, t, e + 0.01); vd.connect(s.detune); v.chain(s, v.pan(p), lp); }
-    v.chain(lp, v.filter('highpass', 250), v.gain(0.09), env);
-    const bz = EL.buzz(v, t, d, 120, 2); v.chain(bz, v.gain(0.18), env);
-    v.chain(EL.arc(v, t, d, u => 15 + 600 * u * u, u => 0.4 + 0.6 * u, 5000), v.gain(0.9), env);
-    const bp = v.filter('bandpass', 1500, 0.8); bp.frequency.setValueAtTime(1500, t); bp.frequency.exponentialRampToValueAtTime(8000, e);
-    v.chain(v.noise(t, e + 0.01), bp, v.gain(0.3), env);
-  },
-  /* an impact frame: a discharge. A loud crack, a sizzle (dense arc, decaying), a burst of chopped buzz, a punch kept
-     above 150 Hz. big: the slam (below). */
-  impact(v, t, o){
-    if (o.big) return SFX.slam(v, t, o);
-    v.out.gain.value = 2.2;
-    EL.crack(v, t, 1, v.out);
-    const s = EL.arc(v, t, 0.16, u => 900 * (1 - u) + 40, u => Math.pow(1 - u, 1.5), 4500); v.chain(s, v.out); v.send(s, 0.4);
-    const bz = EL.buzz(v, t, 0.1, 120, 4), bg = v.gain(0); EL.spikes(bg.gain, t, 0.1, () => 120, u => 0.6 * (1 - u)); v.chain(bz, bg, v.out);
-    v.chain(v.dive('sine', 300, 160, 0.05, t, t + 0.12), v.env(t, 0.001, 0.45, 0.07), v.sat(1.6), v.filter('highpass', 150), v.out);
-  },
-  /* the slam: a massive discharge. A huge crack, a long sizzle, a buzz surge collapsing, a sub hit (110 -> 38 Hz, the one
-     low moment, saturated so laptops hear it), then a shimmering electric tail: sparse sparks and a falling whine into
-     the hall. A riser before it supplies the charge-up. */
-  slam(v, t){
-    v.out.gain.value = 1.3;
-    EL.crack(v, t, 1.3, v.out);
-    const s = EL.arc(v, t, 0.6, u => 1200 * Math.pow(1 - u, 2) + 60, u => Math.pow(1 - u, 1.2), 4000); v.chain(s, v.out); v.send(s, 0.3, 0.5);
-    const bz = EL.buzz(v, t, 0.7, 120, 5), bg = v.env(t, 0.003, 0.5, 0.65); v.chain(bz, bg, v.out); v.send(bg, 0, 0.3);
-    const sub = v.dive('sine', 110, 38, 0.45, t, t + 1.5), sg = v.env(t, 0.002, 1, 1.2);
-    v.chain(sub, sg, v.sat(2.6, 0.6), v.filter('lowpass', 900, 0.7), v.out); v.chain(sg, v.gain(0.55), v.out);
-    const tl = EL.arc(v, t + 0.15, 2.2, u => 50 * (1 - u) + 5, u => 0.5 * Math.pow(1 - u, 1.5), 6000); v.chain(tl, v.pan(0.2), v.out); v.send(tl, 0.2, 0.7);
-    const w = v.dive('sine', 7800, 2600, 1.8, t, t + 2), wg = v.env(t, 0.01, 0.04, 1.8); v.chain(w, wg, v.pan(-0.2), v.out); v.send(wg, 0, 0.6);
-    const nz = v.burst(t, 0.0005, 0.6, 0.25, v.filter('highpass', 2500), v.filter('lowpass', 9000, 0.5)); nz.connect(v.out); v.send(nz, 0.3, 0.5);
-  },
-  /* hit-stop freeze: power sagging: the buzz's pitch and a whine falling fast, quiet */
-  tapeStop(v, t, o){
-    const d = clamp(+o.dur || 0.3, 0.06, 2), e = t + d;
-    v.out.gain.value = 0.45;
-    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, t + 0.005); env.gain.setValueAtTime(1, t + 0.4 * d); env.gain.exponentialRampToValueAtTime(0.0001, e);
-    const c = v.osc('sine', 240, t, e + 0.01), m = v.osc('sine', 480, t, e + 0.01), mi = v.gain(700);
-    c.frequency.setValueAtTime(240, t); c.frequency.linearRampToValueAtTime(60, e); m.frequency.setValueAtTime(480, t); m.frequency.linearRampToValueAtTime(120, e); m.connect(mi); mi.connect(c.frequency);
-    v.chain(c, v.sat(2.5, 0.4), v.filter('highpass', 250), env);
-    const w = v.osc('sine', 4000, t, e + 0.01); w.frequency.setValueAtTime(4000, t); w.frequency.exponentialRampToValueAtTime(900, e); v.chain(w, v.gain(0.05), env);
-    env.connect(v.out); v.send(env, 0.25);
-  },
-  /* a word slam: an electric snap. A crack, a short dense arc, a chopped blip of buzz, the Topre key's click on top;
-     big: a longer arc, a bit-crushed blip, more room. No thump. */
-  type(v, t, o){
-    const big = !!o.big;
-    v.out.gain.value = big ? 2.1 : 1.7;
-    EL.crack(v, t, big ? 0.9 : 0.7, v.out);
-    const a = EL.arc(v, t, big ? 0.12 : 0.05, () => 700, u => 1 - u * 0.7, big ? 3800 : 5000); v.chain(a, v.out); v.send(a, 0.35, big ? 0.2 : 0);
-    const bz = EL.buzz(v, t, big ? 0.09 : 0.05, 120, 3), bg = v.gain(0); EL.spikes(bg.gain, t, big ? 0.09 : 0.05, () => 150, () => 0.4); v.chain(bz, bg, v.out);
-    if (big){ const cr = v.keep(v.ctx.createWaveShaper()); cr.curve = crushCurve(); const sq = v.osc('square', 1200, t, t + 0.06); sq.frequency.setValueAtTime(1800, t + 0.03); v.chain(sq, v.env(t, 0.001, 0.12, 0.05), cr, v.filter('lowpass', 7000), v.out); }
-    if (keyBufs && keyBufs.normal){ const L = keyBufs.normal.d; v.chain(v.buf(L[Math.floor(Math.random() * L.length)], t, 1.1), v.filter('highpass', 900), v.filter('highpass', 900), v.gain(0.4), v.out); }
-  },
-};
-/* density: bursts merge. tubeOn calls within 90 ms of the last join its cascade (one more spark, spaced at least
-   35 ms, at most 12 a cascade); type and tick within 90 ms of their last are dropped. */
-const MERGE = 0.09;
-Engine.prototype.cached = function (name){ return this.fxCache[name] || null; };
-Engine.prototype.sfx = function (name, opts, when){
-  const V = this.sfxVoices, now = this.ctx.currentTime;
-  if (name === 'stopAll'){
-    for (const v of V.splice(0)) v.kill(0.012);
-    /* the shared reverbs hold the tails: duck their return; it comes back with the next effect (not before 0.4 s) */
-    if (this.verbOut){ const g = this.verbOut.gain; g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.linearRampToValueAtTime(0, now + 0.012); this.ducked = now + 0.4; }
-    return;
-  }
-  const fn = SFX[name]; if (!fn) return;
-  if (this.ducked){ const g = this.verbOut.gain, at = Math.max(now, this.ducked); g.cancelScheduledValues(now); g.setValueAtTime(0, at); g.linearRampToValueAtTime(1, at + 0.05); this.ducked = 0; }
-  const at = Math.max(when, now), c = this.casc;
-  if (name === 'tubeOn' && c && !c.v.dead && at - c.last < MERGE && c.k < 12){   // join the cascade: one more note
-    c.last = at; c.next = Math.max(at, c.next + 0.035); c.k++; SFX.tubeNote(c.v, c.next, ++c.n); return c.v;
-  }
-  if (name === 'type' || name === 'tick'){ const L = this.lastAt || (this.lastAt = {}); if (at - (L[name] || -9) < MERGE) return; L[name] = at; }
-  for (let i = V.length - 1; i >= 0; i--) if (V[i].dead || V[i].end < at) V.splice(i, 1);
-  while (V.length >= SFX_MAX) V.shift().kill(0.015, at);   // polyphony: the oldest makes room (as this one starts)
-  const v = new Voice(this, at);
-  if (name === 'tubeOn'){   // a new cascade; within 0.6 s of the last it carries on up the scale
-    const n = c && at - c.last < 0.6 ? c.n + 1 : 0; this.casc = { v, last: at, next: at, n, k: 1 }; opts = { n };
-  }
-  fn(v, v.t, opts || {});
-  V.push(v); v.cleanup();
-  return v;
-};
-
 /* ---------------- public API ---------------- */
 let eng = null, booted = false, muted = false, hidden = false, unlockedAt = 0;
 try {
@@ -694,56 +337,26 @@ function flushPending(){
   for (const [code, down, t] of pending.splice(0)) if (now - t < 300) sound.key(code, down);
 }
 
-const ENV0 = Object.freeze({ kick: 0, snare: 0, bar: 0, drop: 0, step: 0, barN: 0, part: -1 });
-/* the one context: made on the first call of unlock() or tryAutoplay(), whichever comes first */
-function make(){
-  if (eng) return true;
-  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
-  const ctx = new AC({ latencyHint: 'interactive' });
-  eng = new Engine(ctx);
-  eng.out.gain.value = muted ? 0 : 1;
-  decodeKeys(ctx);                     // only if the early offline decode was not possible
-  ctx.addEventListener && ctx.addEventListener('statechange', () => { if (ctx.state === 'running') boot(); });
-  return true;
-}
-function boot(){
-  if (booted) return; booted = true;
-  setTimeout(() => { try { eng.warm(); } catch (e){} }, 2600);   // build the event sounds before they are needed
-}
-let autoplayP = null;
 const sound = {
   get muted(){ return muted; },
   unlock(){
     try {
-      if (!make()) return;
+      if (!eng){
+        const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+        const ctx = new AC({ latencyHint: 'interactive' });
+        eng = new Engine(ctx);
+        eng.out.gain.value = muted ? 0 : 1;
+        decodeKeys(ctx);                     // only if the early offline decode was not possible
+      }
       if (!unlockedAt) unlockedAt = performance.now();
-      const ctx = eng.ctx;
-      if (ctx.state === 'running') boot();
-      else if (!hidden){ const p = ctx.resume(); if (p && p.then) p.then(() => { if (ctx.state === 'running') boot(); }, () => {}); }
+      const ctx = eng.ctx, go = () => {
+        if (booted) return; booted = true;
+        setTimeout(() => { try { eng.warm(); } catch (e){} }, 2600);   // build the event sounds before they are needed
+      };
+      if (ctx.state === 'running') go();
+      else if (!hidden){ const p = ctx.resume(); if (p && p.then) p.then(go, () => {}); else go(); }
     } catch (e){ /* audio is a nicety; never break the page */ }
   },
-  /* on load, before any gesture: make the context and see whether it may start. Some visitors' browsers allow sound at once
-     (a site they have allowed, a home-screen app, Chrome's media engagement, a same-site navigation after a click);
-     resolves true when the context is running within ~150 ms, else false (the context waits, suspended, for unlock()
-     from the first gesture: never a second one). Asked once; a browser that refuses logs its one warning */
-  tryAutoplay(ms){
-    if (autoplayP) return autoplayP;
-    return (autoplayP = new Promise(res => {
-      try {
-        if (hidden || !make()) return res(false);
-        const ctx = eng.ctx;
-        if (ctx.state === 'running'){ boot(); return res(true); }
-        /* (no resume() here: a context the browser allows starts running by itself, and asking one it refuses would
-           log its warning a second time) */
-        let done = false;
-        const fin = v => { if (done) return; done = true; if (v) boot(); res(v); };
-        if (ctx.addEventListener) ctx.addEventListener('statechange', () => { if (ctx.state === 'running') fin(true); });
-        setTimeout(() => fin(ctx.state === 'running'), ms || 150);
-      } catch (e){ res(false); }
-    }));
-  },
-  /* the context is running: sounds scheduled now are heard now */
-  get running(){ return !!(eng && eng.ctx.state === 'running'); },
   key(code, down){
     if (!ready()) return;
     if (!keyBufs){ if (decoding && pending.length < 6) pending.push([code, down, performance.now()]); return; }
@@ -753,17 +366,6 @@ const sound = {
     if (!ready()) return;
     try { eng.event(name, eng.ctx.currentTime + 0.005); } catch (e){}
   },
-  /* the intro's sound effects (see SFX): a no-op until unlocked by a gesture, while muted, or without Web Audio;
-     nothing is queued. sfx('stopAll') (or stopAll()) fades out everything playing within ~20 ms. */
-  sfx(name, opts){
-    if (name === 'stopAll') return sound.stopAll();
-    if (!ready()) return;
-    try { eng.sfx(String(name), opts, eng.ctx.currentTime + 0.005); } catch (e){}
-  },
-  stopAll(){ if (eng) try { eng.sfx('stopAll'); } catch (e){} },
-  /* the intro's tune is gone (the intro is scored with sfx()); a silent stand-in so an older caller stays harmless */
-  music: { start(){}, stop(){}, ping(){}, alive(){ return false; }, time(){ return -1; }, level(){ return 0; },
-    render(){ return Promise.resolve(null); }, env(){ return ENV0; }, playing: false, BPM: 120, BAR: 2, INTRO: 7 },
   setMuted(m){
     muted = !!m;
     try { localStorage.setItem(LS_KEY, muted ? '1' : '0'); } catch (e){}
@@ -774,40 +376,14 @@ const sound = {
   },
 };
 
-/* the first gesture anywhere on the page unlocks (capture phase: before anything else sees it). The listeners go once
-   the context runs */
-{
-  const T = ['pointerdown', 'keydown', 'touchstart', 'touchend', 'mousedown', 'click'];
-  const g = e => {
-    if (e.type === 'keydown' && (e.metaKey || /^(Shift|Control|Alt|Meta|CapsLock|Fn)$/.test(e.key || ''))) return;   // (a lone modifier is no activation)
-    sound.unlock();
-    if (sound.running) for (const t of T) removeEventListener(t, g, true);
-  };
-  for (const t of T) addEventListener(t, g, true);
-}
-
 document.addEventListener('visibilitychange', () => {
   hidden = document.visibilityState === 'hidden';
   if (!eng) return;
   try { if (hidden) eng.ctx.suspend(); else if (!muted && booted) eng.ctx.resume(); } catch (e){}
 });
 
-/* test hooks (?debug only): the live context's sfx bus for an AnalyserNode, and an offline render of one effect through
-   a fresh engine (the whole chain, master included) */
-if (/[?&]debug\b/.test(location.search)) sound._dbg = {
-  eng: () => eng,
-  render(name, opts, secs){
-    const O = window.OfflineAudioContext || window.webkitOfflineAudioContext, sr = 48000;
-    const ctx = new O(2, Math.round(((secs || 3) + 0.3) * sr), sr), E = new Engine(ctx);
-    if (opts && opts._dry){ sfxVerbs(E); E.verbOut.gain.value = 0; }
-    if (opts && opts._bus){ E.out.disconnect(); E.sfxBus.connect(ctx.destination); }   // the bus itself, before any dynamics
-    for (const [n, o, at] of Array.isArray(name) ? name : [[name, opts, 0]]){
-      if (n === 'stopAll') ctx.suspend(0.3 + at).then(() => { E.sfx('stopAll'); ctx.resume(); });   // (a stop needs the clock there)
-      else E.sfx(n, o, 0.3 + (at || 0));   // (0.3 s in: the compressors settle from their initial state first)
-    }
-    return ctx.startRendering();
-  },
-};
+/* test hook (?debug only): the live engine */
+if (/[?&]debug\b/.test(location.search)) sound._dbg = { eng: () => eng };
 
 M.sound = sound;
 })();

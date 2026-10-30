@@ -104,17 +104,7 @@ MAC.createTerminal({ content, aspect, cols?, width? }) -> {   // width: phones a
   scrollInfo,                   // { off: rows up from the bottom, max, rowH: a row as 0..1 of the canvas } (1:1 touch scrolling)
 }
 ```
-The start gate (first landings, both layouts): browsers hold sound back until the visitor's first key, click or tap, so
-the intro waits for it on a standby screen in its own look (the dark tube breathing, the name small, PRESS ANY KEY or, on
-phones, TAP TO START blinking, a small SOUND ON), with the help line and the prompt under it. That gesture starts the
-intro from its first frame (it calls `MAC.sound.unlock()`, then the intro's clock waits for the context to run, at most
-0.25 s, so the 'boot' cue is heard) and is used up: it neither types nor skips (a letter that starts it is typed after
-all when more letters follow within 1.5 s, or Enter when it is a command by itself, so a command typed straight away
-still runs). A chip still works. A browser that lets the page play sound at once (`sound.tryAutoplay()` resolves true
-within ~0.15 s; the tube stays dark while it is asked) gets no gate, nor does a muted visitor, reduced motion, a deep
-link, a returning phone visitor or `demo`. Test hooks: `gated` (read-only) and `begin()` (the gesture from elsewhere:
-main.js calls it for a click off the glass in the 3D view).
-Phones (pointer: coarse) play the intro once, its opening (`DEMO.LENGTH`, about 14.1 s from the gesture; once it plays, any tap or key skips it), then settle on a title card:
+Phones (pointer: coarse) play the intro once, its opening (`DEMO.LENGTH`, about 14.1 s; any tap or key skips it), then settle on a title card:
 the name, the role line and a boot-disk menu of big rows (about, j, eden, writing when published, contact, links, play),
 tapped or chosen by number, the arrows and return; a returning visitor lands on the card with "welcome back", and `demo`
 plays the intro again. Home and back on phones are this card. Contact on phones gives each address [email] (mailto) and
@@ -123,12 +113,12 @@ plays the intro again. Home and back on phones are this card. Contact on phones 
 (its own small vector drawing, not the intro's logo), and when an animation is all that changes and nothing scrolls,
 only its rows are redrawn (the brightness tally `lum` swaps that drawing's share, so it stays the whole screen's). On desktops:
 The landing (every load, until the first command; deep links skip it) is an anime-OP-style opening drawn on the canvas,
-12.6 s to the slam on its own fixed 150 bpm grid (a film of 11.2 s played through a cut: every word is held whole and
+12.6 s to the slam (silent) on its own fixed 150 bpm grid (a film of 11.2 s played through a cut: every word is held whole and
 still for at least 0.4 s by half beats or beats added while its backdrop keeps moving, and two camera moves play faster) (a cut or a hit every half beat or beat), in one phosphor: the tube
 ignites on a tunnel of bezels; KAIAV, NIHALANI and a huge 16 slam in (the name becoming a header); an impact frame; the
 picture was the middle tube of a wall of CRTs: the camera blasts back, flies along the wall as the tubes switch on in
 cascades (each a word or motif: KN, J, EDEN, AGENTS, CONTEXT, FOUNDERS, 16, a globe, a graph), whips round and dives
-into the J tube (a globe whose latitudes carry CO-FOUNDER, YOUNG FOUNDERS and GLOBAL), out in a barrel roll and into
+into the J tube (a turning globe with CO-FOUNDER, YOUNG FOUNDERS and GLOBAL slammed flat over it), out in a barrel roll and into
 the EDEN tube (EDEN and AGENTS drawn by linking constellations, CONTEXT squeezed in by brackets); the wall spells THE
 GOAT? column by column and hits as three comic panels; every tube flips to KN, the KN bursts out of the middle one in
 wireframe, turns chrome on a split impact frame, and is cut from angle to angle on the hits while the wall behind it
@@ -137,14 +127,14 @@ hit-stop with a white ring shockwave, the land). Each act has its own way of put
 bands, constellations, flip tiles). Impact frames last two or three frames over a short hit-stop (the picture's clock
 holds, then catches up); one is a bright full frame (the slam), the rest dark field with bright line art. Motion blur is real (sub-frame samples averaged). Then a loop: the logo breathing on smooth curves with
 a full turn a section, and a sine scroller of `MAC.CONTENT` facts (the name, J, Eden). Keys glint the type, or give the
-logo one more smooth turn and a hop; reduced motion gets one still frame. It starts with sound (the gate above); it cues `MAC.sound.sfx(name, opts)` on its hits (lengths follow the cut), and `sfx('stopAll')` when dismissed. It animates at 30 fps through
-the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's real age, s, from its first frame; -1 on the standby screen) and
+logo one more smooth turn and a hop; reduced motion gets one still frame. It is silent. It animates at 30 fps through
+the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's real age, s, from its first frame) and
 `introPose` (the logo's pose in the last frame).
 
 ## main.js (integrator)
 Creates the scene, terminal and typist; routes keydown/keyup to terminal + typist; text input through the hidden
 #kbd field (all devices, so assistive tech has a real input); clicks on the tube go through `api.pickScreen` to
-`term.handleTap` (a click off the glass on the standby screen calls `term.begin()`); `sound.tryAutoplay()` is asked at load. Hash deep links: #about #eden #j #writing #contact #links #help, and #post/<slug> for the reader
+`term.handleTap` (a click on the glass during the intro does nothing unless it lands on a chip, such as the help line's `help`). Hash deep links: #about #eden #j #writing #contact #links #help, and #post/<slug> for the reader
 (anything else in the hash is ignored). One rAF loop, paused when hidden and while the reader is open.
 `flat()` is the terminal-only layout: phones, and desktops without WebGL or three.js, after a context loss or
 repeated render errors. Desktops get one centred column, unchanged. Touch screens get the computer in the hand:
@@ -202,50 +192,14 @@ The visible parts are the forearms, sleeves and hands, so they must look great f
 ## Sound: src/sound.js
 ```js
 MAC.sound = {
-  unlock(),                 // call from the first user gesture (keydown / pointerdown); sound.js also unlocks on the first
-                            // pointerdown / keydown / touchstart / touchend / mousedown / click anywhere (capture phase)
-  tryAutoplay(ms?),         // on load: makes the one context and asks it to start without a gesture; a promise of true when it
-                            // runs within ~150 ms (a site the visitor allowed, a home-screen app, Chrome's media engagement),
-                            // else false (the context waits, suspended, for unlock(); asked once, so one browser warning at most)
-  running,                  // the context is running (sounds scheduled now are heard now)
+  unlock(),                 // call from the first user gesture (keydown / pointerdown)
   key(code, down),          // mechanical key sound for KeyboardEvent.code, on press and release (varies per key, Space/Enter/Shift heavier)
   event(name),              // 'disk' (floppy seek), 'beep' (terminal bell), 'error'
   setMuted(bool), muted,    // remembered in localStorage
-  sfx(name, opts),          // the intro's sound effects (below)
-  stopAll(),                // = sfx('stopAll')
-  music,                    // gone: a silent stand-in (alive() false, time() -1, env() all zeros) until no caller is left
 }
 ```
-Intro sound effects, `MAC.sound.sfx(name, opts)`: an electric, high-octane palette synthesised live from Web Audio nodes
-(no files): cracks, crackling arcs (band-limited noise chopped by random spikes), transformer buzz (an FM sine on the mains
-harmonics, saturated, kept above 220 Hz), flyback whine, bit-crushed sample-and-hold glitches, bright flanged whooshes.
-Arcs are lowpassed near 8.5 kHz (exciting, not painful); low end only on the big slam. Tails go to two shared convolvers
-(a small room, a long dark hall). Each call is a voice on the sfx bus (highpass, a gentle glue compressor) into the master
-limiter and mute stage. A no-op (cheap, never throws) before audio is unlocked, while muted, with the tab hidden, or
-without Web Audio; nothing is queued or replayed later. At most 8 voices: a ninth fades out the oldest (15 ms).
-Density is handled here: `tubeOn` calls within 90 ms of the last join one cascade (a spark each, spaced at least 35 ms,
-sweeping across the stereo field, at most 12), and `type`/`tick` calls within 90 ms of their last are dropped.
-Levels (offline, loudest 50 ms RMS): slam -12 dBFS, impact -17, whoosh/whip -17, type big -20, zap -20, boot/riser -20,
-type -24, tubeOn -30 (one spark), tick -33; every peak below -1 dBFS, the whole cue sheet included.
-
-| name | what | opts |
-|---|---|---|
-| `'boot'` | power-on: a crack, the flyback whine zinging up, the transformer buzz surging and settling, a few sparks (~1.3 s) | |
-| `'tubeOn'` | one spark: a few crackles and a tiny high whine blip; bursts merge into one crackling sweep | `i` (ignored; order sets the pan) |
-| `'whoosh'` | bright flanged noise swoosh with a sizzling arc riding it, fast S-curve pan | `dur` s (0.6), `dir` -1/0/1 |
-| `'whip'` | the same, faster and brighter, a crack at the peak | `dur` s (0.2), `dir` -1/1 |
-| `'zap'` | glitch: a crack, a sample-and-hold square, arc and buzz, stuttered and bit-crushed (~0.1-0.15 s); three patterns rotate | `v` 0-2 picks one |
-| `'tick'` | a tiny spark | |
-| `'riser'` | charge-up: electric whine rising (300 Hz -> 3.2 kHz with a speeding vibrato), buzz rising, crackle growing denser; cut at the hit | `dur` s until the hit (1.2) |
-| `'impact'` | a discharge: a loud crack, a decaying sizzle, a chopped buzz burst, a punch kept above 150 Hz | `big: true` = the slam: a huge crack, a long sizzle, a collapsing buzz surge, a sub hit (110 -> 38 Hz), then a shimmering electric tail (sparse sparks, a falling whine) into the hall |
-| `'tapeStop'` | power sag: the buzz and a whine falling fast, quiet | `dur` s (0.3) |
-| `'type'` | an electric snap: a crack, a short dense arc, a chopped buzz blip, the Topre key's click on top | `big` (longer arc, a bit-crushed blip, more room) |
-| `'stopAll'` | fade out and stop everything playing (voices and the reverbs' tails) in 12 ms | |
-
-With `?debug`, `MAC.sound._dbg = { eng(), render(name | [[name, opts, at], ...], opts, secs) }`: the live engine
-(e.g. `eng().sfxOut` to tap an AnalyserNode) and an offline render through the whole chain, starting 0.3 s in so the
-compressors have settled (resolves to an AudioBuffer; `'stopAll'` entries are honoured at their time; opts `_dry`
-mutes the reverbs, `_bus` taps the bus before any dynamics).
+The landing intro is silent (there are no intro sound effects and no music).
+With `?debug`, `MAC.sound._dbg = { eng() }`: the live engine.
 The typist calls `MAC.sound.key(code, true)` at finger contact and `(code, false)` at release (if MAC.sound exists).
 The terminal calls `MAC.sound.event('disk' | 'beep' | 'error')` where it makes sense.
 
