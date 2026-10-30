@@ -388,7 +388,7 @@ const MUSIC = (() => {
     /* a dotted-eighth echo for the lead, darker each time round */
     echo = ctx.createDelay(1); echo.delayTime.value = STEP * 3;
     const fb = ctx.createGain(), elp = ctx.createBiquadFilter(); fb.gain.value = .32; elp.type = 'lowpass'; elp.frequency.value = 1900;
-    const ret = ctx.createGain(); ret.gain.value = .45;
+    const ret = ctx.createGain(); ret.gain.value = .32;
     echo.connect(elp); elp.connect(fb); fb.connect(echo); elp.connect(ret); ret.connect(bus);
     /* pulse waves (12.5% and 25%) with the top harmonics rolled off */
     const pw = d => { const N = 28, re = new Float32Array(N), im = new Float32Array(N); for (let k = 1; k < N; k++){ const a = 2 / (k * Math.PI) * Math.sin(k * Math.PI * d) * Math.pow(.93, k); re[k] = a; } return ctx.createPeriodicWave(re, im); };
@@ -428,9 +428,10 @@ const MUSIC = (() => {
   }
   function kick(at, v){
     const ctx = eng.ctx, o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'sine'; o.frequency.setValueAtTime(150, at); o.frequency.exponentialRampToValueAtTime(42, at + .11);
+    o.type = 'sine'; o.frequency.setValueAtTime(160, at); o.frequency.exponentialRampToValueAtTime(52, at + .1);
     g.gain.setValueAtTime(.0001, at); g.gain.exponentialRampToValueAtTime(.9 * v, at + .004); g.gain.exponentialRampToValueAtTime(.001, at + .3);
     o.connect(g); g.connect(bus); o.start(at); o.stop(at + .32);
+    hit(at, .05 * v, 'bandpass', 2600, 1.2, .012);   // a click, so a small speaker hears the beat
     o.onended = () => { try { g.disconnect(); } catch (e){} };
   }
   function step(at, n){
@@ -438,24 +439,24 @@ const MUSIC = (() => {
     /* arpeggio: up through the chord, an octave up, sixteenths */
     const arp = [0, 1, 2, 1][st % 4] + (st % 8 >= 4 ? 3 : 0), m = arp < 3 ? ch[arp] + 24 : ch[arp - 3] + 36;
     const cut = intro ? 900 + 2200 * Math.pow((bar * 16 + st) / (INTRO * 16), 1.4) : 2600;
-    tone('pw:p12', mf(m), at, STEP * .7, intro ? .16 : .07, cut, 1.2, bus, { sus: .4, rel: .05 });
+    tone('pw:p12', mf(m), at, STEP * .7, intro ? .14 : .045, cut, 1.2, bus, { sus: .4, rel: .05 });
     /* bass: eighths, root with an octave jump, plucked */
     if (st % 2 === 0 && bar >= 2){
-      const r = ch[0] - (ch[0] > 44 ? 12 : 0), bm = [r, r, r + 12, r, r, r + 7, r + 12, r + 7][st / 2];
-      tone('sawtooth', mf(bm), at, STEP * 1.6, .2, 1300, 3.5, bus, { cutTo: 260, cutT: .14, sus: .5, rel: .05 });
+      const r = ch[0], bm = [r, r, r + 12, r, r, r + 7, r + 12, r + 7][st / 2];   // (A2-ish: low enough to anchor, high enough for a laptop speaker)
+      tone('sawtooth', mf(bm), at, STEP * 1.6, .17, 1500, 3, bus, { cutTo: 380, cutT: .16, sus: .5, rel: .06 });
     }
     /* lead */
     if (!intro && st % 2 === 0){
       const L = LEAD[(bar - INTRO) % LOOP], i = st / 2, note = L[i];
-      if (note > 0){ let k = 1; while (i + k < 8 && L[i + k] === -1) k++; tone('pw:p25', mf(note), at, STEP * 2 * k - .02, .1, 2600, .8, bus, { vib: 9, send: .55, sus: .7, rel: .12 }); }
+      if (note > 0){ let k = 1; while (i + k < 8 && L[i + k] === -1) k++; tone('pw:p25', mf(note), at, STEP * 2 * k - .02, .1, note > 81 ? 1700 : 2300, .7, bus, { vib: 8, send: .4, sus: .7, rel: .14 }); }
     }
     /* drums */
     const d = drums(bar, st);
     if (d.k) kick(at, d.k);
-    if (d.s){ hit(at, .32 * d.s, 'bandpass', 1900, .9, .16); tone('triangle', 190, at, .03, .12 * d.s, 3000, .7, bus, { slide: 120, slideT: .05, sus: 0, rel: .03 }); }
-    if (d.h) hit(at, .07 * d.h, 'highpass', 7500, .7, .035);
-    if (d.o) hit(at, .06 * d.o, 'highpass', 6500, .7, .22);
-    if (d.c) hit(at, .14, 'highpass', 4200, .5, 1.4);
+    if (d.s){ hit(at, .22 * d.s, 'bandpass', 1500, .8, .15); tone('triangle', 190, at, .03, .12 * d.s, 3000, .7, bus, { slide: 120, slideT: .05, sus: 0, rel: .03 }); }
+    if (d.h) hit(at, .04 * d.h, 'highpass', 7000, .7, .03);
+    if (d.o) hit(at, .035 * d.o, 'highpass', 6500, .7, .2);
+    if (d.c) hit(at, .1, 'highpass', 4200, .5, 1.6);
   }
   function tick(){
     if (!eng) return;
@@ -478,7 +479,7 @@ const MUSIC = (() => {
       if (!bus) setup(E);
       const now = E.ctx.currentTime;
       t0 = now + .08; next = t0; n = 0; playing = true;
-      bus.gain.cancelScheduledValues(now); bus.gain.setValueAtTime(0, now); bus.gain.linearRampToValueAtTime(.34, t0 + .05);
+      bus.gain.cancelScheduledValues(now); bus.gain.setValueAtTime(0, now); bus.gain.linearRampToValueAtTime(.3, t0 + .05);
       clearInterval(timer); timer = setInterval(tick, 25); tick();
       return true;
     },
@@ -495,7 +496,7 @@ const MUSIC = (() => {
     render(sec){
       const O = window.OfflineAudioContext || window.webkitOfflineAudioContext; if (!O) return Promise.resolve(null);
       const sr = 22050, ctx = new O(1, Math.round(sr * sec), sr), keep = [eng, bus, an, anBuf, echo, waves, noise];
-      setup({ ctx, master: ctx.destination }); bus.gain.value = .34;
+      setup({ ctx, master: ctx.destination }); bus.gain.value = .3;
       for (let i = 0, t = .05; t < sec; i++, t += STEP) step(t, i);
       [eng, bus, an, anBuf, echo, waves, noise] = keep;
       return ctx.startRendering().then(b => { const d = b.getChannelData(0), h = sr / 2, r = []; for (let i = 0; i + h <= d.length; i += h){ let q = 0; for (let j = i; j < i + h; j++) q += d[j] * d[j]; r.push(Math.sqrt(q / h)); } return r; });

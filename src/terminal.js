@@ -1387,7 +1387,7 @@ M.createTerminal = function createTerminal(opts){
       ['Font', 'VT323'], ['Files', files + ' in ~'], ['User', C.name || 'Kaiav'], ...roles.map((r, i) => [i ? '' : 'Role', r])];
   }
   /* ---- the landing: a demoscene intro, drawn straight onto the tube ----
-     An Amiga-style intro in one phosphor, cut to an imaginary 120 bpm soundtrack. The opening (about 7 s): the
+     An Amiga-style intro in one phosphor, cut to its own 120 bpm tune (sound.js). The opening (about 6 s): the
      raster opens from a line; stars drift, then accelerate into hyperspace behind a title card typed out in a
      C64-style bitmap font ("KAIAV NIHALANI", then PRESENTS rastered in), which shuts to a dot; copper bars drop in
      on the eighth notes; the grid floor rolls out; and out of the vanishing point comes a chunky extruded "KN"
@@ -1395,13 +1395,13 @@ M.createTerminal = function createTerminal(opts){
      painter-sorted, letter by letter), tumbling, pulling back for a breath and slamming in on the beat, with a
      flash, a jolt, a shockwave through the floor and a glint across the chrome. Then the sine scroller of facts
      from content.js starts along the floor, mirrored in it.
-     After that it keeps evolving without getting busy: the logo sways and bobs, and every few bars does one move
-     (a full turn, a bounce on the floor, a twist of the letters against each other, a slow flip, a zoom back
-     into the distance and in again); the copper bars change pattern (a rotating cylinder, a scrolling copper list,
-     a breathing fan); the floor sometimes rushes or rolls in a wave; the scroller's wave drifts and the letters
-     sometimes hop. Keys spin the logo (one way, with a soft detent back to the front) and make it hop under
-     gravity, flash the next bar and push the stars; all of it capped, so a held or mashed key just spins it
-     faster. The pointer (term.pointer) tilts it and a drag spins it. Under reduced motion it is one still frame.
+     After that it breathes rather than adds: the logo sways and bobs over the turning cylinder of copper bars,
+     and at the top of each eight-bar section (on the tune's clock when it plays) makes one full turn that ends in a
+     glint; the facts scroll by slowly enough to read. With the tune playing, the bars and the floor move with its
+     kick, and its drop lands like the slam. Keys spin the logo (one way, with a soft detent back to the front) and
+     make it hop under gravity, flash the next bar and push the stars; all of it capped, so a held or mashed key
+     just spins it faster. The pointer (term.pointer) tilts it and a drag spins it. Under reduced motion it is one
+     still frame.
      It draws into its own canvas, rastered on the CPU, and lands on the tube as one image per frame: a GPU-backed
      2D canvas fed hundreds of paths and clips a frame can fall behind on a weak (or software) GPU. Geometry, the
      shade ramp, the font strips and the stars are made once; a frame allocates nothing. */
@@ -1425,11 +1425,11 @@ M.createTerminal = function createTerminal(opts){
     const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 
     /* ---- the logo: K and N as outlines (8 units tall), slanted, bevelled at the front and extruded ---- */
-    const SHEAR = .24, DZ = 1.35, BV = .38, BD = .5;       // slant; half the depth; the bevel's inset and depth
+    const SHEAR = .24, DZ = 1.35, BV = .3, BD = .42;       // slant; half the depth; the bevel's inset and depth
     const OUTL = [
       [[0, -4], [1.9, -4], [1.9, -1.2], [4, -4], [6.4, -4], [3.3, .3], [6.2, 4], [3.8, 4], [1.9, 1.3], [1.9, 4], [0, 4]],   // K
       [[0, -4], [1.9, -4], [1.9, .3], [4.5, -4], [6.4, -4], [6.4, 4], [4.5, 4], [4.5, -.3], [1.9, 4], [0, 4]],              // N
-    ], OX = [-7, .6];
+    ], OX = [-6.85, .45];
     let NV = 0;
     const LET = OUTL.map((o, li) => {
       const n = o.length, p = o.map(([x, y]) => [x + OX[li] + SHEAR * y, y]);
@@ -1455,7 +1455,7 @@ M.createTerminal = function createTerminal(opts){
     const ordF = new Int16Array(64), ordD = new Float32Array(64);
     const LM = new Float32Array(18), LC = new Float32Array(6);   // each letter's matrix (the logo's, then its own twist) and its centre's place
     let m20 = 0, F = 1000, cx = 640, hy = 500;
-    function xform(yaw, pit, rol, px, py, pz, tw0, tw1){
+    function xform(yaw, pit, rol, px, py, pz, tw0, tw1, kx, ky){   // (kx, ky: squash and stretch, 1 = none)
       const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pit), sp = Math.sin(pit), cr = Math.cos(rol), sr = Math.sin(rol);
       const a10 = sp * sy, a11 = cp, a12 = -sp * cy;  // Rz(rol) Rx(pit) Ry(yaw)
       const m00 = cr * cy - sr * a10, m01 = -sr * a11, m02 = cr * sy - sr * a12;
@@ -1465,10 +1465,10 @@ M.createTerminal = function createTerminal(opts){
         const L = LET[li], v = L.v, tw = li ? tw1 : tw0, c = Math.cos(tw), s2 = Math.sin(tw), b = li * 9;
         const l00 = m00 * c - m02 * s2, l02 = m00 * s2 + m02 * c, l10 = m10 * c - m12 * s2, l12 = m10 * s2 + m12 * c, l20 = m20 * c - m22 * s2, l22 = m20 * s2 + m22 * c;
         LM[b] = l00; LM[b + 1] = m01; LM[b + 2] = l02; LM[b + 3] = l10; LM[b + 4] = m11; LM[b + 5] = l12; LM[b + 6] = l20; LM[b + 7] = m21; LM[b + 8] = l22;
-        const ox = m00 * L.cx + px, oy = m10 * L.cx + py, oz = m20 * L.cx + pz;
+        const ox = m00 * L.cx * kx + px, oy = m10 * L.cx * kx + py, oz = m20 * L.cx * kx + pz;
         LC[li * 3] = ox; LC[li * 3 + 1] = oy; LC[li * 3 + 2] = oz;
         for (let i = 0, k = L.o; i < L.n * 3; i++, k++){
-          const x = v[i * 3], y = v[i * 3 + 1], z = v[i * 3 + 2];
+          const x = v[i * 3] * kx, y = v[i * 3 + 1] * ky, z = v[i * 3 + 2];
           const X1 = l00 * x + m01 * y + l02 * z + ox, Y1 = l10 * x + m11 * y + l12 * z + oy, Z1 = Math.max(.5, l20 * x + m21 * y + l22 * z + oz);
           wx[k] = X1; wy[k] = Y1; wz[k] = Z1; qx[k] = cx + F * X1 / Z1; qy[k] = hy - F * Y1 / Z1;
         }
@@ -1485,7 +1485,7 @@ M.createTerminal = function createTerminal(opts){
       chrome = document.createElement('canvas'); chrome.width = 1; chrome.height = 128;   // an environment strip: two skies, two horizons
       const c = chrome.getContext('2d', CPU);
       for (let y = 0; y < 128; y++){
-        const u = (y % 64) / 63, v = (u < .5 ? 1 - .42 * u / .5 : u < .56 ? .3 : .5 + .42 * (u - .56) / .44) * (y < 64 ? 1 : .9);
+        const u = (y % 64) / 63, v = (u < .47 ? .5 + .4 * Math.pow(u / .47, 1.6) : u < .5 ? 1 : u < .55 ? .2 : .28 + .44 * (u - .55) / .45) * (y < 64 ? 1 : .92);
         c.fillStyle = SH[si(v)]; c.fillRect(0, y, 1, 1);
       }
     }
@@ -1517,7 +1517,7 @@ M.createTerminal = function createTerminal(opts){
           const dif = Math.max(0, Nx * LX + Ny * LY + Nz * LZ);
           const hx = LX - wx[i0] / wz[i0] * .7, hy2 = LY - wy[i0] / wz[i0] * .7, hz = LZ - .7, hl = 1 / Math.hypot(hx, hy2, hz);
           const sp = Math.max(0, (Nx * hx + Ny * hy2 + Nz * hz) * hl), spec = Math.pow(sp, 18);
-          const v = (kind ? .18 : .07) + (kind ? .46 : .34) * dif + .45 * spec + (kind ? lit * .3 : 0);
+          const v = (kind ? .2 : .07) + (kind ? .5 : .34) * dif + (kind ? .7 : .4) * spec + (kind ? lit * .3 : 0);   // the bevels catch the light hardest
           const c = si(v * alpha);
           quad(i0, i1, i2, i3); g.fillStyle = SH[c]; g.fill();
           if (kind){ g.strokeStyle = SH[si((v + .22) * alpha)]; g.lineWidth = lw * .6; g.stroke(); }   // (the sides go unstroked: the bevels and caps carry the edges)
@@ -1550,6 +1550,27 @@ M.createTerminal = function createTerminal(opts){
         }
       }
       g.lineJoin = 'miter';
+    }
+    /* ---- impact frames: the logo as one flat shape, and radial lines from a point ---- */
+    function silhouette(col, sides){
+      g.fillStyle = col;
+      for (const L of LET){
+        const o = L.o, n = L.n;
+        g.beginPath(); for (let k = 0; k < 3; k++){ const r0 = o + k * n; g.moveTo(qx[r0], qy[r0]); for (let i = 1; i < n; i++) g.lineTo(qx[r0 + i], qy[r0 + i]); g.closePath(); }
+        g.fill();
+        if (sides) for (let i = 0; i < n; i++){ const a = o + n + i, b = o + n + (i + 1) % n; quad(a, b, b + n, a + n); g.fill(); }
+      }
+    }
+    const NRAD = 30, radA = new Float32Array(NRAD), radW = new Float32Array(NRAD);
+    for (let i = 0; i < NRAD; i++){ radA[i] = (i + rnd() * .7) / NRAD * TAU; radW[i] = .006 + rnd() * .022; }
+    function radial(x0, y0, r0, col, wk){            // wedges from r0 out past the edge of the tube
+      const R = W * 1.5; g.fillStyle = col; g.beginPath();
+      for (let i = 0; i < NRAD; i++){
+        const a = radA[i], w = radW[i] * wk;
+        g.moveTo(x0 + Math.cos(a) * r0, y0 + Math.sin(a) * r0);
+        g.lineTo(x0 + Math.cos(a - w) * R, y0 + Math.sin(a - w) * R); g.lineTo(x0 + Math.cos(a + w) * R, y0 + Math.sin(a + w) * R); g.closePath();
+      }
+      g.fill();
     }
     /* its shadow on the floor (y = -FY), cast by a light high behind the viewer: front and back outlines and the sides between */
     const FY = 7, SX = .18, SZ = .95;
@@ -1712,48 +1733,29 @@ M.createTerminal = function createTerminal(opts){
     }
 
     /* ---- the show: the opening (age a, seconds), then the loop (L = a - SLAM) ---- */
-    const T_BARS = 2.75, T_FLOOR = 3.0, T_LOGO = 3.5, T_HOLD = 5.0, T_RUSH = 5.5, SLAM = 6.0, SCROLL0 = 6.25, GPS = 3.6;
-    const MOVE0 = 6, MOVE_GAP = 8.5, MOVE_LEN = 2.8, MOVES = 5;   // turn, bounce, twist, flip, zoom
+    const T_BARS = 2.75, T_FLOOR = 3.0, T_LOGO = 3.5, T_HOLD = 5.0, T_RUSH = 5.5, SLAM = 6.0, SCROLL0 = 6.25, GPS = 2.6;   // (GPS: glyphs a second, a reading pace)
+    const SECTION = 16, TURN = 2.2, HS = .1;   // eight bars at 120 bpm; a full turn opens each one
     const NB = 5, bp = new Float32Array(NB), bo = new Int8Array(NB), bY = new Float32Array(NB), bD = new Float32Array(NB);
     let lastT = -1, dist = 0, floorD = 0, kick = 0, nextBar = 0, lastKey = 0, keyGlint = -9;
     let oy = 0, oyv = 0, op = 0, opv = 0, spin = 0, spinV = 0, hop = 0, hopV = 0, pu = -1, pv = -1, down = false, lastU = -1, ageNow = 0;
     const backOut = x => { if (x <= 0) return 0; if (x >= 1) return 1; const c = 1.7, u = x - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
     const eOut = x => 1 - Math.pow(1 - clamp(x, 0, 1), 3), eIn = x => Math.pow(clamp(x, 0, 1), 4);
-    /* the move under way at loop time L: { m: which, p: seconds into it } (m = -1: none) */
-    let mvM = -1, mvP = 0;
-    function move(L){
-      mvM = -1; const t = L - MOVE0; if (t < 0) return;
-      const i = Math.floor(t / MOVE_GAP), p = t - i * MOVE_GAP;
-      if (p < MOVE_LEN){ mvM = i % MOVES; mvP = p; }
-    }
-    /* the last impact (the slam, a landing from a bounce, the end of a zoom): seconds since, and how hard; for the flash and the floor's shockwave */
+    /* the last impact (the slam, the tune's drop): seconds since, and how hard; for the flash and the floor's shockwave */
     let shT = 9, shS = 0;
-    /* the beat (set each frame from the tune's clock, or a quieter one of our own), the second part's weight, quality */
-    let bk = 0, bs = 0, pwS = 0, dropAt = -9, lastDrop = 0, Q = TAP ? 1 : 0, lastW = 0, slowAcc = 0, qAt = 0;
+    /* the beat (set each frame from the tune's clock, or a quieter one of our own); quality */
+    let hitDrop = 0, tearN = 0, lastSec = 0, lastYaw = 0, sparkAt = -9, sparkA = 0;   // impact frames to come (counted in frames), the smear's memory, the key spark
+    let bk = 0, bs = 0, dropAt = -9, lastDrop = 0, Q = TAP ? 1 : 0, lastW = 0, slowAcc = 0, qAt = 0;
     function impact(a, L){
       shT = 9; shS = 0;
       if (a >= SLAM && L < 3){ shT = L; shS = 1; }
       if (a - dropAt < 3 && a - dropAt < shT){ shT = a - dropAt; shS = .8; }   // the tune's drop lands like a slam
-      if (mvM === 1 && mvP > .42){ shT = mvP - .42; shS = .55; }
-      else if (mvM === 4 && mvP > 2.3){ shT = mvP - 2.3; shS = .45; }
     }
     function bars(T, a, L, still){
-      const sky0 = 4, sky1 = hy - 6, span = sky1 - sky0, mid = (sky0 + sky1) / 2 - bh * .5, am = span * .36;
-      /* three patterns, crossfaded every 20 s: the rotating cylinder, a copper list scrolling down, a breathing fan */
-      let wA = 1, wB = 0, wC = 0;
-      if (!still && L > 14){
-        const seg = Math.floor((L - 14) / 20), u = sstep(0, 3, (L - 14) - seg * 20), cur = (seg + 1) % 3, prev = seg % 3;
-        wA = (cur === 0 ? u : 0) + (prev === 0 ? 1 - u : 0); wB = (cur === 1 ? u : 0) + (prev === 1 ? 1 - u : 0); wC = (cur === 2 ? u : 0) + (prev === 2 ? 1 - u : 0);
-      }
-      const beat = .16 * bk, cyc = still ? 2 : T * 9;   // the kick lifts them; a highlight cycles down through each one
+      const sky0 = 4, sky1 = hy - 6, span = sky1 - sky0, mid = (sky0 + sky1) / 2 - bh * .5, am = span * (still ? .36 : .32 + .05 * Math.sin(L * .21));   // the cylinder breathes
+      const beat = .14 * bk, cyc = still ? 2 : T * 6;   // the kick lifts them; a highlight cycles down through each one
       for (let i = 0; i < NB; i++){
         const ph = T * 1.55 + i * .58;
         let y = mid + am * Math.sin(ph), d = Math.cos(ph);
-        if (wB > 0 || wC > 0){
-          const yb = sky0 - bh + ((i * (span + bh) / NB + L * 55) % (span + bh)), db = Math.cos((yb - mid) / (span * .5) * 1.4) - .3;
-          const yc = mid + (i - 2) * am * .45 * (.55 + .45 * Math.sin(L * .9)) + am * .25 * Math.sin(L * .55), dc = .6 * Math.cos(L * 1.2 + i * 1.3);
-          y = y * wA + yb * wB + yc * wC; d = d * wA + db * wB + dc * wC;
-        }
         if (!still && a < T_BARS + 1.6) y = sky0 - bh - 12 + (y - sky0 + bh + 12) * backOut((a - T_BARS - i * .25) / .45);   // they drop in on the eighth notes
         bY[i] = y; bD[i] = d;
         let k = i; while (k > 0 && bD[bo[k - 1]] > d){ bo[k] = bo[k - 1]; k--; } bo[k] = i;
@@ -1762,7 +1764,7 @@ M.createTerminal = function createTerminal(opts){
       for (let r = 0; r < NB; r++){
         const i = bo[r], d = bD[i], peak = clamp(.18 + .1 * d + .55 * bp[i] + beat, 0, 1), y0 = Math.round(bY[i]);
         for (let k = 0; k < nb; k++){
-          const e = 1 - Math.abs(2 * (k + .5) / nb - 1), hp = (cyc + i * 2.3) % (nb + 6) - 3, dd = k - hp, v = peak * (.12 + .88 * e * e + .45 * Math.exp(-dd * dd * .7));
+          const e = 1 - Math.abs(2 * (k + .5) / nb - 1), hp = (cyc + i * 2.3) % (nb + 6) - 3, dd = k - hp, v = peak * (.12 + .88 * e * e + .28 * Math.exp(-dd * dd * .7));
           const y = y0 + k * st; if (y < sky0 || y + st > sky1) continue;
           g.fillStyle = SH[si(v)]; g.fillRect(0, y, W, st);
         }
@@ -1775,11 +1777,9 @@ M.createTerminal = function createTerminal(opts){
       for (let k = 0; k < 5; k++){ g.fillStyle = SH[si((.17 - k * .032) * hw)]; g.fillRect(cx - W * hw / 2, hy - 4 - k * 4, W * hw, 4); }
       if (reveal > 0){
         const gs = 4, nz = 40, span = nz * gs, zf = zN + span;
-        const wave = still ? 0 : bump(L % 26, 3, 8.5, 1.2) * 1;   // now and then the floor rolls
         for (let k = 0; k < nz; k++){
           const z = zN + ((k * gs - floorD) % span + span) % span; let y = hy + F * FY / z, v = .04 + .26 * Math.pow(1 - (z - zN) / span, 3);
           if (z > zN + 6 && F * FY / z - F * FY / (z + gs) < 3) continue;   // (far lines closer than 3 px: left out)
-          if (wave > 0) y += wave * Math.sin(z * .32 - L * 3.2) * F / z * .45;
           if (shS > 0 && shT < 2.5){ const d = Math.abs(z - zl) - shT * 50, e = shS * Math.exp(-d * d / 40) * Math.exp(-shT * 1.6); y -= e * F / z * .5; v += .4 * e; }
           if (y > y1 || y > bot || y < hy) continue;
           g.fillStyle = SH[si(v + .18 * bk)]; g.fillRect(0, Math.round(y), W, 2);
@@ -1808,9 +1808,8 @@ M.createTerminal = function createTerminal(opts){
       const pos = still ? nameAt + title.w / 2 - cols / 2 : (a - SCROLL0) * GPS * GW - cols;
       if (!still && pos < -cols){ s = s0; return; }
       const ip = Math.floor(pos), fr = pos - ip, gh = (GH + 1) * s, rh = Math.round(gh * .5), y0 = ys - 4 * s;
-      /* the wave drifts: its height and length breathe; now and then the letters hop, one after another */
-      const am = still ? amp : amp * (.75 + .3 * Math.sin(L * .23)) * (1 + .3 * bs), wl = W * (still ? .95 : .9 + .22 * Math.sin(L * .11)), ph = still ? 2.1 : a * 2.6;
-      const hopB = still ? 0 : bump(L % 30, 19, 25, 1) * s * 2.4;
+      /* a long, low wave: the letters ride it but stay upright enough to read */
+      const am = amp * (still ? .7 : .6 + .08 * Math.sin(L * .19)), wl = W * 1.4, ph = still ? 2.1 : a * 1.9;
       g.imageSmoothingEnabled = false;
       let n = 0;
       for (let j = 0; j < cols; j++){
@@ -1818,7 +1817,6 @@ M.createTerminal = function createTerminal(opts){
         src %= stripW;
         const x = Math.round((j - fr) * s);
         let y = y0 + am * Math.sin(x / wl * TAU - ph);
-        if (hopB > 0) y -= hopB * Math.abs(Math.sin(L * 4.4 - (src >> 3) * .6));
         y = Math.round(y);
         g.drawImage(strip, src, 0, 1, GH + 1, x, y, s, gh);
         if (Q < 1) g.drawImage(stripR, src, 0, 1, GH + 1, x, y + 8 * s + Math.round(s * .6), s, rh);
@@ -1831,59 +1829,6 @@ M.createTerminal = function createTerminal(opts){
       s = s0;
     }
 
-    /* ---- part two: a plasma sky (chunky, colour-cycled, darkening to the horizon) and vector bobs round the logo ---- */
-    let pc = null, pimg = null, prad = null, ppw = 0, pph = 0;
-    const RGBT = new Uint8Array(NS * 3); SH.forEach((c, i) => { const v = rgb(c); RGBT[i * 3] = v[0]; RGBT[i * 3 + 1] = v[1]; RGBT[i * 3 + 2] = v[2]; });
-    function plasma(T, alpha){
-      const pw = Q ? 48 : 80, ph = Math.max(6, Math.round(pw * (hy - 10) / W));
-      if (!pc || ppw !== pw || pph !== ph){
-        pc = document.createElement('canvas'); pc.width = pw; pc.height = ph; ppw = pw; pph = ph;
-        pimg = pc.getContext('2d', CPU).createImageData(pw, ph); prad = new Float32Array(pw * ph);
-        for (let y = 0; y < ph; y++) for (let x = 0; x < pw; x++) prad[y * pw + x] = Math.hypot(x - pw * .5, (y - ph * .4) * 1.6) * 80 / pw;
-      }
-      const d = pimg.data, kx = 80 / pw;
-      for (let y = 0, i = 0; y < ph; y++){
-        const fade = 1 - (y / ph) * (y / ph), yy = y * kx;
-        for (let x = 0; x < pw; x++, i++){
-          const xx = x * kx, v = Math.sin(xx * .16 + T * 1.1) + Math.sin(yy * .21 - T * 1.4) + Math.sin((xx + yy) * .09 + T * .8) + Math.sin(prad[i] * .32 - T * 1.9);
-          const q = ((v + 4) * 2.2 + T * 3) % 8, lvl = (q < 4 ? q : 8 - q) / 4;      // eight cycling bands, up and down a little ramp
-          const c = si((.03 + .13 * lvl * lvl) * fade) * 3, o = i * 4;
-          d[o] = RGBT[c]; d[o + 1] = RGBT[c + 1]; d[o + 2] = RGBT[c + 2]; d[o + 3] = 255;
-        }
-      }
-      pc.getContext('2d', CPU).putImageData(pimg, 0, 0);
-      g.imageSmoothingEnabled = false; g.globalAlpha = alpha;
-      g.drawImage(pc, 0, 0, pw, ph, 0, 4, W, hy - 10);
-      g.globalAlpha = 1; g.imageSmoothingEnabled = true;
-      lumAcc += W * hy * .05 * alpha;
-    }
-    const NBOB = 12, bwx = new Float32Array(NBOB), bwy = new Float32Array(NBOB), bwz = new Float32Array(NBOB), bord = new Int8Array(NBOB);
-    let ball = null;
-    function makeBall(){
-      const n = 48; ball = document.createElement('canvas'); ball.width = ball.height = n;
-      const c = ball.getContext('2d', CPU), im = c.createImageData(n, n), d = im.data;
-      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
-        const u = (x + .5) / n * 2 - 1, v = (y + .5) / n * 2 - 1, r = Math.hypot(u, v); if (r > 1) continue;
-        const l = .16 + .46 * Math.sqrt(1 - r * r) + .45 * Math.pow(Math.max(0, 1 - Math.hypot(u + .38, v + .38) / .55), 2), k = si(Math.min(1, l)) * 3, o = (y * n + x) * 4;
-        d[o] = RGBT[k]; d[o + 1] = RGBT[k + 1]; d[o + 2] = RGBT[k + 2]; d[o + 3] = r > .94 ? 255 * (1 - r) / .06 : 255;
-      }
-      c.putImageData(im, 0, 0);
-    }
-    function bobsPlace(T, py, pz, alpha){
-      for (let i = 0; i < NBOB; i++){
-        const th = i / NBOB * TAU + T * .9, R = 10.5 + .8 * Math.sin(T * 2 + i);
-        bwx[i] = R * Math.cos(th); bwy[i] = py + 4 * Math.sin(2 * th + T * 1.3); bwz[i] = pz + R * .8 * Math.sin(th);
-        let k = i; while (k > 0 && bwz[bord[k - 1]] < bwz[i]){ bord[k] = bord[k - 1]; k--; } bord[k] = i;
-      }
-    }
-    function bobs(alpha, zc, front){
-      if (!ball) makeBall();
-      for (let j = 0; j < NBOB; j++){
-        const i = bord[j], z = bwz[i]; if ((z <= zc) !== front || z < 2) continue;
-        const r = F * .78 / z * alpha, x = cx + F * bwx[i] / z, y = hy - F * bwy[i] / z;
-        g.drawImage(ball, x - r, y - r, 2 * r, 2 * r); lumAcc += 3.1 * r * r * .45;
-      }
-    }
     function draw(x, t0, w, hh, a, t){
       const still = REDUCED;
       if (!chrome) makeChrome();
@@ -1891,6 +1836,9 @@ M.createTerminal = function createTerminal(opts){
       const dt = lastT < 0 || still ? 0 : clamp(t - lastT, 0, .1); lastT = t;
       if (still) a = 40;
       else if (TAP) a = a < SLAM / 1.3 ? a * 1.3 : a + SLAM * (1 - 1 / 1.3);   // phones play it once, in about six seconds: the opening runs a little faster
+      /* the slam's hit-stop: the picture holds for a tenth of a second (two inverted impact frames, then one of speed lines) */
+      let hit = 0;
+      if (!still && a >= SLAM){ if (a < SLAM + HS){ hit = a < SLAM + .067 ? 1 : 2; a = SLAM; } else a -= HS; }
       ageNow = a;
       const L = a - SLAM, T = still ? 7.3 : a;
       /* quality: when frames keep coming late (a slow phone, a busy machine), draw smaller and leave out extras */
@@ -1905,13 +1853,15 @@ M.createTerminal = function createTerminal(opts){
         if (mt >= 0 || L >= 0){
           const e = mu.env(mt >= 0 ? mt : L + mu.INTRO * mu.BAR), I = mt >= 0 ? (a < SLAM ? .4 : 1) : .45;
           bk = e.kick * I; bs = e.snare * I;
-          if (mt >= 0 && e.drop > .9 && lastDrop <= .9 && a > SLAM + 1) dropAt = a;
+          if (mt >= 0 && e.drop > .9 && lastDrop <= .9 && a > SLAM + 1){ dropAt = a; hitDrop = 1; tearN = 1; }   // the drop: one negative frame, then a torn one
           lastDrop = mt >= 0 ? e.drop : 0;
-          const want = still || L < 0 ? 0 : (mt >= 0 ? e.part === 2 : L % 64 >= 32) ? 1 : 0;   // part two: the tune's B section, or every other half-minute
-          pwS += (want - pwS) * Math.min(1, dt * 1.1);
         }
       }
-      move(still ? -1 : L); impact(a, L);
+      /* where we are in the section (the tune's, when it plays: its sections start at bar 4 and every 8 bars after) */
+      const sec = still ? -1 : mt >= 0 ? (mt - mu.INTRO * mu.BAR) % SECTION : L % SECTION;
+      if (sec >= 0 && sec < lastSec && L > 2) tearN = Math.max(tearN, 1); lastSec = sec;   // a section starts: one torn frame
+      if (hitDrop){ hit = 1; hitDrop = 0; }
+      impact(a, L);
       /* the physical bits: the pointer's lean, the spin (with a soft detent back to the front once it is slow), the hop */
       if (dt > 0){
         const tyaw = pu < 0 ? 0 : clamp((pu - .5) * .8, -.38, .38), tpit = pv < 0 ? 0 : clamp((pv - .35) * .5, -.2, .2);
@@ -1930,14 +1880,12 @@ M.createTerminal = function createTerminal(opts){
         kick *= Math.exp(-dt * 2.5);
       }
       if (Math.abs(spin) > 1e4){ spin %= TAU; }
-      /* stars: drift, hyperspace behind the title, back to a drift; the floor's rush, a zoom and keys push them */
-      const rush = still ? 0 : bump(L % 26, 15, 19, 1.2);
-      let speed = still ? 0 : a < .3 ? 8 : a < 2.6 ? 8 + 316 * Math.pow((a - .3) / 2.3, 2) : a < SLAM ? 9 + 315 * (1 - sstep(2.6, 3.9, a)) : 9 + 60 * rush;
-      if (mvM === 4) speed += 70 * bump(mvP, 1.6, 2.4, .3);
-      speed += 70 * kick + 30 * bk;
-      dist += speed * dt; floorD += (still ? 0 : 3 + 12 * rush + 6 * kick) * dt;
+      /* stars: drift, hyperspace behind the title, back to a drift; keys push them */
+      let speed = still ? 0 : a < .3 ? 8 : a < 2.6 ? 8 + 316 * Math.pow((a - .3) / 2.3, 2) : a < SLAM ? 9 + 315 * (1 - sstep(2.6, 3.9, a)) : 9;
+      speed += 70 * kick + 25 * bk;
+      dist += speed * dt; floorD += (still ? 0 : 3 + 6 * kick) * dt;
       /* the logo */
-      let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, alpha = 1, flash = 0, shake = 0, tw0 = 0, tw1 = 0, sweep = -1;
+      let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, alpha = 1, flash = 0, shake = 0, shakeX = 0, tw0 = 0, tw1 = 0, sweep = -1, sx = 1, sy = 1, rushU = 0;
       if (!still && a < SLAM){
         alpha = sstep(T_LOGO, T_LOGO + .5, a);
         if (a < T_HOLD){                               // out of the vanishing point, tumbling, slowing as it comes
@@ -1946,37 +1894,30 @@ M.createTerminal = function createTerminal(opts){
         } else if (a < T_RUSH){                       // a breath: it drifts back and winds up
           const u = sstep(T_HOLD, T_RUSH, a);
           z = 1.9 * Z0 + .4 * Z0 * u; yaw = -.2 - .25 * u; pit = -.28 + .12 * u;
+          sx = 1 + .1 * u; sy = 1 - .13 * u;            // the wind-up: it squashes
         } else {                                      // and rushes in on the beat
           const u = eIn((a - T_RUSH) / (SLAM - T_RUSH));
           z = 2.3 * Z0 + (Z0 - 2.3 * Z0) * u; yaw = -.45 * (1 - u); pit = -.16 - .12 * u;
+          const v = (a - T_RUSH) / (SLAM - T_RUSH); sx = 1.1 - .2 * v; sy = .87 + .33 * v; rushU = v;   // and stretches as it comes
         }
         y = logoY + (1 - alpha) * 2;
       } else {
         const wI = still ? 1 : sstep(0, 2, L);
-        if (!still){ shake = Math.exp(-L * 7) * Math.sin(L * 46) * h * .02; z -= Z0 * .14 * Math.exp(-L * 5.5) * Math.cos(L * 15); }
+        if (!still){
+          const e = Math.exp(-L * 7);
+          shake = e * Math.sin(L * 46 + 1.2) * h * .022; shakeX = e * Math.sin(L * 53) * h * .012;   // the jolt, down and to the side
+          z -= Z0 * .12 * Math.exp(-L * 6) * Math.cos(L * 14);                                     // the punch: in past its mark, and back
+          const q = Math.exp(-L * 10) * Math.cos(L * 18); sx = 1 + .12 * q; sy = 1 - .16 * q;      // squashed by the landing
+        }
         yaw = wI * (.42 * Math.sin(L * .5) + .08 * Math.sin(L * 1.3));
         pit = -.28 + wI * .12 * Math.sin(L * .7 + .6);
         rol = wI * .05 * Math.sin(L * .43);
         y = logoY + wI * .6 * Math.sin(L * 1.2);
         z += wI * 2 * Math.sin(L * .33);
-        if (mvM >= 0){
-          const p = mvP, e = sstep(0, MOVE_LEN, p);
-          if (mvM === 0) yaw += TAU * e;                                       // a full turn
-          else if (mvM === 1){                                                 // a drop onto the floor and a few bounces
-            const yb = -FY + 4.4, y0 = y;
-            z += 2.2 * Z0 * (sstep(0, .5, p) - sstep(2.1, MOVE_LEN, p));          // (it hops back first, to land clear of the scroller)
-            y = p < .42 ? y0 + (yb - y0) * (p / .42) * (p / .42) : p < 2.1 ? yb + (y0 - yb) * .5 * Math.abs(Math.sin(Math.PI * (p - .42) / .56)) * Math.exp(-(p - .42) * 1.5) : yb + (y0 - yb) * sstep(2.1, MOVE_LEN, p);
-          }
-          else if (mvM === 2){ tw0 = TAU * e; tw1 = -TAU * e; }                // the letters twist against each other
-          else if (mvM === 3) pit += TAU * sstep(0, MOVE_LEN, p);              // a slow flip
-          else {                                                               // back into the distance, and in again
-            z += p < 1.3 ? 2.4 * Z0 * eOut(p / 1.3) : p < 1.8 ? 2.4 * Z0 : 2.4 * Z0 * (1 - eIn((p - 1.8) / .5));
-            yaw += .5 * Math.sin(Math.PI * clamp(p / 2.3, 0, 1));
-          }
-        }
-        if (shS > 0) flash = (shS >= 1 ? .4 : .14 * shS) * Math.exp(-shT * 8);
+        if (sec >= 0 && L > 2 && sec < TURN) yaw += TAU * sstep(0, TURN, sec);   // a full turn opens each section
+        if (shS > 0) flash = (shS >= 1 ? .36 : .14 * shS) * Math.exp(-shT * 14);
         if (!still && L < 1) sweep = (L - .05) / .8;
-        if (mvM === 4 && mvP > 2.3) shake += Math.exp(-(mvP - 2.3) * 9) * Math.sin((mvP - 2.3) * 46) * h * .007;
+        else if (sec >= TURN - .2 && sec < TURN + .6 && L > 2) sweep = (sec - TURN + .2) / .8;   // and ends in a glint
       }
       if (!still && a - keyGlint < .7) sweep = (a - keyGlint) / .7;
       yaw += oy + spin; pit += op; y += hop; z -= Z0 * .04 * bs; envT = T * .7;
@@ -1986,21 +1927,42 @@ M.createTerminal = function createTerminal(opts){
       g.fillStyle = P.bg; rawFill(0, 0, W, h);
       g.save();
       if (cam > .001){ g.translate(cx, h * .5); g.rotate(-.07 * cam); g.scale(1 + .1 * cam, 1 + .1 * cam); g.translate(-cx, -h * .5 + h * .05 * cam); }
-      if (shake) g.translate(0, Math.round(shake));
-      if ((still || a >= T_BARS) && pwS < .99){ if (pwS > .01) g.globalAlpha = 1 - pwS; bars(still ? 3.1 : T, a, L, still); g.globalAlpha = 1; }
-      if (pwS > .01) plasma(T, pwS);
+      if (shake || shakeX) g.translate(Math.round(shakeX), Math.round(shake));
+      if (still || a >= T_BARS) bars(still ? 3.1 : T, a, L, still);
       if (still || a >= T_FLOOR - .2) floor(a, L, z, still);
-      xform(yaw, pit, rol, 0, y, z, tw0, tw1);
+      const lsx = cx, lsy = hy - F * y / z, lr = F * 8.5 / z;          // the logo's centre and size on the tube
+      if (!still && a >= T_RUSH && a < SLAM){ g.globalAlpha = rushU; radial(lsx, lsy, lr * (1.5 - .5 * rushU), SH[si(.32)], .6); g.globalAlpha = 1; }   // speed lines as it rushes in
+      /* a smear on a fast turn: two fading silhouettes trailing the logo */
+      const yv = dt > 0 ? (yaw - lastYaw) / dt : 0; lastYaw = yaw;
+      if (!still && alpha > .5 && Math.abs(yv) > 3.2 && Q < 2) for (let k = 2; k >= 1; k--){ xform(yaw - yv * .028 * k, pit, rol, 0, y, z, tw0, tw1, sx, sy); g.globalAlpha = .45 / k; silhouette(SH[si(.3)], false); g.globalAlpha = 1; }
+      xform(yaw, pit, rol, 0, y, z, tw0, tw1, sx, sy);
       const sb = still ? 1 : sstep(0, .5, a);
       drawStars(dist + (still ? 37 : 0), speed, z, 1e9, sb);
-      const bob = pwS > .01 && Q < 2; if (bob){ bobsPlace(T, y, z, pwS); bobs(pwS, z, false); }
       if (alpha > .02){ if (Q < 2) drawShadow(alpha); drawLogo(alpha, clamp(F / z * .1, 1.5, 4.5), sweep); }
-      if (bob) bobs(pwS, z, true);
       drawStars(dist + (still ? 37 : 0), speed, 0, z, sb);
       if (still || a > SCROLL0 - .5) scroller(a, L, still);
+      if (!still && ageNow - sparkAt < .28){        // a key's spark: short rays off the logo's edge
+        const u = (ageNow - sparkAt) / .28, r0 = lr * (.7 + .5 * u), r1 = r0 + lr * .35 * (1 - u * .5);
+        g.strokeStyle = SH[si(1 - u * .6)]; g.lineWidth = 3; g.beginPath();
+        for (let k = 0; k < 7; k++){ const an = sparkA + (k - 3) * .16; g.moveTo(lsx + Math.cos(an) * r0, lsy + Math.sin(an) * r0); g.lineTo(lsx + Math.cos(an) * r1, lsy + Math.sin(an) * r1); }
+        g.stroke();
+      }
+      if (hit === 2) radial(lsx, lsy, lr * .9, P.bright, .5);   // the beat after the impact frame: speed lines out of it
       g.restore();
+      if (hit === 1){                                // the impact frame: the field burns white, the logo a black cut-out, black rays
+        g.fillStyle = SH[si(.92)]; g.fillRect(0, 0, W, h);
+        g.save(); if (shake || shakeX) g.translate(Math.round(shakeX), Math.round(shake));
+        silhouette(P.bg, true); radial(lsx, lsy, lr * 1.05, P.bg, 1);
+        g.restore();
+      }
       if (!still) titleCard(a);
-      if (flash > .01){ g.globalAlpha = flash; g.fillStyle = P.bright; g.fillRect(0, 0, W, h); g.globalAlpha = 1; }
+      if (flash > .01 && hit !== 1){ g.globalAlpha = flash; g.fillStyle = P.bright; g.fillRect(0, 0, W, h); g.globalAlpha = 1; }
+      if (tearN > 0 && hit !== 1){                   // a torn frame: alternate bands of the picture slip sideways, one frame
+        tearN--; g.setTransform(1, 0, 0, 1, 0, 0);
+        const bh2 = Math.max(4, Math.round(off.height / 11));
+        for (let k = 1; k < 11; k += 2){ const dx = Math.round(Math.sin(k * 12.9898 + a) * off.width * .035); g.drawImage(off, 0, k * bh2, off.width, bh2, dx, k * bh2, off.width, bh2); }
+        g.setTransform(rk, 0, 0, rk, 0, 0);
+      }
       if (!still && a < .42){                          // the raster opens out from a line
         const lw = W * sstep(0, .12, a), oh = h * .5 * Math.pow(sstep(.1, .42, a), 2), m = h * .5;
         g.fillStyle = P.bg; rawFill(0, 0, W, Math.max(0, m - oh)); rawFill(0, m + oh, W, h - m - oh);
@@ -2021,6 +1983,7 @@ M.createTerminal = function createTerminal(opts){
         const now = performance.now(); if (now - lastKey < 120) return; lastKey = now;
         bp[nextBar] = 1; nextBar = (nextBar + 1) % NB;
         if (ageNow - keyGlint > .7) keyGlint = ageNow;
+        sparkAt = ageNow; sparkA = rnd() * TAU;
       },
       pointer(u, v, isDown){
         const on = u >= 0 && u <= 1 && v >= 0 && v <= 1;
