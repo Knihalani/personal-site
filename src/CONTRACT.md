@@ -39,6 +39,10 @@ MAC.createScene(container: HTMLElement) -> {
     deskTop, wallZ, windowRect, // for room.js (MAC.dressRoom(api))
   },
   add(obj3d),                    // also turns on castShadow for its meshes, unless mesh.userData.noShadow
+  defer(fn),                     // start-up work for later: fn runs (a generator: steps) in ~6 ms slices between frames.
+                                // The scene paints its off-screen textures this way; room.js builds its sections and
+                                // typist.js meshes the hands through it, so the first frame comes early and never stalls
+  mergeStatic(group),           // merges a group's static meshes that share a material into one draw (skips userData.keep)
   setLook(nx, ny),              // pointer in -1..1 (0,0 = the screen); ny > 0 leans back toward the desk and hands
   nudge(),                      // a keystroke happened: skips the intro reveal, wakes the renderer
   setLamp(on), lampOn,          // the desk lamp switch (main.js exposes it as MAC.world.lamp)
@@ -49,7 +53,8 @@ MAC.createScene(container: HTMLElement) -> {
   resize(w, h),
 }
 ```
-Test hook: with `?debug` in the URL the scene also exposes `api._dbg = { yawS, pitchS, intro, shot, LOOK, lampS, view() }`
+Test hook: with `?debug` in the URL the scene also exposes `api._dbg = { yawS, pitchS, intro, shot, LOOK, lampS, view(), jobs(), flushJobs(), push }`
+(`flushJobs()` finishes the deferred work at once; `push.t = 9` skips the settle-in camera move)
 (`view()` returns `{ yawRest, leanAt, leanEnd, fullFov }`)
 (e.g. `pitchS.x = pitchS.t = -LOOK.down` forces the lean-back view). Not present otherwise.
 
