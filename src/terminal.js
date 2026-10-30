@@ -1412,16 +1412,16 @@ M.createTerminal = function createTerminal(opts){
   }
   /* ---- the landing: a demoscene intro, drawn straight onto the tube ----
      An Amiga-style intro in one phosphor, cut to its own 120 bpm tune (sound.js), which keeps its time: the opening
-     is the tune's eight-bar intro (16 s), and if the tune starts part-way (at the first touch) it joins at the
+     is the tune's six-bar intro (12 s), and if the tune starts part-way (at the first touch) it joins at the
      picture's place, so the drop always lands on the slam. Bar 0: the raster opens from a line and the name is
-     typed out in a C64-style bitmap font; bar 1: PRESENTS rasters in, and the card shuts to a dot. Bars 2-5: ABOUT,
-     five of his own lines from content.js, one every three beats, each wiping in behind a copper bar, a row of
-     pips counting them off; then the card is sucked into the vanishing point. Bar 6: hyperspace, the camera
-     tilts, the copper bars drop in on the eighth notes. Bars 6-7: out of the vanishing point comes a chunky
-     extruded "KN" (bevelled, flat-shaded facets, chrome front faces, bright vector edges; back faces culled, the
-     rest painter-sorted, letter by letter), tumbling, winding up and rushing in to slam down on bar 8, with impact
-     frames, a flash, a jolt, a shockwave through the floor and a glint across the chrome. Then the sine scroller
-     of facts starts along the floor, mirrored in it.
+     typed out in a C64-style bitmap font, PRESENTS rastered in under it. Bars 1-3: a hype reel of hard cuts on the
+     kick, one fact a card in huge type, each its own treatment (cropped giant, a zoom through a letter, hollow,
+     stretched, a whip pan, a stutter, a smash), ending on THE GOAT?, which zooms through its O into hyperspace.
+     Bars 4-5: the camera tilts, the copper bars drop in on the eighth notes, and out of the vanishing point comes a
+     chunky extruded "KN" (bevelled, flat-shaded facets, chrome front faces, bright vector edges; back faces culled,
+     the rest painter-sorted, letter by letter), tumbling, winding up and rushing in to slam down on bar 6, with
+     impact frames, a flash, a jolt, a shockwave through the floor and a glint across the chrome. Then the sine
+     scroller of facts starts along the floor, mirrored in it.
      After that it breathes rather than adds: the logo sways and bobs over the turning cylinder of copper bars,
      and at the top of each eight-bar section (on the tune's clock when it plays) makes one full turn that ends in a
      glint; the facts scroll by slowly enough to read. With the tune playing, the bars and the floor move with its
@@ -1683,9 +1683,9 @@ M.createTerminal = function createTerminal(opts){
     }
     /* ---- the title card: the name typed out letter by letter with a block cursor, PRESENTS rastered in under it on
        the beat; then it squashes to a line, and the line to a dot ---- */
-    const T_TYPE = .5, T_LET = .08, T_SUB = 2.0, T_SHUT = 3.4;
+    const T_TYPE = .2, T_LET = .05, T_SUB = 1.0, T_SHUT = 99;   // (the title is cut away by the first card at 2 s)
     function titleCard(a){
-      if (a < T_TYPE - .05 || a > T_SHUT + .62) return;
+      if (a < T_TYPE - .05 || a >= CARD0) return;
       if (!strip) makeStrip();
       const k = Math.max(2, Math.min(Math.round(s * .75), Math.floor(W * .8 / (title.w + GW)))), k2 = Math.max(2, Math.round(k * .55));
       const cyT = h * .3, tw = title.w * k, sw = sub.w * k2, th = (GH + 1) * k + k2 * 3 + (GH + 1) * k2;
@@ -1760,90 +1760,103 @@ M.createTerminal = function createTerminal(opts){
     }
 
     /* ---- the show: the opening (age a, seconds), then the loop (L = a - SLAM) ---- */
-    const T_FLOOR = 4.0, T_BARS = 13.0, T_LOGO = 13.2, T_HOLD = 14.6, T_RUSH = 15.4, SLAM = 16.0, SCROLL0 = 16.25, GPS = 2.6;   // (GPS: glyphs a second, a reading pace)
-    /* ---- ABOUT: his own lines, one at a time, every three beats; then the card is sucked into the vanishing point ---- */
-    const AB0 = 4.0, ABS = 4.5, AB_STEP = 1.5, AB_END = 12.0, AB_SUCK = .7;
-    let about = null, aboutK = 0, aboutHdr = null, ADV = null;
+    const T_FLOOR = 7.6, T_BARS = 8.0, T_LOGO = 8.1, T_HOLD = 10.6, T_RUSH = 11.3, SLAM = 12.0, SCROLL0 = 12.25, GPS = 2.6;   // (GPS: glyphs a second, a reading pace)
+    let ADV = null;
     const adv = ch => { if (!ADV){ ADV = {}; for (const c in FONT8){ let a2 = GW, b2 = -1; FONT8[c].split('|').forEach(row => { for (let x = 0; x < GW; x++) if (row[x] === '#'){ if (x < a2) a2 = x; if (x > b2) b2 = x; } }); ADV[c] = b2 < 0 ? 4 : b2 - a2 + 2; } } return ADV[ch] || 4; };
     const textW = t => { let w2 = 0; for (const ch of t) w2 += adv(ch); return w2; };
-    function aboutLines(){
-      const bl = String((A.body || []).join('\n')).split('\n').map(x => x.replace(/^\s*[-*\u2022]\s*/, '').trim()).filter(Boolean);
-      const pick = re => bl.find(b => re.test(b));
-      return [pick(/\by\/o\b/i), pick(/^born/i), pick(/^co-?founder of j/i), pick(/^founder of eden/i), pick(/squash|bjj/i)].filter(Boolean).slice(0, 6);
+    /* ---- the cards: one fact a card, in huge type on a dark field, cut on the kick (2 s to 8 s), each with its own
+       treatment; THE GOAT? last, then a zoom through its O into hyperspace ---- */
+    const CARD0 = 2.0, CARD_END = 8.0;
+    let cards = null, cardKey = '', cardI = -1;
+    function cardDefs(){
+      const bl = String((A.body || []).join('\n')).split('\n').map(x => x.replace(/^\s*[-*•]\s*/, '').trim()).filter(Boolean);
+      const has = re => bl.some(b => re.test(b)), yo = /(\d+)\s*y\/o/i.exec(bl.join(' '));
+      const out = [];
+      if (yo) out.push({ d: .5, big: yo[1] + '.', fx: 'crop' });
+      if (has(/hong kong/i)) out.push({ d: 1, big: 'HONG KONG.', fx: 'through' });
+      if (has(/founder of j/i) && has(/founder of eden/i)) out.push({ d: 1, big: 'FOUNDER.', small: 'J + EDEN', fx: 'outline' });
+      if (J.line) out.push({ d: 1, big: 'J', small: J.line + '.', fx: 'stretch' });
+      if (E.line) out.push({ d: 1, big: 'EDEN', small: E.line + '.', fx: 'whip' });
+      if (has(/squash/i)) out.push({ d: .5, big: 'SQUASH.', fx: 'stutter' });
+      if (has(/bjj/i)) out.push({ d: .5, big: 'BJJ.', fx: 'smash' });
+      out.push({ d: .5, big: 'THE GOAT?', fx: 'goat' });
+      /* back to back from CARD0, the last running to CARD_END */
+      let t2 = CARD0; out.forEach(c => { c.t0 = t2; t2 += c.d; }); out[out.length - 1].d = CARD_END - out[out.length - 1].t0;
+      return out;
     }
-    function makeAbout(){
-      /* the size: as big as reads well, small enough that the longest item wraps to at most three lines in the sky */
-      const sky = hy * .78;
-      let k = Math.max(3, Math.min(Math.round(W / 165), Math.floor(sky / (3 * 8 * 1.5))));
-      const src = aboutLines().map(fontText);
-      const wrap = (t, max) => { const out = []; let cur = ''; for (const wd of t.split(' ')){ const nx = cur ? cur + ' ' + wd : wd; if (cur && textW(nx) > max){ out.push(cur); cur = wd; } else cur = nx; } if (cur) out.push(cur); return out; };
-      let lines;
-      for (;; k--){ const max = W * .8 / k; lines = src.map(t => wrap(t, max)); if (k <= 3 || lines.every(l => l.length <= 3 && l.every(x => textW(x) <= max))) break; }
-      aboutK = k;
-      about = lines.map(ls => { const b = ls.map(x => bake(x)); return { b, w: Math.max(...b.map(x => x.w)) }; });
-      aboutHdr = bake('ABOUT');
-    }
-    function aboutCard(a){
-      if (a < AB0 - .05 || a > AB_END + AB_SUCK) return;
-      if (!about || aboutKey !== fitKey){ aboutKey = fitKey; if (!strip) makeStrip(); makeAbout(); }
-      if (!about.length) return;
-      const k = aboutK, k2 = Math.max(2, Math.round(k * .5)), lh = Math.round(8 * k * 1.5), N = about.length;
-      const cyA = hy * .48, su = sstep(AB_END, AB_END + AB_SUCK, a);
-      g.save();
-      if (su > 0){ const sc = Math.max(.02, 1 - su); g.translate(cx, hy); g.scale(sc, sc); g.translate(-cx, -hy); g.translate(0, (hy - cyA) * su * .3); g.globalAlpha = 1 - su * su; }
-      g.imageSmoothingEnabled = false;
-      /* the header: ABOUT, and a rule drawing out under it */
-      const hdrIn = sstep(AB0, AB0 + .35, a), hy0 = Math.round(cyA - 2.2 * lh), hw = aboutHdr.w * k2;
-      g.globalAlpha *= hdrIn; g.drawImage(aboutHdr.face, 0, 0, aboutHdr.w + 1, GH + 1, Math.round(cx - hw / 2), hy0, (aboutHdr.w + 1) * k2, (GH + 1) * k2);
-      g.fillStyle = SH[si(.45)]; const rw = W * .6 * sstep(AB0 + .1, AB0 + .5, a); g.fillRect(cx - rw / 2, hy0 + (GH + 2) * k2, rw, 2);
-      if (su > 0) g.globalAlpha = 1 - su * su; else g.globalAlpha = 1;
-      /* the item up now: wipes in behind a copper bar, holds, and (all but the last) squashes away just before the next */
-      const i = Math.floor((a - ABS) / AB_STEP);
-      if (i >= 0){
-        const ii = Math.min(i, N - 1), it = about[ii], p = i >= N ? AB_STEP : a - (ABS + ii * AB_STEP), n = it.b.length;
-        const bhgt = n * lh, y0 = Math.round(cyA - bhgt / 2 + lh * .25), x0 = Math.round(cx - (it.w * k) / 2 + k * 3);
-        const wipe = sstep(0, .32, p), out = ii < N - 1 ? sstep(AB_STEP - .2, AB_STEP, p) : 0;
-        const bar = 1 - sstep(.15, .8, p);           // the copper bar it rides in on, fading once it has passed
-        if (bar > 0){ const bh2 = bhgt + lh * .5, by = y0 - lh * .4; for (let q = 0; q < 8; q++){ const e = 1 - Math.abs(2 * (q + .5) / 8 - 1); g.fillStyle = SH[si(bar * (.1 + .4 * e * e))]; g.fillRect(0, Math.round(by + q * bh2 / 8), W, Math.ceil(bh2 / 8)); } }
-        g.save();
-        if (out > 0){ const m = y0 + bhgt / 2; g.translate(0, m); g.scale(1, Math.max(.03, 1 - out)); g.translate(0, -m); }
-        const rx = x0 - 6 * k + (it.w * k + 8 * k) * wipe;
-        g.beginPath(); g.rect(0, y0 - lh, rx, bhgt + 2 * lh); g.clip();
-        g.fillStyle = P.bright; g.fillRect(x0 - 5 * k, y0 + 2 * k, 3 * k, 3 * k);   // the bullet
-        for (let l = 0; l < n; l++) g.drawImage(it.b[l].face, 0, 0, it.b[l].w + 1, GH + 1, x0, y0 + l * lh, (it.b[l].w + 1) * k, (GH + 1) * k);
-        g.restore();
-        if (wipe < 1){ g.fillStyle = P.bright; g.fillRect(Math.round(rx) - 2, y0 - lh * .3, 3, bhgt + lh * .2); }   // the wipe's hot edge
-        lumAcc += it.w * k * bhgt * .2;
-        /* the pips: one per item, lit up to this one */
-        const ps = Math.max(4, Math.round(k * 1.6)), pg = ps * 2, px0 = Math.round(cx - (N * pg - ps) / 2), py = Math.round(cyA + 2.1 * lh);
-        for (let q = 0; q < N; q++){ g.fillStyle = q < ii || (q === ii && wipe > .5) ? SH[si(q === ii ? 1 : .55)] : SH[si(.2)]; g.fillRect(px0 + q * pg, py, ps, ps); }
-      }
-      g.imageSmoothingEnabled = true; g.restore();
-    }
-    let aboutKey = '';
-    /* ---- THE GOAT?: a hard cut on the beat as the card goes, half a second, letters filling the tube (two lines on a
-       tall one); its first two frames inverted, like the slam's ---- */
-    const G0 = 12.5, G1 = 13.0;
-    let goat = null, goatL = null;
-    function goatCard(a){
-      if (a < G0 || a >= G1) return 0;
-      if (!goat){ goat = bake('THE GOAT?'); goatL = [bake('THE'), bake('GOAT?')]; }
-      const tall = h > W * .9, u = (a - G0) / (G1 - G0), inv = a < G0 + .067;
-      g.fillStyle = inv ? SH[si(.92)] : P.bg; g.fillRect(0, 0, W, h);
-      const parts = tall ? goatL : [goat], wmax = Math.max(...parts.map(p2 => p2.w));
-      const k0 = Math.floor(Math.min(W * .9 / (wmax + 1), h * (tall ? .36 : .6) / ((GH + 1) * parts.length))), k = k0 * (1.06 - .06 * sstep(0, .25, u));   // a small punch in
-      const lh = (GH + 2) * k, y0 = h * .45 - lh * parts.length / 2;
-      if (!inv) radial(cx, h * .45, W * .1, SH[si(.16)], .8);
-      g.imageSmoothingEnabled = false;
-      parts.forEach((p2, l) => {
-        const x = cx - (p2.w + 1) * k / 2, y = y0 + l * lh;
-        if (inv){ g.fillStyle = P.bg; g.globalCompositeOperation = 'destination-out'; }
-        g.drawImage(p2.face, 0, 0, p2.w + 1, GH + 1, x, y, (p2.w + 1) * k, (GH + 1) * k);
-        if (inv) g.globalCompositeOperation = 'source-over';
+    function makeCards(){
+      if (!strip) makeStrip();
+      const tall = h > W * .9;
+      cards = cardDefs().map(c => {
+        const words = fontText(c.big), bigL = (tall && c.fx !== 'through' ? words.split(' ') : [words]).map(x => bake(x));
+        const bw = Math.max(...bigL.map(x => x.w)) + 1;
+        let kB = Math.floor(Math.min(W * .9 / bw, h * (c.small ? .5 : .62) / (bigL.length * (GH + 1))));
+        if (c.fx === 'crop') kB = Math.floor(Math.min(h * .98 / 7, W * 1.15 / bw));   // just bigger than the tube: cropped, still read
+        let smallL = [], kS = 0;
+        if (c.small){
+          const st = fontText(c.small); kS = Math.max(3, Math.min(Math.floor(kB * .3), Math.floor(W * .88 / (textW(st) + 1))));
+          if (kS < Math.floor(kB * .16)) kS = Math.max(3, Math.floor(kB * .16));   // too long for one line at a readable size: wrap
+          const max = W * .88 / kS; let cur = ''; for (const wd of st.split(' ')){ const nx = cur ? cur + ' ' + wd : wd; if (cur && textW(nx) > max){ smallL.push(bake(cur)); cur = wd; } else cur = nx; } if (cur) smallL.push(bake(cur));
+        }
+        const lhB = (GH + 2) * kB, lhS = (GH + 3) * kS, hgt = bigL.length * lhB + (smallL.length ? smallL.length * lhS + lhB * .25 : 0);
+        if (c.fx !== 'crop' && hgt > h * .85){ const f = h * .85 / hgt; kB = Math.max(3, Math.floor(kB * f)); kS = Math.max(3, Math.floor(kS * f)); }   // the whole block fits the tube
+        const big = bigL[0], o = bigL.length === 1 ? words.indexOf('O') : -1;
+        return Object.assign(c, { bigL, kB, smallL, kS, bw, ox: o >= 0 ? (big.xs[o] + 3.5) : bw / 2 });
       });
-      g.imageSmoothingEnabled = true;
+    }
+    /* draws a baked line centred at (x, y top), k per font pixel */
+    function line(b, x, y, k){ g.drawImage(b.face, 0, 0, b.w + 1, GH + 1, Math.round(x - (b.w + 1) * k / 2), Math.round(y), (b.w + 1) * k, (GH + 1) * k); }
+    function cardBlock(c, x, k, noSmall, noBig){                     // the big lines and the small ones under them, centred on the tube
+      const lhB = (GH + 2) * k, lhS = (GH + 3) * c.kS * (k / c.kB), hgt = c.bigL.length * lhB + (c.smallL.length ? c.smallL.length * lhS + lhB * .25 : 0);
+      let y = h * .46 - hgt / 2;
+      for (const b of c.bigL){ if (!noBig) line(b, x, y, k); y += lhB; }
+      y += lhB * .25;
+      if (!noSmall) for (const b of c.smallL){ line(b, x, y, c.kS * (k / c.kB)); y += lhS; }
+    }
+    /* returns 2 on an inverted frame (a bright event), 1 when a card is up, 0 when none */
+    function cardShow(a){
+      if (a < CARD0 || a >= CARD_END) return 0;
+      if (!cards || cardKey !== fitKey){ cardKey = fitKey; makeCards(); }
+      let i = 0; while (i < cards.length - 1 && a >= cards[i + 1].t0) i++;
+      const c = cards[i], p = a - c.t0, u = p / c.d, fresh = i !== cardI;
+      if (fresh){ cardI = i; if (c.fx === 'whip' || c.fx === 'smash') tearN = Math.max(tearN, 1); }   // some cuts tear for a frame
+      const inv = c.fx === 'goat' && p < .067;
+      g.fillStyle = inv ? SH[si(.92)] : P.bg; g.fillRect(0, 0, W, h);
+      g.imageSmoothingEnabled = false; g.save();
+      let k = c.kB, x = cx;
+      switch (c.fx){
+        case 'crop': { k = c.kB * (1 + .5 * (1 - sstep(0, .1, p))); x = cx + (.5 - u) * W * .18; cardBlock(c, x, k); break; }   // giant, cropped, drifting; a smash in
+        case 'through': {                            // accelerating into the O, and through it
+          const z2 = Math.exp(u * u * 3.2), ox = cx - (c.bw * k) / 2 + c.ox * k, oy = h * .46;
+          g.translate(ox, oy); g.scale(z2, z2); g.translate(-ox, -oy); cardBlock(c, x, k); break; }
+        case 'outline': {                            // a scanline wipe: alternate rows first, then the rest
+          cardBlock(c, x, k);
+          if (p < .1){ g.fillStyle = P.bg; const step = p < .05 ? 8 : 4, off = p < .05 ? 0 : 2; for (let y = off; y < h; y += step) rawFill(0, y, W, step / 2); }
+          break; }
+        case 'stretch': { const e = eOut(p / .2); g.translate(cx, h * .46); g.scale(1 + .9 * (1 - e), 1 - .35 * (1 - e)); g.translate(-cx, -h * .46); cardBlock(c, x, k, p < .12); break; }   // (its small line cut in a beat-fraction later)
+        case 'whip': {                               // a whip pan in, ghosts trailing
+          const e = eOut(p / .14), dx = W * (1 - e);
+          if (e < 1) for (let q = 3; q >= 1; q--){ g.globalAlpha = .18; g.save(); g.translate(dx + q * W * .06, 0); cardBlock(c, x, k); g.restore(); }
+          g.globalAlpha = 1; g.translate(dx, 0); cardBlock(c, x, k); break; }
+        case 'stutter': {                            // split in two, the halves jumping against each other, then locking
+          const st2 = p < .22 ? ((p * 30 | 0) % 2 ? 1 : -1) * k * 3 * (1 - p / .22) : 0;
+          g.save(); g.beginPath(); g.rect(0, 0, W, h * .46 + (GH + 1) * k / 2); g.clip(); g.translate(st2, 0); cardBlock(c, x, k); g.restore();
+          g.save(); g.beginPath(); g.rect(0, h * .46 + (GH + 1) * k / 2, W, h); g.clip(); g.translate(-st2, 0); cardBlock(c, x, k); g.restore();
+          break; }
+        case 'smash': { const e = sstep(0, .09, p), z2 = 2.4 - 1.4 * e; g.translate(cx, h * .46); g.scale(z2, z2); g.translate(-cx, -h * .46); cardBlock(c, x, k); break; }
+        default: {                                   // THE GOAT?: inverted on the cut, rays, then zooming through its O into what comes next
+          if (!inv) radial(cx, h * .46, W * .1, SH[si(.16)], .8);
+          const zt = sstep(c.d - .3, c.d, p), z2 = Math.exp(zt * zt * 3.4), ox = cx - (c.bw * k) / 2 + c.ox * k;
+          if (zt > 0){ g.translate(ox, h * .46); g.scale(z2, z2); g.translate(-ox, -h * .46); }
+          if (inv) g.globalCompositeOperation = 'destination-out';
+          cardBlock(c, x, k); g.globalCompositeOperation = 'source-over';
+        }
+      }
+      g.restore(); g.imageSmoothingEnabled = true;
+      lumAcc += W * h * .05;
       return inv ? 2 : 1;
     }
+
     const SECTION = 16, TURN = 2.2, HS = .1;   // eight bars at 120 bpm; a full turn opens each one
     const NB = 5, bp = new Float32Array(NB), bo = new Int8Array(NB), bY = new Float32Array(NB), bD = new Float32Array(NB);
     let lastT = -1, dist = 0, floorD = 0, kick = 0, nextBar = 0, lastKey = 0, keyGlint = -9;
@@ -1961,8 +1974,8 @@ M.createTerminal = function createTerminal(opts){
       /* the beat: the tune's clock while it plays (from the first touch), otherwise a quieter one of our own */
       bk = 0; bs = 0;
       if (mu && !still){
-        if (mt >= 0 || L >= 0){
-          const e = mu.env(mt >= 0 ? mt : L + mu.INTRO * mu.BAR), I = mt >= 0 ? (a < SLAM ? .4 : 1) : .45;
+        {
+          const e = mu.env(mt >= 0 ? mt : a), I = mt >= 0 ? (a < SLAM ? .55 : 1) : (a < SLAM ? .4 : .45);   // (song time is the picture's time)
           bk = e.kick * I; bs = e.snare * I;
           if (mt >= 0 && e.drop > .9 && lastDrop <= .9 && a > SLAM + 1){ dropAt = a; hitDrop = 1; tearN = 1; }   // the drop: one negative frame, then a torn one
           lastDrop = mt >= 0 ? e.drop : 0;
@@ -1992,7 +2005,7 @@ M.createTerminal = function createTerminal(opts){
       }
       if (Math.abs(spin) > 1e4){ spin %= TAU; }
       /* stars: drift, hyperspace behind the title, back to a drift; keys push them */
-      let speed = still ? 0 : a < SLAM ? 6 + 52 * sstep(1, 3.4, a) * (1 - sstep(3.6, 4.6, a)) + 300 * bump(a, 11.8, 14.2, .9) : 9;   // a gentle rush behind the title, hyperspace as the card is sucked away
+      let speed = still ? 0 : a < SLAM ? 8 + 50 * sstep(.4, 1.8, a) + 300 * bump(a, 7.9, 9.9, .7) : 9;   // a rush behind the title; hyperspace out of the last card
       speed += 70 * kick + 25 * bk;
       dist += speed * dt; floorD += (still ? 0 : 3 + 6 * kick) * dt;
       /* the logo */
@@ -2001,14 +2014,14 @@ M.createTerminal = function createTerminal(opts){
         alpha = sstep(T_LOGO, T_LOGO + .5, a);
         if (a < T_HOLD){                               // out of the vanishing point, tumbling, slowing as it comes
           const u = eOut((a - T_LOGO) / (T_HOLD - T_LOGO));
-          z = 900 + (1.9 * Z0 - 900) * u; yaw = (1 - u) * 3 * Math.PI - .2 * u; pit = -.28 + (1 - u) * TAU * .5; rol = (1 - u) * .6;
+          z = 170 + (1.5 * Z0 - 170) * u; yaw = (1 - u) * 3 * Math.PI - .2 * u; pit = -.28 + (1 - u) * TAU * .5; rol = (1 - u) * .6;
         } else if (a < T_RUSH){                       // a breath: it drifts back and winds up
           const u = sstep(T_HOLD, T_RUSH, a);
-          z = 1.9 * Z0 + .4 * Z0 * u; yaw = -.2 - .25 * u; pit = -.28 + .12 * u;
+          z = 1.5 * Z0 + .35 * Z0 * u; yaw = -.2 - .25 * u; pit = -.28 + .12 * u;
           sx = 1 + .1 * u; sy = 1 - .13 * u;            // the wind-up: it squashes
         } else {                                      // and rushes in on the beat
           const u = eIn((a - T_RUSH) / (SLAM - T_RUSH));
-          z = 2.3 * Z0 + (Z0 - 2.3 * Z0) * u; yaw = -.45 * (1 - u); pit = -.16 - .12 * u;
+          z = 1.85 * Z0 + (Z0 - 1.85 * Z0) * u; yaw = -.45 * (1 - u); pit = -.16 - .12 * u;
           const v = (a - T_RUSH) / (SLAM - T_RUSH); sx = 1.1 - .2 * v; sy = .87 + .33 * v; rushU = v;   // and stretches as it comes
         }
         y = logoY + (1 - alpha) * 2;
@@ -2033,7 +2046,7 @@ M.createTerminal = function createTerminal(opts){
       if (!still && a - keyGlint < .7) sweep = (a - keyGlint) / .7;
       yaw += oy + spin; pit += op; y += hop; z -= Z0 * .04 * bs; envT = T * .7;
       /* the camera, in the opening: tilted and craned, righting itself as the logo arrives */
-      const cam = still ? 0 : sstep(12.1, 12.9, a) * (1 - sstep(13.2, SLAM, a));
+      const cam = still ? 0 : sstep(7.9, 8.4, a) * (1 - sstep(8.8, SLAM, a));
       g.setTransform(rk, 0, 0, rk, 0, 0);
       g.fillStyle = P.bg; rawFill(0, 0, W, h);
       g.save();
@@ -2066,7 +2079,7 @@ M.createTerminal = function createTerminal(opts){
         silhouette(P.bg, true); radial(lsx, lsy, lr * 1.05, P.bg, 1);
         g.restore();
       }
-      if (!still){ titleCard(a); aboutCard(a); goatCard(a); }
+      let card = 0; if (!still){ titleCard(a); card = cardShow(a); }
       if (flash > .01 && hit !== 1){ g.globalAlpha = flash; g.fillStyle = P.bright; g.fillRect(0, 0, W, h); g.globalAlpha = 1; }
       if (tearN > 0 && hit !== 1){                   // a torn frame: alternate bands of the picture slip sideways, one frame
         tearN--; g.setTransform(1, 0, 0, 1, 0, 0);
@@ -2074,8 +2087,8 @@ M.createTerminal = function createTerminal(opts){
         for (let k = 1; k < 11; k += 2){ const dx = Math.round(Math.sin(k * 12.9898 + a) * off.width * .035); g.drawImage(off, 0, k * bh2, off.width, bh2, dx, k * bh2, off.width, bh2); }
         g.setTransform(rk, 0, 0, rk, 0, 0);
       }
-      if (!still && a < .42){                          // the raster opens out from a line
-        const lw = W * sstep(0, .12, a), oh = h * .5 * Math.pow(sstep(.1, .42, a), 2), m = h * .5;
+      if (!still && a < .3){                           // the raster opens out from a line
+        const lw = W * sstep(0, .08, a), oh = h * .5 * Math.pow(sstep(.06, .3, a), 2), m = h * .5;
         g.fillStyle = P.bg; rawFill(0, 0, W, Math.max(0, m - oh)); rawFill(0, m + oh, W, h - m - oh);
         g.fillStyle = P.bright; g.fillRect(cx - lw / 2, m - oh - 2, lw, 3); if (oh > 2) g.fillRect(cx - lw / 2, m + oh - 1, lw, 3);
       }

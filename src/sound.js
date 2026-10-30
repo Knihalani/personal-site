@@ -324,13 +324,13 @@ Engine.prototype.event = function (name, when){
    been touched (the AudioContext unlocked by a gesture) and only when not muted. env(t) gives the visuals the same
    beat (kick, snare, bar, the drop) from the same pattern, with or without sound. */
 const MUSIC = (() => {
-  const BPM = 120, STEP = 60 / BPM / 4, BAR = STEP * 16, INTRO = 8, LOOP = 16;   // (the intro is the landing's opening: 16 s)
+  const BPM = 120, STEP = 60 / BPM / 4, BAR = STEP * 16, INTRO = 6, LOOP = 16;   // (the intro is the landing's opening: 12 s)
   const mf = m => 440 * Math.pow(2, (m - 69) / 12);
   const PC = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
   const nm = s => { const m = /^([A-G]#?)(\d)$/.exec(s); return m ? PC[m[1]] + 12 * (+m[2] + 1) : null; };
   /* chords: root (bass octave) and quality */
   const CH = { Am: [45, 0], F: [41, 1], C: [48, 1], G: [43, 1], E: [40, 1], Em: [40, 0], Dm: [38, 0] };
-  const INTRO_CH = ['Am', 'Am', 'F', 'G', 'Am', 'F', 'G', 'E'];
+  const INTRO_CH = ['Am', 'F', 'C', 'G', 'F', 'E'];
   const A_CH = ['Am', 'F', 'C', 'G', 'Am', 'F', 'G', 'E'], B_CH = ['F', 'G', 'Em', 'Am', 'Dm', 'Am', 'E', 'E'];
   /* the lead, in eighths: a note, '-' holds, '.' rests */
   const LEAD = [
@@ -340,16 +340,17 @@ const MUSIC = (() => {
     'F5 . D5 . A4 . D5 F5', 'E5 . C5 . A4 . C5 E5', 'G#5 . E5 . B4 . E5 G#5', 'B5 - - - - - . .',
   ].map(b => b.split(' ').map(x => x === '-' ? -1 : x === '.' ? 0 : nm(x)));
   const chordAt = bar => bar < INTRO ? INTRO_CH[bar] : ((bar - INTRO) % LOOP < 8 ? A_CH : B_CH)[(bar - INTRO) % 8];
-  const tones = name => { const [r, q] = CH[name]; return [r, r + (q ? 4 : 3), r + 7]; };
+  const TN = [0, 0, 0], tones = name => { const c = CH[name]; TN[0] = c[0]; TN[1] = c[0] + (c[1] ? 4 : 3); TN[2] = c[0] + 7; return TN; };   // (one array, reused: the scheduler makes no garbage)
   /* the drums, per sixteenth: k kick, s snare, h hat, o open hat */
+  const DR = { k: 0, s: 0, h: 0, o: 0, c: 0 };
   const drums = (bar, st) => {
-    const r = { k: 0, s: 0, h: 0, o: 0, c: 0 };
+    const r = DR; r.k = r.s = r.h = r.o = r.c = 0;   // (one object, reused)
     if (bar < INTRO){
-      if (bar >= 4 && bar < 6 && (st === 0 || st === 8)) r.k = .75;   // ABOUT: a half-time pulse
-      if (bar >= 6 && st % 4 === 0) r.k = .9;                         // the build: four on the floor
-      if (bar === 6 && (st === 4 || st === 12)) r.s = .6;
-      if (bar === 7) r.s = .15 + .55 * st / 15;                       // the roll into the drop (and the slam)
-      if (bar >= 3) r.h = (bar >= 6 ? st % 2 === 0 : st % 4 === 2) ? .3 : 0;
+      if (bar === 0 ? st === 0 || st === 8 : st % 4 === 0) r.k = bar === 0 ? .8 : .95;   // driving from the start: the name, then four on the floor under the cards
+      if (bar >= 1 && bar < 5 && (st === 4 || st === 12)) r.s = .8;
+      if (bar === 5) r.s = .2 + .6 * st / 15;                         // the roll into the drop (and the slam)
+      r.h = (bar >= 4 ? st % 2 === 0 : st % 4 === 2) ? .32 : 0;
+      if (bar >= 1 && bar < 4 && st === 14) r.o = .5;
       return r;
     }
     const lb = (bar - INTRO) % LOOP, B = lb >= 8;
@@ -443,13 +444,13 @@ const MUSIC = (() => {
     const cut = intro ? 900 + 2200 * Math.pow((bar * 16 + st) / (INTRO * 16), 1.4) : 2600;
     tone('pw:p12', mf(m), at, STEP * .7, intro ? .14 : .045, cut, 1.2, bus, { sus: .4, rel: .05 });
     /* bass: eighths, root with an octave jump, plucked */
-    if (st % 2 === 0 && bar >= 2){
+    if (st % 2 === 0){
       const r = ch[0], bm = [r, r, r + 12, r, r, r + 7, r + 12, r + 7][st / 2];   // (A2-ish: low enough to anchor, high enough for a laptop speaker)
       tone('sawtooth', mf(bm), at, STEP * 1.6, .17, 1500, 3, bus, { cutTo: 380, cutT: .16, sus: .5, rel: .06 });
     }
     /* lead */
-    if ((!intro || bar >= 4) && st % 2 === 0){       // (in the intro's second half the theme is previewed, darker and an octave down)
-      const L = LEAD[intro ? bar - 4 : (bar - INTRO) % LOOP], i = st / 2, note = L[i];
+    if ((!intro || bar >= 2) && st % 2 === 0){       // (from bar 2 of the intro the theme is previewed, darker and an octave down)
+      const L = LEAD[intro ? bar - 2 : (bar - INTRO) % LOOP], i = st / 2, note = L[i];
       if (note > 0){ let k = 1; while (i + k < 8 && L[i + k] === -1) k++;
         if (intro) tone('pw:p25', mf(note - 12), at, STEP * 2 * k - .02, .07, 1100, .7, bus, { vib: 6, send: .3, sus: .7, rel: .14 });
         else tone('pw:p25', mf(note), at, STEP * 2 * k - .02, .1, note > 81 ? 1700 : 2300, .7, bus, { vib: 8, send: .4, sus: .7, rel: .14 }); }
