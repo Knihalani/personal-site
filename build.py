@@ -186,12 +186,39 @@ CSP = '; '.join([
     "base-uri 'none'",
     "form-action 'self'",
 ])
+# one real, indexable page per section (/about, /j, ...): the same site, opened on that page, with its own title,
+# description and canonical URL (main.js runs the page named by the path)
+def _bl(*keys): return ' '.join(b.rstrip('.') + '.' for b in BULLETS if any(k.lower() in b.lower() for k in keys))
+ROUTES = {
+    'about':   (f'About {NAME}', _bl('y/o', 'Hong Kong', 'Cofounder of J', 'Founder of Eden', 'squash')),
+    'j':       (f'{J["title"]} · {NAME}', J['body'].split('\n\n')[0].rstrip('.') + '.'),
+    'eden':    (f'{E["title"]} · {NAME}', f'{E["line"]}. {E["body"]}'),
+    'contact': (f'Contact {NAME}', _bl('Reach out')),
+    'links':   (f'{NAME} on ' + ', '.join(n for n, k in (('LinkedIn', 'linkedin'), ('X', 'x'), ('GitHub', 'github')) if LK.get(k)), DESC),
+}
+if any(p.get('status') == 'published' for p in C['writing'].get('posts', [])): ROUTES['writing'] = (f'Writing · {NAME}', f'Writing by {NAME}.')
+def routed(r, title, desc):
+    pg = page
+    for pat, val in ((r'<title>[^<]*</title>', f'<title>{e(title)}</title>'),
+                     (r'<meta name="description" content="[^"]*">', f'<meta name="description" content="{e(desc)}">'),
+                     (r'<link rel="canonical" href="[^"]*">', f'<link rel="canonical" href="{SITE}/{r}">'),
+                     (r'<meta property="og:url" content="[^"]*">', f'<meta property="og:url" content="{SITE}/{r}">'),
+                     (r'<meta property="og:title" content="[^"]*">', f'<meta property="og:title" content="{e(title)}">'),
+                     (r'<meta property="og:description" content="[^"]*">', f'<meta property="og:description" content="{e(desc)}">'),
+                     (r'<meta name="twitter:title" content="[^"]*">', f'<meta name="twitter:title" content="{e(title)}">'),
+                     (r'<meta name="twitter:description" content="[^"]*">', f'<meta name="twitter:description" content="{e(desc)}">')):
+        pg, n = re.subn(pat, lambda m: val, pg, count=1)
+        if not n: raise SystemExit(f'build: {r}: no {pat}')
+    return pg
 WEB = out != root   # the repo-root build (index.html, site.html) skips the deploy-only files
 for f in (root / 'static').glob('*') if WEB else []: shutil.copyfile(f, out / f.name)
 today = datetime.date.today().isoformat()
+for r, (t, d) in ROUTES.items() if WEB else []: (out / f'{r}.html').write_text(routed(r, t, d), encoding='utf-8')
 WEB and (out / 'robots.txt').write_text(f'User-agent: *\nAllow: /\n\nSitemap: {SITE}/sitemap.xml\n', encoding='utf-8')
 WEB and (out / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    f'  <url><loc>{SITE}/</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>\n</urlset>\n', encoding='utf-8')
+    f'  <url><loc>{SITE}/</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>\n'
+    + ''.join(f'  <url><loc>{SITE}/{r}</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>\n' for r in ROUTES)
+    + '</urlset>\n', encoding='utf-8')
 WEB and (out / 'site.webmanifest').write_text(json.dumps({'name': NAME, 'short_name': NAME.split()[0], 'start_url': '/', 'display': 'standalone',
     'background_color': '#0a0f0a', 'theme_color': '#0a0f0a',
     'icons': [{'src': '/icon-512.png', 'sizes': '512x512', 'type': 'image/png'}, {'src': '/apple-touch-icon.png', 'sizes': '180x180', 'type': 'image/png'}]}, indent=1), encoding='utf-8')
