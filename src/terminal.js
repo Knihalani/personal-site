@@ -1521,8 +1521,12 @@ M.createTerminal = function createTerminal(opts){
        words 0.55 s or more). The slam lands at 12.6 s */
     const SEG = [[1.15, .02, .22], [1.55, .02, .22], [1.95, 1.2, .6], [3.53, .008, .408], [3.86, .02, .42], [4.3, .02, .22],
       [4.45, .6, .4], [5.54, .02, .42], [6.0, .02, .22], [6.32, .02, .22], [7.52, .02, .22], [7.6, .4, .2]];
-    function toFilm(r){ let off = 0; for (const [f0, df, dr] of SEG){ const r0 = f0 + off; if (r < r0) break; if (r < r0 + dr) return f0 + (r - r0) * df / dr; off += dr - df; } return r - off; }
-    function toReal(f){ let off = 0; for (const [f0, df, dr] of SEG){ if (f < f0) break; if (f < f0 + df) return f0 + off + (f - f0) * dr / df; off += dr - df; } return f + off; }
+    /* inside a quickening the film's speed eases up from 1x and back down (a cubic with slope 1 at both ends: no jolt
+       in the camera's speed at either edge); a hold is a straight creep */
+    const segF = (u, df, dr) => { if (dr >= df) return u * df; const m = dr / df; return df * (u * u * u * (2 * m - 2) + u * u * (3 - 3 * m) + u * m); };
+    const segR = (v, df, dr) => { if (dr >= df) return v / df * dr; let lo = 0, hi = 1; for (let k = 0; k < 40; k++){ const mid = (lo + hi) / 2; if (segF(mid, df, dr) < v) lo = mid; else hi = mid; } return (lo + hi) / 2 * dr; };
+    function toFilm(r){ let off = 0; for (const [f0, df, dr] of SEG){ const r0 = f0 + off; if (r < r0) break; if (r < r0 + dr) return f0 + segF((r - r0) / dr, df, dr); off += dr - df; } return r - off; }
+    function toReal(f){ let off = 0; for (const [f0, df, dr] of SEG){ if (f < f0) break; if (f < f0 + df) return f0 + off + segR(f - f0, df, dr); off += dr - df; } return f + off; }
     /* the time the holds have added by real time r (the backdrop's clock is S plus this), and by film time f */
     function holdX(r){ let off = 0, x = 0; for (const [f0, df, dr] of SEG){ const r0 = f0 + off; if (r < r0) break; if (dr > df) x += Math.min(r - r0, dr) * (1 - df / dr); off += dr - df; } return x; }
     function holdXf(f){ let x = 0; for (const [f0, df, dr] of SEG){ if (f < f0 + df) break; if (dr > df) x += dr - df; } return x; }
