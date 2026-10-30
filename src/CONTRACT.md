@@ -72,7 +72,7 @@ motion stay in sync. Unknown codes: pick the nearest key or just bob a finger.
 
 ## terminal.js (terminal agent)
 ```js
-MAC.createTerminal({ content, aspect, cols? }) -> {   // cols: 54 on desktop, 40 on phones in portrait, up to 84 on wider touch screens
+MAC.createTerminal({ content, aspect, cols?, width? }) -> {   // width: phones ask for a canvas as wide as the tube in device pixels (720..1280)   // cols: 54 on desktop, 40 on phones in portrait, up to 84 on wider touch screens
   canvas,                       // 2D canvas, redrawn only when something changes
   handleKey(e: KeyboardEvent) -> bool,   // true if consumed (call e.preventDefault()); false lets Tab move focus
   handleKeyUp(e),               // passed to a running app's keyUp (games)
@@ -107,7 +107,9 @@ the name, the role line and a boot-disk menu of big rows (about, j, eden, writin
 tapped or chosen by number, the arrows and return; a returning visitor lands on the card with "welcome back", and `demo`
 plays the intro again. Home and back on phones are this card. Contact on phones gives each address [email] (mailto) and
 [copy] (one confirmation: the toast), the profiles inline. `leave()` calls `MAC.pageTurn(canvas)` when main.js offers it
-(the phone's afterglow). Test hooks: `intro` and `home` (read-only). On desktops:
+(the phone's afterglow). Test hooks: `intro` and `home` (read-only). On phones the card carries a slowly turning KN badge
+(its own small vector drawing, not the intro's logo), and when an animation is all that changes and nothing scrolls,
+only its rows are redrawn (the brightness tally `lum` swaps that drawing's share, so it stays the whole screen's). On desktops:
 The landing (every load, until the first command; deep links skip it) is a demoscene-style intro drawn on the canvas:
 a title card, then an extruded vector "KN" over copper bars, a starfield and a perspective floor, with a sine scroller of
 `MAC.CONTENT` facts. Keys typed while it shows flash a bar and kick the logo; reduced motion gets one still frame. It
@@ -121,7 +123,10 @@ Creates the scene, terminal and typist; routes keydown/keyup to terminal + typis
 `flat()` is the terminal-only layout: phones, and desktops without WebGL or three.js, after a context loss or
 repeated render errors. Desktops get one centred column, unchanged. Touch screens get the computer in the hand:
 - the case (built by main.js into #stage): the tube's recess, a KN-84 model plate, a floppy slot whose lamp flickers with
-  `MAC.sound.event('disk')`, the sound lamp (#mute) behind a lens; a fine grain from one inline SVG turbulence (static);
+  `MAC.sound.event('disk')`, the sound lamp (#mute) behind a lens;
+  the bloom is redrawn only when the picture settles (hidden while the tube animates, never under a finger), a tap on
+  the glass glows under the finger, the current page's strip key stays latched down, and the page shell shows the case
+  (not a black page) while the fonts load; a fine grain from one inline SVG turbulence (static);
   Archivo (condensed for the case's lettering) loads on phones only (head.html);
 - the tube (#tube, built by main.js): the canvas in a beige bezel, with a bloom (the frame drawn at 1/6 size into a second
   canvas, blurred by CSS, screen-blended; one drawImage per changed frame), scanlines, vignette and glass in one CSS overlay,

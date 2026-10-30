@@ -211,14 +211,14 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   let term = prev || null, cv = null, bw = 0, bh = 0, shift = 0, rub = 0;
   /* phones: the tube (the canvas, its bloom, the glass over them) and the keyboard. #kbd stays the real text field
      for assistive tech, but never brings up the phone's keyboard */
-  let tube = null, scr = null, bloom = null, bx = null, keys = null, kbTouch = { t: -1e9, x: 0, y: 0 };
+  let tapGlow = null, tube = null, scr = null, bloom = null, bx = null, keys = null, kbTouch = { t: -1e9, x: 0, y: 0 };
   /* the click a browser may send where a key's touch ended, when the key folded or changed under it */
   const strayClick = e => performance.now() - kbTouch.t < 350 && Math.hypot(e.clientX - kbTouch.x, e.clientY - kbTouch.y) < 20;
   if (TOUCH){
     kbd.setAttribute('inputmode', 'none'); kbd.setAttribute('virtualkeyboardpolicy', 'manual');
     tube = D.createElement('div'); tube.id = 'tube'; scr = D.createElement('div'); scr.className = 'scr';
     bloom = D.createElement('canvas'); bloom.className = 'bloom'; bx = bloom.getContext('2d');
-    tube.appendChild(scr);
+    tube.appendChild(scr); if (!prev) scr.style.visibility = 'hidden';   // nothing on the glass until the fonts are in (no fallback flash): then it powers on
     /* the case's details: the tube's recess, the model plate, the floppy slot and its lamp */
     const part = (cls, html) => { const d = D.createElement('div'); d.className = cls; if (html) d.innerHTML = html; stage.appendChild(d); return d; };
     part('recess'); stage.appendChild(tube);
@@ -233,13 +233,11 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     /* a page turn: the old page, copied once, glows green and fades over ~300 ms as the new one types in */
     if (!REDUCED){
       const ghost = D.createElement('canvas'); ghost.className = 'ghost'; scr.appendChild(ghost); const gx = ghost.getContext('2d');
-      let gt = 0;
       M.pageTurn = src => {
         if (!src || !src.width) return;
         if (ghost.width !== src.width || ghost.height !== src.height){ ghost.width = src.width; ghost.height = src.height; }
         try { gx.drawImage(src, 0, 0); } catch (e){ return; }
-        ghost.classList.remove('fade'); ghost.style.opacity = '1'; void ghost.offsetWidth; ghost.classList.add('fade'); ghost.style.opacity = '0';
-        clearTimeout(gt); gt = setTimeout(() => ghost.classList.remove('fade'), 400);
+        if (ghost.animate) ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: 'cubic-bezier(.3,.6,.4,1)' });   // (no reflow to restart it)
       };
     }
   }
@@ -265,7 +263,11 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       cols = W < 420 ? 40 : W < 600 ? 46 : 54;
     }
     if (term && term.resize) term.resize(W / H, cols);
-    else { term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols }); if (cv) cv.remove(); }
+    else {
+      /* phones: a canvas as wide as the tube in device pixels (portrait), within 720..1280 */
+      const width = TOUCH ? Math.max(720, Math.min(1280, Math.round(Math.min(screen.width || innerWidth, screen.height || innerHeight) * (devicePixelRatio || 2)))) : undefined;
+      term = M.createTerminal({ content: M.CONTENT, aspect: W / H, cols, width }); if (cv) cv.remove();
+    }
     cv = term.canvas; cv.className = 'phone-term'; cv.style.width = W + 'px'; cv.style.height = H + 'px';
     if (TOUCH){
       if (cv.parentNode !== scr){ scr.appendChild(cv); scr.appendChild(bloom); }
@@ -275,7 +277,26 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   };
   /* the phosphor's bloom: the frame, shrunk to a sixth and blurred by the compositor, laid over it in screen mode.
      One cheap draw per changed frame */
-  function glow(){ if (!bx) return; try { bx.drawImage(cv, 0, 0, bloom.width, bloom.height); } catch (e){} }
+  /* the bloom is drawn when the picture settles: the downscale is the costliest thing a phone does in a frame, so while
+     the tube animates (the intro, a game, a fling) the glow fades out instead of chasing every frame, and comes back
+     ~150 ms after the last change */
+  let glowDue = false, lastChange = -1e9, runFrom = -1e9, glowOn = true;
+  const glowShow = on => { if (on !== glowOn){ glowOn = on; bloom.style.opacity = on ? '' : '0'; } };
+  function glow(){
+    if (!bx) return;
+    const t = performance.now();
+    if (t - lastChange > 250) runFrom = t;   // a still picture before this change
+    lastChange = t; glowDue = true;
+    if (t - runFrom > 120) glowShow(false);   // changing frame after frame: animating
+  }
+  let glowAt = -1e9;
+  function glowSettle(){
+    const t = performance.now();
+    if (!glowDue || t - lastChange < 150 || t - glowAt < 600 || ty != null || fling) return;   // (a blinking cursor alone: a redraw a second at most; never under a finger or a fling)
+    glowDue = false; glowAt = t;
+    try { bx.imageSmoothingQuality = 'low'; bx.drawImage(cv, 0, 0, bloom.width, bloom.height); } catch (e){}
+    glowShow(true);
+  }
   build();
   if (TOUCH) keys.fold(true);   // home opens on the title card, the keyboard folded until a letter is wanted
   if (/[?&]debug\b/.test(location.search)) M._term = term;   // test hook (see CONTRACT.md), never otherwise
@@ -303,7 +324,14 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   });
   addEventListener('keyup', e => { if (keys) keys.echo(e.code, false); if (!reading() && term.handleKeyUp) term.handleKeyUp(e); });
   addEventListener('wheel', e => { if (reading() || !term.scroll || e.ctrlKey) return; term.scroll(wheelPx(e)); e.preventDefault(); }, { passive: false });
-  stage.addEventListener('pointerdown', () => { unlock(); });
+  stage.addEventListener('pointerdown', e => {
+    unlock();
+    if (!tube || REDUCED || e.pointerType === 'mouse') return;   // phones: the phosphor answers under the finger
+    const r = tube.getBoundingClientRect(); if (e.clientY > r.bottom || e.clientY < r.top) return;
+    if (!tapGlow){ tapGlow = D.createElement('i'); tapGlow.className = 'tapglow'; tube.appendChild(tapGlow); }
+    tapGlow.style.left = (e.clientX - r.left) + 'px'; tapGlow.style.top = (e.clientY - r.top) + 'px';
+    if (tapGlow.animate) tapGlow.animate([{ opacity: 1, transform: 'scale(.35)' }, { opacity: 0, transform: 'scale(1.15)' }], { duration: 420, easing: 'ease-out' });   // (no reflow to restart it)
+  }, { passive: true });
   stage.addEventListener('pointermove', e => {
     if (e.pointerType !== 'mouse') return;
     const r = cv.getBoundingClientRect(), u = (e.clientX - r.left) / r.width, v = (e.clientY - r.top) / r.height;
@@ -418,12 +446,13 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   const frame = now => {
     requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt;
     let changed = false;
-    try { if ((changed = term.update(dt, T))){ place(); glow(); } } catch (e){ oops(e); }
+    try { if ((changed = term.update(dt, T))){ place(); glow(); } else if (glowDue) glowSettle(); } catch (e){ oops(e); }
     try { tick(changed); } catch (e){ oops(e); }
   };
   whenReady(() => {
     if (!prev) fromHash(); place(); if (!TOUCH) focus(); requestAnimationFrame(frame);
-    if (TOUCH && !REDUCED && !prev){ scr.classList.add('on'); scr.addEventListener('animationend', () => scr.classList.remove('on'), { once: true }); }   // the tube warms up
+    if (TOUCH) scr.style.visibility = '';
+    if (TOUCH && !REDUCED && !prev){ tube.classList.add('on'); setTimeout(() => tube.classList.remove('on'), 1100); scr.classList.add('on'); scr.addEventListener('animationend', () => scr.classList.remove('on'), { once: true }); }   // the tube warms up
   });
 
   /* ---- phones: the keyboard. The desk's board, drawn in CSS (head.html): QWERTY, two layers of digits and symbols,
@@ -773,7 +802,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       if (reading()){ try { M.reader.close(); } catch (e){} return; }
       if (term.canBack) term.run('back');
     });
-    let wasReading = false, n = 0, wasApp = '', exitAt = 0, lastPage = '';
+    let wasReading = false, n = 0, wasApp = '', exitAt = 0, lastPage = '', sugAt = 0;
     return changed => {
       const r = reading(); if (r !== wasReading){ wasReading = r; D.body.classList.toggle('reading', r); }
       /* each app gets its controls: a game its own pad (and the keyboard comes up for it); the editor and the typing
@@ -798,9 +827,13 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       if (pg !== lastPage){ if (pg) keys.fold(true); lastPage = pg; }
       placeMute();
       const m = modeNow();
-      if (m !== mode){ render(m); fits(); }
+      /* the strip: at once when it changes kind (pages, words, an app); while typing, the words a beat after the keys stop
+         (the matching runs over every command, and a fast thumb should not wait on it) */
+      if (m !== mode){
+        const now = performance.now(), typingOn = m.startsWith('sug:') && mode && mode.startsWith('sug:');
+        if (!typingOn || now - sugAt > 90){ render(m); fits(); sugAt = now; }
+      }
       if (changed || !(n++ % 15)){
-        fits();
         syncHistory();
       }
     };

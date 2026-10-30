@@ -417,7 +417,9 @@ M.createTerminal = function createTerminal(opts){
   const C = (opts && opts.content) || M.CONTENT || {};
   if (opts && opts.cols >= 32) COLS = opts.cols | 0;
   let aspect = opts && opts.aspect > 0.3 && opts.aspect < 8 ? opts.aspect : 4 / 3;   // (up to 8: a phone on its side, over its keyboard)
-  const W = WIDTH; let H = Math.round(WIDTH / aspect);   // (resize() changes H, the grid and the font size)
+  /* phones may ask for a narrower canvas, as wide as the tube in device pixels: crisper (no downscale) and far fewer
+     pixels to paint and upload each frame */
+  const W = opts && opts.width >= 600 ? Math.min(WIDTH, opts.width | 0) : WIDTH, PX = W / WIDTH; let H = Math.round(W / aspect);   // (resize() changes H, the grid and the font size)
   const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d', { alpha: false });
   /* VT323 has an fi/fl ligature that would eat a grid cell: switch shaping extras off where the canvas allows,
@@ -440,10 +442,10 @@ M.createTerminal = function createTerminal(opts){
   const diskSound = () => { const t = performance.now(); if (t - lastDisk > 400){ lastDisk = t; sfx('disk'); } };
 
   /* ---- grid ---- */
-  const PADX = 52; let cw = (W - 2 * PADX) / COLS;
+  const PADX = Math.round(52 * PX); let cw = (W - 2 * PADX) / COLS;
   let advance = 0.4, fs = cw / advance;                 // VT323 advance is 0.4em; re-measured once loaded
   let ch = Math.round(fs * LINE);
-  let ROWS = Math.floor((H - 64) / ch);
+  let ROWS = Math.floor((H - Math.round(64 * PX)) / ch);
   let PADY = Math.round((H - ROWS * ch) / 2);
   const font = (k = 1) => (fs * k).toFixed(2) + 'px ' + FONT;
   /* g.font is only assigned when it changes: the strings are built once per size (a font set is parsed every time) */
@@ -841,7 +843,8 @@ M.createTerminal = function createTerminal(opts){
   let homeMenu = null;
   function phoneHome(o, note){
     const tight = COLS >= 50;   // a phone on its side: a short tube, so fewer blank rows
-    if (!tight) o.blank();
+    if (!tight && ROWS >= 25) o.blank().viz(3, knBadge, () => 12);   // a tall tube: the KN badge, turning slowly over the name
+    else if (!tight) o.blank();
     o.big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' \u00b7 '), 'n']);
     if (note && tight) o.line([note, 'd']); o.blank();
     if (note && !tight) o.line([note, 'd']).blank();
@@ -857,6 +860,27 @@ M.createTerminal = function createTerminal(opts){
     o.blank().line(['tap a row, or type help', 'f']).blank();
     homeMenu = m; paintHome();
     return o;
+  }
+  /* the title card's badge: the letters K N as slanted outlines, turning slowly, a light running along them (its own
+     few lines of vector work; the intro's logo is a different, heavier thing) */
+  const KN_OUT = [
+    [[0, -4], [1.9, -4], [1.9, -1.2], [4, -4], [6.4, -4], [3.3, .3], [6.2, 4], [3.8, 4], [1.9, 1.3], [1.9, 4], [0, 4]],
+    [[0, -4], [1.9, -4], [1.9, .3], [4.5, -4], [6.4, -4], [6.4, 4], [4.5, 4], [4.5, -.3], [1.9, 4], [0, 4]],
+  ];
+  function knBadge(x, y, w, h, age, t){
+    const sc = h / 10.5, cy = y + h / 2, turn = REDUCED ? 1 : Math.cos(t * .45) * .22 + .78, shear = .24;
+    const pt = (px, py, ox) => [x + (ox + px * turn + py * shear) * sc, cy - py * sc];   // (y up, as drawn)
+    const run = REDUCED ? -1 : (t * .35) % 1.6 - .3;   // the light along the letters, from the left
+    g.lineJoin = 'round';
+    KN_OUT.forEach((poly, li) => {
+      const ox = .6 + li * 7.6;
+      for (const [dz, col, lw] of [[.55, P.faint, 2.5], [0, P.bright, 3]]){   // a faint copy behind: depth
+        g.beginPath(); poly.forEach(([px, py], i) => { const q = pt(px, py, ox); i ? g.lineTo(q[0] + dz * sc, q[1] + dz * sc) : g.moveTo(q[0] + dz * sc, q[1] + dz * sc); }); g.closePath();
+        g.strokeStyle = col; g.lineWidth = lw; g.stroke();
+      }
+      const f = run - li * .25;
+      if (f > 0 && f < 1){ const q = pt(3, 0, ox); const gr = g.createLinearGradient(q[0] - 6 * sc, 0, q[0] + 6 * sc, 0); gr.addColorStop(Math.max(0, f - .15), 'rgba(240,255,232,0)'); gr.addColorStop(f, 'rgba(240,255,232,.5)'); gr.addColorStop(Math.min(1, f + .15), 'rgba(240,255,232,0)'); g.fillStyle = gr; g.beginPath(); poly.forEach(([px, py], i) => { const q2 = pt(px, py, ox); i ? g.lineTo(q2[0], q2[1]) : g.moveTo(q2[0], q2[1]); }); g.closePath(); g.fill(); }
+    });
   }
   function paintHome(){
     const m = homeMenu; if (!m) return;
@@ -1296,7 +1320,7 @@ M.createTerminal = function createTerminal(opts){
     const all = !!argv[1];
     const exists = n => (M.TERM.cmds[n] && !M.TERM.cmds[n].hidden && typeof M.TERM.cmds[n].run === 'function') || (M.TERM.apps[n] && typeof M.TERM.apps[n].start === 'function');
     if (!all){
-      const groups = HELP_TOP.map(([label, what, names]) => [label, what, names.filter(exists)]).filter(x => x[2].length);
+      const groups = HELP_TOP.map(([label, what, names]) => [label, what, names.filter(n => exists(n) && !(TAP && n === 'writing' && !posts().length))]).filter(x => x[2].length);
       const also = HELP_ALSO.filter(exists);
       if (!io.tty){ io.write(groups.map(([l, w, ns]) => l + ' (' + w + ')\n  ' + ns.join('  ')).join('\n') + '\nalso\n  ' + also.join('  ') + '\n\nhelp all for everything\n'); return; }
       const o = out(); o.blank().head('help').blank();
@@ -2417,15 +2441,16 @@ M.createTerminal = function createTerminal(opts){
       }
     }
     /* a command chip types and runs its command; an inline link opens. A finger gets a little slack. */
-    const slack = cw * 0.6;
+    const slack = cw * (TAP ? 1.2 : 0.6), vs = TAP ? ch * 0.3 : 4;   // (a fingertip is wider than a pointer)
     for (const h of drawnHits){
-      if (px < h.x0 - slack || px > h.x1 + slack || py < h.top - 4 || py >= h.bot + 4) continue;
+      if (px < h.x0 - slack || px > h.x1 + slack || py < h.top - vs || py >= h.bot + vs) continue;
       if (h.link.stop){ if (job && !app) interrupt(); touched(); return true; }
       if (h.link.bottom){ toBottom(); dirty = true; return true; }
       if (h.link.mail){ try { const a = document.createElement('a'); a.href = 'mailto:' + h.link.mail; document.body.appendChild(a); a.click(); a.remove(); } catch (e){} touched(); return true; }   // phones: [email] opens the mail app
       if (h.link.copy){ const ok = copyText(h.link.copy); sfx('beep'); toast(ok, h.link.copy); touched(); return true; }   // phones: [copy], one note (the toast)
       if (h.link.cmd){
         if (app || job) return false;
+        if (TAP && homeOn()){ const i = homeMenu.items.findIndex(it => it[0] === h.link.cmd); if (i >= 0 && i !== homeMenu.sel){ homeMenu.sel = i; paintHome(); draw(); } }   // the bar on the row tapped (the page turn glows it)
         nudgeOff = true; touched();
         nav(h.link.cmd);
         sfx('beep'); return true;
@@ -3046,7 +3071,7 @@ M.createTerminal = function createTerminal(opts){
       let s = sp[0]; if (s.length > left) s = s.slice(0, left); left -= s.length;
       const link = sp[2];
       const selected = sp[1] === 'i';
-      if (selected){ g.fillStyle = P.normal; g.fillRect(X(col) - 3, top + 1, s.length * cw * k + 6, ch * k - 2); }
+      if (selected){ const solid = link && link.nl; g.fillStyle = P.normal; g.fillRect(X(col) - 3, top + (solid ? 0 : 1), s.length * cw * k + 6, ch * k - (solid ? 0 : 2)); }   // (the phone menu's bar: one solid block over its two rows)
       const hov = link && !selected && hoverKey && hoverKey === spanKeyOf(X(col), top);
       setFont(k); g.fillStyle = selected ? P.bg : hov ? P.bright : color(sp[1]);
       if (k === 1 && SPAN_VEC.test(s)){                // arrows and the lock, drawn: VT323 has neither
@@ -3158,6 +3183,20 @@ M.createTerminal = function createTerminal(opts){
     }
   }
   let drawnCards = [], drawnHits = [];   // what is on screen and can be clicked or tapped
+  const liveViz = [];                    // phones: the animated drawings on screen, and where (redrawn alone when only they move)
+  function drawVizOnly(){
+    for (const v of liveViz){
+      /* the brightness tally (lum) swaps this drawing's old share for its new one, so it stays the whole screen's */
+      const a0 = lumAcc;
+      g.save(); g.beginPath(); g.rect(0, v.top, W, v.hh); g.clip();
+      g.fillStyle = P.bg; g.fillRect(0, v.top, W, v.hh);
+      const a1 = lumAcc;
+      v.r.draw(X(2), v.top, X(COLS) - X(2), v.hh, now - v.r.t0, now);
+      g.restore();
+      const part = lumAcc - a1; lumAcc = a0 - (v.r._lum || 0) + part; v.r._lum = part;
+    }
+    curFont = '';
+  }
   let hoverKey = '', lastFirst = -1, lastTotal = 0;   // the clickable thing under the mouse; the view, to notice it move
   const cardKeyOf = (top, it) => 'c' + Math.round(top) + ':' + it.ai, spanKeyOf = (x0, top) => 's' + Math.round(x0) + ':' + Math.round(top);
   const VEC_RE = /[\u2190\u2191\u2192\u2193\u00b7\u2022\u25cf\ue000~]/g;
@@ -3232,7 +3271,7 @@ M.createTerminal = function createTerminal(opts){
     g.textBaseline = 'alphabetic';
     animFps = 0;
     if (booting){ drawBoot(); return; }
-    drawnCards = []; drawnHits.length = 0;
+    drawnCards = []; drawnHits.length = 0; liveViz.length = 0;
     if (app){ drawGrid(); return; }
     // lay out units bottom-anchored
     const total = totalUnits();
@@ -3265,9 +3304,11 @@ M.createTerminal = function createTerminal(opts){
           if (r.t0 < 0) r.t0 = now;
           const age = now - r.t0;
           g.save(); g.beginPath(); g.rect(0, top, W, h * ch); g.clip();
+          const l0 = lumAcc;
           r.draw(X(2), top, X(COLS) - X(2), h * ch, age, now);
+          r._lum = lumAcc - l0;   // (its share of the brightness tally, for a redraw of it alone)
           g.restore(); curFont = '';
-          if (r.live && !REDUCED) animFps = Math.max(animFps, r.live(age) || 0);
+          if (r.live && !REDUCED){ animFps = Math.max(animFps, r.live(age) || 0); if (TAP) liveViz.push({ r, top, hh: h * ch }); }
         }
       }
       u += h;
@@ -3375,8 +3416,13 @@ M.createTerminal = function createTerminal(opts){
     if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (job && job.ask && !job.ask.one) || (app && gridCursor)) changed = true; }
     if (idleT0 < 0 && !booting) idleT0 = t;
     const nv = nudgeOn(); if (nv !== lastNudge){ lastNudge = nv; changed = true; }
-    if (!app && animFps > 0 && t - lastAnim >= 1 / animFps - 1e-3) changed = true;
-    if (!app) for (const r of drawnCards) if (r.flash != null && t - r.flash < 0.45) changed = true;   // tap / pick flash
+    for (const r of drawnCards) if (!app && r.flash != null && t - r.flash < 0.45) changed = true;   // tap / pick flash
+    /* phones: when an animation is all that moves (the intro, the title card's badge) and nothing scrolls, only its rows
+       are drawn again: the tall canvas is otherwise repainted whole every frame */
+    if (!changed && !app && animFps > 0 && t - lastAnim >= 1 / animFps - 1e-3){
+      if (TAP && liveViz.length && totalUnits() <= ROWS && !REDUCED){ drawVizOnly(); lastAnim = t; return true; }
+      changed = true;
+    }
     if (changed){ draw(); lastAnim = t; dirty = false; }
     return changed;
   }
@@ -3392,7 +3438,7 @@ M.createTerminal = function createTerminal(opts){
     if (cols >= 32) COLS = cols | 0;
     H = Math.round(W / aspect); canvas.height = H;          // (resets the context: shaping and font are set again below)
     cw = (W - 2 * PADX) / COLS; ch = Math.round(cw / 0.4 * LINE); fs = cw / advance;
-    ROWS = Math.floor((H - 64) / ch); PADY = Math.round((H - ROWS * ch) / 2);
+    ROWS = Math.floor((H - Math.round(64 * PX)) / ch); PADY = Math.round((H - ROWS * ch) / 2);
     fontStr = {}; curFont = ''; noShaping();
     ENV.COLUMNS = String(COLS); ENV.LINES = String(ROWS);
     if (homeMenu) paintHome();   // the menu's bars to the new width, before the rows are fitted
