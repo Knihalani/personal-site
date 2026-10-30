@@ -255,6 +255,7 @@ function Engine(ctx){
   const hpf = ctx.createBiquadFilter(); hpf.type = 'highpass'; hpf.frequency.value = 25; hpf.Q.value = 0.7;
   E.master = ctx.createGain(); E.master.gain.value = 0.8;
   E.master.connect(hpf); hpf.connect(tone); tone.connect(glue); glue.connect(lim); lim.connect(E.out); E.out.connect(ctx.destination);
+  E.lim = lim;
 
   /* room reverb send */
   E.verb = ctx.createConvolver(); E.verb.buffer = reverbIR(ctx);
@@ -278,15 +279,15 @@ function Engine(ctx){
   E.warm = () => { for (const n in FX) E.getFx(n); };
   E.voices = 0;
 
-  /* sfx bus (the intro's effects): its own glue compressor and a limiter, then the master (mute, master limiter) */
+  /* sfx bus (the intro's effects): a highpass and a gentle glue compressor of its own, then straight into the master's
+     limiter and mute stage (not the keys' glue: its low threshold would flatten the effects' dynamics) */
   E.offline = !!(window.OfflineAudioContext && ctx instanceof window.OfflineAudioContext);
-  E.sfxBus = ctx.createGain(); E.sfxBus.gain.value = 0.9;
+  E.sfxBus = ctx.createGain(); E.sfxBus.gain.value = 1;
+  const sHp = ctx.createBiquadFilter(); sHp.type = 'highpass'; sHp.frequency.value = 28; sHp.Q.value = 0.7;
   const sGlue = ctx.createDynamicsCompressor();
-  sGlue.threshold.value = -16; sGlue.knee.value = 8; sGlue.ratio.value = 4; sGlue.attack.value = 0.002; sGlue.release.value = 0.12;
-  const sLim = ctx.createDynamicsCompressor();
-  sLim.threshold.value = -4; sLim.knee.value = 0; sLim.ratio.value = 20; sLim.attack.value = 0.001; sLim.release.value = 0.06;
-  E.sfxOut = ctx.createGain(); E.sfxOut.gain.value = 0.85;
-  E.sfxBus.connect(sGlue); sGlue.connect(sLim); sLim.connect(E.sfxOut); E.sfxOut.connect(E.master);
+  sGlue.threshold.value = -12; sGlue.knee.value = 6; sGlue.ratio.value = 2.5; sGlue.attack.value = 0.003; sGlue.release.value = 0.15;
+  E.sfxOut = ctx.createGain(); E.sfxOut.gain.value = 0.5;
+  E.sfxBus.connect(sHp); sHp.connect(sGlue); sGlue.connect(E.sfxOut); E.sfxOut.connect(lim);
   E.sfxVoices = [];
 }
 Engine.prototype.play = function (buf, bus, when, gain, rate, pan, lpF){
@@ -326,56 +327,86 @@ Engine.prototype.event = function (name, when){
 };
 
 /* ---------------- intro sound effects: sfx(name, opts) ----------------
-   Built live from Web Audio nodes (oscillators, one shared noise buffer, filters, a tanh saturator, a convolver for the
-   impact's tail), so every call can take its own duration, pan and pitch. Each call is a voice: its nodes feed one
-   gain, that gain feeds the sfx bus (its own compressor and limiter, then the master, so mute and the master limiter
-   apply). At most SFX_MAX voices; a new one fades out the oldest. A voice's nodes are disconnected when it ends.
-   The noise buffer, the impulse response and the saturation curve are made once, on first use. */
+   Built live from Web Audio nodes (oscillators, one shared stereo noise buffer, filters, a tanh saturator), so every
+   call can take its own duration, pan and pitch. Each effect is layered: a transient (a click or crack), a body (a
+   saturated sine or filtered noise, so small speakers hear the low end as harmonics), and a tail (sends into two shared
+   convolvers: a small "room" that glues them into one space and a long dark "hall" for the big hits). Width comes from
+   decorrelated stereo noise, Haas delays and panning; transients and subs stay centred.
+   Each call is a voice: its nodes feed one gain into the sfx bus (glue compressor, limiter, then the master, so mute and
+   the master limiter apply). At most SFX_MAX voices; a new one fades out the oldest. A voice's nodes are disconnected
+   when it ends. The noise buffer, the impulse responses, the reverbs and the saturation curve are made on first use. */
 const SFX_MAX = 8;
 let SAT = null;
 function satCurve(){
   if (SAT) return SAT;
-  const n = 1024, k = 2.4, c = new Float32Array(n), tk = Math.tanh(k);
+  const n = 2048, k = 2.4, c = new Float32Array(n), tk = Math.tanh(k);
   for (let i = 0; i < n; i++){ const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(k * x) / tk; }
   return (SAT = c);
 }
-function noiseBuffer(ctx){
-  const sr = ctx.sampleRate, n = Math.round(2 * sr), b = ctx.createBuffer(1, n, sr), d = b.getChannelData(0), r = rng(911);
-  for (let i = 0; i < n; i++) d[i] = r() * 2 - 1;
+function noiseBuffer(ctx){   // 2 s, two independent channels (wide when used in stereo, mono when summed)
+  const sr = ctx.sampleRate, n = Math.round(2 * sr), b = ctx.createBuffer(2, n, sr);
+  for (let ch = 0; ch < 2; ch++){ const d = b.getChannelData(ch), r = rng(911 + ch * 7); for (let i = 0; i < n; i++) d[i] = r() * 2 - 1; }
   return b;
 }
-/* the impact's room: stereo decaying noise that darkens as it decays (a one-pole lowpass closing), 8 ms predelay */
-function impulseBuffer(ctx){
-  const sr = ctx.sampleRate, len = Math.round(1.6 * sr), pre = Math.round(0.008 * sr), b = ctx.createBuffer(2, len, sr);
+/* stereo decaying noise that darkens as it decays (a one-pole lowpass closing from f0 to f1), with a predelay */
+function impulseBuffer(ctx, secs, tau, f0, f1, pre, seed){
+  const sr = ctx.sampleRate, len = Math.round(secs * sr), p0 = Math.round(pre * sr), b = ctx.createBuffer(2, len, sr);
   for (let ch = 0; ch < 2; ch++){
-    const r = rng(4242 + ch * 101), d = b.getChannelData(ch);
-    let y = 0, e2 = 0;
-    for (let i = pre; i < len; i++){
-      const t = (i - pre) / sr, a = Math.exp(-TAU * (900 + 7000 * Math.exp(-t / 0.18)) / sr);
-      y = (r() * 2 - 1) * (1 - a) + a * y;
-      const v = y * Math.exp(-t / 0.32) * Math.min(1, t / 0.006) * (len - i < 600 ? (len - i) / 600 : 1);
+    const r = rng(seed + ch * 101), d = b.getChannelData(ch);
+    let y = 0, y2 = 0, e2 = 0;
+    for (let i = p0; i < len; i++){
+      const t = (i - p0) / sr, a = Math.exp(-TAU * (f1 + (f0 - f1) * Math.exp(-t / (tau * 0.6))) / sr);
+      y = (r() * 2 - 1) * (1 - a) + a * y; y2 = y * (1 - a) + a * y2;   // two poles: a smoother darkening
+      const v = y2 * Math.exp(-t / tau) * Math.min(1, t / 0.01) * (len - i < 2000 ? (len - i) / 2000 : 1);
       d[i] = v; e2 += v * v;
     }
-    const g = 0.5 / Math.sqrt(e2 || 1); for (let i = 0; i < len; i++) d[i] *= g;   // unit-ish energy: the wet level is the send's
+    const g = 0.6 / Math.sqrt(e2 || 1); for (let i = 0; i < len; i++) d[i] *= g;   // fixed energy: the wet level is the send's
   }
   return b;
+}
+/* the shared reverbs, made on the first effect: room (1.3 s, bright-ish) and hall (3.6 s, dark), returns into the bus */
+function sfxVerbs(E){
+  if (E.vb) return E.vb;
+  const ctx = E.ctx, mk = (ir, lo, hi, g) => {
+    const c = ctx.createConvolver(); c.normalize = false; c.buffer = ir;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = lo;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = hi; lp.Q.value = 0.5;
+    const r = ctx.createGain(); r.gain.value = g;
+    c.connect(hp); hp.connect(lp); lp.connect(r); r.connect(E.verbOut); return c;
+  };
+  E.verbOut = ctx.createGain(); E.verbOut.connect(E.sfxBus);
+  return (E.vb = {
+    room: mk(impulseBuffer(ctx, 1.1, 0.2, 7000, 1800, 0.012, 515), 150, 7000, 0.9),
+    hall: mk(impulseBuffer(ctx, 3.6, 0.85, 3200, 380, 0.025, 777), 45, 3500, 1),
+  });
 }
 
 /* one effect's worth of nodes */
 function Voice(E, t){
-  const ctx = E.ctx;
+  const ctx = E.ctx, vb = sfxVerbs(E);
   this.E = E; this.ctx = ctx; this.t = t; this.end = t; this.srcs = []; this.dead = false;
-  this.out = ctx.createGain(); this.out.connect(E.sfxBus); this.nodes = [this.out];
+  this.out = ctx.createGain(); this.out.connect(E.sfxBus);
+  this.rs = ctx.createGain(); this.rs.connect(vb.room);   // this voice's sends (cut with it)
+  this.hs = ctx.createGain(); this.hs.connect(vb.hall);
+  this.nodes = [this.out, this.rs, this.hs];
 }
 Voice.prototype = {
   keep(n){ this.nodes.push(n); return n; },
   gain(v){ const g = this.keep(this.ctx.createGain()); g.gain.value = v == null ? 1 : v; return g; },
-  filter(type, f, Q){ const b = this.keep(this.ctx.createBiquadFilter()); b.type = type; b.frequency.value = f; b.Q.value = Q == null ? 0.707 : Q; return b; },
-  sat(drive){   // drive into the shared tanh curve, then back down so its level stays about the same
-    const pre = this.gain(drive || 1), ws = this.keep(this.ctx.createWaveShaper()), post = this.gain(0.75);
-    ws.curve = satCurve(); ws.oversample = '2x'; pre.connect(ws); ws.connect(post); return [pre, post];
+  mono(v){ const g = this.gain(v); g.channelCount = 1; g.channelCountMode = 'explicit'; return g; },
+  filter(type, f, Q, gdb){ const b = this.keep(this.ctx.createBiquadFilter()); b.type = type; b.frequency.value = f; b.Q.value = Q == null ? 0.707 : Q; if (gdb) b.gain.value = gdb; return b; },
+  sat(drive, post){   // drive into the shared tanh curve
+    const pre = this.gain(drive || 1), ws = this.keep(this.ctx.createWaveShaper()), o = this.gain(post == null ? 0.7 : post);
+    ws.curve = satCurve(); ws.oversample = '4x'; pre.connect(ws); ws.connect(o); return [pre, o];
   },
   pan(p){ if (!this.ctx.createStereoPanner) return this.gain(1); const s = this.keep(this.ctx.createStereoPanner()); s.pan.value = clamp(p || 0, -1, 1); return s; },
+  /* Haas: a mono signal to both sides, one side ms later (side -1 delays the left) */
+  wide(ms, side){
+    const i = this.mono(1), d = this.keep(this.ctx.createDelay(0.05)), m = this.keep(this.ctx.createChannelMerger(2));
+    d.delayTime.value = ms / 1000; const late = side < 0 ? 0 : 1;
+    i.connect(m, 0, 1 - late); i.connect(d); d.connect(m, 0, late); return [i, m];
+  },
+  send(n, room, hall){ const o = Array.isArray(n) ? n[1] : n; if (room){ const g = this.gain(room); o.connect(g); g.connect(this.rs); } if (hall){ const g = this.gain(hall); o.connect(g); g.connect(this.hs); } },
   src(node, t0, t1){ node.start(t0); node.stop(t1); this.srcs.push(node); this.keep(node); if (t1 > this.end) this.end = t1; return node; },
   osc(type, f, t0, t1){ const o = this.ctx.createOscillator(); o.type = type; o.frequency.value = f; return this.src(o, t0, t1); },
   noise(t0, t1, rate){
@@ -388,11 +419,18 @@ Voice.prototype = {
   chain(...ns){ for (let i = 0; i < ns.length - 1; i++){ const a = ns[i], b = ns[i + 1]; (Array.isArray(a) ? a[1] : a).connect(Array.isArray(b) ? b[0] : b); } return ns[ns.length - 1]; },
   /* attack/decay on a gain param: exponential both ways (never a click), returns the time it is silent */
   ad(p, t0, att, peak, dec){ p.setValueAtTime(0.0001, t0); p.exponentialRampToValueAtTime(peak, t0 + att); p.exponentialRampToValueAtTime(0.0001, t0 + att + dec); p.setValueAtTime(0, t0 + att + dec + 0.001); return t0 + att + dec + 0.002; },
-  tail(t){ if (t > this.end) this.end = t; },
-  kill(fade){
+  /* a gain with an ad envelope */
+  env(t0, att, peak, dec){ const g = this.gain(0); this.ad(g.gain, t0, att, peak, dec); return g; },
+  /* a smooth swell: rises as x^a to the peak at fraction pk of d, falls as (1-x)^b */
+  swell(p, t0, d, pk, peak, a, b){
+    const n = 64, c = new Float32Array(n);
+    for (let i = 0; i < n; i++){ const x = i / (n - 1); c[i] = peak * (x < pk ? Math.pow(x / pk, a) : Math.pow((1 - x) / (1 - pk), b)); }
+    c[n - 1] = 0; p.setValueCurveAtTime(c, t0, d);
+  },
+  kill(fade, at){
     if (this.dead) return; this.dead = true;
-    const now = this.ctx.currentTime, g = this.out.gain;
-    try { g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.linearRampToValueAtTime(0, now + fade); } catch (e){}
+    const now = Math.max(this.ctx.currentTime, at || 0);
+    for (const g of [this.out.gain, this.rs.gain, this.hs.gain]) try { g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.linearRampToValueAtTime(0, now + fade); } catch (e){}
     for (const s of this.srcs) try { s.stop(now + fade + 0.005); } catch (e){}
     this.end = Math.min(this.end, now + fade + 0.01);
     clearTimeout(this.timer); this.timer = 0; this.cleanup();
@@ -408,152 +446,222 @@ Voice.prototype = {
     };
     this.timer = setTimeout(tick, Math.max(0, this.end - this.ctx.currentTime) * 1000 + 80);
   },
+  /* a pitch-dropping sine: f0 -> f1 over drop seconds */
+  dive(type, f0, f1, drop, t0, t1){ const o = this.osc(type, f0, t0, t1); o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f1, t0 + drop); return o; },
+  /* a filtered noise burst: noise -> filters -> ad envelope; returns the envelope gain (route it on) */
+  burst(t0, att, peak, dec, ...flt){ const e = this.env(t0, att, peak, dec), n = this.noise(t0, t0 + att + dec + 0.02); this.chain(n, ...flt, e); return e; },
 };
+/* zap gate patterns: a fixed few, rotated, so a run of zaps varies without sounding random */
+const ZAPS = [
+  { dur: 0.15, f: 3200, hum: 120, mod: 240, pew: 0, seed: 11 },
+  { dur: 0.19, f: 2400, hum: 120, mod: 360, pew: 0, seed: 23 },
+  { dur: 0.13, f: 4200, hum: 180, mod: 240, pew: 1, seed: 37 },
+];
+for (const z of ZAPS){   // on/off segments of 2-9 ms, sparser toward the end
+  const r = rng(z.seed), g = []; let x = 0, on = 1;
+  while (x < z.dur){ const len = (on ? 0.002 + r() * 0.006 : 0.002 + r() * 0.009 * (0.5 + x / z.dur)); g.push([x, on ? 0.45 + r() * 0.55 : 0.04]); x += len; on ^= 1; }
+  z.gate = g;
+}
 
 const SFX = {
-  /* CRT power-on: the relay's click and a saturated thunk, the tube's static "fwump", a whine rising to the flyback's
-     pitch and settling (plus a faint 15.7 kHz), the drive spinning up if its sound is already built */
+  /* CRT power-on: the switch's double click and a saturated thunk; the degauss coil's "bwong" (two detuned 60 Hz saws
+     through a resonant lowpass, wobbling, plus the coil's ring); static crackling as the tube charges (sparse clicks
+     of high noise) with a fizz swelling under it; the flyback whine rising into place (with a faint 15.7 kHz); the
+     drive spinning up if its sound is already built. */
   boot(v, t){
-    v.out.gain.value = 0.9;
-    const c = v.gain(); v.ad(c.gain, t, 0.0005, 0.45, 0.014); v.chain(v.noise(t, t + 0.03), v.filter('bandpass', 3200, 1.2), c, v.out);
-    const o = v.osc('sine', 85, t, t + 0.4); o.frequency.setValueAtTime(85, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.14);
-    const g = v.gain(); v.ad(g.gain, t, 0.002, 0.8, 0.24); v.chain(o, g, v.sat(1.6), v.out);
-    const lp = v.filter('lowpass', 160, 1.2); lp.frequency.setValueAtTime(160, t); lp.frequency.exponentialRampToValueAtTime(900, t + 0.08); lp.frequency.exponentialRampToValueAtTime(220, t + 0.6);
-    const f = v.gain(); v.ad(f.gain, t + 0.01, 0.03, 0.32, 0.6); v.chain(v.noise(t, t + 0.7, 0.7), lp, f, v.out);
-    const w = v.osc('triangle', 1200, t + 0.05, t + 2.3); w.frequency.setValueAtTime(1200, t + 0.05); w.frequency.exponentialRampToValueAtTime(7800, t + 1.1);
-    const wg = v.gain(0); wg.gain.setValueAtTime(0.0001, t + 0.05); wg.gain.exponentialRampToValueAtTime(0.035, t + 0.5); wg.gain.setValueAtTime(0.035, t + 1.1); wg.gain.exponentialRampToValueAtTime(0.0001, t + 2.25);
-    v.chain(w, v.filter('lowpass', 9000, 0.7), wg, v.out);
-    const h = v.osc('sine', 15700, t + 0.3, t + 2.3), hg = v.gain(0); hg.gain.setValueAtTime(0.0001, t + 0.3); hg.gain.exponentialRampToValueAtTime(0.01, t + 1); hg.gain.exponentialRampToValueAtTime(0.0001, t + 2.25); v.chain(h, hg, v.out);
-    const d = v.E.cached('disk'); if (d){ const dg = v.gain(0.16); v.chain(v.buf(d[Math.floor(Math.random() * d.length)], t + 0.35), v.filter('highpass', 120), dg, v.out); }
+    v.out.gain.value = 0.75;
+    for (const [dt, pk] of [[0, 0.6], [0.011, 0.35]]){
+      const c = v.burst(t + dt, 0.0003, pk, 0.006, v.mono(), v.filter('bandpass', 2600, 1.2)); v.chain(c, v.wide(0.3, 1), v.out); v.send(c, 0.5);
+    }
+    const th = v.dive('sine', 110, 46, 0.1, t, t + 0.4), thg = v.env(t, 0.002, 0.85, 0.28), ths = v.sat(2);
+    v.chain(th, thg, ths, v.filter('lowpass', 1400, 0.7), v.out); v.send(ths, 0.25);
+    /* degauss */
+    const dg = t + 0.05, lp = v.filter('lowpass', 680, 4), wob = v.gain(0.7), am = v.osc('sine', 7, dg, dg + 1.3), amd = v.gain(0.3);
+    am.connect(amd); amd.connect(wob.gain);
+    for (const [f, p] of [[60, -0.35], [60.45, 0.35]]){ const s = v.osc('sawtooth', f, dg, dg + 1.3); v.chain(s, v.pan(p), lp); }
+    const de = v.env(dg, 0.02, 0.32, 1.1); v.chain(lp, wob, de, v.out); v.send(de, 0.35);
+    const ring = v.dive('sine', 190, 150, 0.6, dg, dg + 0.9), rg = v.env(dg, 0.006, 0.12, 0.7); v.chain(ring, rg, v.out); v.send(rg, 0.4);
+    /* static crackle: random clicks of high noise, thinning out */
+    const cg = v.gain(0), cn = v.noise(t + 0.12, t + 1.9);
+    cg.gain.setValueAtTime(0, t);
+    for (let x = t + 0.15; x < t + 1.8; x += 0.008 + Math.random() * 0.05 * (1 + (x - t) * 1.5)){
+      const a = (0.25 + Math.random() * 0.75) * (1 - (x - t) / 2.1);
+      cg.gain.setValueAtTime(a, x); cg.gain.setValueAtTime(0, x + 0.0008 + Math.random() * 0.002);
+    }
+    v.chain(cn, v.filter('highpass', 2500, 0.7), v.filter('peaking', 5000, 1, 4), cg, v.gain(0.55), v.out); v.send(cg, 0.3);
+    const fz = v.gain(0); fz.gain.setValueAtTime(0.0001, t + 0.1); fz.gain.exponentialRampToValueAtTime(0.06, t + 0.9); fz.gain.exponentialRampToValueAtTime(0.0001, t + 2.1);
+    v.chain(v.noise(t + 0.1, t + 2.15), v.filter('bandpass', 7500, 0.9), fz, v.out);
+    /* flyback whine */
+    const w = v.osc('triangle', 2400, t + 0.1, t + 2.3), vib = v.osc('sine', 5.5, t + 0.1, t + 2.3), vd = v.gain(9);
+    w.frequency.setValueAtTime(2400, t + 0.1); w.frequency.exponentialRampToValueAtTime(7867, t + 0.95); vib.connect(vd); vd.connect(w.frequency);
+    const wg = v.gain(0); wg.gain.setValueAtTime(0.0001, t + 0.1); wg.gain.exponentialRampToValueAtTime(0.022, t + 0.7); wg.gain.setValueAtTime(0.022, t + 1.1); wg.gain.exponentialRampToValueAtTime(0.0001, t + 2.25);
+    v.chain(w, v.filter('lowpass', 9000, 0.7), wg, v.pan(0.15), v.out);
+    const h = v.osc('sine', 15734, t + 0.4, t + 2.3), hg = v.gain(0); hg.gain.setValueAtTime(0.0001, t + 0.4); hg.gain.exponentialRampToValueAtTime(0.008, t + 1.1); hg.gain.exponentialRampToValueAtTime(0.0001, t + 2.25); v.chain(h, hg, v.out);
+    const d = v.E.cached('disk'); if (d){ v.chain(v.buf(d[Math.floor(Math.random() * d.length)], t + 0.4), v.filter('highpass', 150), v.gain(0.14), v.pan(0.3), v.out); }
   },
-  /* one tube switching on: a relay tick, a thump, the degauss coil's decaying hum (two detuned saws: it wobbles), a faint
-     whine; opts.i steps the pitch */
+  /* one tube switching on: the relay's double tick, a saturated "thup" with a puff of air, a short degauss hum, a spark
+     of static, a faint whine; opts.i picks the pitch and the place across the wall (pan) */
   tubeOn(v, t, o){
-    const i = o.i | 0, k = 1 + 0.05 * (((i * 7) % 9) - 4);
-    v.out.gain.value = 0.8;
-    const c = v.gain(); v.ad(c.gain, t, 0.0005, 0.3, 0.01); v.chain(v.noise(t, t + 0.02), v.filter('bandpass', 2600 * k, 1.5), c, v.out);
-    const s = v.osc('sine', 110 * k, t, t + 0.3); s.frequency.setValueAtTime(110 * k, t); s.frequency.exponentialRampToValueAtTime(48 * k, t + 0.09);
-    const sg = v.gain(); v.ad(sg.gain, t, 0.002, 0.7, 0.18); v.chain(s, sg, v.sat(1.4), v.out);
-    const hum = v.gain(); v.ad(hum.gain, t + 0.005, 0.012, 0.16, 0.4);
-    const lp = v.filter('lowpass', 520, 2); lp.connect(hum); hum.connect(v.out);
-    v.osc('sawtooth', 55 * k, t, t + 0.45).connect(lp); v.osc('sawtooth', 57.5 * k, t, t + 0.45).connect(lp);
-    const w = v.osc('sine', 6800 + 380 * ((i * 5) % 7), t + 0.02, t + 0.95), wg = v.gain(0);
-    wg.gain.setValueAtTime(0.0001, t + 0.02); wg.gain.exponentialRampToValueAtTime(0.022, t + 0.17); wg.gain.exponentialRampToValueAtTime(0.0001, t + 0.92); v.chain(w, wg, v.out);
+    const i = o.i | 0, k = [1, 1.12, 0.94, 1.06, 0.89, 1.19, 1.03, 1.09, 0.97][((i % 9) + 9) % 9], p = ((((i * 4) % 9) + 9) % 9) / 8 * 1.1 - 0.55;
+    v.out.gain.value = 0.7;
+    const bus = v.pan(p);
+    v.chain(v.osc('sine', 1650 * k, t, t + 0.08), v.env(t, 0.001, 0.13, 0.05), bus);   // the glass's ping
+    bus.connect(v.out); v.send(bus, 0.3);
+    for (const [dt, pk] of [[0, 0.8], [0.007, 0.45]]) v.chain(v.burst(t + dt, 0.0003, pk, 0.006, v.mono(), v.filter('bandpass', 3400 * k, 1.4)), bus);
+    const s = v.dive('sine', 96 * k, 48 * k, 0.07, t, t + 0.3); v.chain(s, v.env(t, 0.002, 0.75, 0.17), v.sat(1.8), v.filter('lowpass', 1000, 0.7), bus);
+    v.chain(v.burst(t, 0.003, 0.35, 0.08, v.mono(), v.filter('lowpass', 700 * k, 0.8)), bus);
+    const lp = v.filter('lowpass', 560 * k, 3); v.osc('sawtooth', 60, t + 0.01, t + 0.4).connect(lp); v.osc('sawtooth', 60.6, t + 0.01, t + 0.4).connect(lp);
+    v.chain(lp, v.env(t + 0.01, 0.01, 0.14, 0.28), bus);
+    const sp = v.burst(t + 0.004, 0.002, 0.25, 0.08, v.filter('highpass', 5200 * k, 0.7)); sp.connect(v.out);
+    const w = v.osc('sine', 6900 + 330 * (((i * 5) % 7 + 7) % 7), t + 0.02, t + 0.7), wg = v.gain(0);
+    wg.gain.setValueAtTime(0.0001, t + 0.02); wg.gain.exponentialRampToValueAtTime(0.012, t + 0.12); wg.gain.exponentialRampToValueAtTime(0.0001, t + 0.68); v.chain(w, wg, bus);
   },
-  /* camera move: noise through a bandpass that sweeps up and back down, a lowpassed body under it, panned across */
+  /* camera move: stereo noise in three bands (air sweeping up and back, a low body, a little sheen at the peak) under
+     one smooth swell, carried across by the pan */
   whoosh(v, t, o){
-    const d = clamp(+o.dur || 0.8, 0.15, 4), dir = o.dir < 0 ? -1 : o.dir > 0 ? 1 : 0, pk = t + 0.55 * d, e = t + d;
-    v.out.gain.value = 0.85;
-    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(0.6, pk); env.gain.exponentialRampToValueAtTime(0.0001, e);
-    const p = v.pan(-0.7 * dir); if (dir && p.pan){ p.pan.setValueAtTime(-0.7 * dir, t); p.pan.linearRampToValueAtTime(0.7 * dir, e); }
-    const bp = v.filter('bandpass', 260, 0.9); bp.frequency.setValueAtTime(260, t); bp.frequency.exponentialRampToValueAtTime(2300, pk); bp.frequency.exponentialRampToValueAtTime(500, e);
-    const lp = v.filter('lowpass', 160, 0.8); lp.frequency.setValueAtTime(160, t); lp.frequency.exponentialRampToValueAtTime(700, pk); lp.frequency.exponentialRampToValueAtTime(200, e);
-    const bg = v.gain(0.55);
-    v.chain(v.noise(t, e + 0.02, 0.9), bp, env); v.chain(v.noise(t, e + 0.02, 0.6), lp, bg, env); v.chain(env, p, v.out);
+    const d = clamp(+o.dur || 0.8, 0.15, 4), dir = o.dir < 0 ? -1 : o.dir > 0 ? 1 : 0, pk = t + 0.6 * d, e = t + d;
+    v.out.gain.value = 1.1;
+    const env = v.gain(0); v.swell(env.gain, t, d, 0.6, 1, 2.2, 1.5);
+    const p = v.pan(0); if (dir && p.pan){ const c = new Float32Array(32); for (let j = 0; j < 32; j++) c[j] = 0.8 * dir * Math.tanh(3 * (j / 31 - 0.6)) / Math.tanh(1.8); p.pan.setValueCurveAtTime(c, t, d); }
+    const bp = v.filter('bandpass', 300, 1.1); bp.frequency.setValueAtTime(300, t); bp.frequency.exponentialRampToValueAtTime(2600, pk); bp.frequency.exponentialRampToValueAtTime(600, e);
+    const lp = v.filter('lowpass', 180, 0.8); lp.frequency.setValueAtTime(180, t); lp.frequency.exponentialRampToValueAtTime(900, pk); lp.frequency.exponentialRampToValueAtTime(220, e);
+    v.chain(v.noise(t, e + 0.02, 0.9), bp, v.gain(0.9), env); v.chain(v.noise(t, e + 0.02, 0.5), lp, v.gain(0.6), env);
+    v.chain(v.noise(t, e + 0.02), v.filter('highpass', 4500, 0.7), v.gain(0.1), env);
+    v.chain(env, p, v.out); v.send(env, 0.25);
   },
-  /* whip pan: fast and bright, a high band ripping across */
+  /* whip pan: a fast, bright rip across with a snap at its peak */
   whip(v, t, o){
-    const d = clamp(+o.dur || 0.24, 0.08, 1), dir = o.dir < 0 ? -1 : 1, pk = t + 0.55 * d, e = t + d;
-    v.out.gain.value = 0.8;
-    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(0.75, pk); env.gain.exponentialRampToValueAtTime(0.0001, e);
-    const p = v.pan(-0.85 * dir); if (p.pan){ p.pan.setValueAtTime(-0.85 * dir, t); p.pan.linearRampToValueAtTime(0.85 * dir, e); }
-    const bp = v.filter('bandpass', 1400, 1.3); bp.frequency.setValueAtTime(1400, t); bp.frequency.exponentialRampToValueAtTime(7000, pk); bp.frequency.exponentialRampToValueAtTime(2600, e);
-    const lp = v.filter('lowpass', 900, 0.7), bg = v.gain(0.3);
-    v.chain(v.noise(t, e + 0.02), v.filter('highpass', 700), bp, env); v.chain(v.noise(t, e + 0.02, 0.5), lp, bg, env); v.chain(env, p, v.out);
-  },
-  /* electric glitch on a cut: a square wave jumping between random pitches through a stuttering gate and the
-     saturator, a falling sine zap, a crackle of high noise, the error buzz sped up underneath */
-  zap(v, t){
-    const d = 0.17 + Math.random() * 0.08, e = t + d;
+    const d = clamp(+o.dur || 0.22, 0.08, 1), dir = o.dir < 0 ? -1 : 1, pk = t + 0.45 * d, e = t + d;
     v.out.gain.value = 1;
-    const sq = v.osc('square', 300, t, e + 0.02);
-    for (let x = t; x < e; x += 0.008 + Math.random() * 0.01) sq.frequency.setValueAtTime(120 * Math.pow(2, Math.random() * 3.7), x);
-    const gate = v.gain(0);
-    for (let x = t, on = 1; x < e; x += 0.007 + Math.random() * 0.014, on ^= 1) gate.gain.setValueAtTime(on ? 1 : 0.15, x);
-    gate.gain.setValueAtTime(0, e);
-    const ge = v.gain(); v.ad(ge.gain, t, 0.002, 0.5, d);
-    v.chain(sq, v.filter('bandpass', 1800, 0.8), gate, ge, v.sat(1.5), v.out);
-    const z = v.osc('sine', 2400, t, t + 0.2); z.frequency.setValueAtTime(2400, t); z.frequency.exponentialRampToValueAtTime(90, t + 0.8 * d);
-    const zg = v.gain(); v.ad(zg.gain, t, 0.002, 0.45, 0.8 * d); v.chain(z, zg, v.out);
-    const cr = v.gain(); v.ad(cr.gain, t, 0.001, 0.4, 0.06); v.chain(v.noise(t, t + 0.1), v.filter('highpass', 3000), cr, gate);
-    const er = v.E.getFx('error'); if (er){ const eg = v.gain(); v.ad(eg.gain, t, 0.003, 0.3, 0.09); v.chain(v.buf(er[0], t, 1.6), eg, v.out); }
+    const env = v.gain(0); v.swell(env.gain, t, d, 0.45, 1, 2.6, 1.3);
+    const p = v.pan(-0.85 * dir); if (p.pan){ p.pan.setValueAtTime(-0.85 * dir, t); p.pan.linearRampToValueAtTime(0.85 * dir, e); }
+    const bp = v.filter('bandpass', 1500, 1.5); bp.frequency.setValueAtTime(1500, t); bp.frequency.exponentialRampToValueAtTime(7500, pk); bp.frequency.exponentialRampToValueAtTime(2800, e);
+    const lp = v.filter('lowpass', 500, 0.7); lp.frequency.setValueAtTime(500, t); lp.frequency.exponentialRampToValueAtTime(1600, pk); lp.frequency.exponentialRampToValueAtTime(400, e);
+    v.chain(v.noise(t, e + 0.02), v.filter('highpass', 900), bp, env); v.chain(v.noise(t, e + 0.02, 0.6), lp, v.gain(0.45), env);
+    v.chain(env, p, v.out); v.send(env, 0.2);
+    const sn = v.burst(pk - 0.004, 0.0005, 0.3, 0.014, v.mono(), v.filter('bandpass', 4200, 1)); v.chain(sn, v.wide(0.5, dir), v.out);
   },
-  /* a small hit: a bright ping, a low knock, a few ms of air; opts.pitch scales it */
+  /* electric glitch on a cut: a high-voltage arc. A sharp transient; band-limited noise crackling through a fast gate;
+     a mains buzz (a 120 Hz sine frequency-modulated at 240/360 Hz, saturated) chopped by the same gate; a short low
+     snap; on one variant a quick pitch-dive. Three variants rotate (opts.v picks one). */
+  zap(v, t, o){
+    const z = ZAPS[(o.v != null ? o.v | 0 : (v.E.zapN = ((v.E.zapN | 0) + 1) % ZAPS.length)) % ZAPS.length], e = t + z.dur;
+    v.out.gain.value = 1.25;
+    const gate = v.gain(0); for (const [x, a] of z.gate) gate.gain.setValueAtTime(a, t + x); gate.gain.setValueAtTime(0, e);
+    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, t + 0.002); env.gain.setValueAtTime(1, t + z.dur * 0.35); env.gain.exponentialRampToValueAtTime(0.0001, e);
+    gate.connect(env); env.connect(v.out); v.send(env, 0.3);
+    /* the transient */
+    const tr = v.burst(t, 0.0002, 0.9, 0.004, v.mono(), v.filter('highpass', 1500, 0.7)); v.chain(tr, v.wide(0.4, 1), v.out);
+    /* crackle */
+    v.chain(v.noise(t, e + 0.01), v.filter('highpass', 900), v.filter('bandpass', z.f, 0.9), v.gain(0.75), gate);
+    v.chain(v.noise(t, e + 0.01, 1.3), v.filter('highpass', 6000), v.gain(0.25), gate);
+    /* the buzz: FM around the mains harmonics */
+    const c = v.osc('sine', z.hum, t, e + 0.01), m = v.osc('sine', z.mod, t, e + 0.01), mi = v.gain(z.hum * 3.5);
+    mi.gain.setValueAtTime(z.hum * 3.5, t); mi.gain.exponentialRampToValueAtTime(z.hum * 1.2, e); m.connect(mi); mi.connect(c.frequency);
+    const bz = v.chain(c, v.sat(3, 0.5), v.filter('bandpass', 1100, 0.6)); v.chain(bz, v.gain(0.6), gate); v.chain(bz, v.gain(0.12), env);
+    /* weight */
+    v.chain(v.dive('sine', 140, 55, 0.04, t, t + 0.12), v.env(t, 0.001, 0.4, 0.06), v.sat(1.5), v.out);
+    if (z.pew){ const pw = v.dive('sine', 2200, 380, 0.06, t + 0.01, t + 0.1); v.chain(pw, v.env(t + 0.01, 0.001, 0.12, 0.07), v.out); }
+  },
+  /* a small hit: a crisp click, a short ping with a slight drop, a low knock; opts.pitch scales it */
   tick(v, t, o){
     const k = clamp(+o.pitch || 1, 0.25, 4);
-    v.out.gain.value = 1;
-    const a = v.gain(); v.ad(a.gain, t, 0.0005, 1, 0.035); v.chain(v.osc('sine', 2100 * k, t, t + 0.05), a, v.out);
-    const b = v.gain(); v.ad(b.gain, t, 0.001, 1.2, 0.06); const s = v.osc('sine', 700 * k, t, t + 0.08); s.frequency.setValueAtTime(700 * k, t); s.frequency.exponentialRampToValueAtTime(420 * k, t + 0.05); v.chain(s, b, v.out);
-    const c = v.gain(); v.ad(c.gain, t, 0.0003, 0.8, 0.007); v.chain(v.noise(t, t + 0.02), v.filter('highpass', 5000), c, v.out);
+    v.out.gain.value = 0.9;
+    v.chain(v.burst(t, 0.0003, 0.3, 0.006, v.mono(), v.filter('highpass', 3000)), v.wide(0.4, 1), v.out);
+    const a = v.dive('sine', 1500 * k, 1150 * k, 0.03, t, t + 0.08), ag = v.env(t, 0.001, 0.32, 0.05); v.chain(a, ag, v.out); v.send(ag, 0.12);
+    v.chain(v.osc('sine', 3020 * k, t, t + 0.04), v.env(t, 0.0005, 0.1, 0.025), v.out);
+    v.chain(v.dive('sine', 220 * k, 150 * k, 0.03, t, t + 0.06), v.env(t, 0.001, 0.45, 0.04), v.out);
   },
-  /* rising tension up to the hit at t + dur: noise through a narrowing, rising bandpass; two detuned saws gliding up
-     three octaves through an opening lowpass, with a tremolo that speeds up; both swell and cut dead at the hit */
+  /* rising tension up to the hit at t + dur: stereo noise through a rising, narrowing bandpass; three detuned saws
+     (left, centre, right) gliding up two octaves through an opening resonant lowpass; a saturated sub rising under them;
+     a tremolo speeding into a stutter; all swell and cut dead at the hit, leaving only the room's ring */
   riser(v, t, o){
     const d = clamp(+o.dur || 1.5, 0.2, 8), e = t + d;
-    v.out.gain.value = 0.8;
-    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, e); env.gain.linearRampToValueAtTime(0, e + 0.012);
-    const bp = v.filter('bandpass', 350, 0.8); bp.frequency.setValueAtTime(350, t); bp.frequency.exponentialRampToValueAtTime(6500, e); bp.Q.setValueAtTime(0.8, t); bp.Q.linearRampToValueAtTime(5, e);
-    const ng = v.gain(0.5); v.chain(v.noise(t, e + 0.02), bp, ng, env);
-    const lp = v.filter('lowpass', 400, 4); lp.frequency.setValueAtTime(400, t); lp.frequency.exponentialRampToValueAtTime(6000, e);
-    for (const dt of [0, 9]){ const s = v.osc('sawtooth', 110, t, e + 0.02); s.detune.value = dt; s.frequency.setValueAtTime(110, t); s.frequency.exponentialRampToValueAtTime(880, e); s.connect(lp); }
-    const trem = v.gain(0.6), lfo = v.osc('sine', 5, t, e + 0.02), depth = v.gain(0.4);
-    lfo.frequency.setValueAtTime(5, t); lfo.frequency.exponentialRampToValueAtTime(24, e); lfo.connect(depth); depth.connect(trem.gain);
-    const tg = v.gain(0.2); v.chain(lp, trem, tg, env); env.connect(v.out);
+    v.out.gain.value = 0.95;
+    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, e - 0.005); env.gain.linearRampToValueAtTime(0, e + 0.004);
+    env.connect(v.out); v.send(env, 0.35);
+    const trem = v.gain(0.55), lfo = v.osc('sine', 4, t, e + 0.01), depth = v.gain(0.2);
+    lfo.frequency.setValueAtTime(4, t); lfo.frequency.exponentialRampToValueAtTime(26, e); depth.gain.setValueAtTime(0.15, t); depth.gain.linearRampToValueAtTime(0.45, e);
+    lfo.connect(depth); depth.connect(trem.gain); trem.connect(env);
+    const bp = v.filter('bandpass', 400, 0.7); bp.frequency.setValueAtTime(400, t); bp.frequency.exponentialRampToValueAtTime(7500, e); bp.Q.setValueAtTime(0.7, t); bp.Q.linearRampToValueAtTime(4, e);
+    v.chain(v.noise(t, e + 0.01), bp, v.gain(0.5), trem);
+    const lp = v.filter('lowpass', 300, 3); lp.frequency.setValueAtTime(300, t); lp.frequency.exponentialRampToValueAtTime(7000, e);
+    for (const [dt, p] of [[-14, -0.6], [0, 0], [14, 0.6]]){ const s = v.dive('sawtooth', 110, 440, d, t, e + 0.01); s.detune.value = dt; v.chain(s, v.pan(p), lp); }
+    v.chain(lp, v.gain(0.13), trem);
+    v.chain(v.dive('sine', 40, 95, d, t, e + 0.01), v.sat(2.2, 0.5), v.filter('lowpass', 500), v.gain(0.5), env);
   },
-  /* the impact frame: a pitch-dropping sine (a sub-boom when big) pushed into the saturator so small speakers hear its
-     harmonics, a clean copy for the real low end, a noise crack and a low thud, all sent into a convolver whose impulse
-     is decaying noise (big: a longer, louder tail) */
+  /* the impact frame. Transient: a broadband click and a crack (bandpassed stereo noise; big adds a high sizzle of
+     debris). Body: a punch of low noise and a pitch-dropping sine, driven into the saturator (its harmonics are what
+     small speakers play) under a clean copy for the true sub. Tail: the room (big: a dark rumble and the long hall).
+     opts.lead (s): start a reversed swell that far ahead and land the hit after it (default 0: the hit is now). */
   impact(v, t, o){
-    const big = !!o.big, f0 = big ? 110 : 150, f1 = big ? 30 : 48, drop = big ? 0.5 : 0.16, dec = big ? 1.5 : 0.4;
-    v.out.gain.value = big ? 0.95 : 0.8;
-    const verb = v.keep(v.ctx.createConvolver()); verb.normalize = false; verb.buffer = v.E.irBuf || (v.E.irBuf = impulseBuffer(v.ctx));
-    const wet = v.gain(big ? 0.9 : 0.4); v.chain(verb, v.filter('lowpass', 4500, 0.6), wet, v.out);
-    const s = v.osc('sine', f0, t, t + dec + 0.05); s.frequency.setValueAtTime(f0, t); s.frequency.exponentialRampToValueAtTime(f1, t + drop);
-    const sg = v.gain(); v.ad(sg.gain, t, 0.002, 0.8, dec);
-    const sat = v.sat(big ? 2 : 1.6), sub = v.gain(0.5);
-    s.connect(sg); v.chain(sg, sat, v.out); v.chain(sg, sub, v.out);
-    const send = v.gain(0.35); (sat[1]).connect(send); send.connect(verb);
-    const cr = v.gain(); v.ad(cr.gain, t, 0.0005, big ? 0.85 : 0.55, big ? 0.06 : 0.035);
-    v.chain(v.noise(t, t + 0.12), v.filter('highpass', big ? 1500 : 2200), v.filter('peaking', 3500, 1), cr, v.out); cr.connect(verb);
-    const th = v.gain(); v.ad(th.gain, t, 0.002, 0.6, big ? 0.2 : 0.09);
-    v.chain(v.noise(t, t + 0.25, 0.8), v.filter('lowpass', 500, 0.9), th, v.out); th.connect(verb);
-    v.tail(t + dec + 1.65);   // the convolver rings on after its sources stop
+    const big = !!o.big, lead = clamp(+o.lead || 0, 0, 2), h = t + lead;
+    v.out.gain.value = big ? 0.95 : 0.75;
+    if (lead > 0.05){
+      const sw = v.gain(0); sw.gain.setValueAtTime(0.0001, t); sw.gain.exponentialRampToValueAtTime(0.7, h - 0.004); sw.gain.linearRampToValueAtTime(0, h + 0.002);
+      const bp = v.filter('bandpass', 400, 1); bp.frequency.setValueAtTime(400, t); bp.frequency.exponentialRampToValueAtTime(3500, h);
+      v.chain(v.noise(t, h + 0.01, 0.8), bp, sw, v.out);
+    }
+    v.chain(v.burst(h, 0.0002, big ? 0.9 : 0.7, 0.005, v.mono(), v.filter('highpass', 1800)), v.wide(0.3, 1), v.out);
+    const cr = v.burst(h, 0.0005, big ? 1.4 : 1.2, big ? 0.08 : 0.05, v.filter('highpass', 900), v.filter('bandpass', big ? 2200 : 2800, 0.6));
+    cr.connect(v.out); v.send(cr, big ? 0.4 : 0.45, big ? 0.6 : 0);
+    { const sm = v.burst(h, 0.001, big ? 1 : 0.6, big ? 0.12 : 0.06, v.mono(), v.filter('bandpass', 1100, 0.9)); sm.connect(v.out); v.send(sm, 0.2, big ? 0.5 : 0); }   // the smack: mids a laptop plays
+    if (big){ const db = v.burst(h + 0.005, 0.002, 0.3, 0.25, v.filter('highpass', 6000)); db.connect(v.out); v.send(db, 0.2, 0.4); }
+    const pu = v.burst(h, 0.001, big ? 0.85 : 0.8, big ? 0.16 : 0.09, v.mono(), v.filter('lowpass', 750, 0.9)); pu.connect(v.out); v.send(pu, 0.2, big ? 0.5 : 0);
+    const f0 = big ? 100 : 160, f1 = big ? 28 : 48, dec = big ? 2.2 : 0.38;
+    const s = v.dive('sine', f0, f1, big ? 0.7 : 0.13, h, h + dec + 0.05), sg = v.env(h, 0.002, 1, dec);
+    const sat = v.sat(big ? 3.2 : 2.6, big ? 0.7 : 0.8);
+    s.connect(sg); v.chain(sg, sat, v.filter('lowpass', big ? 1600 : 2200, 0.7), v.out); v.chain(sg, v.gain(big ? 0.6 : 0.45), v.out);
+    v.send(sat, big ? 0.1 : 0.15, big ? 0.35 : 0);
+    if (big){ const rb = v.gain(0); v.ad(rb.gain, h + 0.01, 0.05, 0.6, 2.6); v.chain(v.noise(h, h + 2.8, 0.3), v.filter('lowpass', 150, 0.7), rb, v.out); v.send(rb, 0, 0.3); }
   },
-  /* hit-stop freeze: a chord and a band of hiss slowing to a halt like stopped tape (pitch and filter falling
-     together), then a soft clunk as it stops */
+  /* hit-stop freeze: a dark drone and its hiss slowing to a halt like stopped tape (every layer's pitch falling at the
+     same linear rate, so it reads as one recording decelerating), then the brake's clunk */
   tapeStop(v, t, o){
     const d = clamp(+o.dur || 0.45, 0.1, 3), e = t + d;
-    v.out.gain.value = 0.7;
-    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, t + 0.01); env.gain.setValueAtTime(1, t + 0.4 * d); env.gain.exponentialRampToValueAtTime(0.0001, e);
-    const lp = v.filter('lowpass', 2400, 1); lp.frequency.setValueAtTime(2400, t); lp.frequency.exponentialRampToValueAtTime(110, e);
-    const cg = v.gain(0.07);
-    for (const f of [220, 261.6, 329.6, 440]){ const s = v.osc('sawtooth', f, t, e + 0.02); s.frequency.setValueAtTime(f, t); s.frequency.exponentialRampToValueAtTime(f * 0.07, e); s.connect(lp); }
-    v.chain(lp, cg, env);
-    const n = v.noise(t, e + 0.02); n.playbackRate.setValueAtTime(1, t); n.playbackRate.exponentialRampToValueAtTime(0.05, e);
-    v.chain(n, v.filter('bandpass', 1200, 0.7), v.gain(0.22), env); env.connect(v.out);
-    const k = v.osc('sine', 75, e - 0.01, e + 0.15), kg = v.gain(); v.ad(kg.gain, e - 0.01, 0.002, 0.35, 0.09); v.chain(k, kg, v.out);
+    v.out.gain.value = 0.55;
+    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, t + 0.006); env.gain.setValueAtTime(1, t + 0.5 * d); env.gain.exponentialRampToValueAtTime(0.0001, e);
+    const lp = v.filter('lowpass', 2600, 0.8);
+    for (const [f, p] of [[110, -0.4], [110.5, 0.4], [164.8, -0.2], [220.3, 0.2], [261.6, 0], [329.6, 0.3]]){
+      const s = v.osc('sawtooth', f, t, e + 0.01); s.frequency.setValueAtTime(f, t); s.frequency.linearRampToValueAtTime(f * 0.03, e); v.chain(s, v.pan(p), lp);
+    }
+    v.chain(lp, v.filter('highpass', 50), v.gain(0.13), env);
+    const n = v.noise(t, e + 0.01); n.playbackRate.setValueAtTime(1, t); n.playbackRate.linearRampToValueAtTime(0.03, e);
+    v.chain(n, v.filter('bandpass', 1800, 0.6), v.gain(0.3), env); env.connect(v.out); v.send(env, 0.2);
+    const k = v.dive('sine', 95, 50, 0.04, e - 0.006, e + 0.12); v.chain(k, v.env(e - 0.006, 0.002, 0.45, 0.08), v.sat(1.6), v.out);
+    v.chain(v.burst(e - 0.006, 0.0004, 0.25, 0.01, v.mono(), v.filter('bandpass', 1500, 1)), v.out);
   },
-  /* a word or letter slamming down: the Enter key's recording pitched down (the thock), a short saturated thump, a
-     click; big (a whole word) goes lower and heavier, with a crack */
+  /* a word or letter slamming down: the Enter key's Topre recording pitched down with its thock lifted (a 250 Hz bell),
+     a low saturated thump, a mid puff, a click; big (a whole word) goes lower and heavier with a crack and more room */
   type(v, t, o){
-    const i = o.i | 0, big = !!o.big, k = (1 + 0.03 * (((i * 5) % 7) - 3)) * (big ? 0.85 : 1);
-    v.out.gain.value = 1;
-    if (keyBufs && keyBufs.heavy){ const L = keyBufs.heavy.d; v.chain(v.buf(L[Math.floor(Math.random() * L.length)], t, 0.78 * k), v.filter('lowpass', 6000, 0.6), v.gain(1.2), v.out); }
-    const s = v.osc('sine', 170 * k, t, t + 0.25); s.frequency.setValueAtTime(170 * k, t); s.frequency.exponentialRampToValueAtTime(65 * k, t + (big ? 0.08 : 0.05));
-    const sg = v.gain(); v.ad(sg.gain, t, 0.001, big ? 1 : 0.8, big ? 0.2 : 0.12); v.chain(s, sg, v.sat(big ? 1.8 : 1.3), v.out);
-    const c = v.gain(); v.ad(c.gain, t, 0.0004, 0.28, 0.012); v.chain(v.noise(t, t + 0.03), v.filter('bandpass', 1800 * k, 1), c, v.out);
-    if (big){ const cr = v.gain(); v.ad(cr.gain, t, 0.0005, 0.35, 0.03); v.chain(v.noise(t, t + 0.06), v.filter('highpass', 2500), cr, v.out); }
+    const i = o.i | 0, big = !!o.big, k = (1 + 0.03 * ((((i * 5) % 7) + 7) % 7 - 3)) * (big ? 0.86 : 1);
+    v.out.gain.value = big ? 1 : 0.95;
+    if (keyBufs && keyBufs.heavy){
+      const L = keyBufs.heavy.d, kb = v.chain(v.buf(L[Math.floor(Math.random() * L.length)], t, 0.8 * k), v.filter('highpass', 70), v.filter('peaking', 250 * k, 1.2, 5), v.filter('lowpass', 7000, 0.6), v.gain(1.5));
+      kb.connect(v.out); v.send(kb, 0.2);
+    }
+    const s = v.dive('sine', 150 * k, 52 * k, big ? 0.09 : 0.06, t, t + 0.35);
+    v.chain(s, v.env(t, 0.001, big ? 0.9 : 0.7, big ? 0.24 : 0.13), v.sat(big ? 2.2 : 1.6), v.filter('lowpass', 1500, 0.7), v.out);
+    v.chain(v.burst(t, 0.001, 0.35, 0.03, v.mono(), v.filter('bandpass', 650 * k, 1)), v.out);
+    v.chain(v.burst(t, 0.0003, 0.3, 0.005, v.mono(), v.filter('highpass', 4000)), v.wide(0.35, 1), v.out);
+    if (big){ const cr = v.burst(t, 0.0005, 0.45, 0.04, v.filter('bandpass', 2500, 0.8)); cr.connect(v.out); v.send(cr, 0.45); }
   },
 };
 Engine.prototype.cached = function (name){ return this.fxCache[name] || null; };
 Engine.prototype.sfx = function (name, opts, when){
-  const V = this.sfxVoices;
-  if (name === 'stopAll'){ for (const v of V.splice(0)) v.kill(0.02); return; }
+  const V = this.sfxVoices, now = this.ctx.currentTime;
+  if (name === 'stopAll'){
+    for (const v of V.splice(0)) v.kill(0.012);
+    /* the shared reverbs hold the tails: duck their return; it comes back with the next effect (not before 0.4 s) */
+    if (this.verbOut){ const g = this.verbOut.gain; g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.linearRampToValueAtTime(0, now + 0.012); this.ducked = now + 0.4; }
+    return;
+  }
   const fn = SFX[name]; if (!fn) return;
-  const now = this.ctx.currentTime;
-  for (let i = V.length - 1; i >= 0; i--) if (V[i].dead || V[i].end < now) V.splice(i, 1);
-  while (V.length >= SFX_MAX) V.shift().kill(0.015);   // polyphony: the oldest makes room
-  const v = new Voice(this, Math.max(when, now));
+  if (this.ducked){ const g = this.verbOut.gain, at = Math.max(now, this.ducked); g.cancelScheduledValues(now); g.setValueAtTime(0, at); g.linearRampToValueAtTime(1, at + 0.05); this.ducked = 0; }
+  const at = Math.max(when, now);
+  for (let i = V.length - 1; i >= 0; i--) if (V[i].dead || V[i].end < at) V.splice(i, 1);
+  while (V.length >= SFX_MAX) V.shift().kill(0.015, at);   // polyphony: the oldest makes room (as this one starts)
+  const v = new Voice(this, at);
   fn(v, v.t, opts || {});
   V.push(v); v.cleanup();
   return v;
@@ -645,8 +753,13 @@ if (/[?&]debug\b/.test(location.search)) sound._dbg = {
   eng: () => eng,
   render(name, opts, secs){
     const O = window.OfflineAudioContext || window.webkitOfflineAudioContext, sr = 48000;
-    const ctx = new O(2, Math.round((secs || 3) * sr), sr), E = new Engine(ctx);
-    for (const [n, o, at] of Array.isArray(name) ? name : [[name, opts, 0]]) E.sfx(n, o, 0.01 + (at || 0));
+    const ctx = new O(2, Math.round(((secs || 3) + 0.3) * sr), sr), E = new Engine(ctx);
+    if (opts && opts._dry){ sfxVerbs(E); E.verbOut.gain.value = 0; }
+    if (opts && opts._bus){ E.out.disconnect(); E.sfxBus.connect(ctx.destination); }   // the bus itself, before any dynamics
+    for (const [n, o, at] of Array.isArray(name) ? name : [[name, opts, 0]]){
+      if (n === 'stopAll') ctx.suspend(0.3 + at).then(() => { E.sfx('stopAll'); ctx.resume(); });   // (a stop needs the clock there)
+      else E.sfx(n, o, 0.3 + (at || 0));   // (0.3 s in: the compressors settle from their initial state first)
+    }
     return ctx.startRendering();
   },
 };

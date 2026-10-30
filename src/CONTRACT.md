@@ -194,28 +194,34 @@ MAC.sound = {
   music,                    // gone: a silent stand-in (alive() false, time() -1, env() all zeros) until no caller is left
 }
 ```
-Intro sound effects, `MAC.sound.sfx(name, opts)`: synthesised live from Web Audio nodes (no music, no files), each call a
-voice on its own sfx bus (compressor, limiter) into the master chain, so the mute toggle silences them. A no-op (cheap,
-never throws) before the first gesture has unlocked audio, while muted, with the tab hidden, or without Web Audio;
-nothing is queued or replayed later. At most 8 voices: a ninth fades out the oldest (15 ms). Fire them on the beat
-they belong to; each starts ~5 ms after the call.
+Intro sound effects, `MAC.sound.sfx(name, opts)`: synthesised live from Web Audio nodes (no music, no files). Each is
+layered: a transient, a body (saturated sines so laptop speakers hear the low end as harmonics) and a tail (sends into
+two shared convolvers: a small room that glues everything into one space and a long dark hall for the big hits). Each
+call is a voice on the sfx bus (highpass, a gentle glue compressor) into the master limiter and mute stage, so the mute
+toggle silences them. A no-op (cheap, never throws) before the first gesture has unlocked audio, while muted, with the
+tab hidden, or without Web Audio; nothing is queued or replayed later. At most 8 voices: a ninth fades out the oldest
+(15 ms). Each starts ~5 ms after the call (plus ~12 ms of compressor/limiter lookahead). Levels (offline, through the
+whole chain, loudest 50 ms RMS): impact big -9 dBFS, impact -11, boot/type big -13, type/riser -15, zap/tubeOn/whoosh/
+whip/tapeStop about -19, tick -24; every peak below -1 dBFS, even 8 stacked.
 
 | name | what | opts |
 |---|---|---|
-| `'boot'` | CRT power-on: relay click, saturated thunk, static "fwump", a whine rising and fading (~2.2 s) | |
-| `'tubeOn'` | one tube: tick, thump, the degauss hum's wobble, a faint whine (~0.9 s) | `i` (index: steps pitch) |
-| `'whoosh'` | camera move: band-swept noise with a low body, panned across | `dur` s (0.8), `dir` -1/0/1 |
-| `'whip'` | whip pan: fast, bright | `dur` s (0.24), `dir` -1/1 |
-| `'zap'` | electric glitch on a cut (~0.2 s, random each time) | |
-| `'tick'` | a small hit (~0.08 s) | `pitch` (1) |
-| `'riser'` | rising tension, cut dead at the hit | `dur` s until the hit (1.5) |
-| `'impact'` | an impact frame: pitch-dropping sine, crack, thud, short reverb | `big: true` = the final slam (sub-boom, ~3 s tail) |
-| `'tapeStop'` | hit-stop freeze: a chord and hiss slowing to a halt, a clunk | `dur` s (0.45) |
-| `'type'` | a word or letter slamming down (the Enter key's recording pitched down + a thump) | `i` (varies pitch), `big` (a word: lower, heavier, a crack) |
-| `'stopAll'` | fade out and stop everything playing within ~20 ms | |
+| `'boot'` | CRT warming up: switch double-click and thunk, the degauss "bwong" (wobbling 60 Hz hum + coil ring), static crackle thinning out over a fizz, the flyback whine rising into place (~2 s) | |
+| `'tubeOn'` | one tube: relay double tick, a saturated thup with a puff, a glass ping, a short degauss hum, a spark, a faint whine (~0.6 s) | `i`: pitch and place across the stereo field |
+| `'whoosh'` | camera move: three bands of stereo noise (swept air, low body, sheen) under one smooth swell, panned on an S-curve | `dur` s (0.8), `dir` -1/0/1 |
+| `'whip'` | whip pan: a fast bright rip with a snap at its peak | `dur` s (0.22), `dir` -1/1 |
+| `'zap'` | high-voltage arc (~0.13-0.19 s): a sharp transient, band-limited noise crackling through a fast gate, an FM mains buzz (120 Hz carrier, 240/360 Hz modulator, saturated) chopped by the same gate, a low snap; three variants rotate | `v` 0-2 picks one (2 adds a short pitch-dive) |
+| `'tick'` | a small hit: click, short ping, low knock (~0.06 s) | `pitch` (1) |
+| `'riser'` | rising tension: rising/narrowing noise band, three detuned saws gliding up two octaves through an opening filter, a saturated sub, a tremolo speeding into a stutter; cut dead at the hit, the room ringing on | `dur` s until the hit (1.5, max 8) |
+| `'impact'` | an impact frame: click, crack, mid smack, low punch, a pitch-dropping sine driven into the saturator over a clean sub, room tail | `big: true` = the final slam (100→28 Hz boom, debris sizzle, dark rumble, ~4 s hall tail); `lead` s: start a reversed whoosh-in that long before the hit (default 0: the hit is now) |
+| `'tapeStop'` | hit-stop freeze: a drone and its hiss decelerating together like stopped tape, then the brake's clunk | `dur` s (0.45) |
+| `'type'` | a word or letter slamming down: the Enter key's Topre recording pitched down with its thock lifted, a saturated thump, a puff, a click | `i` (varies pitch), `big` (a word: lower, heavier, a crack) |
+| `'stopAll'` | fade out and stop everything playing (voices and the reverbs' tails) in 12 ms; audible content is gone ~25 ms later | |
 
 With `?debug`, `MAC.sound._dbg = { eng(), render(name | [[name, opts, at], ...], opts, secs) }`: the live engine
-(e.g. `eng().sfxOut` to tap an AnalyserNode) and an offline render through the whole chain (resolves to an AudioBuffer).
+(e.g. `eng().sfxOut` to tap an AnalyserNode) and an offline render through the whole chain, starting 0.3 s in so the
+compressors have settled (resolves to an AudioBuffer; `'stopAll'` entries are honoured at their time; opts `_dry`
+mutes the reverbs, `_bus` taps the bus before any dynamics).
 The typist calls `MAC.sound.key(code, true)` at finger contact and `(code, false)` at release (if MAC.sound exists).
 The terminal calls `MAC.sound.event('disk' | 'beep' | 'error')` where it makes sense.
 
