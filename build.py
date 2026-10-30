@@ -25,7 +25,12 @@ dev = '--dev' in sys.argv
 minify = not dev and '--no-minify' not in sys.argv
 ESBUILD = 'esbuild@0.24.2'   # pinned: the minified output only changes when this does
 ORDER = ['content.js', 'keysamples.js', 'sound.js', 'scene.js', 'room.js', 'typist.js', 'terminal.js', 'apps.js', 'extras.js', 'editor.js', 'reader.js', 'stubs.js', 'main.js']
-scripts = ''.join(f'<script>\n{(src / n).read_text(encoding="utf-8")}\n</script>\n' for n in ORDER if (src / n).exists() and (dev or n != 'stubs.js'))
+DESK = ['scene.js', 'room.js', 'typist.js']   # the 3D room: shipped inert, run only on desktops (main.js), so phones never parse it
+def block(n):
+    if n == DESK[0]: return '<script>\n' + ';\n'.join((src / d).read_text(encoding='utf-8') for d in DESK) + '\n</script>\n'
+    if n in DESK: return ''
+    return f'<script>\n{(src / n).read_text(encoding="utf-8")}\n</script>\n'
+scripts = ''.join(block(n) for n in ORDER if (src / n).exists() and (dev or n != 'stubs.js'))
 body = (src / 'head.html').read_text(encoding='utf-8') + '\n' + scripts
 
 BLOCK = re.compile(r'<(script|style)>(.*?)</\1>', re.S)   # inline blocks only (<script src> has attributes)
@@ -69,6 +74,11 @@ if minify:
         print(f'WARNING: not minified ({e}); building readable output', file=sys.stderr)
         minify = False
 
+# the desk block becomes inert text (type="text/plain"): main.js copies it into a live <script> on desktops only
+_desk = [m for m in BLOCK.finditer(body) if m.group(1) == 'script' and 'loadScene' in m.group(2) and 'createTypist' in m.group(2) and 'desk3d' not in m.group(2)]   # (main.js names both too)
+if len(_desk) != 1: raise SystemExit('build: could not find the 3D room block')
+DESK_CODE = _desk[0].group(2)
+body = body[:_desk[0].start()] + '<script type="text/plain" id="desk3d">' + DESK_CODE + '</script>' + body[_desk[0].end():]
 (out / 'site.html').write_text(body, encoding='utf-8')
 cut = body.index('</style>') + len('</style>')
 page = ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
@@ -92,7 +102,8 @@ ICON = next((l for l in (src / 'head.html').read_text(encoding='utf-8').splitlin
 # fetch (curl, weather, hn, wiki, define).
 def csp_hashes(html):
     return ' '.join(sorted({"'sha256-" + base64.b64encode(hashlib.sha256(m.group(2).encode('utf-8')).digest()).decode() + "'"
-                            for m in BLOCK.finditer(html) if m.group(1) == 'script'}))
+                            for m in BLOCK.finditer(html) if m.group(1) == 'script'} |
+                           {"'sha256-" + base64.b64encode(hashlib.sha256(DESK_CODE.encode('utf-8')).digest()).decode() + "'"}))   # the desk block, run as a copy
 
 
 CSP = '; '.join([

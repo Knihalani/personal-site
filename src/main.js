@@ -54,6 +54,8 @@ function whenReady(go){
 if (small()){ flat(); return; }
 /* three.js comes in on its own (head.html): the room starts when it is here. A desktop where it fails, or has not
    arrived after 10 s (a hung CDN), gets the terminal alone, as without WebGL */
+/* the room's code ships inert (build.py: <script type="text/plain" id="desk3d">): run it now, desktops only */
+{ const d = D.getElementById('desk3d'); if (d && !M.createTypist){ const s = D.createElement('script'); s.textContent = d.textContent; D.head.appendChild(s); } }
 const start = () => {
   if (window.THREE && !M.createScene && M.loadScene) M.loadScene();   // scene.js was parsed before three.js arrived
   if (!window.THREE || !M.createScene){ console.warn('3D off: three.js did not load'); flat(); return; }
