@@ -1486,7 +1486,7 @@ M.createTerminal = function createTerminal(opts){
     }
     /* the camera's jolts: [at, strength] */
     const KK = [.4, .5, .8, .5, 1.2, .8, 1.4, .3, 1.6, 1, 2.4, .25, 3.2, 1, 3.3, .35, 3.6, .45, 4.0, .8, 5.2, 1, 5.4, .35, 5.62, .6, 6.1, .7, 6.2, .3,
-      7.0, .25, 7.1, .35, 7.2, 1.1, 8.0, .6, 8.4, 1, 8.8, .4, 9.2, .4, 9.4, .3, 9.6, .8, 9.8, .35, 10.0, .4, 10.4, .45, 10.6, .35, 10.8, .4, 10.9, .45, 11.0, .5, 11.1, .55, 11.2, 1.8];
+      7.0, .25, 7.1, .35, 7.2, 1.1, 8.0, .6, 8.4, 1, 8.8, .4, 9.2, .4, 9.4, .3, 9.6, .8, 9.8, .35, 10.0, .4, 10.4, .45, 10.7, .35, 10.8, .4, 10.9, .45, 11.0, .5, 11.1, .55, 11.2, 1.8];
     /* the sound effects, on the grid: [at, name, options] (sound.js sfx; silent until the page has been touched; each
        fires on the frame its moment is reached, never late: a missed one is skipped). Tubes switching on call 'tubeOn'
        from the wall itself */
@@ -1495,7 +1495,7 @@ M.createTerminal = function createTerminal(opts){
       [4.4, 'whoosh', { dur: .55, dir: -1 }], [4.95, 'whoosh', { dur: .25, dir: 1 }], [5.2, 'impact'], [5.2, 'tapeStop', { dur: .13 }], [5.4, 'type'], [5.62, 'type'], [6.1, 'type', { big: true }], [6.2, 'tick'],
       [6.4, 'whoosh', { dur: .4, dir: -1 }], [6.6, 'riser', { dur: .6 }], [7.2, 'impact'], [7.2, 'tapeStop', { dur: .1 }], [7.2, 'zap'],
       [7.6, 'zap'], [7.62, 'whoosh', { dur: .38, dir: -1 }], [8.0, 'whip'], [8.4, 'impact'], [8.4, 'tapeStop', { dur: .1 }], [8.8, 'zap'], [9.2, 'whip'], [9.6, 'impact'], [9.6, 'tapeStop', { dur: .1 }], [9.8, 'zap'],
-      [9.4, 'tick'], [10.0, 'riser', { dur: 1.2 }], [10.4, 'zap'], [10.6, 'zap'], [10.8, 'tick'], [10.9, 'tick'], [11.0, 'tick'], [11.1, 'whoosh', { dur: .1, dir: 1 }], [11.2, 'impact', { big: true }], [11.2, 'tapeStop', { dur: .13 }]];
+      [9.4, 'tick'], [10.0, 'riser', { dur: 1.2 }], [10.4, 'zap'], [10.7, 'zap'], [10.8, 'tick'], [10.9, 'tick'], [11.0, 'tick'], [11.1, 'whoosh', { dur: .1, dir: 1 }], [11.2, 'impact', { big: true }], [11.2, 'tapeStop', { dur: .13 }]];
     const NOOPT = {}, TUBEOPT = { i: 0 };
     function sfx(name, o){ try { const s = M.sound; if (s && s.sfx) s.sfx(name, o || NOOPT); } catch (e){} }
 
@@ -2123,8 +2123,8 @@ M.createTerminal = function createTerminal(opts){
         const d = Math.exp(lerp(Math.log(dc), Math.log(dw), p)) * lerp(1, .84, sstep(6.75, 7.2, S));
         lerpC(o, lerp(ex, vx, p), lerp(ey, vy, p), -d, .05 * Math.sin(S * 3), 0, lerp(.35, -.05, p) + .03 * Math.sin(S * 5));
       } else if (S < T_KN){                            // every tube flips to KN from the middle out; the camera pulls back
-        const p = eO3((S - T_W4) / .4);
-        lerpC(o, 0, 0, -Math.exp(lerp(Math.log(dc * 1.6), Math.log(DK()), p)), 0, 0, lerp(.25, 0, p));
+        const p = eO3((S - T_W4) / .25);
+        lerpC(o, 0, 0, -Math.exp(lerp(Math.log(dc * 1.6), Math.log(DK()), p)) * lerp(1, .82, sstep(7.8, T_KN, S)), 0, 0, lerp(.25, 0, p));
       } else {                                         // behind the KN: its own angle on the wall, shot by shot
         const k = shotOf(S), u = c01((S - KCUT[k]) / (KCUT[k + 1] - KCUT[k])), D = DK();
         lerpC(o, 0, 0, -D, 0, 0, 0);
@@ -2171,6 +2171,7 @@ M.createTerminal = function createTerminal(opts){
       const on = T_W4 - .12 + d * .035, f = c01((S - on) / .12);   // each flips over (a turn about its upright) to the KN
       if (f < .5) tsTex = TEX[(base + 3) % NT]; else tsTex = i === 0 && j === 0 ? TX_KN : TEX[7];
       tsFlip = Math.abs(Math.cos(f * Math.PI)); tsBr = (.6 + .4 * Math.exp(-ph * 9)) * (S > T_KN ? .75 : 1);
+      if (S > 7.78 && S < T_KN + .05){ const q = (S - 7.8 - (8 - Math.min(d, 8)) * .024) / .035; tsBr *= 1 + .9 * Math.exp(-q * q); }   // (light running in to the middle tube)
       return on;
     }
     const WLF = new Float32Array(8);
@@ -2464,7 +2465,7 @@ M.createTerminal = function createTerminal(opts){
       tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h);
       tg.globalAlpha = .55; tg.drawImage(htc, 0, 0); tg.globalAlpha = 1;
       radial(cx, h * .58, Math.min(W2, h) * .32, SH[si(.75)], .35);
-      typeOn(tg, true); hollow(LO.n16, cx, h * .6, LO.u16 * 1.04);
+      typeOn(tg, true); hollow(LO.n16, cx, h * .67, LO.u16 * .86);
       const u = LO.uHead; vlineC(LO.w1, LO.hx1, LO.hy + 3 * u, u, null, 1); vlineC(LO.w2, LO.hx2, LO.hy + 3 * u, u, null, 1);
       tg.globalCompositeOperation = 'source-over'; lumAcc += W2 * h * .1;
     }
@@ -2603,7 +2604,7 @@ M.createTerminal = function createTerminal(opts){
        0.1 s cuts in the last beat, and the set (bars, floor) only for the slam */
     let SHOT = 9, FK = 1, SOLID = 1, CHK = 1, ALPHA = 1, SWEEP = -1, SETK = 1, WALLK = 0, BGK = 0, ANCH = -1, AX = 0, AY = 0;
     const K_BURST = 0, K_CHROME = 1, K_HERO = 2, K_WHIP = 3, K_TOP = 4, K_CLOSE = 5, K_DUTCH = 6, K_WIND = 7, K_LOW = 8, K_TQ = 9, K_MG1 = 10, K_MG2 = 11, K_MG3 = 12, K_RUSH = 13, K_LOOP = 14;
-    const KCUT = [T_KN, T_CH, 8.8, 9.2, 9.4, T_EDGE, 9.8, 10.0, 10.4, 10.6, 10.8, 10.9, 11.0, 11.1, SLAM];
+    const KCUT = [T_KN, T_CH, 8.8, 9.2, 9.4, T_EDGE, 9.8, 10.0, 10.4, 10.7, 10.8, 10.9, 11.0, 11.1, SLAM];
     function shotOf(S){ let k = 0; while (k < KCUT.length - 2 && S >= KCUT[k + 1]) k++; return k; }
     function shotPose(S){
       let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, sx = 1, sy = 1;
@@ -2614,7 +2615,8 @@ M.createTerminal = function createTerminal(opts){
         case K_BURST: { const e = eO3(u); WALLK = 1;   // out of the middle tube in wireframe, spinning in its own plane (always readable)
           z = Z0 * lerp(2.4, 1.1, e); yaw = lerp(-.55, -.3, e); pit = lerp(-.1, -.2, e); rol = lerp(-1.6, 0, e); SOLID = 0; CHK = 0; break; }
         case K_CHROME: WALLK = 1; z = Z0 * lerp(1.12, 1.0, u); yaw = lerp(-.45, .38, eIO(u)); pit = -.22; y = logoY + .3 * Math.sin(u * Math.PI); SWEEP = u * 1.2; break;
-        case K_HERO: WALLK = 1; z = Z0 * lerp(1.02, .84, eO3(u)); yaw = lerp(.75, .1, u); pit = lerp(.48, .3, u); rol = lerp(-.2, -.05, u); y = logoY + lerp(.6, 1.9, eO3(u)); break;
+        case K_HERO: if (S < 8.867){ SHOT = K_CLOSE; FK = 2.6; yaw = .5; pit = .32; rol = -.15; SWEEP = .5; BGK = 1; ANCH = LET[1].o + LET[1].n + 3; AX = W2 * .45; AY = h * .55; break; }   // (a two-frame macro insert)
+          WALLK = 1; z = Z0 * lerp(1.02, .84, eO3(u)); yaw = lerp(.75, .1, u); pit = lerp(.48, .3, u); rol = lerp(-.2, -.05, u); y = logoY + lerp(.6, 1.9, eO3(u)); break;
         case K_WHIP: WALLK = 1; z = Z0; yaw = lerp(-.7, .7, eIO(u)); pit = -.15; rol = lerp(.2, -.15, u); break;   // (a whip that never goes near edge-on)
         case K_TOP: WALLK = 1; z = Z0 * 1.05; pit = -.85; yaw = .12; rol = lerp(-.6, .4, u); break;
         case K_CLOSE: FK = 2.8; yaw = lerp(.28, .4, u); pit = lerp(-.3, -.22, u); SWEEP = u; BGK = 1; ANCH = LET[0].o + LET[0].n + 6; AX = lerp(W2 * .56, W2 * .5, u); AY = lerp(h * .36, h * .44, u); break;   // the extreme close-up on the K's arm
