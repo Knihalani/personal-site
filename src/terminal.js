@@ -1758,6 +1758,7 @@ M.createTerminal = function createTerminal(opts){
     const vW = t => { let w2 = 0; for (let i = 0; i < t.length; i++){ const gl = VG[t[i]]; w2 += gl ? gl.w + (i < t.length - 1 ? VGAP : 0) : VSPACE; } return w2; };
     /* a letter's own motion (in letter units), set by the animation callback for each letter; one object, reused */
     const VA = { dx: 0, dy: 0, s: 1, sx: 1, sy: 1, on: true };
+    let vz = 1;   // how far the current card is zoomed (for the glow)
     /* the path of line t, centred on x with its baseline at y, u px to the unit; anim(i, n) may set VA */
     function vline(t, x, y, u, anim){
       const x0 = x - (vW(t) * COND + 6 * SLANT) * u / 2;
@@ -1786,7 +1787,8 @@ M.createTerminal = function createTerminal(opts){
       g.lineCap = 'square'; g.lineJoin = 'miter'; g.miterLimit = 3;
       if (inv){ g.strokeStyle = P.bg; g.lineWidth = lw * 1.15; g.beginPath(); vline(t, x, y, u, anim); g.stroke(); }
       else {
-        g.globalAlpha = .28; g.strokeStyle = SH[si(.4)]; g.lineWidth = lw * 3; g.beginPath(); vline(t, x, y, u, anim); g.stroke(); g.globalAlpha = 1;
+        const ga = .28 * clamp((2.4 - vz) / 1.2, 0, 1);   // the glow thins out as the camera zooms in, so big letters stay clean
+        if (ga > .01){ g.globalAlpha = ga; g.strokeStyle = SH[si(.4)]; g.lineWidth = lw * (1 + 2 / Math.max(1, vz)); g.beginPath(); vline(t, x, y, u, anim); g.stroke(); g.globalAlpha = 1; }
         g.strokeStyle = SH[si(.96)]; g.lineWidth = lw; g.beginPath(); vline(t, x, y, u, anim); g.stroke();
         g.save(); g.beginPath(); g.rect(-W, y - 2.75 * u, 3 * W, 4 * u); g.clip();
         g.strokeStyle = SH[si(.56)]; g.lineWidth = lw * 1.04; g.beginPath(); vline(t, x, y, u, anim); g.stroke(); g.restore();
@@ -1879,7 +1881,7 @@ M.createTerminal = function createTerminal(opts){
       g.save();
       const by = c.y0 - c.hgt / 2;                        // (scale about the block's middle)
       const mid = h * .47;
-      const zoom = (s3, ox, oy) => { g.translate(ox, oy); g.scale(s3, s3); g.translate(-ox, -oy); };
+      vz = 1; const zoom = (s3, ox, oy) => { vz *= s3; g.translate(ox, oy); g.scale(s3, s3); g.translate(-ox, -oy); };
       let yb = 0;
       switch (c.mv){
         case 'push': {                                    // the title's push carries on, then a whip off to the left
@@ -1899,7 +1901,7 @@ M.createTerminal = function createTerminal(opts){
           if (c.smallL.length && p > .08){ g.translate(0, (1 - eOutX((p - .08) / .3)) * 4 * cU); if (q < .5) smallLines(c, yb); }
           break; }
         case 'drop': {                                    // falls in from above with a little follow-through; its line wipes in; then whips away left
-          const e = backOut(Math.min(1, p / .4)); g.translate(0, -h * .75 * (1 - e));
+          const e = backOut(Math.min(1, (p + .1) / .32)); g.translate(0, -h * .32 * (1 - e));   // (already on screen on the cut: never an empty frame)
           if (q > 0){ const v = eInX(q); g.translate(-W * .8 * v, 0); g.translate(cx, mid); g.scale(1 + 1.8 * q, 1); g.translate(-cx, -mid); streaks(-1, q, c); }
           yb = bigLines(c, false, null);
           if (c.smallL.length && p > .12){ const wv = eOutX((p - .12) / .35); g.save(); g.beginPath(); g.rect(0, yb, W * wv, h); g.clip(); smallLines(c, yb); g.restore(); }
@@ -1924,7 +1926,7 @@ M.createTerminal = function createTerminal(opts){
           bigLines(c, inv, null);
         }
       }
-      g.restore();
+      g.restore(); vz = 1;
       void by;
       return inv ? 2 : 1;
     }
