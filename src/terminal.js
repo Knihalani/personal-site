@@ -1681,39 +1681,6 @@ M.createTerminal = function createTerminal(opts){
       const b = bake(text, true); strip = b.face; stripR = b.refl; stripW = b.w; nameAt = b.xs[at];
       const tn = fontText(C.name || 'KN'); titleN = tn.length; title = bake(tn); sub = bake('PRESENTS');
     }
-    /* ---- the title card: the name typed out letter by letter with a block cursor, PRESENTS rastered in under it on
-       the beat; then it squashes to a line, and the line to a dot ---- */
-    const T_TYPE = .2, T_LET = .05, T_SUB = 1.0, T_SHUT = 99;   // (the title is cut away by the first card at 2 s)
-    function titleCard(a){
-      if (a < T_TYPE - .05 || a >= CARD0) return;
-      if (!strip) makeStrip();
-      const k = Math.max(2, Math.min(Math.round(s * .75), Math.floor(W * .8 / (title.w + GW)))), k2 = Math.max(2, Math.round(k * .55));
-      const cyT = h * .3, tw = title.w * k, sw = sub.w * k2, th = (GH + 1) * k + k2 * 3 + (GH + 1) * k2;
-      const yt = Math.round(cyT - th / 2), xt = Math.round(cx - tw / 2), xs = Math.round(cx - sw / 2), yb = yt + (GH + 1) * k + k2 * 3;
-      if (a >= T_SHUT + .25){                         // the line closes to a dot, which fades
-        const u = (a - T_SHUT - .25) / .35, wl = Math.max(6, tw * (1 - sstep(0, .55, u))), al = 1 - sstep(.55, 1, u);
-        g.globalAlpha = al; g.fillStyle = P.bright; g.fillRect(Math.round(cx - wl / 2), Math.round(cyT) - 2, Math.round(wl), 4); g.globalAlpha = 1;
-        return;
-      }
-      const sq = 1 - sstep(T_SHUT, T_SHUT + .25, a);
-      g.save();
-      if (sq < 1){ g.translate(0, cyT); g.scale(1, Math.max(.03, sq)); g.translate(0, -cyT); }
-      g.imageSmoothingEnabled = false;
-      const typed = (a - T_TYPE) / T_LET, n = clamp(Math.floor(typed) + 1, 0, titleN);
-      const X = title.xs, wn = X[n] + 1;
-      if (n > 0) g.drawImage(title.face, 0, 0, wn, GH + 1, xt, yt, wn * k, (GH + 1) * k);
-      if (n > 0 && typed < titleN){ const f = typed - Math.floor(typed); g.globalAlpha = .7 * (1 - f); g.fillStyle = P.bright; g.fillRect(xt + X[n - 1] * k, yt, (X[n] - X[n - 1] - 1) * k, 7 * k); g.globalAlpha = 1; }   // each letter burns in
-      const done = T_TYPE + titleN * T_LET;
-      if (a < done + .9 && (a < done || ((a - done) * 4 | 0) % 2 === 0)){ g.fillStyle = SH[si(.8)]; g.fillRect(xt + X[n] * k + k, yt, 6 * k, 7 * k); }   // the cursor, blinking on the beat once the name is in
-      if (a >= T_SUB){                                // PRESENTS, rastered in row by row with a hot scan line
-        const rows = Math.min(GH + 1, Math.floor((a - T_SUB) / .3 * (GH + 1)) + 1);
-        g.drawImage(sub.face, 0, 0, sub.w + 1, rows, xs, yb, (sub.w + 1) * k2, rows * k2);
-        if (rows < GH + 1){ g.fillStyle = P.bright; g.fillRect(xs - k2 * 2, yb + rows * k2, (sub.w + 4) * k2, Math.max(2, k2 >> 1)); }
-      }
-      g.imageSmoothingEnabled = true; g.restore();
-      lumAcc += tw * (GH + 1) * k * .25 * sq;
-    }
-
     /* ---- stars: a box of them flying at the viewer ---- */
     const NST = 200, ZR = 110, stx = new Float32Array(NST), sty = new Float32Array(NST), stz = new Float32Array(NST);
     for (let i = 0; i < NST; i++){ stx[i] = (rnd() * 2 - 1) * 70; sty[i] = .5 + rnd() * 70; stz[i] = rnd() * ZR; }
@@ -1760,102 +1727,216 @@ M.createTerminal = function createTerminal(opts){
     }
 
     /* ---- the show: the opening (age a, seconds), then the loop (L = a - SLAM) ---- */
-    const T_FLOOR = 7.6, T_BARS = 8.0, T_LOGO = 8.1, T_HOLD = 10.6, T_RUSH = 11.3, SLAM = 12.0, SCROLL0 = 12.25, GPS = 2.6;   // (GPS: glyphs a second, a reading pace)
-    let ADV = null;
-    const adv = ch => { if (!ADV){ ADV = {}; for (const c in FONT8){ let a2 = GW, b2 = -1; FONT8[c].split('|').forEach(row => { for (let x = 0; x < GW; x++) if (row[x] === '#'){ if (x < a2) a2 = x; if (x > b2) b2 = x; } }); ADV[c] = b2 < 0 ? 4 : b2 - a2 + 2; } } return ADV[ch] || 4; };
-    const textW = t => { let w2 = 0; for (const ch of t) w2 += adv(ch); return w2; };
-    /* ---- the cards: one fact a card, in huge type on a dark field, cut on the kick (2 s to 8 s), each with its own
-       treatment; THE GOAT? last, then a zoom through its O into hyperspace ---- */
+    const T_FLOOR = 7.6, T_BARS = 8.0, T_LOGO = 8.0, T_HOLD = 10.6, T_RUSH = 11.3, SLAM = 12.0, SCROLL0 = 12.25, GPS = 2.6;   // (GPS: glyphs a second, a reading pace)
+    /* ---- display type: a condensed italic stroke face with chamfered corners (a vector display's letters), drawn as
+       paths at the size it is seen, never upscaled, so it stays crisp through any zoom. One material for the title and
+       every card: a soft phosphor glow, a bright chrome top, a darker lower half under a horizon line (the logo's chrome),
+       a hot hairline core. Glyphs are strokes on a 4 x 6 grid (y up); compiled once ---- */
+    const VF = {
+      A: [[0, 0, 0, 4, 1.5, 6, 2.5, 6, 4, 4, 4, 0], [0, 2.6, 4, 2.6]], B: [[0, 0, 0, 6, 3, 6, 4, 5, 4, 4, 3, 3, 0, 3], [3, 3, 4, 2, 4, 1, 3, 0, 0, 0]],
+      C: [[4, 1, 3, 0, 1, 0, 0, 1, 0, 5, 1, 6, 3, 6, 4, 5]], D: [[0, 0, 0, 6, 3, 6, 4, 5, 4, 1, 3, 0, 0, 0]], E: [[4, 0, 0, 0, 0, 6, 4, 6], [0, 3, 3, 3]],
+      F: [[0, 0, 0, 6, 4, 6], [0, 3, 3, 3]], G: [[4, 5, 3, 6, 1, 6, 0, 5, 0, 1, 1, 0, 3, 0, 4, 1, 4, 3, 2.2, 3]], H: [[0, 0, 0, 6], [4, 0, 4, 6], [0, 3, 4, 3]],
+      I: [[0, 0, 0, 6]], J: [[4, 6, 4, 1, 3, 0, 1, 0, 0, 1, 0, 2]], K: [[0, 0, 0, 6], [4, 6, 1.2, 3, 0, 3], [1.2, 3, 4, 0]], L: [[0, 6, 0, 0, 4, 0]],
+      M: [[0, 0, 0, 6, 2.5, 3, 5, 6, 5, 0]], N: [[0, 0, 0, 6, 4, 0, 4, 6]], O: [[1, 0, 3, 0, 4, 1, 4, 5, 3, 6, 1, 6, 0, 5, 0, 1, 1, 0]],
+      P: [[0, 0, 0, 6, 3, 6, 4, 5, 4, 4, 3, 3, 0, 3]], Q: [[1, 0, 3, 0, 4, 1, 4, 5, 3, 6, 1, 6, 0, 5, 0, 1, 1, 0], [2.6, 1.4, 4, -.2]],
+      R: [[0, 0, 0, 6, 3, 6, 4, 5, 4, 4, 3, 3, 0, 3], [2, 3, 4, 0]], S: [[4, 5, 3, 6, 1, 6, 0, 5, 0, 4, 1, 3, 3, 3, 4, 2, 4, 1, 3, 0, 1, 0, 0, 1]],
+      T: [[0, 6, 4, 6], [2, 6, 2, 0]], U: [[0, 6, 0, 1, 1, 0, 3, 0, 4, 1, 4, 6]], V: [[0, 6, 2, 0, 4, 6]], W: [[0, 6, 1.2, 0, 2.5, 4, 3.8, 0, 5, 6]],
+      X: [[0, 0, 4, 6], [0, 6, 4, 0]], Y: [[0, 6, 2, 3, 4, 6], [2, 3, 2, 0]], Z: [[0, 6, 4, 6, 0, 0, 4, 0]],
+      0: [[1, 0, 3, 0, 4, 1, 4, 5, 3, 6, 1, 6, 0, 5, 0, 1, 1, 0], [.9, 1.3, 3.1, 4.7]], 1: [[.8, 4.8, 2, 6, 2, 0]], 2: [[0, 5, 1, 6, 3, 6, 4, 5, 4, 4, 0, 0, 4, 0]],
+      3: [[0, 5, 1, 6, 3, 6, 4, 5, 4, 4, 3, 3, 1.6, 3], [3, 3, 4, 2, 4, 1, 3, 0, 1, 0, 0, 1]], 4: [[3, 0, 3, 6, 0, 2, 0, 1.6, 4, 1.6]],
+      5: [[4, 6, 0, 6, 0, 3, 3, 3, 4, 2, 4, 1, 3, 0, 0, 0]], 6: [[4, 5, 3, 6, 1, 6, 0, 5, 0, 1, 1, 0, 3, 0, 4, 1, 4, 2, 3, 3, 0, 3]], 7: [[0, 6, 4, 6, 1.4, 0]],
+      8: [[1, 3, 0, 4, 0, 5, 1, 6, 3, 6, 4, 5, 4, 4, 3, 3, 1, 3, 0, 2, 0, 1, 1, 0, 3, 0, 4, 1, 4, 2, 3, 3]], 9: [[4, 3, 1, 3, 0, 4, 0, 5, 1, 6, 3, 6, 4, 5, 4, 1, 3, 0, 1, 0, 0, 1]],
+      '.': [[0, 0, 0, .02]], ',': [[.4, .3, -.2, -1]], '?': [[0, 5, 1, 6, 3, 6, 4, 5, 4, 4, 2, 2.6, 2, 1.8], [2, 0, 2, .02]], '!': [[0, 1.8, 0, 6], [0, 0, 0, .02]],
+      '+': [[0, 3, 4, 3], [2, 1, 2, 5]], '-': [[0, 3, 3, 3]], "'": [[0, 6, 0, 4.4]], ':': [[0, 1, 0, 1.02], [0, 4, 0, 4.02]], '/': [[0, 0, 3, 6]],
+      '(': [[1.4, 6, 0, 4.4, 0, 1.6, 1.4, 0]], ')': [[0, 6, 1.4, 4.4, 1.4, 1.6, 0, 0]], '·': [[0, 3, 0, 3.02]],
+    };
+    const COND = .8, SLANT = .2, VGAP = 1.55, VSPACE = 2.8;
+    const VG = {};
+    for (const ch in VF){ let mn = 99, mx = -99; for (const st of VF[ch]) for (let i = 0; i < st.length; i += 2){ mn = Math.min(mn, st[i]); mx = Math.max(mx, st[i]); }
+      VG[ch] = { w: mx - mn, s: VF[ch].map(st => Float32Array.from(st.map((v, i) => i % 2 ? v : v - mn))) }; }
+    VG['&'] = VG['+'];
+    const vW = t => { let w2 = 0; for (let i = 0; i < t.length; i++){ const gl = VG[t[i]]; w2 += gl ? gl.w + (i < t.length - 1 ? VGAP : 0) : VSPACE; } return w2; };
+    /* a letter's own motion (in letter units), set by the animation callback for each letter; one object, reused */
+    const VA = { dx: 0, dy: 0, s: 1, sx: 1, sy: 1, on: true };
+    /* the path of line t, centred on x with its baseline at y, u px to the unit; anim(i, n) may set VA */
+    function vline(t, x, y, u, anim){
+      const x0 = x - (vW(t) * COND + 6 * SLANT) * u / 2;
+      let cx2 = 0;
+      for (let i = 0, n = t.length; i < n; i++){
+        const gl = VG[t[i]]; if (!gl){ cx2 += VSPACE; continue; }
+        VA.dx = 0; VA.dy = 0; VA.s = 1; VA.sx = 1; VA.sy = 1; VA.on = true; if (anim) anim(i, n);
+        if (VA.on){
+          const hw = gl.w / 2, ccx = cx2 + hw, ks = VA.s * VA.sx, ky = VA.s * VA.sy;
+          for (const st of gl.s){
+            for (let k = 0; k < st.length; k += 2){
+              const gx = (st[k] - hw) * ks + ccx + VA.dx, gy = (st[k + 1] - 3) * ky + 3 + VA.dy;
+              const X = x0 + (gx * COND + gy * SLANT) * u, Y = y - gy * u;
+              if (k) g.lineTo(X, Y); else g.moveTo(X, Y);
+            }
+          }
+        }
+        cx2 += gl.w + VGAP;
+      }
+    }
+    /* centre x (px) of letter i of t, set as vline would set it */
+    function vCharX(t, i, x, u){ const x0 = x - (vW(t) * COND + 6 * SLANT) * u / 2; let cx2 = 0; for (let j = 0; j < i; j++){ const gl = VG[t[j]]; cx2 += gl ? gl.w + VGAP : VSPACE; } const gl = VG[t[i]]; return x0 + ((cx2 + (gl ? gl.w / 2 : 0)) * COND + 3 * SLANT) * u; }
+    /* the material: glow, chrome top, darker ground under the horizon, hot core. inv: dark letters (on a bright field) */
+    function vtext(t, x, y, u, anim, inv){
+      const lw = .9 * u;
+      g.lineCap = 'square'; g.lineJoin = 'miter'; g.miterLimit = 3;
+      if (inv){ g.strokeStyle = P.bg; g.lineWidth = lw * 1.15; g.beginPath(); vline(t, x, y, u, anim); g.stroke(); }
+      else {
+        g.globalAlpha = .28; g.strokeStyle = SH[si(.4)]; g.lineWidth = lw * 3; g.beginPath(); vline(t, x, y, u, anim); g.stroke(); g.globalAlpha = 1;
+        g.strokeStyle = SH[si(.96)]; g.lineWidth = lw; g.beginPath(); vline(t, x, y, u, anim); g.stroke();
+        g.save(); g.beginPath(); g.rect(-W, y - 2.75 * u, 3 * W, 4 * u); g.clip();
+        g.strokeStyle = SH[si(.56)]; g.lineWidth = lw * 1.04; g.beginPath(); vline(t, x, y, u, anim); g.stroke(); g.restore();
+        g.globalAlpha = .9; g.strokeStyle = P.bright; g.lineWidth = Math.max(1, lw * .2); g.beginPath(); vline(t, x, y, u, anim); g.stroke(); g.globalAlpha = 1;
+      }
+      g.lineCap = 'butt'; g.lineJoin = 'miter';
+      lumAcc += vW(t) * COND * u * 6 * u * .22;
+    }
+
+    /* ---- the title: the name typed on, each letter popping in, PRESENTS tracking in under it on the beat; then the whole
+       card pushes into the camera and the first card carries the push on ---- */
+    const T_TYPE = .2, T_LET = .05, T_SUB = 1.0;
+    let tName = '', tA = 0;
+    const eOutX = x => x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(2, -10 * x), eInX = x => x <= 0 ? 0 : x >= 1 ? 1 : Math.pow(2, 10 * x - 10);
+    const animName = i => { const p = tA - (T_TYPE + i * T_LET); if (p < 0){ VA.on = false; return; } const e = eOutX(p / .22); VA.s = 1 + .55 * (1 - e); VA.dy = 1.2 * (1 - e); };
+    const animSub = (i, n) => { const e = eOutX((tA - T_SUB) / .55); if (tA < T_SUB){ VA.on = false; return; } VA.dx = (i - (n - 1) / 2) * 2.4 * (1 - e); };
+    function titleCard(a){
+      if (a < T_TYPE - .05 || a >= CARD0) return;
+      if (!tName) tName = fontText(C.name || 'KN');
+      tA = a;
+      const U = Math.min(W * .8 / (vW(tName) * COND + 1.2), h * .1), us = U * .38, y = h * .44;
+      const q = sstep(CARD0 - .25, CARD0, a), z2 = 1 + 2.4 * q * q * q;   // the push into the camera
+      g.save(); if (q > 0){ g.translate(cx, y - 3 * U); g.scale(z2, z2); g.translate(-cx, -(y - 3 * U)); }
+      vtext(tName, cx, y, U, animName, false);
+      vtext('PRESENTS', cx, y + 2.4 * U + 6 * us, us, animSub, false);
+      g.restore();
+    }
+
+    /* ---- the cards: one fact a card on a dark field, cut on the kick (2 s to 8 s). One type, one size, one grid; the
+       motion differs, and each cut is a match: the push carries on, a whip leaves left and the next comes in from the
+       right, a dive through an O lands in the next card, letters fall and the next drops in, a squash to a line opens
+       into the next word, a slam, and THE GOAT? dives through its O into the scene ---- */
     const CARD0 = 2.0, CARD_END = 8.0;
-    let cards = null, cardKey = '', cardI = -1;
+    let cards = null, cardKey = '', cardI = -1, cU = 0, cP = 0, cQ = 0, cardN = 0;
     function cardDefs(){
       const bl = String((A.body || []).join('\n')).split('\n').map(x => x.replace(/^\s*[-*•]\s*/, '').trim()).filter(Boolean);
       const has = re => bl.some(b => re.test(b)), yo = /(\d+)\s*y\/o/i.exec(bl.join(' '));
       const out = [];
-      if (yo) out.push({ d: .5, big: yo[1] + '.', fx: 'crop' });
-      if (has(/hong kong/i)) out.push({ d: 1, big: 'HONG KONG.', fx: 'through' });
-      if (has(/founder of j/i) && has(/founder of eden/i)) out.push({ d: 1, big: 'FOUNDER.', small: 'J + EDEN', fx: 'outline' });
-      if (J.line) out.push({ d: 1, big: 'J', small: J.line + '.', fx: 'stretch' });
-      if (E.line) out.push({ d: 1, big: 'EDEN', small: E.line + '.', fx: 'whip' });
-      if (has(/squash/i)) out.push({ d: .5, big: 'SQUASH.', fx: 'stutter' });
-      if (has(/bjj/i)) out.push({ d: .5, big: 'BJJ.', fx: 'smash' });
-      out.push({ d: .5, big: 'THE GOAT?', fx: 'goat' });
-      /* back to back from CARD0, the last running to CARD_END */
+      if (yo) out.push({ d: .5, big: yo[1] + '.', mv: 'push' });
+      if (has(/hong kong/i)) out.push({ d: 1, big: 'HONG KONG.', mv: 'hk' });
+      if (has(/founder of j/i) && has(/founder of eden/i)) out.push({ d: 1, big: 'FOUNDER.', small: 'J + EDEN', mv: 'dive' });
+      if (J.line) out.push({ d: 1, big: 'J', small: J.line + '.', mv: 'drop' });
+      if (E.line) out.push({ d: 1, big: 'EDEN', small: E.line + '.', mv: 'eden' });
+      if (has(/squash/i)) out.push({ d: .5, big: 'SQUASH.', mv: 'squash' });
+      if (has(/bjj/i)) out.push({ d: .5, big: 'BJJ.', mv: 'slam' });
+      out.push({ d: .5, big: 'THE GOAT?', mv: 'goat' });
       let t2 = CARD0; out.forEach(c => { c.t0 = t2; t2 += c.d; }); out[out.length - 1].d = CARD_END - out[out.length - 1].t0;
       return out;
     }
     function makeCards(){
-      if (!strip) makeStrip();
       const tall = h > W * .9;
-      cards = cardDefs().map(c => {
-        const words = fontText(c.big), bigL = (tall && c.fx !== 'through' ? words.split(' ') : [words]).map(x => bake(x));
-        const bw = Math.max(...bigL.map(x => x.w)) + 1;
-        let kB = Math.floor(Math.min(W * .9 / bw, h * (c.small ? .5 : .62) / (bigL.length * (GH + 1))));
-        if (c.fx === 'crop') kB = Math.floor(Math.min(h * .98 / 7, W * 1.15 / bw));   // just bigger than the tube: cropped, still read
-        let smallL = [], kS = 0;
+      cards = cardDefs();
+      for (const c of cards){ const t = fontText(c.big); c.bigL = tall ? t.split(' ') : [t]; }
+      /* one cap height for every big word: the widest line sets it */
+      let mw = 0; for (const c of cards) for (const l of c.bigL) mw = Math.max(mw, vW(l) * COND + 6 * SLANT);
+      cU = Math.min(W * .84 / mw, h * .16);
+      for (const c of cards){
+        c.smallL = [];
         if (c.small){
-          const st = fontText(c.small); kS = Math.max(3, Math.min(Math.floor(kB * .3), Math.floor(W * .88 / (textW(st) + 1))));
-          if (kS < Math.floor(kB * .16)) kS = Math.max(3, Math.floor(kB * .16));   // too long for one line at a readable size: wrap
-          const max = W * .88 / kS; let cur = ''; for (const wd of st.split(' ')){ const nx = cur ? cur + ' ' + wd : wd; if (cur && textW(nx) > max){ smallL.push(bake(cur)); cur = wd; } else cur = nx; } if (cur) smallL.push(bake(cur));
+          const us = cU * .36, max = W * .86 / us, st = fontText(c.small); let cur = '';
+          for (const wd of st.split(' ')){ const nx = cur ? cur + ' ' + wd : wd; if (cur && vW(nx) * COND + 6 * SLANT > max){ c.smallL.push(cur); cur = wd; } else cur = nx; }
+          if (cur) c.smallL.push(cur); c.us = us;
         }
-        const lhB = (GH + 2) * kB, lhS = (GH + 3) * kS, hgt = bigL.length * lhB + (smallL.length ? smallL.length * lhS + lhB * .25 : 0);
-        if (c.fx !== 'crop' && hgt > h * .85){ const f = h * .85 / hgt; kB = Math.max(3, Math.floor(kB * f)); kS = Math.max(3, Math.floor(kS * f)); }   // the whole block fits the tube
-        const big = bigL[0], o = bigL.length === 1 ? words.indexOf('O') : -1;
-        return Object.assign(c, { bigL, kB, smallL, kS, bw, ox: o >= 0 ? (big.xs[o] + 3.5) : bw / 2 });
-      });
+        const nb = c.bigL.length, ns = c.smallL.length;
+        c.hgt = nb * 6 * cU + (nb - 1) * 2.4 * cU + (ns ? 2.2 * cU + ns * 6 * c.us + (ns - 1) * 2.6 * c.us : 0);
+        c.y0 = h * .47 - c.hgt / 2 + 6 * cU;            // the first baseline
+        const oi = c.bigL[0].indexOf('O'); c.ox = oi >= 0 ? vCharX(c.bigL[0], oi, cx, cU) : cx; c.oy = c.y0 - 3 * cU;
+      }
     }
-    /* draws a baked line centred at (x, y top), k per font pixel */
-    function line(b, x, y, k){ g.drawImage(b.face, 0, 0, b.w + 1, GH + 1, Math.round(x - (b.w + 1) * k / 2), Math.round(y), (b.w + 1) * k, (GH + 1) * k); }
-    function cardBlock(c, x, k, noSmall, noBig){                     // the big lines and the small ones under them, centred on the tube
-      const lhB = (GH + 2) * k, lhS = (GH + 3) * c.kS * (k / c.kB), hgt = c.bigL.length * lhB + (c.smallL.length ? c.smallL.length * lhS + lhB * .25 : 0);
-      let y = h * .46 - hgt / 2;
-      for (const b of c.bigL){ if (!noBig) line(b, x, y, k); y += lhB; }
-      y += lhB * .25;
-      if (!noSmall) for (const b of c.smallL){ line(b, x, y, c.kS * (k / c.kB)); y += lhS; }
+    /* the letters' own motions, reading the card's clock (cP: seconds in, cQ: 0..1 through its exit) */
+    const animFall = i => { const e = eInX(clamp(cQ * 1.7 - i * .09, 0, 1)); VA.dy = -14 * e; };           // FOUNDER. leaving: letters drop away, one after another
+    const animSpring = i => { const p = cP - .05 - i * .035; if (p < 0){ VA.sy = .02; return; } VA.sy = Math.max(.02, backOut(Math.min(1, p / .22))); VA.dy = .9 * Math.max(0, Math.sin(p * 18)) * Math.exp(-p * 9); };
+    function bigLines(c, inv, anim){ let y = c.y0; for (const l of c.bigL){ vtext(l, cx, y, cU, anim, inv); y += 8.4 * cU; } return y - 8.4 * cU; }
+    function smallLines(c, yb){ let y = yb + 2.2 * cU + 6 * c.us; for (const l of c.smallL){ vtext(l, cx, y, c.us, null, false); y += 8.6 * c.us; } }
+    function streaks(dir, v, c){                       // speed lines across the text band, as long as the motion is fast
+      if (v < .05) return;
+      g.fillStyle = SH[si(.35)];
+      for (let k = 0; k < 6; k++){ const y = c.y0 - (k + .5) * cU, l = W * .5 * v * (.6 + .4 * Math.sin(k * 2.3)), x = dir > 0 ? cx - l * .2 : cx - l * .8; g.fillRect(x, y, l, Math.max(1, cU * .12)); }
     }
     /* returns 2 on an inverted frame (a bright event), 1 when a card is up, 0 when none */
     function cardShow(a){
       if (a < CARD0 || a >= CARD_END) return 0;
       if (!cards || cardKey !== fitKey){ cardKey = fitKey; makeCards(); }
       let i = 0; while (i < cards.length - 1 && a >= cards[i + 1].t0) i++;
-      const c = cards[i], p = a - c.t0, u = p / c.d, fresh = i !== cardI;
-      if (fresh){ cardI = i; if (c.fx === 'whip' || c.fx === 'smash') tearN = Math.max(tearN, 1); }   // some cuts tear for a frame
-      const inv = c.fx === 'goat' && p < .067;
+      const c = cards[i], p = a - c.t0, X = .16, q = clamp((p - (c.d - X)) / X, 0, 1);
+      cP = p; cQ = q;
+      if (i !== cardI){ cardI = i; cardN++; }
+      const inv = c.mv === 'goat' && p < .067;
       g.fillStyle = inv ? SH[si(.92)] : P.bg; g.fillRect(0, 0, W, h);
-      g.imageSmoothingEnabled = false; g.save();
-      let k = c.kB, x = cx;
-      switch (c.fx){
-        case 'crop': { k = c.kB * (1 + .5 * (1 - sstep(0, .1, p))); x = cx + (.5 - u) * W * .18; cardBlock(c, x, k); break; }   // giant, cropped, drifting; a smash in
-        case 'through': {                            // accelerating into the O, and through it
-          const z2 = Math.exp(u * u * 3.2), ox = cx - (c.bw * k) / 2 + c.ox * k, oy = h * .46;
-          g.translate(ox, oy); g.scale(z2, z2); g.translate(-ox, -oy); cardBlock(c, x, k); break; }
-        case 'outline': {                            // a scanline wipe: alternate rows first, then the rest
-          cardBlock(c, x, k);
-          if (p < .1){ g.fillStyle = P.bg; const step = p < .05 ? 8 : 4, off = p < .05 ? 0 : 2; for (let y = off; y < h; y += step) rawFill(0, y, W, step / 2); }
+      g.save();
+      const by = c.y0 - c.hgt / 2;                        // (scale about the block's middle)
+      const mid = h * .47;
+      const zoom = (s3, ox, oy) => { g.translate(ox, oy); g.scale(s3, s3); g.translate(-ox, -oy); };
+      let yb = 0;
+      switch (c.mv){
+        case 'push': {                                    // the title's push carries on, then a whip off to the left
+          const e = eOutX(p / .3); zoom(1 + .9 * (1 - e) + .03 * p, cx, mid);
+          if (q > 0){ const v = eInX(q); g.translate(-W * .8 * v, 0); g.translate(cx, mid); g.scale(1 + 1.8 * q, 1); g.translate(-cx, -mid); streaks(-1, q, c); }
+          yb = bigLines(c, false, null); break; }
+        case 'hk': {                                      // whips in from the right, overshoots, settles; then dives through the O
+          const e = backOut(Math.min(1, p / .36)), v = 1 - eOutX(p / .3);
+          const z = q > 0 ? 1 : 0, dive = clamp((p - (c.d - .32)) / .32, 0, 1);
+          g.translate(W * .8 * (1 - e), 0); if (v > .02){ g.translate(cx, mid); g.scale(1 + 1.4 * v * v, 1); g.translate(-cx, -mid); streaks(1, v, c); }
+          zoom(1 + .05 * p, cx, mid);
+          if (dive > 0) zoom(Math.exp(5.2 * Math.pow(dive, 2.4)), c.ox, c.oy);
+          void z; yb = bigLines(c, false, null); break; }
+        case 'dive': {                                    // landing out of the O: the dive carries on and settles
+          const e = eOutX(p / .32); zoom(1 + 1.8 * (1 - e), cx, mid);
+          yb = bigLines(c, false, q > 0 ? animFall : null);
+          if (c.smallL.length && p > .08){ g.translate(0, (1 - eOutX((p - .08) / .3)) * 4 * cU); if (q < .5) smallLines(c, yb); }
           break; }
-        case 'stretch': { const e = eOut(p / .2); g.translate(cx, h * .46); g.scale(1 + .9 * (1 - e), 1 - .35 * (1 - e)); g.translate(-cx, -h * .46); cardBlock(c, x, k, p < .12); break; }   // (its small line cut in a beat-fraction later)
-        case 'whip': {                               // a whip pan in, ghosts trailing
-          const e = eOut(p / .14), dx = W * (1 - e);
-          if (e < 1) for (let q = 3; q >= 1; q--){ g.globalAlpha = .18; g.save(); g.translate(dx + q * W * .06, 0); cardBlock(c, x, k); g.restore(); }
-          g.globalAlpha = 1; g.translate(dx, 0); cardBlock(c, x, k); break; }
-        case 'stutter': {                            // split in two, the halves jumping against each other, then locking
-          const st2 = p < .22 ? ((p * 30 | 0) % 2 ? 1 : -1) * k * 3 * (1 - p / .22) : 0;
-          g.save(); g.beginPath(); g.rect(0, 0, W, h * .46 + (GH + 1) * k / 2); g.clip(); g.translate(st2, 0); cardBlock(c, x, k); g.restore();
-          g.save(); g.beginPath(); g.rect(0, h * .46 + (GH + 1) * k / 2, W, h); g.clip(); g.translate(-st2, 0); cardBlock(c, x, k); g.restore();
+        case 'drop': {                                    // falls in from above with a little follow-through; its line wipes in; then whips away left
+          const e = backOut(Math.min(1, p / .4)); g.translate(0, -h * .75 * (1 - e));
+          if (q > 0){ const v = eInX(q); g.translate(-W * .8 * v, 0); g.translate(cx, mid); g.scale(1 + 1.8 * q, 1); g.translate(-cx, -mid); streaks(-1, q, c); }
+          yb = bigLines(c, false, null);
+          if (c.smallL.length && p > .12){ const wv = eOutX((p - .12) / .35); g.save(); g.beginPath(); g.rect(0, yb, W * wv, h); g.clip(); smallLines(c, yb); g.restore(); }
           break; }
-        case 'smash': { const e = sstep(0, .09, p), z2 = 2.4 - 1.4 * e; g.translate(cx, h * .46); g.scale(z2, z2); g.translate(-cx, -h * .46); cardBlock(c, x, k); break; }
-        default: {                                   // THE GOAT?: inverted on the cut, rays, then zooming through its O into what comes next
-          if (!inv) radial(cx, h * .46, W * .1, SH[si(.16)], .8);
-          const zt = sstep(c.d - .3, c.d, p), z2 = Math.exp(zt * zt * 3.4), ox = cx - (c.bw * k) / 2 + c.ox * k;
-          if (zt > 0){ g.translate(ox, h * .46); g.scale(z2, z2); g.translate(-ox, -h * .46); }
-          if (inv) g.globalCompositeOperation = 'destination-out';
-          cardBlock(c, x, k); g.globalCompositeOperation = 'source-over';
+        case 'eden': {                                    // whips in from the right; its line rises in after; then squashes to a line
+          const e = backOut(Math.min(1, p / .36)), v = 1 - eOutX(p / .3);
+          g.translate(W * .8 * (1 - e), 0); if (v > .02){ g.translate(cx, mid); g.scale(1 + 1.4 * v * v, 1); g.translate(-cx, -mid); streaks(1, v, c); }
+          if (q > 0){ g.translate(0, mid); g.scale(1 + .3 * q, Math.max(.02, 1 - eInX(q))); g.translate(0, -mid); }
+          yb = bigLines(c, false, null);
+          if (c.smallL.length && p > .1){ g.translate(0, (1 - eOutX((p - .1) / .3)) * 3 * cU); smallLines(c, yb); }
+          break; }
+        case 'squash': { bigLines(c, false, animSpring); break; }   // springs open out of that line, letter by letter
+        case 'slam': {                                    // drops in from huge and lands hard
+          const l = Math.min(1, p / .12), s3 = 1 + 2.4 * (1 - l * l); zoom(s3, cx, mid);
+          if (p > .12){ const j = Math.exp(-(p - .12) * 22) * Math.sin((p - .12) * 70) * cU * .5; g.translate(j, j * .6); }
+          bigLines(c, false, null); break; }
+        default: {                                        // THE GOAT?: inverted on the cut, settling, rays; then the dive through its O
+          if (!inv) radial(cx, mid, W * .12, SH[si(.14)], .8);
+          zoom(1 + .1 * (1 - eOutX(p / .3)), cx, mid);
+          const dive = clamp((p - (c.d - .3)) / .3, 0, 1);
+          if (dive > 0) zoom(Math.exp(5.6 * Math.pow(dive, 2.4)), c.ox, c.oy);
+          bigLines(c, inv, null);
         }
       }
-      g.restore(); g.imageSmoothingEnabled = true;
-      lumAcc += W * h * .05;
+      g.restore();
+      void by;
       return inv ? 2 : 1;
     }
+    /* out of the last card's O: the scene opens as an octagonal iris, fast, settling */
+    function iris(a){
+      const u = (a - CARD_END) / .38; if (u < 0 || u >= 1) return;
+      const r = Math.min(W, h) * (.06 + 1.6 * eOutX(u)), k = r * .41, x = cx, y = h * .47;
+      g.fillStyle = P.bg; g.beginPath(); g.rect(0, 0, W, h);
+      g.moveTo(x - k, y - r); g.lineTo(x + k, y - r); g.lineTo(x + r, y - k); g.lineTo(x + r, y + k); g.lineTo(x + k, y + r); g.lineTo(x - k, y + r); g.lineTo(x - r, y + k); g.lineTo(x - r, y - k); g.closePath();
+      g.fill('evenodd');
+    }
+
 
     const SECTION = 16, TURN = 2.2, HS = .1;   // eight bars at 120 bpm; a full turn opens each one
     const NB = 5, bp = new Float32Array(NB), bo = new Int8Array(NB), bY = new Float32Array(NB), bD = new Float32Array(NB);
@@ -2007,21 +2088,21 @@ M.createTerminal = function createTerminal(opts){
       /* stars: drift, hyperspace behind the title, back to a drift; keys push them */
       let speed = still ? 0 : a < SLAM ? 8 + 50 * sstep(.4, 1.8, a) + 300 * bump(a, 7.9, 9.9, .7) : 9;   // a rush behind the title; hyperspace out of the last card
       speed += 70 * kick + 25 * bk;
-      dist += speed * dt; floorD += (still ? 0 : 3 + 6 * kick) * dt;
+      dist += speed * dt; floorD += (still ? 0 : 3 + 10 * bump(a, T_LOGO, T_RUSH, .5) + 6 * kick) * dt;   // (the floor runs faster under the dolly)
       /* the logo */
       let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, alpha = 1, flash = 0, shake = 0, shakeX = 0, tw0 = 0, tw1 = 0, sweep = -1, sx = 1, sy = 1, rushU = 0;
       if (!still && a < SLAM){
-        alpha = sstep(T_LOGO, T_LOGO + .5, a);
-        if (a < T_HOLD){                               // out of the vanishing point, tumbling, slowing as it comes
-          const u = eOut((a - T_LOGO) / (T_HOLD - T_LOGO));
-          z = 170 + (1.5 * Z0 - 170) * u; yaw = (1 - u) * 3 * Math.PI - .2 * u; pit = -.28 + (1 - u) * TAU * .5; rol = (1 - u) * .6;
+        alpha = sstep(T_LOGO, T_LOGO + .04, a);
+        if (a < T_HOLD){                               // the hero from the first frame: out of the iris, large, the camera dollying in and round it
+          const u = sstep(T_LOGO, T_HOLD, a), e = eOut((a - T_LOGO) / (T_HOLD - T_LOGO));
+          z = 1.7 * Z0 + (1.2 * Z0 - 1.7 * Z0) * u; yaw = -1.15 + 1.35 * e; pit = -.05 - .23 * u; rol = .12 * (1 - e);
         } else if (a < T_RUSH){                       // a breath: it drifts back and winds up
           const u = sstep(T_HOLD, T_RUSH, a);
-          z = 1.5 * Z0 + .35 * Z0 * u; yaw = -.2 - .25 * u; pit = -.28 + .12 * u;
+          z = 1.2 * Z0 + .25 * Z0 * u; yaw = -.2 - .25 * u; pit = -.28 + .12 * u;
           sx = 1 + .1 * u; sy = 1 - .13 * u;            // the wind-up: it squashes
         } else {                                      // and rushes in on the beat
           const u = eIn((a - T_RUSH) / (SLAM - T_RUSH));
-          z = 1.85 * Z0 + (Z0 - 1.85 * Z0) * u; yaw = -.45 * (1 - u); pit = -.16 - .12 * u;
+          z = 1.45 * Z0 + (Z0 - 1.45 * Z0) * u; yaw = -.45 * (1 - u); pit = -.16 - .12 * u;
           const v = (a - T_RUSH) / (SLAM - T_RUSH); sx = 1.1 - .2 * v; sy = .87 + .33 * v; rushU = v;   // and stretches as it comes
         }
         y = logoY + (1 - alpha) * 2;
@@ -2079,7 +2160,7 @@ M.createTerminal = function createTerminal(opts){
         silhouette(P.bg, true); radial(lsx, lsy, lr * 1.05, P.bg, 1);
         g.restore();
       }
-      let card = 0; if (!still){ titleCard(a); card = cardShow(a); }
+      if (!still){ iris(a); titleCard(a); cardShow(a); }
       if (flash > .01 && hit !== 1){ g.globalAlpha = flash; g.fillStyle = P.bright; g.fillRect(0, 0, W, h); g.globalAlpha = 1; }
       if (tearN > 0 && hit !== 1){                   // a torn frame: alternate bands of the picture slip sideways, one frame
         tearN--; g.setTransform(1, 0, 0, 1, 0, 0);
