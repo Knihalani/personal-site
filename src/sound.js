@@ -286,7 +286,7 @@ function Engine(ctx){
   const sHp = ctx.createBiquadFilter(); sHp.type = 'highpass'; sHp.frequency.value = 28; sHp.Q.value = 0.7;
   const sGlue = ctx.createDynamicsCompressor();
   sGlue.threshold.value = -12; sGlue.knee.value = 6; sGlue.ratio.value = 2.5; sGlue.attack.value = 0.003; sGlue.release.value = 0.15;
-  E.sfxOut = ctx.createGain(); E.sfxOut.gain.value = 0.5;
+  E.sfxOut = ctx.createGain(); E.sfxOut.gain.value = 0.45;
   E.sfxBus.connect(sHp); sHp.connect(sGlue); sGlue.connect(E.sfxOut); E.sfxOut.connect(lim);
   E.sfxVoices = [];
 }
@@ -463,190 +463,187 @@ for (const z of ZAPS){   // on/off segments of 2-9 ms, sparser toward the end
   z.gate = g;
 }
 
-const SFX = {
-  /* CRT power-on: the switch's double click and a saturated thunk; the degauss coil's "bwong" (two detuned 60 Hz saws
-     through a resonant lowpass, wobbling, plus the coil's ring); static crackling as the tube charges (sparse clicks
-     of high noise) with a fizz swelling under it; the flyback whine rising into place (with a faint 15.7 kHz); the
-     drive spinning up if its sound is already built. */
-  boot(v, t){
-    v.out.gain.value = 0.75;
-    for (const [dt, pk] of [[0, 0.6], [0.011, 0.35]]){
-      const c = v.burst(t + dt, 0.0003, pk, 0.006, v.mono(), v.filter('bandpass', 2600, 1.2)); v.chain(c, v.wide(0.3, 1), v.out); v.send(c, 0.5);
+/* An electric sound world: cracks, crackling arcs, transformer buzz, flyback whine, sizzle, bit-crushed glitches.
+   Bright but never painful (arcs are lowpassed near 8-9 kHz); low end only on the big slam. The building blocks: */
+let CRUSH = null;
+function crushCurve(){   // 4-bit amplitude steps: bit-crush
+  if (CRUSH) return CRUSH;
+  const n = 1024, c = new Float32Array(n);
+  for (let i = 0; i < n; i++){ const x = i / (n - 1) * 2 - 1; c[i] = Math.round(x * 7) / 7; }
+  return (CRUSH = c);
+}
+const EL = {
+  /* random spikes on a gain: rate(x) spikes a second at x in 0..1 of dur, each 0.4-2.5 ms, amplitude amp(x) * 0.3-1 */
+  spikes(p, t, dur, rate, amp){
+    p.setValueAtTime(0, t);
+    for (let x = 0, n = 0; x < dur && n < 600; n++){
+      const u = x / dur, a = amp(u) * (0.3 + Math.random() * 0.7), w = 0.0004 + Math.random() * 0.0021;
+      p.setValueAtTime(a, t + x); p.setValueAtTime(0, t + x + w);
+      x += w + (-Math.log(1 - Math.random() * 0.999) / Math.max(1, rate(u)));
     }
-    const th = v.dive('sine', 110, 46, 0.1, t, t + 0.4), thg = v.env(t, 0.002, 0.85, 0.28), ths = v.sat(2);
-    v.chain(th, thg, ths, v.filter('lowpass', 1400, 0.7), v.out); v.send(ths, 0.25);
-    /* degauss */
-    const dg = t + 0.05, lp = v.filter('lowpass', 680, 4), wob = v.gain(0.7), am = v.osc('sine', 7, dg, dg + 1.3), amd = v.gain(0.3);
-    am.connect(amd); amd.connect(wob.gain);
-    for (const [f, p] of [[60, -0.35], [60.45, 0.35]]){ const s = v.osc('sawtooth', f, dg, dg + 1.3); v.chain(s, v.pan(p), lp); }
-    const de = v.env(dg, 0.02, 0.32, 1.1); v.chain(lp, wob, de, v.out); v.send(de, 0.35);
-    const ring = v.dive('sine', 190, 150, 0.6, dg, dg + 0.9), rg = v.env(dg, 0.006, 0.12, 0.7); v.chain(ring, rg, v.out); v.send(rg, 0.4);
-    /* static crackle: random clicks of high noise, thinning out */
-    const cg = v.gain(0), cn = v.noise(t + 0.12, t + 1.9);
-    cg.gain.setValueAtTime(0, t);
-    for (let x = t + 0.15; x < t + 1.8; x += 0.008 + Math.random() * 0.05 * (1 + (x - t) * 1.5)){
-      const a = (0.25 + Math.random() * 0.75) * (1 - (x - t) / 2.1);
-      cg.gain.setValueAtTime(a, x); cg.gain.setValueAtTime(0, x + 0.0008 + Math.random() * 0.002);
-    }
-    v.chain(cn, v.filter('highpass', 2500, 0.7), v.filter('peaking', 5000, 1, 4), cg, v.gain(0.55), v.out); v.send(cg, 0.3);
-    const fz = v.gain(0); fz.gain.setValueAtTime(0.0001, t + 0.1); fz.gain.exponentialRampToValueAtTime(0.06, t + 0.9); fz.gain.exponentialRampToValueAtTime(0.0001, t + 2.1);
-    v.chain(v.noise(t + 0.1, t + 2.15), v.filter('bandpass', 7500, 0.9), fz, v.out);
-    /* flyback whine */
-    const w = v.osc('triangle', 2400, t + 0.1, t + 2.3), vib = v.osc('sine', 5.5, t + 0.1, t + 2.3), vd = v.gain(9);
-    w.frequency.setValueAtTime(2400, t + 0.1); w.frequency.exponentialRampToValueAtTime(7867, t + 0.95); vib.connect(vd); vd.connect(w.frequency);
-    const wg = v.gain(0); wg.gain.setValueAtTime(0.0001, t + 0.1); wg.gain.exponentialRampToValueAtTime(0.022, t + 0.7); wg.gain.setValueAtTime(0.022, t + 1.1); wg.gain.exponentialRampToValueAtTime(0.0001, t + 2.25);
-    v.chain(w, v.filter('lowpass', 9000, 0.7), wg, v.pan(0.15), v.out);
-    const h = v.osc('sine', 15734, t + 0.4, t + 2.3), hg = v.gain(0); hg.gain.setValueAtTime(0.0001, t + 0.4); hg.gain.exponentialRampToValueAtTime(0.008, t + 1.1); hg.gain.exponentialRampToValueAtTime(0.0001, t + 2.25); v.chain(h, hg, v.out);
-    const d = v.E.cached('disk'); if (d){ v.chain(v.buf(d[Math.floor(Math.random() * d.length)], t + 0.4), v.filter('highpass', 150), v.gain(0.14), v.pan(0.3), v.out); }
   },
-  /* one tube switching on: the relay's double tick, a saturated "thup" with a puff of air, a short degauss hum, a spark
-     of static, a faint whine; opts.i picks the pitch and the place across the wall (pan) */
-  tubeOn(v, t, o){
-    const i = o.i | 0, k = [1, 1.12, 0.94, 1.06, 0.89, 1.19, 1.03, 1.09, 0.97][((i % 9) + 9) % 9], p = ((((i * 4) % 9) + 9) % 9) / 8 * 1.1 - 0.55;
-    v.out.gain.value = 0.7;
-    const bus = v.pan(p);
-    v.chain(v.osc('sine', 1650 * k, t, t + 0.08), v.env(t, 0.001, 0.13, 0.05), bus);   // the glass's ping
-    bus.connect(v.out); v.send(bus, 0.3);
-    for (const [dt, pk] of [[0, 0.8], [0.007, 0.45]]) v.chain(v.burst(t + dt, 0.0003, pk, 0.006, v.mono(), v.filter('bandpass', 3400 * k, 1.4)), bus);
-    const s = v.dive('sine', 96 * k, 48 * k, 0.07, t, t + 0.3); v.chain(s, v.env(t, 0.002, 0.75, 0.17), v.sat(1.8), v.filter('lowpass', 1000, 0.7), bus);
-    v.chain(v.burst(t, 0.003, 0.35, 0.08, v.mono(), v.filter('lowpass', 700 * k, 0.8)), bus);
-    const lp = v.filter('lowpass', 560 * k, 3); v.osc('sawtooth', 60, t + 0.01, t + 0.4).connect(lp); v.osc('sawtooth', 60.6, t + 0.01, t + 0.4).connect(lp);
-    v.chain(lp, v.env(t + 0.01, 0.01, 0.14, 0.28), bus);
-    const sp = v.burst(t + 0.004, 0.002, 0.25, 0.08, v.filter('highpass', 5200 * k, 0.7)); sp.connect(v.out);
-    const w = v.osc('sine', 6900 + 330 * (((i * 5) % 7 + 7) % 7), t + 0.02, t + 0.7), wg = v.gain(0);
-    wg.gain.setValueAtTime(0.0001, t + 0.02); wg.gain.exponentialRampToValueAtTime(0.012, t + 0.12); wg.gain.exponentialRampToValueAtTime(0.0001, t + 0.68); v.chain(w, wg, bus);
+  /* a crackling arc: noise through a band, chopped by spikes, lowpassed; returns its output (route it on) */
+  arc(v, t, dur, rate, amp, f){
+    const g = v.gain(0); EL.spikes(g.gain, t, dur, rate, amp);
+    return v.chain(v.noise(t, t + dur + 0.01), v.filter('highpass', 1200), v.filter('bandpass', f || 4000, 0.6), g, v.filter('lowpass', 8500, 0.5));
   },
-  /* camera move: stereo noise in three bands (air sweeping up and back, a low body, a little sheen at the peak) under
-     one smooth swell, carried across by the pan */
-  whoosh(v, t, o){
-    const d = clamp(+o.dur || 0.8, 0.15, 4), dir = o.dir < 0 ? -1 : o.dir > 0 ? 1 : 0, pk = t + 0.6 * d, e = t + d;
-    v.out.gain.value = 1.1;
-    const env = v.gain(0); v.swell(env.gain, t, d, 0.6, 1, 2.2, 1.5);
-    const p = v.pan(0); if (dir && p.pan){ const c = new Float32Array(32); for (let j = 0; j < 32; j++) c[j] = 0.8 * dir * Math.tanh(3 * (j / 31 - 0.6)) / Math.tanh(1.8); p.pan.setValueCurveAtTime(c, t, d); }
-    const bp = v.filter('bandpass', 300, 1.1); bp.frequency.setValueAtTime(300, t); bp.frequency.exponentialRampToValueAtTime(2600, pk); bp.frequency.exponentialRampToValueAtTime(600, e);
-    const lp = v.filter('lowpass', 180, 0.8); lp.frequency.setValueAtTime(180, t); lp.frequency.exponentialRampToValueAtTime(900, pk); lp.frequency.exponentialRampToValueAtTime(220, e);
-    v.chain(v.noise(t, e + 0.02, 0.9), bp, v.gain(0.9), env); v.chain(v.noise(t, e + 0.02, 0.5), lp, v.gain(0.6), env);
-    v.chain(v.noise(t, e + 0.02), v.filter('highpass', 4500, 0.7), v.gain(0.1), env);
-    v.chain(env, p, v.out); v.send(env, 0.25);
+  /* a sharp crack: a 1-3 ms broadband click and a short bright band; mono, Haas-widened */
+  crack(v, t, a, out){
+    v.chain(v.burst(t, 0.0002, a, 0.003, v.mono(), v.filter('highpass', 1500)), v.wide(0.3, 1), out);
+    v.chain(v.burst(t, 0.0004, a * 0.6, 0.018, v.filter('bandpass', 3500, 0.8)), out);
   },
-  /* whip pan: a fast, bright rip across with a snap at its peak */
-  whip(v, t, o){
-    const d = clamp(+o.dur || 0.22, 0.08, 1), dir = o.dir < 0 ? -1 : 1, pk = t + 0.45 * d, e = t + d;
-    v.out.gain.value = 1;
-    const env = v.gain(0); v.swell(env.gain, t, d, 0.45, 1, 2.6, 1.3);
-    const p = v.pan(-0.85 * dir); if (p.pan){ p.pan.setValueAtTime(-0.85 * dir, t); p.pan.linearRampToValueAtTime(0.85 * dir, e); }
-    const bp = v.filter('bandpass', 1500, 1.5); bp.frequency.setValueAtTime(1500, t); bp.frequency.exponentialRampToValueAtTime(7500, pk); bp.frequency.exponentialRampToValueAtTime(2800, e);
-    const lp = v.filter('lowpass', 500, 0.7); lp.frequency.setValueAtTime(500, t); lp.frequency.exponentialRampToValueAtTime(1600, pk); lp.frequency.exponentialRampToValueAtTime(400, e);
-    v.chain(v.noise(t, e + 0.02), v.filter('highpass', 900), bp, env); v.chain(v.noise(t, e + 0.02, 0.6), lp, v.gain(0.45), env);
-    v.chain(env, p, v.out); v.send(env, 0.2);
-    const sn = v.burst(pk - 0.004, 0.0005, 0.3, 0.014, v.mono(), v.filter('bandpass', 4200, 1)); v.chain(sn, v.wide(0.5, dir), v.out);
-  },
-  /* electric glitch on a cut: a high-voltage arc. A sharp transient; band-limited noise crackling through a fast gate;
-     a mains buzz (a 120 Hz sine frequency-modulated at 240/360 Hz, saturated) chopped by the same gate; a short low
-     snap; on one variant a quick pitch-dive. Three variants rotate (opts.v picks one). */
-  zap(v, t, o){
-    const z = ZAPS[(o.v != null ? o.v | 0 : (v.E.zapN = ((v.E.zapN | 0) + 1) % ZAPS.length)) % ZAPS.length], e = t + z.dur;
-    v.out.gain.value = 1.25;
-    const gate = v.gain(0); for (const [x, a] of z.gate) gate.gain.setValueAtTime(a, t + x); gate.gain.setValueAtTime(0, e);
-    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, t + 0.002); env.gain.setValueAtTime(1, t + z.dur * 0.35); env.gain.exponentialRampToValueAtTime(0.0001, e);
-    gate.connect(env); env.connect(v.out); v.send(env, 0.3);
-    /* the transient */
-    const tr = v.burst(t, 0.0002, 0.9, 0.004, v.mono(), v.filter('highpass', 1500, 0.7)); v.chain(tr, v.wide(0.4, 1), v.out);
-    /* crackle */
-    v.chain(v.noise(t, e + 0.01), v.filter('highpass', 900), v.filter('bandpass', z.f, 0.9), v.gain(0.75), gate);
-    v.chain(v.noise(t, e + 0.01, 1.3), v.filter('highpass', 6000), v.gain(0.25), gate);
-    /* the buzz: FM around the mains harmonics */
-    const c = v.osc('sine', z.hum, t, e + 0.01), m = v.osc('sine', z.mod, t, e + 0.01), mi = v.gain(z.hum * 3.5);
-    mi.gain.setValueAtTime(z.hum * 3.5, t); mi.gain.exponentialRampToValueAtTime(z.hum * 1.2, e); m.connect(mi); mi.connect(c.frequency);
-    const bz = v.chain(c, v.sat(3, 0.5), v.filter('bandpass', 1100, 0.6)); v.chain(bz, v.gain(0.6), gate); v.chain(bz, v.gain(0.12), env);
-    /* weight */
-    v.chain(v.dive('sine', 140, 55, 0.04, t, t + 0.12), v.env(t, 0.001, 0.4, 0.06), v.sat(1.5), v.out);
-    if (z.pew){ const pw = v.dive('sine', 2200, 380, 0.06, t + 0.01, t + 0.1); v.chain(pw, v.env(t + 0.01, 0.001, 0.12, 0.07), v.out); }
-  },
-  /* a small hit: a crisp click, a short ping with a slight drop, a low knock; opts.pitch scales it */
-  tick(v, t, o){
-    const k = clamp(+o.pitch || 1, 0.25, 4);
-    v.out.gain.value = 0.9;
-    v.chain(v.burst(t, 0.0003, 0.3, 0.006, v.mono(), v.filter('highpass', 3000)), v.wide(0.4, 1), v.out);
-    const a = v.dive('sine', 1500 * k, 1150 * k, 0.03, t, t + 0.08), ag = v.env(t, 0.001, 0.32, 0.05); v.chain(a, ag, v.out); v.send(ag, 0.12);
-    v.chain(v.osc('sine', 3020 * k, t, t + 0.04), v.env(t, 0.0005, 0.1, 0.025), v.out);
-    v.chain(v.dive('sine', 220 * k, 150 * k, 0.03, t, t + 0.06), v.env(t, 0.001, 0.45, 0.04), v.out);
-  },
-  /* rising tension up to the hit at t + dur: stereo noise through a rising, narrowing bandpass; three detuned saws
-     (left, centre, right) gliding up two octaves through an opening resonant lowpass; a saturated sub rising under them;
-     a tremolo speeding into a stutter; all swell and cut dead at the hit, leaving only the room's ring */
-  riser(v, t, o){
-    const d = clamp(+o.dur || 1.5, 0.2, 8), e = t + d;
-    v.out.gain.value = 0.95;
-    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, e - 0.005); env.gain.linearRampToValueAtTime(0, e + 0.004);
-    env.connect(v.out); v.send(env, 0.35);
-    const trem = v.gain(0.55), lfo = v.osc('sine', 4, t, e + 0.01), depth = v.gain(0.2);
-    lfo.frequency.setValueAtTime(4, t); lfo.frequency.exponentialRampToValueAtTime(26, e); depth.gain.setValueAtTime(0.15, t); depth.gain.linearRampToValueAtTime(0.45, e);
-    lfo.connect(depth); depth.connect(trem.gain); trem.connect(env);
-    const bp = v.filter('bandpass', 400, 0.7); bp.frequency.setValueAtTime(400, t); bp.frequency.exponentialRampToValueAtTime(7500, e); bp.Q.setValueAtTime(0.7, t); bp.Q.linearRampToValueAtTime(4, e);
-    v.chain(v.noise(t, e + 0.01), bp, v.gain(0.5), trem);
-    const lp = v.filter('lowpass', 300, 3); lp.frequency.setValueAtTime(300, t); lp.frequency.exponentialRampToValueAtTime(7000, e);
-    for (const [dt, p] of [[-14, -0.6], [0, 0], [14, 0.6]]){ const s = v.dive('sawtooth', 110, 440, d, t, e + 0.01); s.detune.value = dt; v.chain(s, v.pan(p), lp); }
-    v.chain(lp, v.gain(0.13), trem);
-    v.chain(v.dive('sine', 40, 95, d, t, e + 0.01), v.sat(2.2, 0.5), v.filter('lowpass', 500), v.gain(0.5), env);
-  },
-  /* the impact frame. Transient: a broadband click and a crack (bandpassed stereo noise; big adds a high sizzle of
-     debris). Body: a punch of low noise and a pitch-dropping sine, driven into the saturator (its harmonics are what
-     small speakers play) under a clean copy for the true sub. Tail: the room (big: a dark rumble and the long hall).
-     opts.lead (s): start a reversed swell that far ahead and land the hit after it (default 0: the hit is now). */
-  impact(v, t, o){
-    const big = !!o.big, lead = clamp(+o.lead || 0, 0, 2), h = t + lead;
-    v.out.gain.value = big ? 0.95 : 0.75;
-    if (lead > 0.05){
-      const sw = v.gain(0); sw.gain.setValueAtTime(0.0001, t); sw.gain.exponentialRampToValueAtTime(0.7, h - 0.004); sw.gain.linearRampToValueAtTime(0, h + 0.002);
-      const bp = v.filter('bandpass', 400, 1); bp.frequency.setValueAtTime(400, t); bp.frequency.exponentialRampToValueAtTime(3500, h);
-      v.chain(v.noise(t, h + 0.01, 0.8), bp, sw, v.out);
-    }
-    v.chain(v.burst(h, 0.0002, big ? 0.9 : 0.7, 0.005, v.mono(), v.filter('highpass', 1800)), v.wide(0.3, 1), v.out);
-    const cr = v.burst(h, 0.0005, big ? 1.4 : 1.2, big ? 0.08 : 0.05, v.filter('highpass', 900), v.filter('bandpass', big ? 2200 : 2800, 0.6));
-    cr.connect(v.out); v.send(cr, big ? 0.4 : 0.45, big ? 0.6 : 0);
-    { const sm = v.burst(h, 0.001, big ? 1 : 0.6, big ? 0.12 : 0.06, v.mono(), v.filter('bandpass', 1100, 0.9)); sm.connect(v.out); v.send(sm, 0.2, big ? 0.5 : 0); }   // the smack: mids a laptop plays
-    if (big){ const db = v.burst(h + 0.005, 0.002, 0.3, 0.25, v.filter('highpass', 6000)); db.connect(v.out); v.send(db, 0.2, 0.4); }
-    const pu = v.burst(h, 0.001, big ? 0.85 : 0.8, big ? 0.16 : 0.09, v.mono(), v.filter('lowpass', 750, 0.9)); pu.connect(v.out); v.send(pu, 0.2, big ? 0.5 : 0);
-    const f0 = big ? 100 : 160, f1 = big ? 28 : 48, dec = big ? 2.2 : 0.38;
-    const s = v.dive('sine', f0, f1, big ? 0.7 : 0.13, h, h + dec + 0.05), sg = v.env(h, 0.002, 1, dec);
-    const sat = v.sat(big ? 3.2 : 2.6, big ? 0.7 : 0.8);
-    s.connect(sg); v.chain(sg, sat, v.filter('lowpass', big ? 1600 : 2200, 0.7), v.out); v.chain(sg, v.gain(big ? 0.6 : 0.45), v.out);
-    v.send(sat, big ? 0.1 : 0.15, big ? 0.35 : 0);
-    if (big){ const rb = v.gain(0); v.ad(rb.gain, h + 0.01, 0.05, 0.6, 2.6); v.chain(v.noise(h, h + 2.8, 0.3), v.filter('lowpass', 150, 0.7), rb, v.out); v.send(rb, 0, 0.3); }
-  },
-  /* hit-stop freeze: a dark drone and its hiss slowing to a halt like stopped tape (every layer's pitch falling at the
-     same linear rate, so it reads as one recording decelerating), then the brake's clunk */
-  tapeStop(v, t, o){
-    const d = clamp(+o.dur || 0.45, 0.1, 3), e = t + d;
-    v.out.gain.value = 0.55;
-    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, t + 0.006); env.gain.setValueAtTime(1, t + 0.5 * d); env.gain.exponentialRampToValueAtTime(0.0001, e);
-    const lp = v.filter('lowpass', 2600, 0.8);
-    for (const [f, p] of [[110, -0.4], [110.5, 0.4], [164.8, -0.2], [220.3, 0.2], [261.6, 0], [329.6, 0.3]]){
-      const s = v.osc('sawtooth', f, t, e + 0.01); s.frequency.setValueAtTime(f, t); s.frequency.linearRampToValueAtTime(f * 0.03, e); v.chain(s, v.pan(p), lp);
-    }
-    v.chain(lp, v.filter('highpass', 50), v.gain(0.13), env);
-    const n = v.noise(t, e + 0.01); n.playbackRate.setValueAtTime(1, t); n.playbackRate.linearRampToValueAtTime(0.03, e);
-    v.chain(n, v.filter('bandpass', 1800, 0.6), v.gain(0.3), env); env.connect(v.out); v.send(env, 0.2);
-    const k = v.dive('sine', 95, 50, 0.04, e - 0.006, e + 0.12); v.chain(k, v.env(e - 0.006, 0.002, 0.45, 0.08), v.sat(1.6), v.out);
-    v.chain(v.burst(e - 0.006, 0.0004, 0.25, 0.01, v.mono(), v.filter('bandpass', 1500, 1)), v.out);
-  },
-  /* a word or letter slamming down: the Enter key's Topre recording pitched down with its thock lifted (a 250 Hz bell),
-     a low saturated thump, a mid puff, a click; big (a whole word) goes lower and heavier with a crack and more room */
-  type(v, t, o){
-    const i = o.i | 0, big = !!o.big, k = (1 + 0.03 * ((((i * 5) % 7) + 7) % 7 - 3)) * (big ? 0.86 : 1);
-    v.out.gain.value = big ? 1 : 0.95;
-    if (keyBufs && keyBufs.heavy){
-      const L = keyBufs.heavy.d, kb = v.chain(v.buf(L[Math.floor(Math.random() * L.length)], t, 0.8 * k), v.filter('highpass', 70), v.filter('peaking', 250 * k, 1.2, 5), v.filter('lowpass', 7000, 0.6), v.gain(1.5));
-      kb.connect(v.out); v.send(kb, 0.2);
-    }
-    const s = v.dive('sine', 150 * k, 52 * k, big ? 0.09 : 0.06, t, t + 0.35);
-    v.chain(s, v.env(t, 0.001, big ? 0.9 : 0.7, big ? 0.24 : 0.13), v.sat(big ? 2.2 : 1.6), v.filter('lowpass', 1500, 0.7), v.out);
-    v.chain(v.burst(t, 0.001, 0.35, 0.03, v.mono(), v.filter('bandpass', 650 * k, 1)), v.out);
-    v.chain(v.burst(t, 0.0003, 0.3, 0.005, v.mono(), v.filter('highpass', 4000)), v.wide(0.35, 1), v.out);
-    if (big){ const cr = v.burst(t, 0.0005, 0.45, 0.04, v.filter('bandpass', 2500, 0.8)); cr.connect(v.out); v.send(cr, 0.45); }
+  /* transformer buzz: a sine at hum Hz frequency-modulated at 2x (mains harmonics), saturated, kept above 200 Hz */
+  buzz(v, t, dur, hum, idx){
+    const c = v.osc('sine', hum, t, t + dur + 0.01), m = v.osc('sine', hum * 2, t, t + dur + 0.01), mi = v.gain(hum * (idx || 3));
+    m.connect(mi); mi.connect(c.frequency);
+    return v.chain(c, v.sat(3, 0.5), v.filter('highpass', 220), v.filter('highpass', 220), v.filter('lowpass', 5000, 0.7));
   },
 };
+
+const SFX = {
+  /* CRT power-on: a crack, the flyback whine zinging up into place, the transformer's buzz surging up and settling, a
+     few sparks. No thud. */
+  boot(v, t){
+    v.out.gain.value = 1.3;
+    EL.crack(v, t, 0.7, v.out);
+    for (const [f0, f1, a, p] of [[1500, 7900, 0.12, -0.3], [3000, 15800, 0.02, 0.3]]){
+      const z = v.dive('sine', f0, f1, 0.25, t, t + 1.5), g = v.gain(0);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(a, t + 0.04); g.gain.exponentialRampToValueAtTime(a * 0.3, t + 0.35); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.45);
+      v.chain(z, g, v.pan(p), v.out); v.send(g, 0.4);
+    }
+    const bz = EL.buzz(v, t, 1.3, 120, 2.5), bg = v.gain(0);
+    bg.gain.setValueAtTime(0.0001, t); bg.gain.exponentialRampToValueAtTime(0.35, t + 0.25); bg.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
+    v.chain(bz, bg, v.out); v.send(bg, 0.3);
+    const a = EL.arc(v, t + 0.02, 0.9, u => 40 * (1 - u) + 4, u => 0.7 * (1 - u), 5000); v.chain(a, v.out); v.send(a, 0.4);
+  },
+  /* one spark of a tube cascade: a few crackles and a tiny whine blip, high and short; sfx() merges tubes that arrive
+     together into one crackling sweep across the stereo field */
+  tubeOn(v, t, o){
+    v.out.gain.value = 1.1;
+    SFX.tubeNote(v, t, o.n | 0);
+  },
+  tubeNote(v, t, n){
+    const p = clamp(-0.75 + (n % 9) * 0.19, -0.8, 0.8), bus = v.pan(p); bus.connect(v.out); v.send(bus, 0.35);
+    v.chain(EL.arc(v, t, 0.03, () => 300, u => 0.6 * (1 - u * 0.6), 4500 + (n % 5) * 600), bus);
+    const f = 6000 + (n % 7) * 350;
+    v.chain(v.dive('sine', f, f * 1.15, 0.03, t, t + 0.05), v.env(t, 0.001, 0.025, 0.035), bus);
+  },
+  /* camera move: bright noise swooshing (a bandpass sweeping up and back, a flanger sweep, rumble cut below 400 Hz)
+     with a sizzling arc riding the same swell, panned fast on an S-curve */
+  whoosh(v, t, o){
+    const d = clamp(+o.dur || 0.6, 0.08, 4), dir = o.dir < 0 ? -1 : o.dir > 0 ? 1 : 0, pk = t + 0.6 * d, e = t + d;
+    v.out.gain.value = 1.1;
+    const env = v.gain(0); v.swell(env.gain, t, d, 0.6, 1, 2.2, 1.4);
+    const p = v.pan(0); if (dir && p.pan){ const c = new Float32Array(32); for (let j = 0; j < 32; j++) c[j] = 0.9 * dir * Math.tanh(4 * (j / 31 - 0.55)) / Math.tanh(2.2); p.pan.setValueCurveAtTime(c, t, d); }
+    const bp = v.filter('bandpass', 900, 0.9); bp.frequency.setValueAtTime(900, t); bp.frequency.exponentialRampToValueAtTime(5000, pk); bp.frequency.exponentialRampToValueAtTime(1600, e);
+    const src = v.chain(v.noise(t, e + 0.02), v.filter('highpass', 400), bp);
+    const fl = v.keep(v.ctx.createDelay(0.02)); fl.delayTime.setValueAtTime(0.004, t); fl.delayTime.exponentialRampToValueAtTime(0.0007, e);
+    src.connect(env); src.connect(fl); v.chain(fl, v.gain(0.8), env);
+    v.chain(EL.arc(v, t, d, u => 60 + 260 * Math.sin(Math.PI * Math.min(1, u / 0.9)), () => 0.5, 5500), env);
+    v.chain(env, v.filter('lowpass', 9000, 0.5), p, v.out); v.send(env, 0.25);
+  },
+  /* whip pan: the same, faster and brighter, with a crack at its peak */
+  whip(v, t, o){
+    const d = clamp(+o.dur || 0.2, 0.06, 1), dir = o.dir < 0 ? -1 : 1, pk = t + 0.45 * d, e = t + d;
+    v.out.gain.value = 1.1;
+    const env = v.gain(0); v.swell(env.gain, t, d, 0.45, 1, 2.6, 1.3);
+    const p = v.pan(-0.9 * dir); if (p.pan){ p.pan.setValueAtTime(-0.9 * dir, t); p.pan.linearRampToValueAtTime(0.9 * dir, e); }
+    const bp = v.filter('bandpass', 2000, 1.2); bp.frequency.setValueAtTime(2000, t); bp.frequency.exponentialRampToValueAtTime(7500, pk); bp.frequency.exponentialRampToValueAtTime(3500, e);
+    const src = v.chain(v.noise(t, e + 0.02), v.filter('highpass', 1000), bp);
+    const fl = v.keep(v.ctx.createDelay(0.02)); fl.delayTime.setValueAtTime(0.003, t); fl.delayTime.exponentialRampToValueAtTime(0.0005, e);
+    src.connect(env); src.connect(fl); v.chain(fl, v.gain(0.8), env);
+    v.chain(EL.arc(v, t, d, () => 350, () => 0.6, 6000), env);
+    v.chain(env, v.filter('lowpass', 9000, 0.5), p, v.out); v.send(env, 0.2);
+    EL.crack(v, pk - 0.002, 0.3, v.out);
+  },
+  /* glitch zap: a crack, then a square wave jumping between random pitches (sample-and-hold), a burst of arc and a
+     transformer buzz, all chopped by a fast stutter and bit-crushed; ~0.1-0.15 s. Three stutter patterns rotate. */
+  zap(v, t, o){
+    const z = ZAPS[(o.v != null ? o.v | 0 : (v.E.zapN = ((v.E.zapN | 0) + 1) % ZAPS.length)) % ZAPS.length], dur = z.dur * 0.8, e = t + dur;
+    v.out.gain.value = 1.2;
+    EL.crack(v, t, 0.6, v.out);
+    const gate = v.gain(0); for (const [x, a] of z.gate) if (x < dur) gate.gain.setValueAtTime(a > 0.2 ? 1 : 0.05, t + x); gate.gain.setValueAtTime(0, e);
+    const cr = v.keep(v.ctx.createWaveShaper()); cr.curve = crushCurve();
+    gate.connect(cr); v.chain(cr, v.filter('highpass', 300), v.filter('lowpass', 8500, 0.6), v.out); v.send(cr, 0.3);
+    const r = rng(z.seed * 3), sq = v.osc('square', 900, t, e + 0.01);
+    for (let x = 0; x < dur; x += 0.01 + r() * 0.012) sq.frequency.setValueAtTime(300 * Math.pow(2, r() * 4), t + x);
+    v.chain(sq, v.gain(0.16), gate);
+    v.chain(EL.buzz(v, t, dur, z.hum, 4), v.gain(0.35), gate);
+    v.chain(EL.arc(v, t, dur, () => 500, () => 1, z.f), gate);
+  },
+  /* a small hit: a tiny spark (a crack and a couple of crackles); quiet */
+  tick(v, t){
+    v.out.gain.value = 0.8;
+    EL.crack(v, t, 0.5, v.out);
+    const a = EL.arc(v, t + 0.003, 0.025, () => 250, () => 0.5, 6000); v.chain(a, v.out); v.send(a, 0.3);
+  },
+  /* charge-up into the hit at t + dur: an electric whine rising (a saw and its fifth, 300 Hz -> 3.2 kHz, with a vibrato
+     speeding up), the transformer buzz rising with it, crackle growing denser, a noise swell; everything cuts at the hit */
+  riser(v, t, o){
+    const d = clamp(+o.dur || 1.2, 0.2, 8), e = t + d;
+    v.out.gain.value = 1.3;
+    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, e - 0.004); env.gain.linearRampToValueAtTime(0, e + 0.004);
+    env.connect(v.out); v.send(env, 0.35);
+    const vib = v.osc('sine', 6, t, e + 0.01), vd = v.gain(0);
+    vib.frequency.setValueAtTime(6, t); vib.frequency.exponentialRampToValueAtTime(22, e); vd.gain.setValueAtTime(5, t); vd.gain.linearRampToValueAtTime(40, e); vib.connect(vd);
+    const lp = v.filter('lowpass', 1500, 2); lp.frequency.setValueAtTime(1500, t); lp.frequency.exponentialRampToValueAtTime(8000, e);
+    for (const [m, p] of [[1, -0.4], [1.5, 0.4]]){ const s = v.dive('sawtooth', 300 * m, 3200 * m, d, t, e + 0.01); vd.connect(s.detune); v.chain(s, v.pan(p), lp); }
+    v.chain(lp, v.filter('highpass', 250), v.gain(0.09), env);
+    const bz = EL.buzz(v, t, d, 120, 2); v.chain(bz, v.gain(0.18), env);
+    v.chain(EL.arc(v, t, d, u => 15 + 600 * u * u, u => 0.4 + 0.6 * u, 5000), v.gain(0.9), env);
+    const bp = v.filter('bandpass', 1500, 0.8); bp.frequency.setValueAtTime(1500, t); bp.frequency.exponentialRampToValueAtTime(8000, e);
+    v.chain(v.noise(t, e + 0.01), bp, v.gain(0.3), env);
+  },
+  /* an impact frame: a discharge. A loud crack, a sizzle (dense arc, decaying), a burst of chopped buzz, a punch kept
+     above 150 Hz. big: the slam (below). */
+  impact(v, t, o){
+    if (o.big) return SFX.slam(v, t, o);
+    v.out.gain.value = 2.2;
+    EL.crack(v, t, 1, v.out);
+    const s = EL.arc(v, t, 0.16, u => 900 * (1 - u) + 40, u => Math.pow(1 - u, 1.5), 4500); v.chain(s, v.out); v.send(s, 0.4);
+    const bz = EL.buzz(v, t, 0.1, 120, 4), bg = v.gain(0); EL.spikes(bg.gain, t, 0.1, () => 120, u => 0.6 * (1 - u)); v.chain(bz, bg, v.out);
+    v.chain(v.dive('sine', 300, 160, 0.05, t, t + 0.12), v.env(t, 0.001, 0.45, 0.07), v.sat(1.6), v.filter('highpass', 150), v.out);
+  },
+  /* the slam: a massive discharge. A huge crack, a long sizzle, a buzz surge collapsing, a sub hit (110 -> 38 Hz, the one
+     low moment, saturated so laptops hear it), then a shimmering electric tail: sparse sparks and a falling whine into
+     the hall. A riser before it supplies the charge-up. */
+  slam(v, t){
+    v.out.gain.value = 1.3;
+    EL.crack(v, t, 1.3, v.out);
+    const s = EL.arc(v, t, 0.6, u => 1200 * Math.pow(1 - u, 2) + 60, u => Math.pow(1 - u, 1.2), 4000); v.chain(s, v.out); v.send(s, 0.3, 0.5);
+    const bz = EL.buzz(v, t, 0.7, 120, 5), bg = v.env(t, 0.003, 0.5, 0.65); v.chain(bz, bg, v.out); v.send(bg, 0, 0.3);
+    const sub = v.dive('sine', 110, 38, 0.45, t, t + 1.5), sg = v.env(t, 0.002, 1, 1.2);
+    v.chain(sub, sg, v.sat(2.6, 0.6), v.filter('lowpass', 900, 0.7), v.out); v.chain(sg, v.gain(0.55), v.out);
+    const tl = EL.arc(v, t + 0.15, 2.2, u => 50 * (1 - u) + 5, u => 0.5 * Math.pow(1 - u, 1.5), 6000); v.chain(tl, v.pan(0.2), v.out); v.send(tl, 0.2, 0.7);
+    const w = v.dive('sine', 7800, 2600, 1.8, t, t + 2), wg = v.env(t, 0.01, 0.04, 1.8); v.chain(w, wg, v.pan(-0.2), v.out); v.send(wg, 0, 0.6);
+    const nz = v.burst(t, 0.0005, 0.6, 0.25, v.filter('highpass', 2500), v.filter('lowpass', 9000, 0.5)); nz.connect(v.out); v.send(nz, 0.3, 0.5);
+  },
+  /* hit-stop freeze: power sagging: the buzz's pitch and a whine falling fast, quiet */
+  tapeStop(v, t, o){
+    const d = clamp(+o.dur || 0.3, 0.06, 2), e = t + d;
+    v.out.gain.value = 0.45;
+    const env = v.gain(0); env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(1, t + 0.005); env.gain.setValueAtTime(1, t + 0.4 * d); env.gain.exponentialRampToValueAtTime(0.0001, e);
+    const c = v.osc('sine', 240, t, e + 0.01), m = v.osc('sine', 480, t, e + 0.01), mi = v.gain(700);
+    c.frequency.setValueAtTime(240, t); c.frequency.linearRampToValueAtTime(60, e); m.frequency.setValueAtTime(480, t); m.frequency.linearRampToValueAtTime(120, e); m.connect(mi); mi.connect(c.frequency);
+    v.chain(c, v.sat(2.5, 0.4), v.filter('highpass', 250), env);
+    const w = v.osc('sine', 4000, t, e + 0.01); w.frequency.setValueAtTime(4000, t); w.frequency.exponentialRampToValueAtTime(900, e); v.chain(w, v.gain(0.05), env);
+    env.connect(v.out); v.send(env, 0.25);
+  },
+  /* a word slam: an electric snap. A crack, a short dense arc, a chopped blip of buzz, the Topre key's click on top;
+     big: a longer arc, a bit-crushed blip, more room. No thump. */
+  type(v, t, o){
+    const big = !!o.big;
+    v.out.gain.value = big ? 2.1 : 1.7;
+    EL.crack(v, t, big ? 0.9 : 0.7, v.out);
+    const a = EL.arc(v, t, big ? 0.12 : 0.05, () => 700, u => 1 - u * 0.7, big ? 3800 : 5000); v.chain(a, v.out); v.send(a, 0.35, big ? 0.2 : 0);
+    const bz = EL.buzz(v, t, big ? 0.09 : 0.05, 120, 3), bg = v.gain(0); EL.spikes(bg.gain, t, big ? 0.09 : 0.05, () => 150, () => 0.4); v.chain(bz, bg, v.out);
+    if (big){ const cr = v.keep(v.ctx.createWaveShaper()); cr.curve = crushCurve(); const sq = v.osc('square', 1200, t, t + 0.06); sq.frequency.setValueAtTime(1800, t + 0.03); v.chain(sq, v.env(t, 0.001, 0.12, 0.05), cr, v.filter('lowpass', 7000), v.out); }
+    if (keyBufs && keyBufs.normal){ const L = keyBufs.normal.d; v.chain(v.buf(L[Math.floor(Math.random() * L.length)], t, 1.1), v.filter('highpass', 900), v.filter('highpass', 900), v.gain(0.4), v.out); }
+  },
+};
+/* density: bursts merge. tubeOn calls within 90 ms of the last join its cascade (one more spark, spaced at least
+   35 ms, at most 12 a cascade); type and tick within 90 ms of their last are dropped. */
+const MERGE = 0.09;
 Engine.prototype.cached = function (name){ return this.fxCache[name] || null; };
 Engine.prototype.sfx = function (name, opts, when){
   const V = this.sfxVoices, now = this.ctx.currentTime;
@@ -658,10 +655,17 @@ Engine.prototype.sfx = function (name, opts, when){
   }
   const fn = SFX[name]; if (!fn) return;
   if (this.ducked){ const g = this.verbOut.gain, at = Math.max(now, this.ducked); g.cancelScheduledValues(now); g.setValueAtTime(0, at); g.linearRampToValueAtTime(1, at + 0.05); this.ducked = 0; }
-  const at = Math.max(when, now);
+  const at = Math.max(when, now), c = this.casc;
+  if (name === 'tubeOn' && c && !c.v.dead && at - c.last < MERGE && c.k < 12){   // join the cascade: one more note
+    c.last = at; c.next = Math.max(at, c.next + 0.035); c.k++; SFX.tubeNote(c.v, c.next, ++c.n); return c.v;
+  }
+  if (name === 'type' || name === 'tick'){ const L = this.lastAt || (this.lastAt = {}); if (at - (L[name] || -9) < MERGE) return; L[name] = at; }
   for (let i = V.length - 1; i >= 0; i--) if (V[i].dead || V[i].end < at) V.splice(i, 1);
   while (V.length >= SFX_MAX) V.shift().kill(0.015, at);   // polyphony: the oldest makes room (as this one starts)
   const v = new Voice(this, at);
+  if (name === 'tubeOn'){   // a new cascade; within 0.6 s of the last it carries on up the scale
+    const n = c && at - c.last < 0.6 ? c.n + 1 : 0; this.casc = { v, last: at, next: at, n, k: 1 }; opts = { n };
+  }
   fn(v, v.t, opts || {});
   V.push(v); v.cleanup();
   return v;

@@ -201,29 +201,31 @@ MAC.sound = {
   music,                    // gone: a silent stand-in (alive() false, time() -1, env() all zeros) until no caller is left
 }
 ```
-Intro sound effects, `MAC.sound.sfx(name, opts)`: synthesised live from Web Audio nodes (no music, no files). Each is
-layered: a transient, a body (saturated sines so laptop speakers hear the low end as harmonics) and a tail (sends into
-two shared convolvers: a small room that glues everything into one space and a long dark hall for the big hits). Each
-call is a voice on the sfx bus (highpass, a gentle glue compressor) into the master limiter and mute stage, so the mute
-toggle silences them. A no-op (cheap, never throws) before the first gesture has unlocked audio, while muted, with the
-tab hidden, or without Web Audio; nothing is queued or replayed later. At most 8 voices: a ninth fades out the oldest
-(15 ms). Each starts ~5 ms after the call (plus ~12 ms of compressor/limiter lookahead). Levels (offline, through the
-whole chain, loudest 50 ms RMS): impact big -9 dBFS, impact -11, boot/type big -13, type/riser -15, zap/tubeOn/whoosh/
-whip/tapeStop about -19, tick -24; every peak below -1 dBFS, even 8 stacked.
+Intro sound effects, `MAC.sound.sfx(name, opts)`: an electric, high-octane palette synthesised live from Web Audio nodes
+(no files): cracks, crackling arcs (band-limited noise chopped by random spikes), transformer buzz (an FM sine on the mains
+harmonics, saturated, kept above 220 Hz), flyback whine, bit-crushed sample-and-hold glitches, bright flanged whooshes.
+Arcs are lowpassed near 8.5 kHz (exciting, not painful); low end only on the big slam. Tails go to two shared convolvers
+(a small room, a long dark hall). Each call is a voice on the sfx bus (highpass, a gentle glue compressor) into the master
+limiter and mute stage. A no-op (cheap, never throws) before audio is unlocked, while muted, with the tab hidden, or
+without Web Audio; nothing is queued or replayed later. At most 8 voices: a ninth fades out the oldest (15 ms).
+Density is handled here: `tubeOn` calls within 90 ms of the last join one cascade (a spark each, spaced at least 35 ms,
+sweeping across the stereo field, at most 12), and `type`/`tick` calls within 90 ms of their last are dropped.
+Levels (offline, loudest 50 ms RMS): slam -12 dBFS, impact -17, whoosh/whip -17, type big -20, zap -20, boot/riser -20,
+type -24, tubeOn -30 (one spark), tick -33; every peak below -1 dBFS, the whole cue sheet included.
 
 | name | what | opts |
 |---|---|---|
-| `'boot'` | CRT warming up: switch double-click and thunk, the degauss "bwong" (wobbling 60 Hz hum + coil ring), static crackle thinning out over a fizz, the flyback whine rising into place (~2 s) | |
-| `'tubeOn'` | one tube: relay double tick, a saturated thup with a puff, a glass ping, a short degauss hum, a spark, a faint whine (~0.6 s) | `i`: pitch and place across the stereo field |
-| `'whoosh'` | camera move: three bands of stereo noise (swept air, low body, sheen) under one smooth swell, panned on an S-curve | `dur` s (0.8), `dir` -1/0/1 |
-| `'whip'` | whip pan: a fast bright rip with a snap at its peak | `dur` s (0.22), `dir` -1/1 |
-| `'zap'` | high-voltage arc (~0.13-0.19 s): a sharp transient, band-limited noise crackling through a fast gate, an FM mains buzz (120 Hz carrier, 240/360 Hz modulator, saturated) chopped by the same gate, a low snap; three variants rotate | `v` 0-2 picks one (2 adds a short pitch-dive) |
-| `'tick'` | a small hit: click, short ping, low knock (~0.06 s) | `pitch` (1) |
-| `'riser'` | rising tension: rising/narrowing noise band, three detuned saws gliding up two octaves through an opening filter, a saturated sub, a tremolo speeding into a stutter; cut dead at the hit, the room ringing on | `dur` s until the hit (1.5, max 8) |
-| `'impact'` | an impact frame: click, crack, mid smack, low punch, a pitch-dropping sine driven into the saturator over a clean sub, room tail | `big: true` = the final slam (100→28 Hz boom, debris sizzle, dark rumble, ~4 s hall tail); `lead` s: start a reversed whoosh-in that long before the hit (default 0: the hit is now) |
-| `'tapeStop'` | hit-stop freeze: a drone and its hiss decelerating together like stopped tape, then the brake's clunk | `dur` s (0.45) |
-| `'type'` | a word or letter slamming down: the Enter key's Topre recording pitched down with its thock lifted, a saturated thump, a puff, a click | `i` (varies pitch), `big` (a word: lower, heavier, a crack) |
-| `'stopAll'` | fade out and stop everything playing (voices and the reverbs' tails) in 12 ms; audible content is gone ~25 ms later | |
+| `'boot'` | power-on: a crack, the flyback whine zinging up, the transformer buzz surging and settling, a few sparks (~1.3 s) | |
+| `'tubeOn'` | one spark: a few crackles and a tiny high whine blip; bursts merge into one crackling sweep | `i` (ignored; order sets the pan) |
+| `'whoosh'` | bright flanged noise swoosh with a sizzling arc riding it, fast S-curve pan | `dur` s (0.6), `dir` -1/0/1 |
+| `'whip'` | the same, faster and brighter, a crack at the peak | `dur` s (0.2), `dir` -1/1 |
+| `'zap'` | glitch: a crack, a sample-and-hold square, arc and buzz, stuttered and bit-crushed (~0.1-0.15 s); three patterns rotate | `v` 0-2 picks one |
+| `'tick'` | a tiny spark | |
+| `'riser'` | charge-up: electric whine rising (300 Hz -> 3.2 kHz with a speeding vibrato), buzz rising, crackle growing denser; cut at the hit | `dur` s until the hit (1.2) |
+| `'impact'` | a discharge: a loud crack, a decaying sizzle, a chopped buzz burst, a punch kept above 150 Hz | `big: true` = the slam: a huge crack, a long sizzle, a collapsing buzz surge, a sub hit (110 -> 38 Hz), then a shimmering electric tail (sparse sparks, a falling whine) into the hall |
+| `'tapeStop'` | power sag: the buzz and a whine falling fast, quiet | `dur` s (0.3) |
+| `'type'` | an electric snap: a crack, a short dense arc, a chopped buzz blip, the Topre key's click on top | `big` (longer arc, a bit-crushed blip, more room) |
+| `'stopAll'` | fade out and stop everything playing (voices and the reverbs' tails) in 12 ms | |
 
 With `?debug`, `MAC.sound._dbg = { eng(), render(name | [[name, opts, at], ...], opts, secs) }`: the live engine
 (e.g. `eng().sfxOut` to tap an AnalyserNode) and an offline render through the whole chain, starting 0.3 s in so the
