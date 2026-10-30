@@ -1411,14 +1411,17 @@ M.createTerminal = function createTerminal(opts){
       ['Font', 'VT323'], ['Files', files + ' in ~'], ['User', C.name || 'Kaiav'], ...roles.map((r, i) => [i ? '' : 'Role', r])];
   }
   /* ---- the landing: a demoscene intro, drawn straight onto the tube ----
-     An Amiga-style intro in one phosphor, cut to its own 120 bpm tune (sound.js). The opening (about 6 s): the
-     raster opens from a line; stars drift, then accelerate into hyperspace behind a title card typed out in a
-     C64-style bitmap font ("KAIAV NIHALANI", then PRESENTS rastered in), which shuts to a dot; copper bars drop in
-     on the eighth notes; the grid floor rolls out; and out of the vanishing point comes a chunky extruded "KN"
-     (bevelled, flat-shaded facets, chrome front faces, bright vector edges; back faces culled, the rest
-     painter-sorted, letter by letter), tumbling, pulling back for a breath and slamming in on the beat, with a
-     flash, a jolt, a shockwave through the floor and a glint across the chrome. Then the sine scroller of facts
-     from content.js starts along the floor, mirrored in it.
+     An Amiga-style intro in one phosphor, cut to its own 120 bpm tune (sound.js), which keeps its time: the opening
+     is the tune's eight-bar intro (16 s), and if the tune starts part-way (at the first touch) it joins at the
+     picture's place, so the drop always lands on the slam. Bar 0: the raster opens from a line and the name is
+     typed out in a C64-style bitmap font; bar 1: PRESENTS rasters in, and the card shuts to a dot. Bars 2-5: ABOUT,
+     five of his own lines from content.js, one every three beats, each wiping in behind a copper bar, a row of
+     pips counting them off; then the card is sucked into the vanishing point. Bar 6: hyperspace, the camera
+     tilts, the copper bars drop in on the eighth notes. Bars 6-7: out of the vanishing point comes a chunky
+     extruded "KN" (bevelled, flat-shaded facets, chrome front faces, bright vector edges; back faces culled, the
+     rest painter-sorted, letter by letter), tumbling, winding up and rushing in to slam down on bar 8, with impact
+     frames, a flash, a jolt, a shockwave through the floor and a glint across the chrome. Then the sine scroller
+     of facts starts along the floor, mirrored in it.
      After that it breathes rather than adds: the logo sways and bobs over the turning cylinder of copper bars,
      and at the top of each eight-bar section (on the tune's clock when it plays) makes one full turn that ends in a
      glint; the facts scroll by slowly enough to read. With the tune playing, the bars and the floor move with its
@@ -1680,7 +1683,7 @@ M.createTerminal = function createTerminal(opts){
     }
     /* ---- the title card: the name typed out letter by letter with a block cursor, PRESENTS rastered in under it on
        the beat; then it squashes to a line, and the line to a dot ---- */
-    const T_TYPE = .35, T_LET = .055, T_SUB = 1.5, T_SHUT = 2.5;
+    const T_TYPE = .5, T_LET = .08, T_SUB = 2.0, T_SHUT = 3.4;
     function titleCard(a){
       if (a < T_TYPE - .05 || a > T_SHUT + .62) return;
       if (!strip) makeStrip();
@@ -1757,7 +1760,90 @@ M.createTerminal = function createTerminal(opts){
     }
 
     /* ---- the show: the opening (age a, seconds), then the loop (L = a - SLAM) ---- */
-    const T_BARS = 2.75, T_FLOOR = 3.0, T_LOGO = 3.5, T_HOLD = 5.0, T_RUSH = 5.5, SLAM = 6.0, SCROLL0 = 6.25, GPS = 2.6;   // (GPS: glyphs a second, a reading pace)
+    const T_FLOOR = 4.0, T_BARS = 13.0, T_LOGO = 13.2, T_HOLD = 14.6, T_RUSH = 15.4, SLAM = 16.0, SCROLL0 = 16.25, GPS = 2.6;   // (GPS: glyphs a second, a reading pace)
+    /* ---- ABOUT: his own lines, one at a time, every three beats; then the card is sucked into the vanishing point ---- */
+    const AB0 = 4.0, ABS = 4.5, AB_STEP = 1.5, AB_END = 12.0, AB_SUCK = .7;
+    let about = null, aboutK = 0, aboutHdr = null, ADV = null;
+    const adv = ch => { if (!ADV){ ADV = {}; for (const c in FONT8){ let a2 = GW, b2 = -1; FONT8[c].split('|').forEach(row => { for (let x = 0; x < GW; x++) if (row[x] === '#'){ if (x < a2) a2 = x; if (x > b2) b2 = x; } }); ADV[c] = b2 < 0 ? 4 : b2 - a2 + 2; } } return ADV[ch] || 4; };
+    const textW = t => { let w2 = 0; for (const ch of t) w2 += adv(ch); return w2; };
+    function aboutLines(){
+      const bl = String((A.body || []).join('\n')).split('\n').map(x => x.replace(/^\s*[-*\u2022]\s*/, '').trim()).filter(Boolean);
+      const pick = re => bl.find(b => re.test(b));
+      return [pick(/\by\/o\b/i), pick(/^born/i), pick(/^co-?founder of j/i), pick(/^founder of eden/i), pick(/squash|bjj/i)].filter(Boolean).slice(0, 6);
+    }
+    function makeAbout(){
+      /* the size: as big as reads well, small enough that the longest item wraps to at most three lines in the sky */
+      const sky = hy * .78;
+      let k = Math.max(3, Math.min(Math.round(W / 165), Math.floor(sky / (3 * 8 * 1.5))));
+      const src = aboutLines().map(fontText);
+      const wrap = (t, max) => { const out = []; let cur = ''; for (const wd of t.split(' ')){ const nx = cur ? cur + ' ' + wd : wd; if (cur && textW(nx) > max){ out.push(cur); cur = wd; } else cur = nx; } if (cur) out.push(cur); return out; };
+      let lines;
+      for (;; k--){ const max = W * .8 / k; lines = src.map(t => wrap(t, max)); if (k <= 3 || lines.every(l => l.length <= 3 && l.every(x => textW(x) <= max))) break; }
+      aboutK = k;
+      about = lines.map(ls => { const b = ls.map(x => bake(x)); return { b, w: Math.max(...b.map(x => x.w)) }; });
+      aboutHdr = bake('ABOUT');
+    }
+    function aboutCard(a){
+      if (a < AB0 - .05 || a > AB_END + AB_SUCK) return;
+      if (!about || aboutKey !== fitKey){ aboutKey = fitKey; if (!strip) makeStrip(); makeAbout(); }
+      if (!about.length) return;
+      const k = aboutK, k2 = Math.max(2, Math.round(k * .5)), lh = Math.round(8 * k * 1.5), N = about.length;
+      const cyA = hy * .48, su = sstep(AB_END, AB_END + AB_SUCK, a);
+      g.save();
+      if (su > 0){ const sc = Math.max(.02, 1 - su); g.translate(cx, hy); g.scale(sc, sc); g.translate(-cx, -hy); g.translate(0, (hy - cyA) * su * .3); g.globalAlpha = 1 - su * su; }
+      g.imageSmoothingEnabled = false;
+      /* the header: ABOUT, and a rule drawing out under it */
+      const hdrIn = sstep(AB0, AB0 + .35, a), hy0 = Math.round(cyA - 2.2 * lh), hw = aboutHdr.w * k2;
+      g.globalAlpha *= hdrIn; g.drawImage(aboutHdr.face, 0, 0, aboutHdr.w + 1, GH + 1, Math.round(cx - hw / 2), hy0, (aboutHdr.w + 1) * k2, (GH + 1) * k2);
+      g.fillStyle = SH[si(.45)]; const rw = W * .6 * sstep(AB0 + .1, AB0 + .5, a); g.fillRect(cx - rw / 2, hy0 + (GH + 2) * k2, rw, 2);
+      if (su > 0) g.globalAlpha = 1 - su * su; else g.globalAlpha = 1;
+      /* the item up now: wipes in behind a copper bar, holds, and (all but the last) squashes away just before the next */
+      const i = Math.floor((a - ABS) / AB_STEP);
+      if (i >= 0){
+        const ii = Math.min(i, N - 1), it = about[ii], p = i >= N ? AB_STEP : a - (ABS + ii * AB_STEP), n = it.b.length;
+        const bhgt = n * lh, y0 = Math.round(cyA - bhgt / 2 + lh * .25), x0 = Math.round(cx - (it.w * k) / 2 + k * 3);
+        const wipe = sstep(0, .32, p), out = ii < N - 1 ? sstep(AB_STEP - .2, AB_STEP, p) : 0;
+        const bar = 1 - sstep(.15, .8, p);           // the copper bar it rides in on, fading once it has passed
+        if (bar > 0){ const bh2 = bhgt + lh * .5, by = y0 - lh * .4; for (let q = 0; q < 8; q++){ const e = 1 - Math.abs(2 * (q + .5) / 8 - 1); g.fillStyle = SH[si(bar * (.1 + .4 * e * e))]; g.fillRect(0, Math.round(by + q * bh2 / 8), W, Math.ceil(bh2 / 8)); } }
+        g.save();
+        if (out > 0){ const m = y0 + bhgt / 2; g.translate(0, m); g.scale(1, Math.max(.03, 1 - out)); g.translate(0, -m); }
+        const rx = x0 - 6 * k + (it.w * k + 8 * k) * wipe;
+        g.beginPath(); g.rect(0, y0 - lh, rx, bhgt + 2 * lh); g.clip();
+        g.fillStyle = P.bright; g.fillRect(x0 - 5 * k, y0 + 2 * k, 3 * k, 3 * k);   // the bullet
+        for (let l = 0; l < n; l++) g.drawImage(it.b[l].face, 0, 0, it.b[l].w + 1, GH + 1, x0, y0 + l * lh, (it.b[l].w + 1) * k, (GH + 1) * k);
+        g.restore();
+        if (wipe < 1){ g.fillStyle = P.bright; g.fillRect(Math.round(rx) - 2, y0 - lh * .3, 3, bhgt + lh * .2); }   // the wipe's hot edge
+        lumAcc += it.w * k * bhgt * .2;
+        /* the pips: one per item, lit up to this one */
+        const ps = Math.max(4, Math.round(k * 1.6)), pg = ps * 2, px0 = Math.round(cx - (N * pg - ps) / 2), py = Math.round(cyA + 2.1 * lh);
+        for (let q = 0; q < N; q++){ g.fillStyle = q < ii || (q === ii && wipe > .5) ? SH[si(q === ii ? 1 : .55)] : SH[si(.2)]; g.fillRect(px0 + q * pg, py, ps, ps); }
+      }
+      g.imageSmoothingEnabled = true; g.restore();
+    }
+    let aboutKey = '';
+    /* ---- THE GOAT?: a hard cut on the beat as the card goes, half a second, letters filling the tube (two lines on a
+       tall one); its first two frames inverted, like the slam's ---- */
+    const G0 = 12.5, G1 = 13.0;
+    let goat = null, goatL = null;
+    function goatCard(a){
+      if (a < G0 || a >= G1) return 0;
+      if (!goat){ goat = bake('THE GOAT?'); goatL = [bake('THE'), bake('GOAT?')]; }
+      const tall = h > W * .9, u = (a - G0) / (G1 - G0), inv = a < G0 + .067;
+      g.fillStyle = inv ? SH[si(.92)] : P.bg; g.fillRect(0, 0, W, h);
+      const parts = tall ? goatL : [goat], wmax = Math.max(...parts.map(p2 => p2.w));
+      const k0 = Math.floor(Math.min(W * .9 / (wmax + 1), h * (tall ? .36 : .6) / ((GH + 1) * parts.length))), k = k0 * (1.06 - .06 * sstep(0, .25, u));   // a small punch in
+      const lh = (GH + 2) * k, y0 = h * .45 - lh * parts.length / 2;
+      if (!inv) radial(cx, h * .45, W * .1, SH[si(.16)], .8);
+      g.imageSmoothingEnabled = false;
+      parts.forEach((p2, l) => {
+        const x = cx - (p2.w + 1) * k / 2, y = y0 + l * lh;
+        if (inv){ g.fillStyle = P.bg; g.globalCompositeOperation = 'destination-out'; }
+        g.drawImage(p2.face, 0, 0, p2.w + 1, GH + 1, x, y, (p2.w + 1) * k, (GH + 1) * k);
+        if (inv) g.globalCompositeOperation = 'source-over';
+      });
+      g.imageSmoothingEnabled = true;
+      return inv ? 2 : 1;
+    }
     const SECTION = 16, TURN = 2.2, HS = .1;   // eight bars at 120 bpm; a full turn opens each one
     const NB = 5, bp = new Float32Array(NB), bo = new Int8Array(NB), bY = new Float32Array(NB), bD = new Float32Array(NB);
     let lastT = -1, dist = 0, floorD = 0, kick = 0, nextBar = 0, lastKey = 0, keyGlint = -9;
@@ -1859,7 +1945,10 @@ M.createTerminal = function createTerminal(opts){
       fit(hh);
       const dt = lastT < 0 || still ? 0 : clamp(t - lastT, 0, .1); lastT = t;
       if (still) a = 40;
-      else if (TAP) a = a < SLAM / 1.3 ? a * 1.3 : a + SLAM * (1 - 1 / 1.3);   // phones play it once, in about six seconds: the opening runs a little faster
+      /* the tune keeps the time while it plays (it joined at this picture's place) */
+      const mu = M.sound && M.sound.music;
+      let mt = -1;
+      if (mu && !still){ try { if (mu.alive(a)) mt = mu.time(); } catch (e){} if (mt >= 0 && Math.abs(mt - a) < 2) a = mt; }
       /* the slam's hit-stop: the picture holds for a tenth of a second (two inverted impact frames, then one of speed lines) */
       let hit = 0;
       if (!still && a >= SLAM){ if (a < SLAM + HS){ hit = a < SLAM + .067 ? 1 : 2; a = SLAM; } else a -= HS; }
@@ -1870,10 +1959,8 @@ M.createTerminal = function createTerminal(opts){
       if (lastW && !still){ const iv = wn - lastW; if (iv < 400 && a > 1){ slowAcc = slowAcc * .96 + (iv > 50 ? .04 : 0); if (slowAcc > .45 && Q < 2 && wn - qAt > 1200){ Q++; qAt = wn; slowAcc = 0; } } }
       lastW = wn;
       /* the beat: the tune's clock while it plays (from the first touch), otherwise a quieter one of our own */
-      const mu = M.sound && M.sound.music;
-      let mt = -1; bk = 0; bs = 0;
+      bk = 0; bs = 0;
       if (mu && !still){
-        try { if (mu.alive()) mt = mu.time(); } catch (e){}
         if (mt >= 0 || L >= 0){
           const e = mu.env(mt >= 0 ? mt : L + mu.INTRO * mu.BAR), I = mt >= 0 ? (a < SLAM ? .4 : 1) : .45;
           bk = e.kick * I; bs = e.snare * I;
@@ -1905,7 +1992,7 @@ M.createTerminal = function createTerminal(opts){
       }
       if (Math.abs(spin) > 1e4){ spin %= TAU; }
       /* stars: drift, hyperspace behind the title, back to a drift; keys push them */
-      let speed = still ? 0 : a < .3 ? 8 : a < 2.6 ? 8 + 316 * Math.pow((a - .3) / 2.3, 2) : a < SLAM ? 9 + 315 * (1 - sstep(2.6, 3.9, a)) : 9;
+      let speed = still ? 0 : a < SLAM ? 6 + 52 * sstep(1, 3.4, a) * (1 - sstep(3.6, 4.6, a)) + 300 * bump(a, 11.8, 14.2, .9) : 9;   // a gentle rush behind the title, hyperspace as the card is sucked away
       speed += 70 * kick + 25 * bk;
       dist += speed * dt; floorD += (still ? 0 : 3 + 6 * kick) * dt;
       /* the logo */
@@ -1946,7 +2033,7 @@ M.createTerminal = function createTerminal(opts){
       if (!still && a - keyGlint < .7) sweep = (a - keyGlint) / .7;
       yaw += oy + spin; pit += op; y += hop; z -= Z0 * .04 * bs; envT = T * .7;
       /* the camera, in the opening: tilted and craned, righting itself as the logo arrives */
-      const cam = still ? 0 : 1 - sstep(T_BARS, SLAM, a);
+      const cam = still ? 0 : sstep(12.1, 12.9, a) * (1 - sstep(13.2, SLAM, a));
       g.setTransform(rk, 0, 0, rk, 0, 0);
       g.fillStyle = P.bg; rawFill(0, 0, W, h);
       g.save();
@@ -1979,7 +2066,7 @@ M.createTerminal = function createTerminal(opts){
         silhouette(P.bg, true); radial(lsx, lsy, lr * 1.05, P.bg, 1);
         g.restore();
       }
-      if (!still) titleCard(a);
+      if (!still){ titleCard(a); aboutCard(a); goatCard(a); }
       if (flash > .01 && hit !== 1){ g.globalAlpha = flash; g.fillStyle = P.bright; g.fillRect(0, 0, W, h); g.globalAlpha = 1; }
       if (tearN > 0 && hit !== 1){                   // a torn frame: alternate bands of the picture slip sideways, one frame
         tearN--; g.setTransform(1, 0, 0, 1, 0, 0);
@@ -1998,6 +2085,7 @@ M.createTerminal = function createTerminal(opts){
     return {
       draw,
       live: () => (M.reader && M.reader.isOpen) ? 0 : 30,
+      LENGTH: SLAM + 2,                              // the opening, through the slam (phones play this once, then the title card)
       /* a key: the logo spins on (one way, capped) and hops (capped), the stars surge; the next bar flashes and a glint
          crosses the chrome at most ~8 times a second. Held keys don't repeat here (handleKey passes no repeats) */
       key(){
@@ -3378,8 +3466,8 @@ M.createTerminal = function createTerminal(opts){
   /* ---- frame ---- */
   function update(dt, t){
     now = t;
-    /* phones: the intro plays once, about six seconds, then settles on the title card (not while something is typed) */
-    if (TAP && landing && !landing.full && !app && !job && !input && landing.viz.t0 >= 0 && now - landing.viz.t0 > 6) toHome();
+    /* phones: the intro plays once (its opening, DEMO.LENGTH s), then settles on the title card (not while something is typed) */
+    if (TAP && landing && !landing.full && !app && !job && !input && landing.viz.t0 >= 0 && now - landing.viz.t0 > DEMO.LENGTH) toHome();
     let changed = dirty;
     if (booting){
       bootT += dt;

@@ -324,13 +324,13 @@ Engine.prototype.event = function (name, when){
    been touched (the AudioContext unlocked by a gesture) and only when not muted. env(t) gives the visuals the same
    beat (kick, snare, bar, the drop) from the same pattern, with or without sound. */
 const MUSIC = (() => {
-  const BPM = 120, STEP = 60 / BPM / 4, BAR = STEP * 16, INTRO = 4, LOOP = 16;
+  const BPM = 120, STEP = 60 / BPM / 4, BAR = STEP * 16, INTRO = 8, LOOP = 16;   // (the intro is the landing's opening: 16 s)
   const mf = m => 440 * Math.pow(2, (m - 69) / 12);
   const PC = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
   const nm = s => { const m = /^([A-G]#?)(\d)$/.exec(s); return m ? PC[m[1]] + 12 * (+m[2] + 1) : null; };
   /* chords: root (bass octave) and quality */
   const CH = { Am: [45, 0], F: [41, 1], C: [48, 1], G: [43, 1], E: [40, 1], Em: [40, 0], Dm: [38, 0] };
-  const INTRO_CH = ['Am', 'Am', 'F', 'G'];
+  const INTRO_CH = ['Am', 'Am', 'F', 'G', 'Am', 'F', 'G', 'E'];
   const A_CH = ['Am', 'F', 'C', 'G', 'Am', 'F', 'G', 'E'], B_CH = ['F', 'G', 'Em', 'Am', 'Dm', 'Am', 'E', 'E'];
   /* the lead, in eighths: a note, '-' holds, '.' rests */
   const LEAD = [
@@ -345,9 +345,11 @@ const MUSIC = (() => {
   const drums = (bar, st) => {
     const r = { k: 0, s: 0, h: 0, o: 0, c: 0 };
     if (bar < INTRO){
-      if (bar >= 2 && st % 4 === 0) r.k = .8;
-      if (bar === 3) r.s = .15 + .55 * st / 15;                  // the roll into the drop
-      if (bar >= 1 && st % 2 === 0) r.h = .35;
+      if (bar >= 4 && bar < 6 && (st === 0 || st === 8)) r.k = .75;   // ABOUT: a half-time pulse
+      if (bar >= 6 && st % 4 === 0) r.k = .9;                         // the build: four on the floor
+      if (bar === 6 && (st === 4 || st === 12)) r.s = .6;
+      if (bar === 7) r.s = .15 + .55 * st / 15;                       // the roll into the drop (and the slam)
+      if (bar >= 3) r.h = (bar >= 6 ? st % 2 === 0 : st % 4 === 2) ? .3 : 0;
       return r;
     }
     const lb = (bar - INTRO) % LOOP, B = lb >= 8;
@@ -446,9 +448,11 @@ const MUSIC = (() => {
       tone('sawtooth', mf(bm), at, STEP * 1.6, .17, 1500, 3, bus, { cutTo: 380, cutT: .16, sus: .5, rel: .06 });
     }
     /* lead */
-    if (!intro && st % 2 === 0){
-      const L = LEAD[(bar - INTRO) % LOOP], i = st / 2, note = L[i];
-      if (note > 0){ let k = 1; while (i + k < 8 && L[i + k] === -1) k++; tone('pw:p25', mf(note), at, STEP * 2 * k - .02, .1, note > 81 ? 1700 : 2300, .7, bus, { vib: 8, send: .4, sus: .7, rel: .14 }); }
+    if ((!intro || bar >= 4) && st % 2 === 0){       // (in the intro's second half the theme is previewed, darker and an octave down)
+      const L = LEAD[intro ? bar - 4 : (bar - INTRO) % LOOP], i = st / 2, note = L[i];
+      if (note > 0){ let k = 1; while (i + k < 8 && L[i + k] === -1) k++;
+        if (intro) tone('pw:p25', mf(note - 12), at, STEP * 2 * k - .02, .07, 1100, .7, bus, { vib: 6, send: .3, sus: .7, rel: .14 });
+        else tone('pw:p25', mf(note), at, STEP * 2 * k - .02, .1, note > 81 ? 1700 : 2300, .7, bus, { vib: 8, send: .4, sus: .7, rel: .14 }); }
     }
     /* drums */
     const d = drums(bar, st);
@@ -471,15 +475,16 @@ const MUSIC = (() => {
     BPM, STEP, BAR, INTRO, env,
     get playing(){ return playing && !stopAt; },
     /* the intro calls this every frame it shows: starts the tune (once a gesture has unlocked audio, never muted) and keeps it going */
-    alive(E, isMuted){
+    alive(E, isMuted, pos){
       alive = performance.now();
       if (isMuted){ if (playing && !stopAt) api.stop(.15); return false; }
       if (playing && !stopAt) return true;
       if (!E || E.ctx.state !== 'running' || stopAt) return false;
       if (!bus) setup(E);
       const now = E.ctx.currentTime;
-      t0 = now + .08; next = t0; n = 0; playing = true;
-      bus.gain.cancelScheduledValues(now); bus.gain.setValueAtTime(0, now); bus.gain.linearRampToValueAtTime(.3, t0 + .05);
+      /* join at the picture's place (pos, seconds into the tune), on the next sixteenth */
+      const p0 = Math.max(0, pos || 0); n = Math.ceil((p0 + .08) / STEP); t0 = now - p0; next = t0 + n * STEP; playing = true;
+      bus.gain.cancelScheduledValues(now); bus.gain.setValueAtTime(0, now); bus.gain.linearRampToValueAtTime(.3, now + .15);
       clearInterval(timer); timer = setInterval(tick, 25); tick();
       return true;
     },
@@ -561,7 +566,7 @@ const sound = {
   },
   /* the landing intro's tune (see MUSIC): music.alive() every frame the intro shows; env(t) for its beat */
   music: {
-    alive(){ return MUSIC.alive(eng, muted || hidden); },
+    alive(pos){ return MUSIC.alive(eng, muted || hidden, pos); },
     stop(fade){ MUSIC.stop(fade); },
     time(){ return MUSIC.time(); },
     level(){ return MUSIC.level(); },
