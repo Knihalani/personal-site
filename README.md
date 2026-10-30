@@ -6,7 +6,8 @@ Eden (context for agents).
 It is a room at night. A beige 1980s computer sits on a desk under a lamp, and its green phosphor
 screen is a working terminal. When you type, the hands on the desk type the same keys on the 3D
 keyboard, and you hear a real Topre switch for every press and release. Each visit opens on an 80s
-demoscene-style intro on the screen (a chrome 3D "KN", copper bars, a sine scroller), until the first command.
+demoscene-style intro on the screen, scored to its own chiptune: the name, J, Eden, a question, and the answer (a
+chrome 3D "KN" slamming down over copper bars), then a loop with a sine scroller, until the first command.
 
 ## Using it
 

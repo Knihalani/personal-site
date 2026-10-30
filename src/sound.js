@@ -316,21 +316,25 @@ Engine.prototype.event = function (name, when){
 /* ---------------- music: the landing intro's chiptune ----------------
    A small C64/Amiga-style tune in A minor at 120 bpm, synthesised live with oscillators (no samples): a 12.5% pulse
    arpeggio, a 25% pulse lead with vibrato and a dotted-eighth echo, a filtered saw bass, and drums (a pitch-dropping
-   sine kick, a noise snare, hats, a crash). Four bars of build (the arpeggio's filter opening, the bass coming in, a
-   snare roll), then the drop into a sixteen-bar A/B loop. Everything is band-limited and enveloped, and the bus sits
+   sine kick, a noise snare, hats, a crash). A seven-bar intro scored to the landing's opening, beat for beat: the
+   tube warming up and the name (a sweep, the arpeggio's filter opening, the beam's ticks), J (the bass and kick come
+   in), the wall of tubes (a run of blips as they switch on, a whoosh as the camera pushes in), THE GOAT? (everything
+   cuts to a ticking hat; each letter lands with a pitched bloop, the question mark with a "huh?", a riser, a breath of
+   silence), the answer (the band back on the downbeat, a blip for each copper bar), the build (a snare roll and a
+   riser), then the drop into a sixteen-bar A/B loop. Everything is band-limited and enveloped, and the bus sits
    under the master chain (so the mute toggle silences it) at a moderate level.
    It plays only while the intro asks for it: the demo calls music.alive() every frame it draws; with no call for
    ~300 ms (the intro dismissed, scrolled away or covered) it fades out and stops. It starts only once the page has
    been touched (the AudioContext unlocked by a gesture) and only when not muted. env(t) gives the visuals the same
    beat (kick, snare, bar, the drop) from the same pattern, with or without sound. */
 const MUSIC = (() => {
-  const BPM = 120, STEP = 60 / BPM / 4, BAR = STEP * 16, INTRO = 6, LOOP = 16;   // (the intro is the landing's opening: 12 s)
+  const BPM = 120, STEP = 60 / BPM / 4, BAR = STEP * 16, INTRO = 7, LOOP = 16;   // (the intro is the landing's opening: 14 s)
   const mf = m => 440 * Math.pow(2, (m - 69) / 12);
   const PC = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
   const nm = s => { const m = /^([A-G]#?)(\d)$/.exec(s); return m ? PC[m[1]] + 12 * (+m[2] + 1) : null; };
   /* chords: root (bass octave) and quality */
   const CH = { Am: [45, 0], F: [41, 1], C: [48, 1], G: [43, 1], E: [40, 1], Em: [40, 0], Dm: [38, 0] };
-  const INTRO_CH = ['Am', 'F', 'C', 'G', 'F', 'E'];
+  const INTRO_CH = ['Am', 'F', 'C', 'G', 'Am', 'F', 'E'];
   const A_CH = ['Am', 'F', 'C', 'G', 'Am', 'F', 'G', 'E'], B_CH = ['F', 'G', 'Em', 'Am', 'Dm', 'Am', 'E', 'E'];
   /* the lead, in eighths: a note, '-' holds, '.' rests */
   const LEAD = [
@@ -346,11 +350,17 @@ const MUSIC = (() => {
   const drums = (bar, st) => {
     const r = DR; r.k = r.s = r.h = r.o = r.c = 0;   // (one object, reused)
     if (bar < INTRO){
-      if (bar === 0 ? st === 0 || st === 8 : st % 4 === 0) r.k = bar === 0 ? .8 : .95;   // driving from the start: the name, then four on the floor under the cards
-      if (bar >= 1 && bar < 5 && (st === 4 || st === 12)) r.s = .8;
-      if (bar === 5) r.s = .2 + .6 * st / 15;                         // the roll into the drop (and the slam)
-      r.h = (bar >= 4 ? st % 2 === 0 : st % 4 === 2) ? .32 : 0;
-      if (bar >= 1 && bar < 4 && st === 14) r.o = .5;
+      const goat = bar === 4 && st >= 4;                               // THE GOAT?: the band stops; a hat ticks
+      if (bar === 0){ if (st === 3) r.k = .55; if (st >= 8 && st % 2 === 0) r.h = .18; return r; }   // the name lands; the beam's ticks
+      if (bar === 1){ if (st === 0 || st === 8) r.k = .9; if (st === 12) r.s = .7; r.h = st % 2 === 0 ? .28 : 0; if (st === 6) r.o = .5; return r; }
+      if (goat){ if (st % 2 === 0 && st < 12) r.h = .3; return r; }
+      if (st % 4 === 0) r.k = 1;
+      if (bar === 6) r.s = st < 8 ? (st % 2 === 0 ? .35 + .03 * st : 0) : .45 + .035 * (st - 8);   // the roll into the drop (and the slam)
+      else if (st === 4 || st === 12) r.s = .85;
+      if (bar === 2 && st >= 14) r.s = .6;                             // a fill as the camera pulls back
+      r.h = st % 2 === 0 ? .32 : 0;
+      if ((bar === 2 && st === 10) || (bar === 3 && st === 5)) r.o = .6;   // the whooshes' tails
+      if (bar === 5 && st === 0) r.c = 1;                              // the answer's downbeat
       return r;
     }
     const lb = (bar - INTRO) % LOOP, B = lb >= 8;
@@ -437,20 +447,52 @@ const MUSIC = (() => {
     hit(at, .05 * v, 'bandpass', 2600, 1.2, .012);   // a click, so a small speaker hears the beat
     o.onended = () => { try { g.disconnect(); } catch (e){} };
   }
+  /* a noise sweep through a moving bandpass (whooshes and risers) */
+  function sweep(at, dur, f0, f1, vol, q){
+    const ctx = eng.ctx, s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = noise; s.loop = true; fl.type = 'bandpass'; fl.Q.value = q || 2;
+    fl.frequency.setValueAtTime(f0, at); fl.frequency.exponentialRampToValueAtTime(f1, at + dur);
+    g.gain.setValueAtTime(.0001, at); g.gain.exponentialRampToValueAtTime(vol, at + dur * .85); g.gain.linearRampToValueAtTime(0, at + dur);
+    s.connect(fl); fl.connect(g); g.connect(bus); s.start(at); s.stop(at + dur + .02);
+    s.onended = () => { try { g.disconnect(); } catch (e){} };
+  }
+  /* the intro's cues, on the picture's beats (bar, sixteenth) */
+  function cues(at, bar, st){
+    if (bar === 0 && st === 0){ tone('sine', 220, at, .34, .1, 3000, .7, bus, { slide: 880, slideT: .32, sus: .8, rel: .05 }); }   // the tube warming up
+    if (bar === 0 && st === 3){ tone('pw:p25', mf(57), at, .9, .06, 1400, .7, bus, { sus: .5, rel: .4, send: .3 }); tone('pw:p25', mf(64), at, .9, .05, 1400, .7, bus, { sus: .5, rel: .4 }); }   // the name lands
+    if (bar === 1 && st === 7) sweep(at, .14, 900, 5000, .12, 1.5);   // the crane
+    if (bar === 2 && st === 10) sweep(at, .42, 5000, 500, .1, 1.2);   // the pull back
+    if (bar === 3 && st < 4){                                         // the wall switching on: a blip a tube, two a sixteenth
+      const sc = [69, 72, 76, 79, 81, 84, 88, 91];
+      for (let k = 0; k < 2; k++){ const i = st * 2 + k; tone('pw:p12', mf(sc[i]), at + k * STEP / 2, .05, .06, 4000, .7, bus, { sus: .3, rel: .03 }); }
+    }
+    if (bar === 3 && st === 5) sweep(at, .5, 600, 6000, .12, 1.3);    // the push back in
+    if (bar === 4){
+      if (st >= 4 && st < 6) for (let k = 0; k < 2; k++) hit(at + k * .06, .05, 'highpass', 5200, .7, .02);   // THE, typed
+      if (st >= 6 && st <= 9){ const p = [64, 67, 71, 74][st - 6]; tone('pw:p25', mf(p + 12), at, .12, .09, 3200, .7, bus, { slide: mf(p), slideT: .1, sus: .4, rel: .05 }); }   // G O A T land
+      if (st === 12){ tone('pw:p25', mf(76), at, .11, .09, 3000, .7, bus, { sus: .6, rel: .04 }); tone('pw:p25', mf(83), at + .12, .2, .09, 3000, .7, bus, { sus: .6, rel: .08, vib: 20 }); }   // ?: "huh?"
+      if (st === 12) sweep(at + .05, .42, 300, 7000, .14, 2.2);       // the riser, cut dead on the downbeat
+    }
+    if (bar === 5 && st >= 4 && st <= 12 && st % 2 === 0){ const p = [69, 72, 76, 79, 81][(st - 4) / 2]; tone('pw:p12', mf(p + 12), at, .07, .07, 4000, .7, bus, { sus: .3, rel: .04, send: .3 }); }   // the copper bars drop in
+    if (bar === 6 && st === 8) sweep(at, 1.0, 400, 8000, .12, 1.6); // the rush
+  }
   function step(at, n){
     const bar = Math.floor(n / 16), st = n - bar * 16, ch = tones(chordAt(bar)), intro = bar < INTRO;
+    const quiet = intro && bar === 4 && st >= 4;                      // THE GOAT?: no arpeggio, no bass
+    if (intro) cues(at, bar, st);
     /* arpeggio: up through the chord, an octave up, sixteenths */
     const arp = [0, 1, 2, 1][st % 4] + (st % 8 >= 4 ? 3 : 0), m = arp < 3 ? ch[arp] + 24 : ch[arp - 3] + 36;
-    const cut = intro ? 900 + 2200 * Math.pow((bar * 16 + st) / (INTRO * 16), 1.4) : 2600;
-    tone('pw:p12', mf(m), at, STEP * .7, intro ? .14 : .045, cut, 1.2, bus, { sus: .4, rel: .05 });
-    /* bass: eighths, root with an octave jump, plucked */
-    if (st % 2 === 0){
+    const cut = intro ? 1100 + 1700 * Math.pow((bar * 16 + st) / (INTRO * 16), 1.3) : 2600;
+    if (!quiet) tone('pw:p12', mf(m), at, STEP * .7, intro ? .09 : .045, cut, 1.2, bus, { sus: .4, rel: .05 });
+    /* bass: eighths, root with an octave jump, plucked (in from J) */
+    if (st % 2 === 0 && !quiet && (!intro || bar >= 1)){
       const r = ch[0], bm = [r, r, r + 12, r, r, r + 7, r + 12, r + 7][st / 2];   // (A2-ish: low enough to anchor, high enough for a laptop speaker)
       tone('sawtooth', mf(bm), at, STEP * 1.6, .17, 1500, 3, bus, { cutTo: 380, cutT: .16, sus: .5, rel: .06 });
     }
+    else if (intro && bar === 0 && (st === 3 || st === 11)) tone('sawtooth', mf(ch[0]), at, STEP * 7, .12, 700, 1.5, bus, { cutTo: 300, cutT: .8, sus: .7, rel: .3 });   // under the name: a held, darkening root
     /* lead */
-    if ((!intro || bar >= 2) && st % 2 === 0){       // (from bar 2 of the intro the theme is previewed, darker and an octave down)
-      const L = LEAD[intro ? bar - 2 : (bar - INTRO) % LOOP], i = st / 2, note = L[i];
+    if ((!intro || bar === 2 || bar === 3 || bar === 5 || bar === 6) && st % 2 === 0){   // (in the intro the theme is previewed, darker and an octave down)
+      const L = LEAD[intro ? [0, 0, 0, 1, 0, 4, 7][bar] : (bar - INTRO) % LOOP], i = st / 2, note = L[i];
       if (note > 0){ let k = 1; while (i + k < 8 && L[i + k] === -1) k++;
         if (intro) tone('pw:p25', mf(note - 12), at, STEP * 2 * k - .02, .07, 1100, .7, bus, { vib: 6, send: .3, sus: .7, rel: .14 });
         else tone('pw:p25', mf(note), at, STEP * 2 * k - .02, .1, note > 81 ? 1700 : 2300, .7, bus, { vib: 8, send: .4, sus: .7, rel: .14 }); }

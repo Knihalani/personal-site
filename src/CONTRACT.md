@@ -104,7 +104,7 @@ MAC.createTerminal({ content, aspect, cols?, width? }) -> {   // width: phones a
   scrollInfo,                   // { off: rows up from the bottom, max, rowH: a row as 0..1 of the canvas } (1:1 touch scrolling)
 }
 ```
-Phones (pointer: coarse) play the intro once, about six seconds (any tap or key skips it), then settle on a title card:
+Phones (pointer: coarse) play the intro once, its opening (`DEMO.LENGTH`, about 15.5 s; any tap or key skips it), then settle on a title card:
 the name, the role line and a boot-disk menu of big rows (about, j, eden, writing when published, contact, links, play),
 tapped or chosen by number, the arrows and return; a returning visitor lands on the card with "welcome back", and `demo`
 plays the intro again. Home and back on phones are this card. Contact on phones gives each address [email] (mailto) and
@@ -112,10 +112,17 @@ plays the intro again. Home and back on phones are this card. Contact on phones 
 (the phone's afterglow). Test hooks: `intro` and `home` (read-only). On phones the card carries a slowly turning KN badge
 (its own small vector drawing, not the intro's logo), and when an animation is all that changes and nothing scrolls,
 only its rows are redrawn (the brightness tally `lum` swaps that drawing's share, so it stays the whole screen's). On desktops:
-The landing (every load, until the first command; deep links skip it) is a demoscene-style intro drawn on the canvas:
-a title card, then an extruded vector "KN" over copper bars, a starfield and a perspective floor, with a sine scroller of
-`MAC.CONTENT` facts. Keys typed while it shows flash a bar and kick the logo; reduced motion gets one still frame. It
-animates at 30 fps through the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open.
+The landing (every load, until the first command; deep links skip it) is a demoscene-style intro drawn on the canvas,
+a 14 s opening scored beat for beat by the tune (sound.js), each beat its own idea: the name painted by the beam in two
+interlaced fields (with "16 · Hong Kong" printed under it), gliding up into a header; "Co-founder / of J" craned up out
+of the floor in 3D; a pull-back to a wall of nine tubes streaming context, the middle one rolling to "Founder / of Eden"
+and the push back in; THE GOAT? (letters dropped onto a line with bounce, a riser, the letters sinking through the line,
+which becomes the horizon); then the answer: a wireframe "KN" tumbling in over copper bars and a floor, solidifying
+into chrome, winding up and slamming on the drop. Then a loop: the logo breathing on smooth curves with a full turn a
+section, and a sine scroller of `MAC.CONTENT` facts. Keys glint the type, or give the logo one more smooth turn and a
+hop; reduced motion gets one still frame. It animates at 30 fps through the viz `live` mechanism and stops when
+dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's clock, s) and
+`introPose` (the logo's pose in the last frame).
 
 ## main.js (integrator)
 Creates the scene, terminal and typist; routes keydown/keyup to terminal + typist; text input through the hidden
