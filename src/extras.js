@@ -807,7 +807,7 @@ const QR = (() => {
   return { encode };
 })();
 T.cmds.qr = { g: 'tools', desc: 'a QR code for text or a link', usage: 'qr [-l] text...', opts: [['-l', 'low error correction: room for more text']],
-  ex: ['qr risingfounder.net', 'qr kaiav.pages.dev', 'echo hello | qr'],
+  ex: ['qr risingfounder.net', 'qr kaiav.dev', 'echo hello | qr'],
   more: 'draws a QR code your phone camera can read. up to about 200 characters (270 with -l). piped or redirected, it comes out as text blocks.',
   run(argv, io){
     let a = argv.slice(1), lo = false; if (a[0] === '-l'){ lo = true; a = a.slice(1); }

@@ -33,7 +33,7 @@ def block(n):
 scripts = ''.join(block(n) for n in ORDER if (src / n).exists() and (dev or n != 'stubs.js'))
 
 # ---- SEO / AEO: everything a crawler, a link preview or an answer engine reads, generated from content.js ----
-SITE = 'https://kaiav.pages.dev'
+SITE = 'https://kaiav.dev'   # the custom domain (Cloudflare Pages project kaiav); kaiav.pages.dev redirects here
 import json, html as H, datetime
 def _content():
     js = ("const vm=require('vm'),fs=require('fs');const c={};c.window=c;"
