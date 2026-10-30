@@ -189,8 +189,33 @@ MAC.sound = {
   key(code, down),          // mechanical key sound for KeyboardEvent.code, on press and release (varies per key, Space/Enter/Shift heavier)
   event(name),              // 'disk' (floppy seek), 'beep' (terminal bell), 'error'
   setMuted(bool), muted,    // remembered in localStorage
+  sfx(name, opts),          // the intro's sound effects (below)
+  stopAll(),                // = sfx('stopAll')
+  music,                    // gone: a silent stand-in (alive() false, time() -1, env() all zeros) until no caller is left
 }
 ```
+Intro sound effects, `MAC.sound.sfx(name, opts)`: synthesised live from Web Audio nodes (no music, no files), each call a
+voice on its own sfx bus (compressor, limiter) into the master chain, so the mute toggle silences them. A no-op (cheap,
+never throws) before the first gesture has unlocked audio, while muted, with the tab hidden, or without Web Audio;
+nothing is queued or replayed later. At most 8 voices: a ninth fades out the oldest (15 ms). Fire them on the beat
+they belong to; each starts ~5 ms after the call.
+
+| name | what | opts |
+|---|---|---|
+| `'boot'` | CRT power-on: relay click, saturated thunk, static "fwump", a whine rising and fading (~2.2 s) | |
+| `'tubeOn'` | one tube: tick, thump, the degauss hum's wobble, a faint whine (~0.9 s) | `i` (index: steps pitch) |
+| `'whoosh'` | camera move: band-swept noise with a low body, panned across | `dur` s (0.8), `dir` -1/0/1 |
+| `'whip'` | whip pan: fast, bright | `dur` s (0.24), `dir` -1/1 |
+| `'zap'` | electric glitch on a cut (~0.2 s, random each time) | |
+| `'tick'` | a small hit (~0.08 s) | `pitch` (1) |
+| `'riser'` | rising tension, cut dead at the hit | `dur` s until the hit (1.5) |
+| `'impact'` | an impact frame: pitch-dropping sine, crack, thud, short reverb | `big: true` = the final slam (sub-boom, ~3 s tail) |
+| `'tapeStop'` | hit-stop freeze: a chord and hiss slowing to a halt, a clunk | `dur` s (0.45) |
+| `'type'` | a word or letter slamming down (the Enter key's recording pitched down + a thump) | `i` (varies pitch), `big` (a word: lower, heavier, a crack) |
+| `'stopAll'` | fade out and stop everything playing within ~20 ms | |
+
+With `?debug`, `MAC.sound._dbg = { eng(), render(name | [[name, opts, at], ...], opts, secs) }`: the live engine
+(e.g. `eng().sfxOut` to tap an AnalyserNode) and an offline render through the whole chain (resolves to an AudioBuffer).
 The typist calls `MAC.sound.key(code, true)` at finger contact and `(code, false)` at release (if MAC.sound exists).
 The terminal calls `MAC.sound.event('disk' | 'beep' | 'error')` where it makes sense.
 
