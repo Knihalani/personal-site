@@ -30,7 +30,14 @@ M.dressRoom = function (api){
   const fontJobs = [];
   function fontTex(w, h, draw){ const t = canvasTex(w, h, draw); fontJobs.push(() => { const c = t.image, x = c.getContext('2d'); x.clearRect(0, 0, w, h); draw(x, w, h); t.needsUpdate = true; }); return t; }
   function noiseFill(x, w, h, base, amt, n){ x.fillStyle = base; x.fillRect(0, 0, w, h); for (let i = 0; i < n; i++){ const a = rnd() * amt; x.fillStyle = rnd() < .5 ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a * .6})`; x.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 2, 1 + rnd() * 2); } }
-  const mat = (hex, o) => new THREE.MeshStandardMaterial(Object.assign({ color: lin(hex), roughness: .7, metalness: 0 }, o || {}));
+  // one material per look: identical calls share it, so the meshes can be merged into one draw (api.mergeStatic)
+  const mats = new Map();
+  const mat = (hex, o) => { const k = hex + JSON.stringify(o || {}); let m = mats.get(k);
+    if (!m) mats.set(k, m = new THREE.MeshStandardMaterial(Object.assign({ color: lin(hex), roughness: .7, metalness: 0 }, o || {}))); return m; };
+  /* built in sections after the first frame (api.defer: the room is dark while the tube powers on), so start-up
+     stays short; each section is one slice of work */
+  const later = f => api.defer ? api.defer(f) : f();
+  api.add(group);
   function mesh(g, m, parent, x, y, z){ const o = new THREE.Mesh(g, m); o.position.set(x || 0, y || 0, z || 0); o.castShadow = true; o.receiveShadow = true; (parent || group).add(o); return o; }
 
   /* ---------- wood: one walnut-ish material shared by shelf and frames ---------- */
@@ -40,8 +47,15 @@ M.dressRoom = function (api){
       x.beginPath(); x.moveTo(0, y0); for (let u = 0; u <= w; u += 16) x.lineTo(u, y0 + Math.sin(u * .013 + i) * 3 + Math.sin(u * .05 + i * 3) * 1.2); x.stroke(); }
   }, true);
   const wood = new THREE.MeshStandardMaterial({ map: woodTex, roughness: .55, metalness: 0 });
+  /* page edges: the fore-edge of a book is a stack of paper, not a painted block. Fine uneven lines, slightly
+     yellowed toward the outside; one texture, turned for books standing (lines run up the top face) or lying flat */
+  const pageTex = vertical => { const t = canvasTex(64, 64, (x, W, H) => { x.fillStyle = '#e9e0c9'; x.fillRect(0, 0, W, H);
+      for (let i = 0; i < 64; i += 1 + (rnd() * 2 | 0)){ x.fillStyle = `rgba(${rnd() < .5 ? '120,100,70' : '255,250,235'},${.08 + rnd() * .18})`; vertical ? x.fillRect(i, 0, 1, H) : x.fillRect(0, i, W, 1); } }, true);
+    t.repeat.set(vertical ? 3 : 1, vertical ? 1 : 3); return t; };
+  const pagesUp = new THREE.MeshStandardMaterial({ map: pageTex(true), roughness: .95 }), pagesFlat = new THREE.MeshStandardMaterial({ map: pageTex(false), roughness: .95 });
 
   /* ================= floating shelf with books, a cassette deck's worth of tapes, a cactus ================= */
+  later(() => {
   const SH = { x: .5, y: 1.47, w: .56, d: .17, t: .022 };
   const shelf = new THREE.Group(); shelf.position.set(SH.x, SH.y, WALL_Z + SH.d / 2 + .002); group.add(shelf);
   mesh(softBox(SH.w, SH.t, SH.d, .004, .003), wood, shelf);
@@ -60,7 +74,7 @@ M.dressRoom = function (api){
       x.fillStyle = 'rgba(0,0,0,.25)'; x.fillRect(0, 18, W, 3); x.fillRect(0, H - 22, W, 3);
       x.save(); x.translate(W / 2 + 6, H / 2); x.rotate(-Math.PI / 2); x.fillStyle = new THREE.Color(col).getHSL({}).l > .5 ? '#2a2420' : '#e8dcc0';
       x.font = '600 22px Georgia, serif'; x.textAlign = 'center'; x.fillText(title, 0, 0); x.restore(); });
-    const cover = mat(col, { roughness: .8 }), pages = mat('#e8dfc8', { roughness: .95 });
+    const cover = mat(col, { roughness: .8 }), pages = pagesUp;
     const spineM = new THREE.MeshStandardMaterial({ map: spine, roughness: .75 });
     // BoxGeometry face order: +x, -x, +y, -y, +z, -z  ->  covers on the sides, pages on top/back, spine on the front (+z)
     const b = mesh(new THREE.BoxGeometry(w, h, d), [cover, cover, pages, pages, spineM, pages], shelf);
@@ -71,9 +85,12 @@ M.dressRoom = function (api){
   // three cassette tapes stacked flat, labels hand-written
   const tapeLabel = t => fontTex(256, 64, (x, W, H) => { x.fillStyle = '#efe6cf'; x.fillRect(0, 0, W, H); x.fillStyle = '#c4492d'; x.fillRect(0, 0, W, 9);
     x.fillStyle = '#20304f'; x.font = '500 30px Caveat, "Segoe Print", cursive'; x.fillText(t, 10, 46); });
+  // smoked clear plastic. Not a transmission material: one of those makes three.js render the whole scene a second
+  // time, every frame the shelf is in view
+  const tapeM = new THREE.MeshPhysicalMaterial({ color: lin('#b9bec4'), roughness: .12, clearcoat: .8, clearcoatRoughness: .1, transparent: true, opacity: .62 });
   ['mixtape · spring', 'late night', 'side b'].forEach((t, i) => {
     const c = new THREE.Group(); c.position.set(SH.w / 2 - .085, SH.t / 2 + .0085 + i * .0172, -SH.d / 2 + .075); c.rotation.y = (rnd() - .5) * .25; shelf.add(c);
-    mesh(softBox(.109, .017, .07, .0015, .001), new THREE.MeshPhysicalMaterial({ color: lin('#c8ccd0'), roughness: .08, transmission: .6, thickness: .01, transparent: true, opacity: .55 }), c);
+    mesh(softBox(.109, .017, .07, .0015, .001), tapeM, c);
     const lb = mesh(new THREE.PlaneGeometry(.1, .016), new THREE.MeshStandardMaterial({ map: tapeLabel(t), roughness: .8 }), c, 0, 0, .0352);
     lb.castShadow = false;
   });
@@ -90,7 +107,9 @@ M.dressRoom = function (api){
     const arm = body.clone(); arm.scale(.55, .5, .55); const a1 = mesh(arm, cac, pot, .02, .1, 0); a1.rotation.z = -.5;
   }
 
+  });
   /* ================= cork board with pinned cards, under the shelf ================= */
+  later(() => {
   const CB = { x: .5, y: 1.16, w: .4, h: .27 };
   const board = new THREE.Group(); board.position.set(CB.x, CB.y, WALL_Z + .012); group.add(board);
   const cork = canvasTex(512, 352, (x, W, H) => { noiseFill(x, W, H, '#a87a4c', .22, 26000);
@@ -127,7 +146,9 @@ M.dressRoom = function (api){
     const p = mesh(new THREE.PlaneGeometry(.075, .059), new THREE.MeshStandardMaterial({ map: ph, roughness: .45 }), board, .135, .075, .008); p.rotation.z = -.06;
     mesh(new THREE.CylinderGeometry(.0035, .0045, .006, 16).rotateX(Math.PI / 2), mat('#e7e2d4', { roughness: .4 }), board, .135, .1, .011); }
 
+  });
   /* ================= framed print, right wall edge: a quiet orbital diagram ================= */
+  later(() => {
   { const FR = { x: .92, y: 1.33, w: .2, h: .27 };
     const art = fontTex(320, 432, (c, W, H) => { c.fillStyle = '#ece4d3'; c.fillRect(0, 0, W, H); c.fillStyle = '#e3d9c3'; c.fillRect(28, 28, W - 56, H - 56);
       c.strokeStyle = '#2a2a2a'; c.lineWidth = 1.2; const cx = W / 2, cy = H * .46;
@@ -143,12 +164,14 @@ M.dressRoom = function (api){
     const glass = mesh(new THREE.PlaneGeometry(FR.w, FR.h), new THREE.MeshPhysicalMaterial({ roughness: .05, transparent: true, opacity: .12, clearcoat: 1, metalness: 0, color: 0xffffff }), f, 0, 0, .006); glass.castShadow = false;
   }
 
+  });
   /* ================= desk corner: a stack of books with a small radio clock on top ================= */
+  later(() => {
   // close in beside the machine's right shoulder (behind the mug), turned toward the chair, so the amber readout sits at
   // the right of the lean-back view against the dark wall
   { const st = new THREE.Group(); st.position.set(.345, DESK_Y, -.3); st.rotation.y = -.25; group.add(st);
     let y = 0; [['#3b4a3a', .24, .17, .028], ['#8c3b2c', .23, .16, .024], ['#d6caa9', .21, .15, .02]].forEach(([col, w, d, h], i) => {
-      const pages = mat('#ebe2cb', { roughness: .95 }), cov = mat(col, { roughness: .75 });
+      const pages = pagesFlat, cov = mat(col, { roughness: .75 });
       const b = mesh(new THREE.BoxGeometry(w, h, d), [cov, pages, cov, cov, pages, pages], st, (rnd() - .5) * .01, y + h / 2, (rnd() - .5) * .01); b.rotation.y = (rnd() - .5) * .12; y += h; });
     // radio clock: cream plastic, a perforated speaker grille on the left, a dim amber vacuum-fluorescent-ish
     // seven-segment readout on the right (drawn as segments, so it never depends on a web font)
@@ -182,7 +205,9 @@ M.dressRoom = function (api){
     mesh(softBox(.016, .008, .016, .003, .002), mat('#b9ad90', { roughness: .5 }), rc, .055, .066, 0);
   }
 
+  });
   /* ================= heavy linen curtains framing the window ================= */
+  later(() => {
   { const R = rig.windowRect, WIN = R ? { x: R.x + R.w / 2, y: R.y + R.h / 2, w: R.w, h: R.h } : { x: -.58, y: 1.42, w: .8, h: .84 }; // rig gives the lower-left corner
     const cloth = canvasTex(256, 256, (c, W, H) => { noiseFill(c, W, H, '#3b4250', .12, 9000); c.strokeStyle = 'rgba(255,255,255,.04)'; for (let i = 0; i < W; i += 3){ c.beginPath(); c.moveTo(i, 0); c.lineTo(i, H); c.stroke(); } }, true);
     const cm = new THREE.MeshStandardMaterial({ map: cloth, roughness: .95, side: THREE.DoubleSide });
@@ -198,11 +223,13 @@ M.dressRoom = function (api){
     mesh(new THREE.CylinderGeometry(.007, .007, WIN.w + .55, 16).rotateZ(Math.PI / 2), mat('#1c1a18', { metalness: .6, roughness: .4 }), group, WIN.x, WIN.y + WIN.h / 2 + .3, WALL_Z + .05);
   }
 
+  });
   /* ================= the computer's power cable, drooping off the back of the desk ================= */
+  later(() => {
   { const pts = [V3(.08, DESK_Y + .03, -.31), V3(.12, DESK_Y + .004, -.38), V3(.2, DESK_Y + .002, -.44), V3(.26, DESK_Y - .1, -.47), V3(.28, .2, -.47), V3(.33, 0, -.44)];
     mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, .0035, 8), mat('#d8cfb8', { roughness: .6 }), group); }
-
-  api.add(group);
+  });
+  later(() => { if (api.mergeStatic) api.mergeStatic(group); });
   if (document.fonts && document.fonts.load){
     Promise.all([document.fonts.load('500 30px Caveat'), document.fonts.load('500 12px "IBM Plex Mono"')])
       .then(() => { for (const f of fontJobs) f(); if (api.markScreenDirty) api.markScreenDirty(); }, () => {});

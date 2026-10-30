@@ -988,14 +988,18 @@ M.createTypist = function createTypist(api){
     skinStats.push({ verts: nv, tris: SN.idx.length / 3, nets: Math.round(tSN), ms: Math.round(now() - t0) });
   }());
   for (const g of skinJobs) g.next();            // set up now: runs to the 'setup' yield, so the bind pose is the home pose
-  {
+  const compileAll = () => { if (api.renderer && api.scene && api.camera) try { api.renderer.compile(api.scene, api.camera); } catch (e){} };
+  if (api.defer){
+    // the scene's deferred queue (slices between frames, after the room's textures): one scheduler for all start-up work
+    api.defer(function*(){ for (const g of skinJobs) yield* g; compileAll(); });
+  } else {
     // then mesh in ~6 ms slices between frames; a hidden tab or no idle time still finishes (timeout)
     const idle = window.requestIdleCallback ? (f => requestIdleCallback(f, { timeout: 60 })) : (f => setTimeout(f, 16));
     let j = 0;
     const slice = () => {
       const end = now() + 8;
       while (j < skinJobs.length && now() < end){ if (skinJobs[j].next().done) j++; }
-      if (j < skinJobs.length) idle(slice); else if (api.renderer && api.scene && api.camera) try { api.renderer.compile(api.scene, api.camera); } catch (e){}
+      if (j < skinJobs.length) idle(slice); else compileAll();
     };
     setTimeout(() => idle(slice), 250);
   }
