@@ -816,14 +816,30 @@ M.createTerminal = function createTerminal(opts){
   /* the landing: every load opens on the demo (DEMO, below), with one line under it. The first command (typed,
      clicked or a deep link) clears it for good this visit; home and back then show the plain welcome. */
   let landing = null;
-  function landingRows(){
-    const o = out();
-    o.viz(Math.max(4, ROWS - 2), (x, y, w, h, age, t) => DEMO.draw(x, y, w, h, age, t), DEMO.live);
+  /* the gate: browsers hold sound back until the visitor's first key, click or tap, so on a first landing the
+     intro waits on a standby screen (DEMO.standby) and that gesture starts it, sound and all (the gesture is used
+     up: it neither types nor skips). Asked first (sound.tryAutoplay): a browser that lets this page play sound at
+     once gets no gate. gate: 'ask' (the dark tube while the browser is asked), 'wait' (standby), '' (playing).
+     Not under reduced motion (the still frame), for a deep link (it clears the landing) or for demo */
+  function landingRows(gated){
+    const o = out(), L = { gate: gated ? 'ask' : '', go: -1 };
+    o.viz(Math.max(4, ROWS - 2), (x, y, w, h, age, t) => L.gate ? DEMO.standby(x, y, w, h, t, L.gate === 'wait') : age < 0 ? DEMO.standby(x, y, w, h, t, false) : DEMO.draw(x, y, w, h, age, t),
+      age => L.gate === 'ask' ? 4 : L.gate ? 8 : DEMO.live(age));   // (standby: 8 fps is enough for a slow breath and a blink)
     if (TAP) o.at(0, ['tap anywhere to begin', 'f']);   // phones: any tap or key goes to the title card
     else o.at(2, ['type ', 'f'], chip('help', 'b'), [' and press enter to get started', 'f']);
-    landing = { viz: o.rows[0], note: o.rows[1] };
+    landing = Object.assign(L, { viz: o.rows[0], note: o.rows[1] });
     return o;
   }
+  /* the gesture (or the browser's yes): the intro from its first frame. It waits for the sound to be running (at
+     most 0.25 s), so its first cues are heard, not dropped while the browser starts the audio */
+  function beginIntro(){
+    const l = landing; if (!l || !l.gate) return false;
+    try { if (M.sound && M.sound.unlock) M.sound.unlock(); } catch (e){}
+    l.gate = ''; l.go = now; l.viz.t0 = now + .25; dirty = true;
+    return true;
+  }
+  const soundGo = () => { const s = M.sound; return !s || s.muted || s.running === undefined || s.running; };
+  let gateCh = '', gateChT = -1e9;   // the key that started the intro: typed after all if a command follows at once
   function dismissLanding(){
     if (!landing) return;
     const l = landing; landing = null;
@@ -1412,7 +1428,7 @@ M.createTerminal = function createTerminal(opts){
       ['Font', 'VT323'], ['Files', files + ' in ~'], ['User', C.name || 'Kaiav'], ...roles.map((r, i) => [i ? '' : 'Role', r])];
   }
   /* ---- the landing: a demoscene intro, drawn straight onto the tube ----
-     An anime-OP-style opening, 11.2 s to the slam, on its own fixed 150 bpm grid (a beat 0.4 s, a hit every half
+     An anime-OP-style opening, 11.2 s of film to the slam (12.6 s played: see SEG), on its own fixed 150 bpm grid (a beat 0.4 s, a hit every half
      beat or beat), in one phosphor. Sound effects (sound.js sfx) are cued from here once the page has been touched.
        0.0  the tube ignites: a hot line, the raster snaps open on a tunnel of bezels rushing at the viewer
        0.4  KAIAV slams in; 0.8 NIHALANI; 1.2 the name becomes a one-line header as a huge 16 slams in; 1.4 a jolt
@@ -1423,7 +1439,7 @@ M.createTerminal = function createTerminal(opts){
             latitudes, swinging round to settle on the front: CO-FOUNDER, YOUNG / FOUNDERS, GLOBAL (a faint ring of it
             turning round the back)
        4.4  out of the tube in a barrel roll, along the wall, and into the EDEN tube
-       5.2  impact (two slashed panels: EDEN / FOUNDER); inside, a turning graph of agents: EDEN and then AGENTS are
+       5.2  impact (two slashed panels: EDEN / FOUNDER); inside, a turning graph of agents (FOUNDER slams under it at 5.3): EDEN and then AGENTS are
             drawn by constellations linking up node to node; 6.1 CONTEXT, squeezed in by brackets snapping shut
        6.4  out to the whole wall, which goes dark, then lights column by column on sixteenths into THE GOAT?
        7.2  impact: THE / GOAT / ? as three comic panels, frozen, then alive
@@ -1485,17 +1501,37 @@ M.createTerminal = function createTerminal(opts){
       return a;
     }
     /* the camera's jolts: [at, strength] */
-    const KK = [.4, .5, .8, .5, 1.2, .8, 1.4, .3, 1.6, 1, 2.4, .25, 3.2, 1, 3.3, .35, 3.6, .45, 4.0, .8, 5.2, 1, 5.4, .35, 5.62, .6, 6.1, .7, 6.2, .3,
+    const KK = [.4, .5, .8, .5, 1.2, .8, 1.4, .3, 1.6, 1, 2.4, .25, 3.2, 1, 3.3, .35, 3.6, .45, 4.0, .8, 5.2, 1, 5.3, .35, 5.62, .6, 6.1, .7, 6.2, .3,
       7.0, .25, 7.1, .35, 7.2, 1.1, 8.0, .6, 8.4, 1, 8.8, .4, 9.2, .4, 9.4, .3, 9.6, .8, 9.8, .35, 10.0, .4, 10.4, .45, 10.7, .35, 10.8, .4, 10.9, .45, 11.0, .5, 11.1, .55, 11.2, 1.8];
     /* the sound effects, on the grid: [at, name, options] (sound.js sfx; silent until the page has been touched; each
        fires on the frame its moment is reached, never late: a missed one is skipped). Tubes switching on call 'tubeOn'
        from the wall itself */
     const CUES = [[0, 'boot'], [.4, 'type'], [.8, 'type'], [1.2, 'type', { big: true }], [1.6, 'impact'], [1.6, 'tapeStop', { dur: .13 }], [1.73, 'whoosh', { dur: .45, dir: -1 }],
       [2.4, 'whip'], [2.8, 'whoosh', { dur: .4, dir: 1 }], [3.2, 'impact'], [3.2, 'tapeStop', { dur: .13 }], [3.3, 'type'], [3.6, 'whip'], [4.0, 'type', { big: true }],
-      [4.4, 'whoosh', { dur: .55, dir: -1 }], [4.95, 'whoosh', { dur: .25, dir: 1 }], [5.2, 'impact'], [5.2, 'tapeStop', { dur: .13 }], [5.4, 'type'], [5.62, 'type'], [6.1, 'type', { big: true }], [6.2, 'tick'],
+      [4.4, 'whoosh', { dur: .55, dir: -1 }], [4.95, 'whoosh', { dur: .25, dir: 1 }], [5.2, 'impact'], [5.2, 'tapeStop', { dur: .13 }], [5.3, 'type'], [5.62, 'type'], [6.1, 'type', { big: true }], [6.2, 'tick'],
       [6.4, 'whoosh', { dur: .4, dir: -1 }], [6.6, 'riser', { dur: .6 }], [7.2, 'impact'], [7.2, 'tapeStop', { dur: .1 }], [7.2, 'zap'],
       [7.6, 'zap'], [7.62, 'whoosh', { dur: .38, dir: -1 }], [8.0, 'whip'], [8.4, 'impact'], [8.4, 'tapeStop', { dur: .1 }], [8.8, 'zap'], [9.2, 'whip'], [9.6, 'impact'], [9.6, 'tapeStop', { dur: .1 }], [9.8, 'zap'],
       [9.4, 'tick'], [10.0, 'riser', { dur: 1.2 }], [10.4, 'zap'], [10.7, 'zap'], [10.8, 'tick'], [10.9, 'tick'], [11.0, 'tick'], [11.1, 'whoosh', { dur: .1, dir: 1 }], [11.2, 'impact', { big: true }], [11.2, 'tapeStop', { dur: .13 }]];
+    /* the cut: the film above (its clock a) is played on the real clock through holds and quickenings, each
+       [film at, film span, real span]. A hold lets a word that has just formed stand still for a half beat or a
+       beat (its film creeps on a few ms; the backdrop, the beat pulses and the glints keep moving on the real
+       clock, SD); a quickening plays a camera move faster. Every one adds or saves whole half beats, so the hits
+       stay on the 150 bpm grid; none falls in a hit-stop. Seen words: KAIAV NIHALANI, 16, CO-FOUNDER, YOUNG
+       FOUNDERS, GLOBAL, EDEN / FOUNDER, AGENTS, CONTEXT, THE GOAT? (each whole and still for 0.4 s or more, two
+       words 0.55 s or more). The slam lands at 12.6 s */
+    const SEG = [[1.15, .02, .22], [1.55, .02, .22], [1.95, 1.2, .6], [3.53, .008, .408], [3.86, .02, .42], [4.3, .02, .22],
+      [4.45, .6, .4], [5.54, .02, .42], [6.0, .02, .22], [6.32, .02, .22], [7.52, .02, .22], [7.6, .4, .2]];
+    function toFilm(r){ let off = 0; for (const [f0, df, dr] of SEG){ const r0 = f0 + off; if (r < r0) break; if (r < r0 + dr) return f0 + (r - r0) * df / dr; off += dr - df; } return r - off; }
+    function toReal(f){ let off = 0; for (const [f0, df, dr] of SEG){ if (f < f0) break; if (f < f0 + df) return f0 + off + (f - f0) * dr / df; off += dr - df; } return f + off; }
+    /* the time the holds have added by real time r (the backdrop's clock is S plus this), and by film time f */
+    function holdX(r){ let off = 0, x = 0; for (const [f0, df, dr] of SEG){ const r0 = f0 + off; if (r < r0) break; if (dr > df) x += Math.min(r - r0, dr) * (1 - df / dr); off += dr - df; } return x; }
+    function holdXf(f){ let x = 0; for (const [f0, df, dr] of SEG){ if (f < f0 + df) break; if (dr > df) x += dr - df; } return x; }
+    const SLAM_R = toReal(SLAM);
+    /* the cues and the jolts on the real clock (a sound's length follows the cut too) */
+    const CUESR = CUES.map(([at, n, o]) => [toReal(at), n, o && o.dur ? Object.assign({}, o, { dur: Math.round((toReal(at + o.dur) - toReal(at)) * 1000) / 1000 }) : o]).sort((p, q) => p[0] - q[0]);
+    const KKR = new Float32Array(KK.length); for (let i = 0; i < KK.length; i += 2){ KKR[i] = toReal(KK[i]); KKR[i + 1] = KK[i + 1]; }
+    let SD = 0, AR = 0;   // the backdrop's clock; the real age
+    const gd = T0 => SD - T0 - holdXf(T0);   // time since film moment T0, held time included (glints keep running)
     const NOOPT = {}, TUBEOPT = { i: 0 };
     function sfx(name, o){ try { const s = M.sound; if (s && s.sfx) s.sfx(name, o || NOOPT); } catch (e){} }
 
@@ -2078,7 +2114,7 @@ M.createTerminal = function createTerminal(opts){
         const tt = S - k * .011; if (tt < T0) break;
         const g = tt - T0, sc = (1 + (k0 - 1) * Math.pow(1 - c01(g / .1), 3)) * (1 + .1 * c01((g - .1) / 1.2));   // (then a slow push in)
         const e = out && tt > out ? eI3((tt - out) / .07) : 0;
-        GLP = g < .14 ? -9 : (g - .14) / .32 * (L.n + 4) - 2;   // a glint along the letters once it has landed
+        const gg = k ? g : gd(T0); GLP = gg < .14 ? -9 : ((gg - .14) / .32 % 1.6) * (L.n + 4) - 2;   // a glint along the letters once it has landed (again through a hold)
         if (e >= 1) continue;
         const s2 = sc * (1 + (ok - 1) * e), X = x + odx * e, Y = y + ody * e;
         SQ = g > .1 ? Math.exp(-(g - .1) * 16) * Math.cos((g - .1) * 34) : -.25 * (1 - g / .1); SQX = 0;
@@ -2229,7 +2265,7 @@ M.createTerminal = function createTerminal(opts){
       const knAct = S >= T_KN; CONV = knAct ? 1 - eI3((S - 10.0) / .4) : 1;
       const dim = !knAct || S < T_CH ? 1 : S < 10.0 ? .38 : .38 + .55 * sstep(10.0, 10.1, S);   // (soft behind the chrome KN; back up for the collapse)
       if (CONV <= .02) return;
-      camAt(Math.max(s0, warp(a - .02)), PCAM); camAt(S, CAM);
+      camAt(Math.max(s0, warp(toFilm(AR - .02))), PCAM); camAt(S, CAM);
       /* the blur's transform: where two wall points were an instant ago */
       setCam(CAM);
       const fx = syw * cpt, fz = cyw * cpt, fy = spt, t = fz > .05 ? -CAM.z / fz : 10, Pax = CAM.x + fx * t, Pay = CAM.y + fy * t;
@@ -2271,10 +2307,10 @@ M.createTerminal = function createTerminal(opts){
 
     /* ---- the opening: the name ---- */
     function nameScene(S, a){
-      const boost = Math.exp(-((S - T_K) % BT + BT) % BT * 5);   // the tunnel surges on every beat
-      tunnel(S, 22 + 30 * boost, S > T_K ? .5 * Math.exp(-(S % (BT / 2)) * 14) : 0);
+      const boost = Math.exp(-((SD - T_K) % BT + BT) % BT * 5);   // the tunnel surges on every beat (the backdrop's clock: on through a hold)
+      tunnel(SD, 22 + 30 * boost, S > T_K ? .5 * Math.exp(-(SD % (BT / 2)) * 14) : 0);
       typeOn(tg, true);
-      speedLines(S, cx, h / 2, .9, .22 + .2 * boost, 1, 40);
+      speedLines(SD, cx, h / 2, .9, .22 + .2 * boost, 1, 40);
       const u = LO.uName, up = eO5((S - T_16) / .12), su = lerp(1, LO.uHead / u, up);
       const pk = 1 + .06 * Math.exp(-c01(S - 1.4) * 9) * (S > 1.4 ? 1 : 0);
       word(LO.w1, S, T_K, lerp(cx, LO.hx1, up), lerp(h * .4, LO.hy, up), u * su, 2.4, 0, 0, 0, 1, 1);
@@ -2333,20 +2369,20 @@ M.createTerminal = function createTerminal(opts){
     function band(L, S, T0, lat, R, gx, gy, u, from, out, ring){
       if (S < T0) return;
       const g = S - T0; let ph = from * (1 - eO5(g / .14)) - .05 * g;   // (swings round and settles, centred on the front)
-      if (ring) ph = from - 1.6 * g;   // (the faint ring behind keeps turning)
+      if (ring) ph = from - 1.6 * gd(T0);   // (the faint ring behind keeps turning)
       if (out && S > out) ph -= 2.4 * eI3((S - out) / .08);
       if (out && S > out + .08) return;
       BLL = L; BPH = ph; BLAT = lat; BR = R; BGX = gx; BGY = gy; BU = u; BK = ring ? TAU / (L.w + VSPACE) : COND * u / (R * Math.cos(lat)); BX0 = gx - L.sw * u / 2; BBACK = ring;
-      kHot = ring ? 0 : Math.max(kHot0, .8 * Math.exp(-g * 10)); GLP = ring || g < .14 ? -9 : (g - .14) / .3 * (L.n + 4) - 2;
+      const gg = gd(T0); kHot = ring ? 0 : Math.max(kHot0, .8 * Math.exp(-g * 10)); GLP = ring || gg < .14 ? -9 : ((gg - .14) / .3 % 1.6) * (L.n + 4) - 2;
       vline(L, BX0, gy + 3 * u, u, animBandG, (out && S > out ? 1 - c01((S - out) / .08) : 1) * (ring ? .5 : 1));
       kHot = kHot0; GLP = -9; BBACK = false;
     }
     const animBandG = (i, n) => { animBand(i); const q = i - GLP; LA.hot = Math.max(LA.hot, .7 * Math.exp(-q * q * .7)); void n; };
     function jScene(S){
-      const R = Math.min(W2 * .4, h * .36) * (1 + .1 * eO3((S - 4.0) / .2)), spin = S * 1.4 + 3 * eIO((S - 3.95) / .45), gy = h * .5;
+      const R = Math.min(W2 * .4, h * .36) * (1 + .1 * eO3((S - 4.0) / .2)), spin = SD * 1.4 + 3 * eIO((S - 3.95) / .45), gy = h * .5;
       typeOn(tg, false);
-      globe(S, cx, gy, R, spin, .45 + .3 * Math.exp(-(((S - T_J) % BT + BT) % BT) * 7));
-      streaks(S, false, 1.6, .3);
+      globe(SD, cx, gy, R, spin, .45 + .3 * Math.exp(-(((SD - T_J) % BT + BT) % BT) * 7));
+      streaks(SD, false, 1.6, .3);
       typeOn(tg, true);
       word(LO.J, S, T_J - .1, cx, gy - R * .22, Math.min(LO.uJ * .78, R * .15), 1.9, 3.54, -W2 * 1.1, 0, 1, 1);
       const bu = L => Math.min(R * .22, 1.2 * R / L.sw);   // band type: each word about 60% of the globe's width
@@ -2421,31 +2457,31 @@ M.createTerminal = function createTerminal(opts){
       G.fillStyle = P.bright;
       for (let k = 0; k < C.n; k++){ cnPos(C, k, g, ex); const q = (3 + 4 * Math.exp(-Math.max(0, g - C.dl[k] - .1) * 12)) * pxk; G.fillRect(cnX - q / 2, cnY - q / 2, q, q); }
       /* packets along the links once it stands */
-      if (g > .2 && !ex){ for (let e = 0; e < C.ns; e += 2){ const f = (S * 1.8 + hash(e * 1.3)) % 1, a = C.a[e], b = C.b[e], q = 5 * pxk; G.fillRect(lerp(C.tx[a], C.tx[b], f) - q / 2, lerp(C.ty[a], C.ty[b], f) - q / 2, q, q); } }
+      if (g > .2 && !ex){ for (let e = 0; e < C.ns; e += 2){ const f = (SD * 1.8 + hash(e * 1.3)) % 1, a = C.a[e], b = C.b[e], q = 5 * pxk; G.fillRect(lerp(C.tx[a], C.tx[b], f) - q / 2, lerp(C.ty[a], C.ty[b], f) - q / 2, q, q); } }
       G.globalAlpha = 1;
       lumAcc += C.ns * u * 6 * pxk * al;
       /* then the letters light over it */
       const lit = c01((g - .16) / .07) * al;
-      if (lit > 0){ typeOn(tg, true); kHot = Math.max(kHot0, .6 * Math.exp(-(g - .16) * 8)); GLP = (g - .24) / .32 * (L.n + 4) - 2; vlineC(L, xc, yb, u, animSq, lit); GLP = -9; kHot = kHot0; tg.globalCompositeOperation = 'source-over'; }
+      if (lit > 0){ typeOn(tg, true); kHot = Math.max(kHot0, .6 * Math.exp(-(g - .16) * 8)); GLP = ((gd(T0) - .24) / .32 % 1.6) * (L.n + 4) - 2; vlineC(L, xc, yb, u, animSq, lit); GLP = -9; kHot = kHot0; tg.globalCompositeOperation = 'source-over'; }
     }
     function edenScene(S){
-      const ph = ((S - T_E) % BT + BT) % BT, fire = Math.max(Math.exp(-c01(S - 5.62) * 6) * (S >= 5.62 ? 1 : 0), Math.exp(-ph * 9) * .5);
+      const ph = ((SD - T_E) % BT + BT) % BT, fire = Math.max(Math.exp(-c01(S - 5.62) * 6) * (S >= 5.62 ? 1 : 0), Math.exp(-ph * 9) * .5);
       typeOn(tg, false);
-      graph(S, cx, h * .5, Math.min(W2 * .46, h * .62), S * .9 + 2 * eIO((S - 5.55) / .3), fire, .45);
-      streaks(S, true, 1.1, .2);
+      graph(SD, cx, h * .5, Math.min(W2 * .46, h * .62), SD * .9 + 2 * eIO((S - 5.55) / .3), fire, .45);
+      streaks(SD, true, 1.1, .2);
       const pe = 1 + .05 * c01((S - T_E) / .4), pa = 1 + .05 * c01((S - 5.62) / .4);
       tg.save(); tg.translate(cx * (1 - pe), h * .44 * (1 - pe)); tg.scale(pe, pe);   // (a slow push in on each)
       constellation(LO.cE, LO.eden, LO.uEden, cx, h * .44 + 3 * LO.uEden, S, T_E - .14, 5.6);
       tg.restore(); tg.setTransform(1, 0, 0, 1, BX, BY);
       typeOn(tg, true);
-      word(LO.fdr, S, 5.4, cx, h * .7, LO.uFdr, 1.6, 5.58, 0, 0, 1.6, 1);
+      word(LO.fdr, S, 5.3, cx, h * .7, LO.uFdr, 1.6, 5.58, 0, 0, 1.6, 1);
       tg.globalCompositeOperation = 'source-over';
       tg.save(); tg.translate(cx * (1 - pa), h * .5 * (1 - pa)); tg.scale(pa, pa);
       if (S < 6.1) constellation(LO.cA, LO.agents, LO.uAg, cx, h * .5 + 3 * LO.uAg, S, 5.62, 0);
       tg.restore(); tg.setTransform(1, 0, 0, 1, BX, BY);
       if (S >= 6.1){   // CONTEXT: the brackets snap shut on it, squeezing it into place; a pulse on the beat
         const e = back((S - 6.1) / .1, 2.2), pu = (1 + .08 * Math.exp(-c01(S - 6.2) * 10) * (S > 6.2 ? 1 : 0)) * (1 + .05 * c01((S - 6.15) / .25));
-        typeOn(tg, true); SQ = -.3 * (1 - c01((S - 6.1) / .1)); GLP = (S - 6.2) / .22 * 11 - 2;
+        typeOn(tg, true); SQ = -.3 * (1 - c01((S - 6.1) / .1)); GLP = ((gd(6.2)) / .22 % 1.8) * 11 - 2;
         vlineC(LO.context, cx, h * .5 + 3 * LO.uCtx * pu, LO.uCtx * pu * lerp(1.5, 1, e), animSq, 1); GLP = -9; SQ = 0;
         tg.globalCompositeOperation = 'source-over';
         const bw = LO.context.sw * LO.uCtx / 2 + 26 * pxk, off = W2 * .6 * (1 - e);
@@ -2498,14 +2534,14 @@ M.createTerminal = function createTerminal(opts){
         const o = p * 8, pcx = (PANEL3[o] + PANEL3[o + 2] + PANEL3[o + 4] + PANEL3[o + 6]) / 4, pcy = (PANEL3[o + 1] + PANEL3[o + 3] + PANEL3[o + 5] + PANEL3[o + 7]) / 4;
         const dx = tall ? 0 : (p - 1) * sep, dy = tall ? (p - 1) * sep : 0;
         tg.save(); tg.translate(dx, dy); polyPath(PANEL3, o); tg.clip();
-        if (p === 0){ tg.globalAlpha = .7; tg.drawImage(htc, pcx - cx - W2 * .3, pcy - h / 2, W2, h); tg.globalAlpha = 1; streaks(S, !tall, .6, .3); }
-        if (p === 1){ G = tg; speedLines(S, pcx, pcy, 1.6, .7, 1); radial(pcx, pcy, Math.min(W2, h) * .3, SH[si(.25)], .4); }
-        if (p === 2) rings(S, pcx, pcy, 1.4, .45);
+        if (p === 0){ tg.globalAlpha = .7; tg.drawImage(htc, pcx - cx - W2 * .3, pcy - h / 2, W2, h); tg.globalAlpha = 1; streaks(SD, !tall, .6, .3); }
+        if (p === 1){ G = tg; speedLines(SD, pcx, pcy, 1.6, .7, 1); radial(pcx, pcy, Math.min(W2, h) * .3, SH[si(.25)], .4); }
+        if (p === 2) rings(SD, pcx, pcy, 1.4, .45);
         typeOn(tg, true);
         const pw = tall ? W2 * .82 : (PANEL3[o + 2] - PANEL3[o]) * .82, phh = tall ? (PANEL3[o + 5] - PANEL3[o + 1]) * (p === 2 ? .8 : .7) : h * .5;
-        const L = p === 0 ? LO.the : p === 1 ? LO.goat : LO.q, u = uFit(L, pw, p === 0 ? phh * .7 : phh) * zin, jit = live > .1 ? Math.sin(S * 61 + p) * pxk : 0;
+        const L = p === 0 ? LO.the : p === 1 ? LO.goat : LO.q, u = uFit(L, pw, p === 0 ? phh * .7 : phh) * zin, jit = live > .1 ? Math.sin(SD * 61 + p) * pxk : 0;
         if (p === 1){ hollow(L, pcx + jit, pcy, u * 1.04); vlineC(L, pcx + jit, pcy + 3 * u, u, null, 1); }
-        else if (p === 2){ ROT = -.22 + .05 * Math.sin(S * 7); hollow(L, pcx, pcy, u * 1.06, ROT); vlineC(L, pcx, pcy + 3 * u, u, animRot, 1); ROT = 0; }
+        else if (p === 2){ ROT = -.22 + .05 * Math.sin(SD * 7); hollow(L, pcx, pcy, u * 1.06, ROT); vlineC(L, pcx, pcy + 3 * u, u, animRot, 1); ROT = 0; }
         else vlineC(L, pcx, pcy + 3 * u, u, null, 1);
         tg.globalCompositeOperation = 'source-over'; tg.restore();
       }
@@ -2670,7 +2706,9 @@ M.createTerminal = function createTerminal(opts){
       fit(hh);
       const dt = lastT < 0 || still ? 0 : clamp(t - lastT, 0, .1); lastT = t;
       if (still) a = SLAM + 22;
-      ageNow = a; api.age = a;
+      const ar = a; AR = ar; api.age = still ? a : ar;
+      if (!still) a = toFilm(ar);
+      ageNow = a;
       /* quality: when frames keep coming late, fewer blur samples, then no mirror under the scroller (never the
          resolution, so nothing pops); back up after a long run of good frames */
       const wn = performance.now();
@@ -2681,10 +2719,11 @@ M.createTerminal = function createTerminal(opts){
       if (dt > 0) physics(dt);
       kHot0 = kHot;
       const S = still ? a : warp(a);
+      SD = still ? S : S + holdX(ar);
       if (JOBS.length && !still) runJobs(S > T_I1 - .1);
       /* the jolts: decaying shakes from the hits (the real clock: they keep going through a hit-stop) */
       let shx = 0, shy = 0;
-      if (!still) for (let i = 0; i < KK.length; i += 2){ const d = a - KK[i]; if (d < 0) break; if (d > .6) continue; const e = KK[i + 1] * Math.exp(-d * 11); shx += e * Math.sin(d * 71 + KK[i] * 13); shy += e * Math.cos(d * 59 + KK[i] * 7); }
+      if (!still) for (let i = 0; i < KKR.length; i += 2){ const d = ar - KKR[i]; if (d < 0) break; if (d > .6) continue; const e = KKR[i + 1] * Math.exp(-d * 11); shx += e * Math.sin(d * 71 + KK[i] * 13); shy += e * Math.cos(d * 59 + KK[i] * 7); }
       const sk = Math.min(W, h) * .014;
       tg.save(); G = tg; OY = t0;
       tg.setTransform(1, 0, 0, 1, 0, t0); tg.fillStyle = P.bg; tg.fillRect(0, 0, W2, h); lumAcc += W2 * h * SL[0];
@@ -2707,10 +2746,10 @@ M.createTerminal = function createTerminal(opts){
         else if (a >= T_E && a < T_E + .07) impact3();
       }
       /* the sound effects whose moment this frame reached (none from a jump: those are skipped, never queued) */
-      if (!still && a < SLAM + 1){
-        if (cueA < 0 || a - cueA > .25 || a < cueA) cueA = a - 1e-4;
-        for (let i = 0; i < CUES.length; i++){ const c = CUES[i]; if (c[0] > cueA && c[0] <= a) sfx(c[1], c[2]); }
-        cueA = a;
+      if (!still && ar < SLAM_R + 1){
+        if (cueA < 0 || ar - cueA > .25 || ar < cueA) cueA = ar - 1e-4;
+        for (let i = 0; i < CUESR.length; i++){ const c = CUESR[i]; if (c[0] > cueA && c[0] <= ar) sfx(c[1], c[2]); }
+        cueA = ar;
       }
       tg.restore(); G = tg; BX = 0; BY = 0;
     }
@@ -2851,6 +2890,32 @@ M.createTerminal = function createTerminal(opts){
       F = F0; pcx = cx; pcy = hy;
       tg.setTransform(1, 0, 0, 1, BX, BY);
     }
+    /* the standby screen before the intro (the browser holds sound back until the first key, click or tap: the
+       intro waits for it, and starts with it): the dark tube with a slow breathing glow and a faint raster line,
+       the name small, PRESS ANY KEY (TAP TO START on phones) blinking, a small SOUND ON. show false: the dark tube
+       alone (while the browser is asked whether sound may start by itself, ~0.15 s) */
+    const SBL = {}, GLC = rgb(P.normal).join(',');
+    function standby(x0_, t0, w_, hh, t, show){
+      fit(hh);
+      const kh = kHot; kHot = 0;
+      tg.save(); G = tg; BX = 0; BY = t0;
+      tg.setTransform(1, 0, 0, 1, 0, t0); tg.fillStyle = P.bg; tg.fillRect(0, 0, W2, h); lumAcc += W2 * h * SL[0];
+      if (show){
+        if (!SBL.name){ SBL.name = mkLine(C.name || 'KN'); SBL.go = mkLine(TAP ? 'TAP TO START' : 'PRESS ANY KEY'); SBL.snd = mkLine('SOUND ON'); }
+        const br = REDUCED ? .5 : .5 + .5 * Math.sin(t * 2.1), my = h * .47;   // (a breath every ~3 s)
+        const R = Math.min(W2, h) * (.42 + .05 * br), gr = tg.createRadialGradient(cx, my, 0, cx, my, R);
+        gr.addColorStop(0, 'rgba(' + GLC + ',' + (.07 + .05 * br).toFixed(3) + ')'); gr.addColorStop(.55, 'rgba(' + GLC + ',' + (.02 + .015 * br).toFixed(3) + ')'); gr.addColorStop(1, 'rgba(' + GLC + ',0)');
+        tg.fillStyle = gr; tg.fillRect(0, 0, W2, h); lumAcc += W2 * h * .03;
+        const lw = W2 * (.2 + .03 * br); tg.fillStyle = SH[si(.16 + .1 * br)]; tg.fillRect(cx - lw / 2, my - pxk, lw, 2 * pxk);   // the raster's line, idling
+        typeOn(tg, true);
+        const u1 = uFit(SBL.name, W2 * (tall ? .56 : .3), h * .036); vlineC(SBL.name, cx, h * .33 + 3 * u1, u1, null, .7);
+        const on = REDUCED || (t % 1.1) < .72, u2 = uFit(SBL.go, W2 * (tall ? .74 : .4), h * .056);
+        vlineC(SBL.go, cx, h * .57 + 3 * u2, u2, null, on ? 1 : .14);
+        const u3 = uFit(SBL.snd, W2 * (tall ? .3 : .14), h * .022); vlineC(SBL.snd, cx, h * .68 + 3 * u3, u3, null, .4);
+        tg.globalCompositeOperation = 'source-over';
+      }
+      tg.restore(); G = tg; BX = 0; BY = 0; kHot = kh;
+    }
     let sparkAt = -9, sparkA = 0;
     const BB = new Float32Array(4);
     function grow(){ for (let k = 0; k < NV; k++){ if (qx[k] < BB[0]) BB[0] = qx[k]; if (qx[k] > BB[2]) BB[2] = qx[k]; if (qy[k] < BB[1]) BB[1] = qy[k]; if (qy[k] > BB[3]) BB[3] = qy[k]; } }
@@ -2858,8 +2923,10 @@ M.createTerminal = function createTerminal(opts){
       age: -1,
       get pose(){ return Array.from(POSE.subarray(0, 7)); },   // test hook: the logo's pose in the last frame drawn (yaw, pitch, roll, y, z, sx, sy)
       draw,
+      standby,
       live: () => (M.reader && M.reader.isOpen) ? 0 : 30,
-      LENGTH: SLAM + 1.5,                            // the opening, through the slam (phones play this once, then the title card)
+      LENGTH: SLAM_R + 1.5,                          // the opening, through the slam (phones play this once, then the title card)
+      SLAM: SLAM_R,                                  // when the slam lands (real seconds)
       /* a key: in the opening, a glint over the type; in the loop, one more smooth turn (two at most ahead), a small
          hop, the next bar lit, the stars pushed; a spark and a glint at most ~8 times a second */
       key(){
@@ -3278,6 +3345,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function handleTap(fx, fy){
     if (booting) return false;
+    if (landing && landing.gate && !app && !(!TAP && hitKey(fx, fy))){ beginIntro(); return true; }   // the standby screen: a tap or click starts the intro (a chip still works)
     if (TAP && landing && !app){ toHome(); return true; }   // phones: a tap skips the intro
     if (app){                                   // an app with tap(col, row) gets the grid cell (the editor's shortcut bar, cursor placement)
       const st = app;
@@ -3733,10 +3801,22 @@ M.createTerminal = function createTerminal(opts){
     if (e.metaKey) return false;
     if (/^F\d+$/.test(k)) return false;
     if (booting){ skipBoot(); if (k === 'Escape' || k === 'Enter' || k === ' ') return true; }   // any other key skips the boot AND counts
+    if (landing && landing.gate && !app){                      // the standby screen: the key starts the intro and is used up
+      if (k === 'Tab') return false;
+      if (!e.repeat){ beginIntro(); if (k.length === 1 && k !== ' ' && !e.ctrlKey && !e.altKey){ gateCh = k; gateChT = e.timeStamp || performance.now(); } }
+      return true;
+    }
+    let held = '';
+    if (gateCh){   // ...unless a command is being typed: then that first letter belongs to it
+      const c0 = gateCh; gateCh = '';
+      const word = k.length === 1 && k !== ' ', cmd = k === 'Enter' && !!(M.TERM.cmds[c0] || M.TERM.apps[c0] || hasAlias(c0));   // (Enter: only a key that is a command by itself, j)
+      if ((e.timeStamp || performance.now()) - gateChT < 1500 && !input && !app && !e.ctrlKey && !e.altKey && (word || cmd)) held = c0;
+    }
     if (landing && !app && !e.repeat){                         // the intro answers each key (held keys: once)
       if (!TAP) DEMO.key();
-      else { toHome(); if (k === 'Enter' || k === ' ' || k === 'Escape') return true; }   // phones: a key skips to the title card
+      else { toHome(); if (!held && (k === 'Enter' || k === ' ' || k === 'Escape')) { return true; } }   // phones: a key skips to the title card
     }
+    if (held) insert(held);   // (after the phones' title card, which starts with an empty line)
     const ctrl = e.ctrlKey, alt = e.altKey, c = k.toLowerCase();
     if (app){                                   // apps get keys first
       const st = app;
@@ -3834,7 +3914,8 @@ M.createTerminal = function createTerminal(opts){
   }
   function insertText(str){
     if (booting){ skipBoot(); }
-    if (landing && !app && str){ if (TAP) toHome(); else DEMO.key(); }
+    if (landing && landing.gate && !app && str) beginIntro();   // (assistive tech, a paste: the text still counts)
+    else if (landing && !app && str){ if (TAP) toHome(); else DEMO.key(); }
     if (app){                                   /* phones and IME: an app takes the text whole (app.insertText), or as key events */
       const st = app;
       if (st.inst && typeof st.inst.insertText === 'function'){ if (appCall('insertText', String(str)) !== false && app === st) st.dirty = true; return; }
@@ -3875,8 +3956,14 @@ M.createTerminal = function createTerminal(opts){
     booting = false; rows = []; shown = 0; partial = 0;
     store.set(BOOT_KEY, 1);
     if (TAP && RETURNING){ pageRow = null; page = ''; pages = []; goHome('', 'welcome back'); blinkT0 = now; dirty = true; return; }
-    const w = landingRows();
+    const w = landingRows(!REDUCED);
     pageRow = null; page = ''; pages = [];
+    if (landing.gate){   // may this page play sound at once? then no gate
+      const L0 = landing, s = M.sound;
+      const decide = yes => { if (landing !== L0 || L0.gate !== 'ask') return; if (yes !== false) beginIntro(); else { L0.gate = 'wait'; dirty = true; } };
+      if (!s || s.muted || !s.tryAutoplay) decide(true);
+      else s.tryAutoplay().then(decide, () => decide(false));
+    }
     emit(w, (C.name || '') + '. ' + (A.role || '') + '. An animated intro: the name, Co-founder of J, Founder of Eden, The GOAT?, then the letters K N slam down over copper bars while a message scrolls along the bottom. Type help and press Enter to get started.');
     blinkT0 = now; dirty = true;
   }
@@ -4246,7 +4333,8 @@ M.createTerminal = function createTerminal(opts){
   function update(dt, t){
     now = t;
     /* phones: the intro plays once (its opening, DEMO.LENGTH s), then settles on the title card (not while something is typed) */
-    if (TAP && landing && !landing.full && !app && !job && !input && landing.viz.t0 >= 0 && now - landing.viz.t0 > DEMO.LENGTH) toHome();
+    if (landing && !landing.gate && landing.go >= 0 && landing.viz.t0 > now && (soundGo() || now - landing.go >= .25)){ landing.viz.t0 = now; dirty = true; }   // the sound is running: go
+    if (TAP && landing && !landing.gate && !landing.full && !app && !job && !input && landing.viz.t0 >= 0 && now - landing.viz.t0 > DEMO.LENGTH) toHome();
     let changed = dirty;
     if (booting){
       bootT += dt;
@@ -4373,6 +4461,8 @@ M.createTerminal = function createTerminal(opts){
     get appStatus(){ const r = app ? appCall('status') : null; return r && typeof r === 'object' ? r : null; },   // phones: an app's optional status() -> { note, keys: [{ label, key, ctrl? }] } for main.js's strip
     get page(){ return page; },
     get intro(){ return !!landing; },                     // the demo is on the tube
+    get gated(){ return !!(landing && landing.gate); },   // ...waiting on its standby screen for the first key, click or tap
+    begin(){ return !app && beginIntro(); },              // that gesture, from elsewhere on the page (main.js: a click off the tube)
     get introAge(){ return landing ? DEMO.age : -1; },    // test hooks: the intro's clock (s), -1 before its first frame or with no intro;
     get introPose(){ return landing ? DEMO.pose : null; },   // and the logo's pose in the last frame
     get home(){ return homeOn(); },                       // phones: the title card's menu is up                           // the page on screen ('' = the welcome)

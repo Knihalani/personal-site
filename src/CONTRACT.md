@@ -104,7 +104,17 @@ MAC.createTerminal({ content, aspect, cols?, width? }) -> {   // width: phones a
   scrollInfo,                   // { off: rows up from the bottom, max, rowH: a row as 0..1 of the canvas } (1:1 touch scrolling)
 }
 ```
-Phones (pointer: coarse) play the intro once, its opening (`DEMO.LENGTH`, about 12.7 s; any tap or key skips it), then settle on a title card:
+The start gate (first landings, both layouts): browsers hold sound back until the visitor's first key, click or tap, so
+the intro waits for it on a standby screen in its own look (the dark tube breathing, the name small, PRESS ANY KEY or, on
+phones, TAP TO START blinking, a small SOUND ON), with the help line and the prompt under it. That gesture starts the
+intro from its first frame (it calls `MAC.sound.unlock()`, then the intro's clock waits for the context to run, at most
+0.25 s, so the 'boot' cue is heard) and is used up: it neither types nor skips (a letter that starts it is typed after
+all when more letters follow within 1.5 s, or Enter when it is a command by itself, so a command typed straight away
+still runs). A chip still works. A browser that lets the page play sound at once (`sound.tryAutoplay()` resolves true
+within ~0.15 s; the tube stays dark while it is asked) gets no gate, nor does a muted visitor, reduced motion, a deep
+link, a returning phone visitor or `demo`. Test hooks: `gated` (read-only) and `begin()` (the gesture from elsewhere:
+main.js calls it for a click off the glass in the 3D view).
+Phones (pointer: coarse) play the intro once, its opening (`DEMO.LENGTH`, about 14.1 s from the gesture; once it plays, any tap or key skips it), then settle on a title card:
 the name, the role line and a boot-disk menu of big rows (about, j, eden, writing when published, contact, links, play),
 tapped or chosen by number, the arrows and return; a returning visitor lands on the card with "welcome back", and `demo`
 plays the intro again. Home and back on phones are this card. Contact on phones gives each address [email] (mailto) and
@@ -113,7 +123,8 @@ plays the intro again. Home and back on phones are this card. Contact on phones 
 (its own small vector drawing, not the intro's logo), and when an animation is all that changes and nothing scrolls,
 only its rows are redrawn (the brightness tally `lum` swaps that drawing's share, so it stays the whole screen's). On desktops:
 The landing (every load, until the first command; deep links skip it) is an anime-OP-style opening drawn on the canvas,
-11.2 s to the slam on its own fixed 150 bpm grid (a cut or a hit every half beat or beat), in one phosphor: the tube
+12.6 s to the slam on its own fixed 150 bpm grid (a film of 11.2 s played through a cut: every word is held whole and
+still for at least 0.4 s by half beats or beats added while its backdrop keeps moving, and two camera moves play faster) (a cut or a hit every half beat or beat), in one phosphor: the tube
 ignites on a tunnel of bezels; KAIAV, NIHALANI and a huge 16 slam in (the name becoming a header); an impact frame; the
 picture was the middle tube of a wall of CRTs: the camera blasts back, flies along the wall as the tubes switch on in
 cascades (each a word or motif: KN, J, EDEN, AGENTS, CONTEXT, FOUNDERS, 16, a globe, a graph), whips round and dives
@@ -126,15 +137,14 @@ hit-stop with a white ring shockwave, the land). Each act has its own way of put
 bands, constellations, flip tiles). Impact frames last two or three frames over a short hit-stop (the picture's clock
 holds, then catches up); one is a bright full frame (the slam), the rest dark field with bright line art. Motion blur is real (sub-frame samples averaged). Then a loop: the logo breathing on smooth curves with
 a full turn a section, and a sine scroller of `MAC.CONTENT` facts (the name, J, Eden). Keys glint the type, or give the
-logo one more smooth turn and a hop; reduced motion gets one still frame. It is silent until the page has been touched;
-then it cues `MAC.sound.sfx(name, opts)` on its hits, and `sfx('stopAll')` when dismissed. It animates at 30 fps through
-the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's clock, s) and
+logo one more smooth turn and a hop; reduced motion gets one still frame. It starts with sound (the gate above); it cues `MAC.sound.sfx(name, opts)` on its hits (lengths follow the cut), and `sfx('stopAll')` when dismissed. It animates at 30 fps through
+the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's real age, s, from its first frame; -1 on the standby screen) and
 `introPose` (the logo's pose in the last frame).
 
 ## main.js (integrator)
 Creates the scene, terminal and typist; routes keydown/keyup to terminal + typist; text input through the hidden
 #kbd field (all devices, so assistive tech has a real input); clicks on the tube go through `api.pickScreen` to
-`term.handleTap`. Hash deep links: #about #eden #j #writing #contact #links #help, and #post/<slug> for the reader
+`term.handleTap` (a click off the glass on the standby screen calls `term.begin()`); `sound.tryAutoplay()` is asked at load. Hash deep links: #about #eden #j #writing #contact #links #help, and #post/<slug> for the reader
 (anything else in the hash is ignored). One rAF loop, paused when hidden and while the reader is open.
 `flat()` is the terminal-only layout: phones, and desktops without WebGL or three.js, after a context loss or
 repeated render errors. Desktops get one centred column, unchanged. Touch screens get the computer in the hand:
@@ -192,7 +202,12 @@ The visible parts are the forearms, sleeves and hands, so they must look great f
 ## Sound: src/sound.js
 ```js
 MAC.sound = {
-  unlock(),                 // call from the first user gesture (keydown / pointerdown)
+  unlock(),                 // call from the first user gesture (keydown / pointerdown); sound.js also unlocks on the first
+                            // pointerdown / keydown / touchstart / touchend / mousedown / click anywhere (capture phase)
+  tryAutoplay(ms?),         // on load: makes the one context and asks it to start without a gesture; a promise of true when it
+                            // runs within ~150 ms (a site the visitor allowed, a home-screen app, Chrome's media engagement),
+                            // else false (the context waits, suspended, for unlock(); asked once, so one browser warning at most)
+  running,                  // the context is running (sounds scheduled now are heard now)
   key(code, down),          // mechanical key sound for KeyboardEvent.code, on press and release (varies per key, Space/Enter/Shift heavier)
   event(name),              // 'disk' (floppy seek), 'beep' (terminal bell), 'error'
   setMuted(bool), muted,    // remembered in localStorage

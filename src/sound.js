@@ -695,26 +695,55 @@ function flushPending(){
 }
 
 const ENV0 = Object.freeze({ kick: 0, snare: 0, bar: 0, drop: 0, step: 0, barN: 0, part: -1 });
+/* the one context: made on the first call of unlock() or tryAutoplay(), whichever comes first */
+function make(){
+  if (eng) return true;
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
+  const ctx = new AC({ latencyHint: 'interactive' });
+  eng = new Engine(ctx);
+  eng.out.gain.value = muted ? 0 : 1;
+  decodeKeys(ctx);                     // only if the early offline decode was not possible
+  ctx.addEventListener && ctx.addEventListener('statechange', () => { if (ctx.state === 'running') boot(); });
+  return true;
+}
+function boot(){
+  if (booted) return; booted = true;
+  setTimeout(() => { try { eng.warm(); } catch (e){} }, 2600);   // build the event sounds before they are needed
+}
+let autoplayP = null;
 const sound = {
   get muted(){ return muted; },
   unlock(){
     try {
-      if (!eng){
-        const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-        const ctx = new AC({ latencyHint: 'interactive' });
-        eng = new Engine(ctx);
-        eng.out.gain.value = muted ? 0 : 1;
-        decodeKeys(ctx);                     // only if the early offline decode was not possible
-      }
+      if (!make()) return;
       if (!unlockedAt) unlockedAt = performance.now();
-      const ctx = eng.ctx, go = () => {
-        if (booted) return; booted = true;
-        setTimeout(() => { try { eng.warm(); } catch (e){} }, 2600);   // build the event sounds before they are needed
-      };
-      if (ctx.state === 'running') go();
-      else if (!hidden){ const p = ctx.resume(); if (p && p.then) p.then(go, () => {}); else go(); }
+      const ctx = eng.ctx;
+      if (ctx.state === 'running') boot();
+      else if (!hidden){ const p = ctx.resume(); if (p && p.then) p.then(() => { if (ctx.state === 'running') boot(); }, () => {}); }
     } catch (e){ /* audio is a nicety; never break the page */ }
   },
+  /* on load, before any gesture: make the context and see whether it may start. Some visitors' browsers allow sound at once
+     (a site they have allowed, a home-screen app, Chrome's media engagement, a same-site navigation after a click);
+     resolves true when the context is running within ~150 ms, else false (the context waits, suspended, for unlock()
+     from the first gesture: never a second one). Asked once; a browser that refuses logs its one warning */
+  tryAutoplay(ms){
+    if (autoplayP) return autoplayP;
+    return (autoplayP = new Promise(res => {
+      try {
+        if (hidden || !make()) return res(false);
+        const ctx = eng.ctx;
+        if (ctx.state === 'running'){ boot(); return res(true); }
+        /* (no resume() here: a context the browser allows starts running by itself, and asking one it refuses would
+           log its warning a second time) */
+        let done = false;
+        const fin = v => { if (done) return; done = true; if (v) boot(); res(v); };
+        if (ctx.addEventListener) ctx.addEventListener('statechange', () => { if (ctx.state === 'running') fin(true); });
+        setTimeout(() => fin(ctx.state === 'running'), ms || 150);
+      } catch (e){ res(false); }
+    }));
+  },
+  /* the context is running: sounds scheduled now are heard now */
+  get running(){ return !!(eng && eng.ctx.state === 'running'); },
   key(code, down){
     if (!ready()) return;
     if (!keyBufs){ if (decoding && pending.length < 6) pending.push([code, down, performance.now()]); return; }
@@ -744,6 +773,18 @@ const sound = {
     if (!muted && !hidden && ctx.state === 'suspended') ctx.resume().catch(() => {});
   },
 };
+
+/* the first gesture anywhere on the page unlocks (capture phase: before anything else sees it). The listeners go once
+   the context runs */
+{
+  const T = ['pointerdown', 'keydown', 'touchstart', 'touchend', 'mousedown', 'click'];
+  const g = e => {
+    if (e.type === 'keydown' && (e.metaKey || /^(Shift|Control|Alt|Meta|CapsLock|Fn)$/.test(e.key || ''))) return;   // (a lone modifier is no activation)
+    sound.unlock();
+    if (sound.running) for (const t of T) removeEventListener(t, g, true);
+  };
+  for (const t of T) addEventListener(t, g, true);
+}
 
 document.addEventListener('visibilitychange', () => {
   hidden = document.visibilityState === 'hidden';

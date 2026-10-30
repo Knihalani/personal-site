@@ -15,6 +15,9 @@ const oops = e => { if (!errs++) console.error('kept going after:', e); };   // 
 /* sound: unlocked by the first gesture */
 let unlocked = false;
 function unlock(){ if (unlocked || !sound) return; unlocked = true; try { sound.unlock(); } catch (e){} }
+/* ...unless this browser lets the page play sound at once: asked now, so the answer is in before the intro wants it
+   (the terminal's landing waits on it; sound.js also unlocks on the first gesture anywhere, in the capture phase) */
+if (sound && sound.tryAutoplay && !matchMedia('(prefers-reduced-motion: reduce)').matches) try { sound.tryAutoplay(); } catch (e){}
 /* the toggle keeps one label; aria-pressed (and the dot drawn from it) says whether sound is on. Remembered by sound.js */
 function setupMute(afterClick, signal){
   if (!sound){ muteBtn.hidden = true; return; }
@@ -128,6 +131,9 @@ on(stage, 'click', e => {
   if (reading()) return;
   const p = api.pickScreen && term.handleTap ? api.pickScreen(e.clientX, e.clientY) : null;
   if (p && term.handleTap(p.u, p.v)){ unlock(); if (api.markScreenDirty) api.markScreenDirty(); }
+  else if (!p && term.gated && term.begin){ unlock(); term.begin(); }   // the standby screen: a click anywhere starts the intro
+  /* (a click on the glass while the intro plays does nothing, unless it lands on a chip: the help line's "help",
+     with its slack, sits low on the glass, and running it is what ends the intro) */
   focusInput();
 });
 
