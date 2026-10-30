@@ -827,6 +827,7 @@ M.createTerminal = function createTerminal(opts){
   function dismissLanding(){
     if (!landing) return;
     const l = landing; landing = null;
+    DEMO.stop();   // its sound effects end with it
     rows = rows.filter(r => r !== l.viz && r !== l.note); shown = Math.min(shown, rows.length); partial = 0;
     if (pageRow === l.viz) pageRow = null;
     dirty = true;
@@ -1411,34 +1412,35 @@ M.createTerminal = function createTerminal(opts){
       ['Font', 'VT323'], ['Files', files + ' in ~'], ['User', C.name || 'Kaiav'], ...roles.map((r, i) => [i ? '' : 'Role', r])];
   }
   /* ---- the landing: a demoscene intro, drawn straight onto the tube ----
-     A short film about who owns this machine, in one phosphor, cut to its own 120 bpm tune (sound.js), which keeps
-     its time: the opening is the tune's seven-bar intro (14 s); if the tune starts part-way (at the first touch) it
-     joins at the picture's place and the picture's clock leans gently onto the tune's, so the drop lands on the slam.
-     Each beat has its own idea, one material (vector type in phosphor chrome) and one palette:
-       0.0  the raster opens from a line (the tube warming up)
-       0.4  WHO: the name is built by the tube's own scanlines: interlaced slices of it fly in from either side, in
-            raster order, and close up into solid type; a glint; the beam prints "16 · HONG KONG" under it
-       2.9  the name glides up and becomes the header of what follows
-       3.0  J: "CO-FOUNDER / OF J" lies flat in 3D and the camera cranes up until it stands; the line types on
-       5.55 the camera pulls back: it was one tube in a wall of nine; the other eight switch on in a spiral, each
-            streaming lines of context; the middle one rolls like a slot machine, FOUNDER stays and OF J becomes
-            OF EDEN, and the camera pushes back in: "giving agents context"
-       8.5  THE GOAT?: a hard cut to a quiet line. THE types on, G O A T drop onto the line and bounce, one per
-            sixteenth, then the question mark, bigger, with a tilt; a riser; on the downbeat the letters sink through
-            the line, the question mark is flung away, and the line is the horizon of the next scene
-      10.0  the answer: the floor runs out from that horizon, copper bars drop in on the eighths, and a wireframe KN
-            tumbles in from the vanishing point, solidifies, takes on its chrome, winds up and rushes the camera
-      14.0  the slam, on the tune's drop: two impact frames, a jolt, a shockwave through the floor, a glint
-     Then it loops: the logo breathes over the turning cylinder of bars, makes one full turn at the top of each
-     section, and a sine scroller runs along the floor, mirrored in it. Everything that moves in the loop moves on
-     springs and smooth curves (no instantaneous jumps: the beat only changes brightness). Keys add one more smooth
-     turn and a small hop; the pointer leans it; a drag spins it. Under reduced motion: one still frame.
+     An anime-OP-style opening, 11.2 s to the slam, on its own fixed 150 bpm grid (a beat 0.4 s, a hit every half
+     beat or beat), in one phosphor. Sound effects (sound.js sfx) are cued from here once the page has been touched.
+       0.0  the tube ignites: a hot line, the raster snaps open on a tunnel of bezels rushing at the viewer
+       0.4  KAIAV slams in; 0.8 NIHALANI; 1.2 the name whips up and a huge 16 slams in; 1.4 a jolt
+       1.6  impact: a dark-field still (radial burst, halftone, the 16 in outline). Hit-stop; the picture was the
+            middle tube of a wall: the camera blasts back and trucks along a wall of CRTs that switch on in
+            cascades, each flashing a word or motif of his; a whip pan, and a dive into the J tube
+       3.2  impact (a white ring, the J in halftone); inside: a huge J, CO-FOUNDER, YOUNG / FOUNDERS, GLOBAL over a
+            spinning globe of lit founders
+       4.4  out of the tube in a barrel roll, along the wall, and into the EDEN tube
+       5.2  impact (two slashed panels: EDEN / FOUNDER); inside: a turning graph of agents, AGENTS, CONTEXT in brackets
+       6.4  out to the whole wall, which goes dark, then lights column by column on sixteenths into THE GOAT?
+       7.2  impact: THE / GOAT / ? as three comic panels, frozen, then alive
+       7.6  every tube shows the KN; a dive into the middle one
+       8.0  the KN bursts out in wireframe; 8.4 impact (an inverted silhouette), chrome; a cut on every hit: 8.8 a
+            low hero angle, 9.2 a whip in profile, 9.6 impact (an extreme close-up of a letter edge), 9.8 from
+            above, 10.0 the wind-up, 10.4 the held breath, 10.8 the rush
+      11.2  the slam: an inverted frame, a hit-stop with a white ring shockwave, a jolt, a wave through the floor
+     Hit-stops hold the picture's own clock (S) a few frames at each impact and let it catch up just after; the
+     grid (cuts, hits, sounds) stays on the real clock. Bright full frames: two (8.4, 11.2); every other impact is
+     dark field with bright line art. Then it loops: the logo breathes over the turning cylinder of bars, makes one
+     full turn at the top of each section, and a sine scroller runs along the floor. Everything that moves in the
+     loop moves on springs and smooth curves. Keys add one more smooth turn and a small hop; the pointer leans it;
+     a drag spins it. Under reduced motion: one still frame.
      The logo is a correct painter's renderer: back faces culled exactly (in the logo's own space), the two letters
      ordered by the plane between them, each letter's walls by a 2D visibility order seen from the camera, then the
-     bevels, then the cap; faces are drawn with a same-colour hairline so no seams shimmer. Fast moves get real
-     motion blur: several sub-frame poses accumulated additively on a layer. The backdrop (bars, floor, far stars)
-     is drawn small and scaled up; the type, the logo and the scroller are drawn on the tube at full
-     resolution. Geometry, glyph paths, ramps, gradients and canvases are made once; a frame allocates nothing. */
+     bevels, then the cap. Motion blur is real: sub-frame samples averaged (the logo's poses on a layer; the wall's
+     camera as a 2D transform of its layer; slammed words as ghosts at sub-frame times). Geometry, glyph paths,
+     textures, ramps and canvases are made once (at a size change); a frame allocates nothing. */
   const DEMO = (tg => {
     const TAU = 6.2832, CPU = {};   // (every canvas here only ever draws into another: none is read back, so all may live on the GPU)
     /* the phosphor as a 64-step ramp, bg -> faint -> dim -> normal -> bright (v 0..1), with each step's luminance */
@@ -1462,13 +1464,39 @@ M.createTerminal = function createTerminal(opts){
     const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
     const hash = n => { n = Math.sin(n * 127.1 + 311.7) * 43758.5453; return n - Math.floor(n); };
 
-    /* ---- the timeline (s): the tune's seven-bar intro, two seconds a bar ---- */
-    const T_NAME = .4, T_SUB = 1.5, T_HEAD = 2.85, T_J = 3.1, T_JSUB = 3.62, T_PULL = 5.55, T_WALL = 6.0, T_ROLL = 6.42, T_PUSH = 6.75, T_ESUB = 7.2,
-      T_GOAT = 8.5, T_PAY = 10.0, T_FLY = 10.3, T_SOLID = 11.15, T_HOVER = 12.2, T_WIND = 12.75, T_RUSH = 13.3, SLAM = 14.0, SCROLL0 = 14.5;
-    const SECTION = 16, TURN = 2.4;   // the loop: eight bars a section; a full turn opens each one
+    /* ---- the clock: 150 bpm, a beat 0.4 s, a sixteenth 0.1 s; seven bars to the slam ---- */
+    const BT = .4, SLAM = 11.2, SCROLL0 = 11.7;
+    const SECTION = 16, TURN = 2.4;   // the loop: ten bars a section; a full turn opens each one
+    const T_K = .4, T_N = .8, T_16 = 1.2, T_I1 = 1.6, T_J = 3.2, T_OUTJ = 4.4, T_E = 5.2, T_W3 = 6.4, T_GOAT = 7.2, T_W4 = 7.6, T_KN = 8.0, T_CH = 8.4, T_EDGE = 9.6;
+    /* hit-stops: [at, held for, caught up over] (the picture's clock S = warp(a)) */
+    const HS = [1.6, .13, .2, 3.2, .13, .2, 5.2, .13, .2, 7.2, .1, .2, 8.4, .1, .15, 9.6, .1, .15, 11.2, .13, .25];
+    function warp(a){
+      for (let i = 0; i < HS.length; i += 3){
+        const t = HS[i], f = HS[i + 1], c = HS[i + 2];
+        if (a <= t) return a;
+        if (a < t + f) return t;
+        if (a < t + f + c) return t + (a - t - f) * (f + c) / c;
+      }
+      return a;
+    }
+    /* the camera's jolts: [at, strength] */
+    const KK = [.4, .5, .8, .5, 1.2, .8, 1.4, .3, 1.6, 1, 2.4, .25, 3.2, 1, 3.4, .35, 3.6, .45, 3.8, .35, 4.0, .8, 5.2, 1, 5.4, .35, 5.6, .6, 6.0, .7, 6.2, .3,
+      7.0, .25, 7.1, .35, 7.2, 1.1, 8.0, .6, 8.4, 1, 8.8, .4, 9.2, .4, 9.6, .8, 9.8, .35, 10.0, .4, 10.4, .5, 10.8, .3, 11.2, 1.7];
+    /* the sound effects, on the grid: [at, name, options] (sound.js sfx; silent until the page has been touched; each
+       fires on the frame its moment is reached, never late: a missed one is skipped). Tubes switching on call 'tubeOn'
+       from the wall itself */
+    const CUES = [[0, 'boot'], [.4, 'type'], [.8, 'type'], [1.2, 'type', { big: true }], [1.6, 'impact'], [1.6, 'tapeStop', { dur: .13 }], [1.73, 'whoosh', { dur: .45, dir: -1 }],
+      [2.4, 'whip'], [2.8, 'whoosh', { dur: .4, dir: 1 }], [3.2, 'impact'], [3.2, 'tapeStop', { dur: .13 }], [3.4, 'type'], [3.6, 'whip'], [3.8, 'type'], [4.0, 'type', { big: true }],
+      [4.4, 'whoosh', { dur: .55, dir: -1 }], [4.95, 'whoosh', { dur: .25, dir: 1 }], [5.2, 'impact'], [5.2, 'tapeStop', { dur: .13 }], [5.4, 'type'], [5.6, 'type'], [6.0, 'type', { big: true }], [6.1, 'tick'],
+      [6.4, 'whoosh', { dur: .4, dir: -1 }], [6.6, 'riser', { dur: .6 }], [7.2, 'impact'], [7.2, 'tapeStop', { dur: .1 }], [7.2, 'zap'],
+      [7.6, 'zap'], [7.62, 'whoosh', { dur: .38, dir: 1 }], [8.0, 'whip'], [8.4, 'impact'], [8.4, 'tapeStop', { dur: .1 }], [8.8, 'zap'], [9.2, 'whip'], [9.6, 'impact'], [9.6, 'tapeStop', { dur: .1 }], [9.8, 'zap'],
+      [10.0, 'riser', { dur: 1.2 }], [10.4, 'tick'], [10.8, 'whoosh', { dur: .4, dir: 1 }], [11.2, 'impact', { big: true }], [11.2, 'tapeStop', { dur: .13 }]];
+    const NOOPT = {}, TUBEOPT = { i: 0 };
+    function sfx(name, o){ try { const s = M.sound; if (s && s.sfx) s.sfx(name, o || NOOPT); } catch (e){} }
 
     let G = null;                     // the context being drawn into (the tube, the backdrop, the logo's layer, a cache)
     let W2 = 0, h = 0, cx = 0, OY = 0, tall = false;   // the drawing's size (the tube's width, the rows' height) and where it sits
+    let BX = 0, BY = 0, VMODE = 0, pcx = 0, pcy = 0, kHot = 0;   // the drawing's offset (with the shake), how type is drawn, the logo's axis on the tube, a key's glint
 
     /* ---- display type: a condensed italic stroke face with chamfered corners (a vector display's letters), one
        Path2D a glyph, stroked through a transform at the size it is seen: crisp at any scale, in any pose. The
@@ -1510,15 +1538,6 @@ M.createTerminal = function createTerminal(opts){
     function wrap(t, max){ const out = []; let cur = ''; for (const wd of fontText(t).split(' ')){ const nx = cur ? cur + ' ' + wd : wd; if (cur && mkLine(nx).sw > max){ out.push(mkLine(cur)); cur = wd; } else cur = nx; } if (cur) out.push(mkLine(cur)); return out; }
     /* a letter's own motion, set by the animation callback for each letter (one object, reused) */
     const LA = { dx: 0, dy: 0, s: 1, sx: 1, sy: 1, rot: 0, a: 1, hot: 0, on: true };
-    /* where the letters land: 0 flat; 1 the crane (a plane in 3D); 2 the wall's camera (a zoom) */
-    let MAPF = 0, mpX = 0, mpY = 0;
-    const CR = { th: 0, ps: 0, D: 1, D0: 1, py: 0 }, ZM = { z: 1, x: 0, y: 0 };
-    function mapPt(x, y){
-      if (MAPF === 2){ mpX = cx + (x - cx) * ZM.z + ZM.x; mpY = h / 2 + (y - h / 2) * ZM.z + ZM.y; return 1; }
-      const X = x - cx, Yr = y - CR.py, Y3 = Yr * Math.cos(CR.th), Z3 = -Yr * Math.sin(CR.th);
-      const X4 = X * Math.cos(CR.ps) + Z3 * Math.sin(CR.ps), Z4 = -X * Math.sin(CR.ps) + Z3 * Math.cos(CR.ps), s = CR.D0 / Math.max(CR.D0 * .2, CR.D + Z4);
-      mpX = cx + X4 * s; mpY = CR.py + Y3 * s; return s;
-    }
     let gradT = null, gradCtx = null, gradC = null, gradCC = null;
     const chromeGrad = c => {
       const gr = c.createLinearGradient(0, 6.2, 0, -.2);
@@ -1540,25 +1559,25 @@ M.createTerminal = function createTerminal(opts){
         const l00 = cs * Sx, l01 = -sn * Sy, l10 = sn * Sx, l11 = cs * Sy, Cx = gl.w / 2, Cy = 3;
         const tlx = L.ox[i] + Cx + LA.dx - (l00 * Cx + l01 * Cy), tly = Cy + LA.dy - (l10 * Cx + l11 * Cy);
         let a = u * (COND * l00 + SLANT * l10), b = -u * l10, cc = u * (COND * l01 + SLANT * l11), d = -u * l11, e = x0 + u * (COND * tlx + SLANT * tly), f = y - u * tly;
-        let fade = 1;
-        if (MAPF){
-          const qx = a * Cx + cc * Cy + e, qy = b * Cx + d * Cy + f, k = 8;
-          const s0 = mapPt(qx, qy), X0 = mpX, Y0 = mpY; mapPt(qx + k, qy); const X1 = mpX, Y1 = mpY; mapPt(qx, qy + k); const X2 = mpX, Y2 = mpY;
-          const j00 = (X1 - X0) / k, j10 = (Y1 - Y0) / k, j01 = (X2 - X0) / k, j11 = (Y2 - Y0) / k;
-          const na = j00 * a + j01 * b, nb = j10 * a + j11 * b, nc = j00 * cc + j01 * d, nd = j10 * cc + j11 * d;
-          const ne = X0 + j00 * (e - qx) + j01 * (f - qy), nf = Y0 + j10 * (e - qx) + j11 * (f - qy); e = ne; f = nf;
-          a = na; b = nb; cc = nc; d = nd;
-          if (MAPF === 1) fade = c01(s0 * 1.6 - .25);
+        const A2 = al; if (A2 < .004) continue;
+        c.setTransform(a, b, cc, d, e + BX, f + BY);
+        if (VMODE === 1){   // in outline: a bright stroke hollowed out
+          c.globalAlpha = A2; c.strokeStyle = P.bright; c.lineWidth = 2.5; c.stroke(gl.p);
+          c.globalCompositeOperation = 'source-over'; c.strokeStyle = P.bg; c.lineWidth = 1.45; c.stroke(gl.p); c.globalCompositeOperation = 'lighter';
+        } else if (VMODE === 2){   // in halftone dots, fixed to the tube (the pattern undoes the glyph's transform)
+          if (!htPat) htPat = tg.createPattern(htTile, 'repeat');
+          const E0 = e + BX, F1 = f + BY, dt2 = a * d - b * cc;
+          HTM.a = d / dt2; HTM.b = -b / dt2; HTM.c = -cc / dt2; HTM.d = a / dt2; HTM.e = (cc * F1 - d * E0) / dt2; HTM.f = (b * E0 - a * F1) / dt2; htPat.setTransform(HTM);
+          c.globalAlpha = A2; c.strokeStyle = htPat; c.lineWidth = 2.8; c.stroke(gl.p); c.strokeStyle = P.bright; c.lineWidth = .3; c.stroke(gl.p);
+        } else {
+          c.globalAlpha = A2 * .07; c.strokeStyle = HALO; c.lineWidth = 3.1; c.stroke(gl.p);
+          c.globalAlpha = A2 * .14; c.lineWidth = 1.8; c.stroke(gl.p);
+          c.globalAlpha = A2; c.strokeStyle = gr; c.lineWidth = .92; c.stroke(gl.p);
+          if (LA.hot > .01){ c.globalAlpha = A2 * Math.min(1, LA.hot); c.strokeStyle = P.bright; c.lineWidth = .7; c.stroke(gl.p); }
         }
-        const A2 = al * fade; if (A2 < .004) continue;
-        c.setTransform(a, b, cc, d, e, f + OY);
-        c.globalAlpha = A2 * .07; c.strokeStyle = HALO; c.lineWidth = 3.1; c.stroke(gl.p);
-        c.globalAlpha = A2 * .14; c.lineWidth = 1.8; c.stroke(gl.p);
-        c.globalAlpha = A2; c.strokeStyle = gr; c.lineWidth = .92; c.stroke(gl.p);
-        if (LA.hot > .01){ c.globalAlpha = A2 * Math.min(1, LA.hot); c.strokeStyle = P.bright; c.lineWidth = .7; c.stroke(gl.p); }
         lum += A2 * Math.abs(a * d - b * cc) * gl.w * 6 * .3;
       }
-      c.setTransform(1, 0, 0, 1, 0, OY); c.globalAlpha = 1;
+      c.setTransform(1, 0, 0, 1, BX, BY); c.globalAlpha = 1;
       lumAcc += lum;
     }
     const vlineC = (L, xc, y, u, anim, alpha) => vline(L, xc - L.sw * u / 2, y, u, anim, alpha);   // centred on xc
@@ -1614,7 +1633,7 @@ M.createTerminal = function createTerminal(opts){
         for (let i = 0, k = L.o; i < L.n * 3; i++, k++){
           const x = v[i * 3] * kx, y = v[i * 3 + 1] * ky, z = v[i * 3 + 2];
           const X1 = m00 * x + m01 * y + m02 * z + px, Y1 = m10 * x + m11 * y + m12 * z + py, Z1 = Math.max(.5, m20 * x + m21 * y + m22 * z + pz);
-          wx[k] = X1; wy[k] = Y1; wz[k] = Z1; qx[k] = cx + F * X1 / Z1; qy[k] = hy - F * Y1 / Z1;
+          wx[k] = X1; wy[k] = Y1; wz[k] = Z1; qx[k] = pcx + F * X1 / Z1; qy[k] = pcy - F * Y1 / Z1;
         }
       }
     }
@@ -1822,9 +1841,7 @@ M.createTerminal = function createTerminal(opts){
     const GW = 8, GH = 8, ROWV = [.95, .9, .8, .68, .55, .66, .8, .84];
     let strip = null, stripR = null, stripW = 0, nameAt = 0, nameW = 0;
     function scrollText(){
-      const bl = String((A.body || []).join('\n')).split('\n').map(s => s.replace(/^\s*[-*•]\s*/, '').trim()).filter(Boolean);
-      const pick = re => bl.find(b => re.test(b));
-      const parts = [C.name, J.line && 'co-founder of J - ' + J.line, E.line && 'founder of Eden - ' + E.line, pick(/squash|bjj/i), 'type help to look around'];
+      const parts = [C.name, J.line && 'co-founder of J - ' + J.line, E.line && 'founder of Eden - ' + E.line, 'type help to look around'];
       return '  ' + parts.filter(Boolean).join('  ···  ') + '  ···  ';
     }
     const font8 = t => String(t).toUpperCase().replace(/[^A-Z0-9 .,'\-·:!?/+&()]/g, ' ');
@@ -1874,10 +1891,16 @@ M.createTerminal = function createTerminal(opts){
     }
 
     /* ---- layout: everything sized from the drawing's own box ---- */
-    let rk = 1, lay = null, lg = null, smp = null, sg = null, pxk = 1, fW = 0, fH = 0;
+    let rk = 1, lay = null, lg = null, smp = null, sg = null, pxk = 1, fW = 0, fH = 0, F0 = 1000;
     let gradV = null, fan = null;
-    const LO = {};
+    let wlc = null, wg = null, rw = 1;               // the wall's layer (blurred as a whole by the camera's motion)
+    let htc = null, htPat = null, htTile = null;     // halftone: a full-frame vignette of dots, and a tile for patterns
+    const HTM = new DOMMatrix();
+    const LO = {}, TEX = [], NT = 15;
+    let TX_NAME = null, TX_J = null, TX_E = null, TX_KN = null, TX_VW = null;
+    const PANEL3 = new Float32Array(24), PANEL2 = new Float32Array(16);
     function mkCache(w, hh){ const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(hh)); return c; }
+    const uFit = (L, mw, mh) => Math.min(mw / Math.max(1, L.sw), mh / 6);
     function fit(hh){
       if (hh === fH && W === fW) return;
       fH = hh; fW = W; W2 = W; h = hh; cx = W / 2; tall = h > W * .95;
@@ -1886,255 +1909,477 @@ M.createTerminal = function createTerminal(opts){
       rk = Math.min(1, Math.sqrt((TAP ? .8e5 : 1.3e5) / (W * h)));
       lay = mkCache(W * rk, h * rk); lg = lay.getContext('2d', CPU);
       smp = mkCache(W * rk, h * rk); sg = smp.getContext('2d', CPU);   // one sample of the blur, on a clear canvas
-      LO.pre = null;
+      rw = Math.min(1, Math.sqrt((TAP ? .45e6 : .7e6) / (W * h)));
+      wlc = mkCache(W * rw, h * rw); wg = wlc.getContext('2d', CPU);
       chromeCtxs.fill(null); gradCC = null;
       /* the 3D scene */
       hy = Math.round(h * (tall ? .6 : .58));
-      F = Math.min(.38 * h * Z0 / 8, (tall ? .72 : .6) * W * Z0 / 15.5);
+      F0 = F = Math.min(.38 * h * Z0 / 8, (tall ? .72 : .6) * W * Z0 / 15.5);
       logoY = (hy - h * (tall ? .33 : .3)) * Z0 / F;
       zN = F * FY / (h - hy);
       bh = Math.max(16, Math.round(h * .046 / 8) * 8);
-      fan = null;
-      /* the type */
-      const words = fontText(C.name || 'KN').split(' '), one = mkLine(words.join(' '));
-      const maxW = W * .86;
-      const yo = /(\d+)\s*y\/o/i.exec(String((A.body || []).join(' '))), hk = /hong kong/i.test(String((A.body || []).join(' ')));
-      const subT = [yo && yo[1], hk && 'HONG KONG'].filter(Boolean).join(' · ');
-      /* the name on one line or two, whichever is bigger with the whole block (and its line) inside 62% of the height */
-      const nameU = ls => Math.min(maxW / Math.max(...ls.map(l => l.sw)), h * .62 / (ls.length * 6 + (ls.length - 1) * 2.6 + (subT ? 2.4 + 6 * .32 : 0)));
-      let nm = [one], uN = nameU(nm);
-      if (words.length > 1){ const two = [mkLine(words[0]), mkLine(words.slice(1).join(' '))], u2 = nameU(two); if (u2 > uN * 1.25){ nm = two; uN = u2; } }
-      LO.name = nm; LO.uN = uN;
-      LO.uS = Math.max(uN * .32, W * .0095); LO.sub = subT ? mkLine(subT) : null;
-      /* the name block, cached at full size: its lines and the line under it */
-      const gap = 2.6 * uN, blockH = nm.length * 6 * uN + (nm.length - 1) * gap, pad = 4 * uN;
-      const cw = Math.max(...nm.map(l => l.sw)) * uN + 2 * pad, chh = blockH + 2 * pad;
-      const fullH = blockH + (LO.sub ? 2.4 * uN + 6 * LO.uS : 0);
-      LO.nameCv = mkCache(cw, chh); LO.nameX = cx - cw / 2; LO.nameY = h * .47 - fullH / 2 - pad;   // top-left of the cache on the tube
-      LO.subY = LO.nameY + pad + blockH + 2.4 * uN + 6 * LO.uS;
-      LO.subCv = LO.sub ? mkCache(LO.sub.sw * LO.uS + 4 * LO.uS, 10 * LO.uS) : null;
-      {
-        const c = LO.nameCv.getContext('2d'), sv = G, so = OY; G = c; OY = 0; typeOn(c, false);
-        nm.forEach((l, i) => vline(l, cw / 2 - l.sw * uN / 2, pad + 6 * uN + i * (6 * uN + gap), uN, null, 1));
-        if (LO.subCv){ const d = LO.subCv.getContext('2d'); G = d; typeOn(d, false); vline(LO.sub, 2 * LO.uS, 8 * LO.uS, LO.uS, null, 1); }
-        G = sv; OY = so;
-      }
-      /* the header the name becomes */
-      LO.headK = Math.min(h * (nm.length > 1 ? .036 : .045) / (6 * uN), W * .55 / cw);
-      LO.headY = h * .06 - pad * LO.headK;   // the top of the header's cache (its type starts at 6% of the height)
-      const headB = h * .06 + blockH * LO.headK;   // the header's bottom
-      /* the cards: CO-FOUNDER / OF J, FOUNDER / OF EDEN (one size for both) and their lines */
+      fan = null; gradV = null;
+      /* the words */
+      const words = fontText(C.name || 'KN').split(' ');
+      LO.w1 = mkLine(words[0] || 'KN'); LO.w2 = mkLine(words.slice(1).join(' ') || ' ');
+      LO.uName = uFit(LO.w1.sw > LO.w2.sw ? LO.w1 : LO.w2, W * .82, h * .2);
+      LO.n16 = mkLine(String((/(\d+)\s*y\/o/i.exec(String((A.body || []).join(' '))) || [0, '16'])[1]));
+      LO.u16 = uFit(LO.n16, W * .62, h * .56);
       const jt = String(J.title || 'J').split(':')[0].trim() || 'J', et = String(E.title || 'Eden').split(':')[0].trim() || 'Eden';
-      LO.a1 = mkLine((J.role || 'Co-founder')); LO.a2 = mkLine('of ' + jt); LO.b1 = mkLine(E.role || 'Founder'); LO.b2 = mkLine('of ' + et);
-      /* sized to the width, then to the room under the header (the longer of the two lines under it) */
-      let uC = Math.min(W * .8 / Math.max(LO.a1.sw, LO.a2.sw, LO.b1.sw, LO.b2.sw), h * .14);
-      for (let it = 0; it < 3; it++){
-        const us = Math.max(uC * .36, W * .0095), js = J.line ? wrap(J.line, W * .84 / us) : [], es = E.line ? wrap(E.line, W * .84 / us) : [], ns = Math.max(js.length, es.length);
-        const hb = 14.8 * uC + (ns ? 2.6 * uC + ns * 6 * us + (ns - 1) * 3 * us : 0), room = h * .93 - headB - h * .07;
-        LO.jsub = js; LO.esub = es; LO.cardH = hb;
-        if (hb <= room) break; uC *= room / hb;
+      LO.J = mkLine(jt); LO.uJ = uFit(LO.J, W * .5, h * .5);
+      LO.cof = mkLine(J.role || 'Co-founder'); LO.uCof = uFit(LO.cof, W * .8, h * .1);
+      LO.young = mkLine('YOUNG'); LO.founders = mkLine('FOUNDERS'); LO.uYF = uFit(LO.founders, W * .84, h * .17);
+      LO.global = mkLine('GLOBAL'); LO.uGl = uFit(LO.global, W * .88, h * .26);
+      LO.eden = mkLine(et); LO.uEden = uFit(LO.eden, W * .8, h * .3);
+      LO.fdr = mkLine(E.role || 'Founder'); LO.uFdr = uFit(LO.fdr, W * .7, h * .1);
+      LO.agents = mkLine('AGENTS'); LO.uAg = uFit(LO.agents, W * .84, h * .22);
+      LO.context = mkLine('CONTEXT'); LO.uCtx = uFit(LO.context, W * .7, h * .17);
+      LO.the = mkLine('THE'); LO.goat = mkLine('GOAT'); LO.q = mkLine('?');
+      /* the halftone */
+      htTile = mkCache(6 * pxk, 6 * pxk); { const c = htTile.getContext('2d'); c.fillStyle = P.bright; c.beginPath(); c.arc(3 * pxk, 3 * pxk, 1.7 * pxk, 0, TAU); c.fill(); }
+      htc = mkCache(W, h); { const c = htc.getContext('2d'), st = 11 * pxk, R = Math.hypot(W, h) / 2; c.fillStyle = SH[si(.5)];
+        for (let y = st / 2, r = 0; y < h; y += st, r++) for (let x = (r & 1 ? st / 2 : 0); x < W + st; x += st){ const d = Math.hypot(x - cx, y - h / 2) / R, rr = st * .56 * Math.pow(c01(d * 1.15 - .12), 1.4); if (rr > .4){ c.beginPath(); c.arc(x, y, rr, 0, TAU); c.fill(); } } }
+      htPat = null;
+      /* the panels: three for THE GOAT? (side by side, or stacked on a tall tube), two for EDEN */
+      const gp = 7 * pxk;
+      if (!tall){
+        const a0 = W * .29, a1 = W * .25, b0 = W * .73, b1 = W * .69;
+        PANEL3.set([0, 0, a0 - gp, 0, a1 - gp, h, 0, h, a0 + gp, 0, b0 - gp, 0, b1 - gp, h, a1 + gp, h, b0 + gp, 0, W, 0, W, h, b1 + gp, h]);
+        PANEL2.set([0, 0, W * .6 - gp, 0, W * .4 - gp, h, 0, h, W * .6 + gp, 0, W, 0, W, h, W * .4 + gp, h]);
+      } else {
+        const a0 = h * .25, a1 = h * .29, b0 = h * .7, b1 = h * .74;
+        PANEL3.set([0, 0, W, 0, W, a1 - gp, 0, a0 - gp, 0, a0 + gp, W, a1 + gp, W, b1 - gp, 0, b0 - gp, 0, b0 + gp, W, b1 + gp, W, h, 0, h]);
+        PANEL2.set([0, 0, W, 0, W, h * .44 - gp, 0, h * .56 - gp, 0, h * .56 + gp, W, h * .44 + gp, W, h, 0, h]);
       }
-      LO.uC = uC; LO.uCs = Math.max(uC * .36, W * .0095);
-      LO.y1 = (headB + h * .07 + h * .93) / 2 - LO.cardH / 2 + 6 * uC; LO.y2 = LO.y1 + 8.8 * uC; LO.ys = LO.y2 + 2.6 * uC + 6 * LO.uCs;
-      /* the goat: one line, its baseline on the horizon to come */
-      LO.goat = mkLine('GOAT?'); LO.the = mkLine('THE'); LO.uG = Math.min(W * .8 / LO.goat.sw, (hy - h * .07) / 11.4);
-      LO.goatX = cx - LO.goat.sw * LO.uG / 2;
-      /* the wall: nine tubes, the middle one the screen itself; the camera zoomed out to see them all */
-      LO.zW = 1 / 3.45; LO.pX = W * 1.1; LO.pY = h * 1.1;
-      gradV = null;
+      VW = tall ? [-1, 1, -2, 2] : [-3, 3, -1, 1];
+      makeTex();
     }
 
-    /* ---- the opening's sections. Each draws on the tube (G = tg, OY = the drawing's top), additively ---- */
-    let kHot = 0;                                    // a key's glint on the type
-    function rasterOn(a){
-      if (a >= .36) return;
-      const lw = W2 * sstep(0, .1, a), oh = h * .5 * Math.pow(sstep(.08, .34, a), 2), m = h * .5;
-      G.fillStyle = P.bg; G.fillRect(0, 0, W2, Math.max(0, m - oh)); G.fillRect(0, m + oh, W2, h - m - oh);
-      G.fillStyle = P.bright; G.fillRect(cx - lw / 2, m - oh - 1.5 * pxk, lw, 3 * pxk); if (oh > 2) G.fillRect(cx - lw / 2, m + oh - 1.5 * pxk, lw, 3 * pxk);
+    /* ---- the tubes' pictures, drawn once: a word or a motif on a dark screen with scanlines ---- */
+    const TXW = 224, TXH = 168;
+    function texBase(c, w, hh){
+      c.fillStyle = SH[si(.03)]; c.fillRect(0, 0, w, hh);
+      const gr = c.createRadialGradient(w / 2, hh / 2, hh * .2, w / 2, hh / 2, w * .62); gr.addColorStop(0, 'rgba(120,255,120,0.05)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = gr; c.fillRect(0, 0, w, hh);
     }
-    /* WHO: the beam paints the name in two interlaced fields, top to bottom: the even lines (dim), then the odd ones
-       (full), each sweep led by a hot scanline; then the whole name settles a touch, and a glint crosses it */
-    const F1 = T_NAME, F2 = T_NAME + .32, FD = .36;
-    function field(cv, x0, y0, s, yEnd, odd, alpha){
-      const lh = Math.max(2, Math.round(3 * pxk)), n = Math.ceil(cv.height / lh);
-      G.globalAlpha = alpha;
-      for (let k = odd; k < n; k += 2){ const sy = k * lh; if (sy >= yEnd) break; G.drawImage(cv, 0, sy, cv.width, Math.min(lh, cv.height - sy), x0, y0 + sy * s, cv.width * s, Math.min(lh, cv.height - sy) * s); }
+    function texLines(c, w, hh){ c.globalCompositeOperation = 'source-over'; c.globalAlpha = .45; c.fillStyle = P.bg; for (let y = 0; y < hh; y += 3) c.fillRect(0, y, w, 1); c.globalAlpha = 1; }
+    function texWord(c, L, w, hh, mw, mh, yc){ const u = uFit(L, w * mw, hh * mh); vlineC(L, w / 2, (yc != null ? yc : hh / 2) + 3 * u, u, null, 1); }
+    function texKN(c, w, hh, lw){
+      const sc = hh * .7 / 8, ox = w / 2 - 7 * sc, oy = hh / 2;
+      c.lineJoin = 'round'; c.strokeStyle = P.bright;
+      for (const pass of [[lw * 3.5, .18], [lw, 1]]){
+        c.lineWidth = pass[0]; c.globalAlpha = pass[1];
+        KN_OUT.forEach((poly, li) => { c.beginPath(); poly.forEach(([px, py], i) => { const X = ox + (li * 7.6 + px + .24 * py) * sc, Y = oy - py * sc; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.closePath(); c.stroke(); });
+      }
+      c.globalAlpha = 1;
+    }
+    function makeTex(){
+      const sv = G, sx = BX, sy = BY; BX = 0; BY = 0;
+      const mk = (w, hh, fn) => { const cv = mkCache(w, hh), c = cv.getContext('2d'); texBase(c, w, hh); G = c; typeOn(c, true); fn(c, w, hh); c.globalCompositeOperation = 'source-over'; texLines(c, w, hh); return cv; };
+      const words = [LO.w1, LO.J, LO.eden, LO.agents, LO.context, LO.founders, LO.n16, null, null, null, null, LO.w2, LO.global, LO.cof, null];
+      for (let k = 0; k < NT; k++){
+        TEX[k] = mk(TXW, TXH, (c, w, hh) => {
+          if (words[k]) return texWord(c, words[k], w, hh, .8, k === 1 || k === 6 ? .62 : .32);
+          c.strokeStyle = P.bright; c.fillStyle = P.bright; c.lineWidth = 2.2;
+          if (k === 7) return texKN(c, w, hh, 2);
+          if (k === 8){ const pts = [[.2, .3], [.45, .2], [.7, .35], [.35, .6], [.62, .7], [.82, .58], [.5, .45]]; c.globalAlpha = .6; c.beginPath(); [[0, 1], [1, 2], [0, 3], [3, 6], [6, 1], [6, 4], [4, 5], [2, 5], [6, 2]].forEach(([a, b]) => { c.moveTo(pts[a][0] * w, pts[a][1] * hh); c.lineTo(pts[b][0] * w, pts[b][1] * hh); }); c.stroke(); c.globalAlpha = 1; pts.forEach(([x, y]) => c.fillRect(x * w - 5, y * hh - 5, 10, 10)); return; }
+          if (k === 9){ c.beginPath(); c.arc(w / 2, hh / 2, hh * .36, 0, TAU); c.stroke(); c.globalAlpha = .55; for (const r of [.12, .26]){ c.beginPath(); c.ellipse(w / 2, hh / 2, hh * r, hh * .36, 0, 0, TAU); c.stroke(); } for (const yy of [-.18, 0, .18]){ c.beginPath(); c.ellipse(w / 2, hh / 2 + yy * hh, hh * .36 * Math.sqrt(1 - (yy / .36) ** 2), hh * .05, 0, 0, TAU); c.stroke(); } c.globalAlpha = 1; return; }
+          if (k === 10){ c.lineWidth = 4; c.beginPath(); c.moveTo(w * .3, hh * .22); c.lineTo(w * .2, hh * .22); c.lineTo(w * .2, hh * .78); c.lineTo(w * .3, hh * .78); c.moveTo(w * .7, hh * .22); c.lineTo(w * .8, hh * .22); c.lineTo(w * .8, hh * .78); c.lineTo(w * .7, hh * .78); c.stroke(); c.fillRect(w * .34, hh * .47, w * .32, 7); return; }
+          if (k === 14){ c.lineWidth = 3; c.beginPath(); for (let x = 0; x <= w; x += 4){ const y = hh / 2 + Math.sin(x / w * TAU * 2) * hh * .2 * Math.sin(x / w * Math.PI); x ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke(); return; }
+        });
+      }
+      const HW = TAP ? 480 : 640, HH = HW * .75;
+      TX_NAME = mk(HW, HH, (c, w, hh) => { const L = mkLine((LO.w1.t + ' ' + LO.w2.t).trim()); texWord(c, L, w, hh, .84, .1, hh * .2); texWord(c, LO.n16, w, hh, .6, .56, hh * .6); });
+      TX_J = mk(HW, HH, (c, w, hh) => { texWord(c, LO.J, w, hh, .5, .52, hh * .42); texWord(c, LO.cof, w, hh, .8, .1, hh * .84); });
+      TX_E = mk(HW, HH, (c, w, hh) => { texWord(c, LO.eden, w, hh, .8, .3, hh * .44); texWord(c, LO.fdr, w, hh, .7, .1, hh * .76); });
+      TX_KN = mk(HW, HH, (c, w, hh) => texKN(c, w, hh, 4));
+      /* the video wall: THE GOAT? across the tubes it covers (VW: its grid box) */
+      const vw = VW, pw = (vw[1] - vw[0] + 1) * GX - (GX - TW), ph = (vw[3] - vw[2] + 1) * GY - (GY - TH), sc = 1100 / Math.max(pw, ph);
+      TX_VW = mk(pw * sc, ph * sc, (c, w, hh) => {
+        c.fillStyle = SH[si(.03)]; c.fillRect(0, 0, w, hh);
+        if (!tall){ texWord(c, LO.the, w, hh, .3, .18, hh * .16); texWord(c, mkLine('GOAT?'), w, hh, .94, .62, hh * .62); }
+        else { texWord(c, LO.the, w, hh, .5, .1, hh * .1); texWord(c, LO.goat, w, hh, .92, .3, hh * .38); texWord(c, LO.q, w, hh, .5, .3, hh * .78); }
+      });
+      VWS = sc;
+      G = sv; BX = sx; BY = sy;
+    }
+
+    /* ---- motion graphics: speed lines, tunnels, rings ---- */
+    const NRL = 64, rlA = new Float32Array(NRL), rlS = new Float32Array(NRL), rlP = new Float32Array(NRL), rlW = new Float32Array(NRL);
+    for (let i = 0; i < NRL; i++){ rlA[i] = rnd() * TAU; rlS[i] = .8 + rnd() * 1.4; rlP[i] = rnd(); rlW[i] = .5 + rnd(); }
+    /* lines streaming out of (x, y) (dir 1) or into it (-1), at speed k */
+    function speedLines(S, x, y, k, v, dir, n){
+      const R = Math.hypot(W2, h) * .62; G.strokeStyle = SH[si(v)]; G.lineWidth = 1.6 * pxk; G.beginPath();
+      for (let i = 0; i < (n || NRL); i++){
+        let f = (S * rlS[i] * k + rlP[i]) % 1; if (dir < 0) f = 1 - f;
+        const r0 = R * (.08 + f * f * 1.1), r1 = r0 + R * (.05 + .3 * f * f) * rlW[i], c = Math.cos(rlA[i]), s = Math.sin(rlA[i]);
+        G.moveTo(x + c * r0, y + s * r0); G.lineTo(x + c * r1, y + s * r1);
+      }
+      G.stroke(); lumAcc += (n || NRL) * R * .2 * 1.6 * pxk * SL[si(v)];
+    }
+    /* parallel streaks: across the frame (vertical dir 1: downward; horizontal dir 0: leftward) */
+    function streaks(S, vert, k, v){
+      G.fillStyle = SH[si(v)];
+      for (let i = 0; i < 40; i++){
+        const L = (vert ? h : W2) * (.12 + .3 * rlW[i] * rlW[i]), span = (vert ? h : W2) + L, p = ((S * k * rlS[i] + rlP[i]) % 1) * span - L, q = rlA[i] / TAU * (vert ? W2 : h), th = (1 + 2.2 * (rlW[i] - .5)) * pxk;
+        if (vert) G.fillRect(q, p, th, L); else G.fillRect(W2 - p - L, q, L, th);
+      }
+      lumAcc += 40 * (vert ? h : W2) * .25 * 2 * pxk * SL[si(v)];
+    }
+    function rings(S, x, y, k, v){
+      const R = Math.hypot(W2, h) * .6; G.strokeStyle = SH[si(v)];
+      for (let i = 0; i < 7; i++){ const f = (S * k + i / 7) % 1, r = R * f * f; G.globalAlpha = Math.sin(f * Math.PI); G.lineWidth = (1 + 5 * f) * pxk; G.beginPath(); G.arc(x, y, Math.max(1, r), 0, TAU); G.stroke(); }
+      G.globalAlpha = 1; lumAcc += R * 20 * pxk * SL[si(v)];
+    }
+    function rrect(c, x, y, w, hh, r){ c.beginPath(); c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r); c.lineTo(x + w, y + hh - r); c.quadraticCurveTo(x + w, y + hh, x + w - r, y + hh); c.lineTo(x + r, y + hh); c.quadraticCurveTo(x, y + hh, x, y + hh - r); c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath(); }
+    /* the tunnel of bezels the opening rushes down */
+    function tunnel(S, speed, strobe){
+      const f = h * 1.05, span = 36, n = 12;
+      for (let k = 0; k < n; k++){
+        const z = .9 + ((k * span / n - S * speed) % span + span) % span, s = f / z / 3.2;
+        if (s * 4 < 8) continue;
+        const near = 1 - z / span, rot = .25 * Math.sin(S * 1.7 + z * .09) + S * .35;
+        G.setTransform(Math.cos(rot) * s, Math.sin(rot) * s, -Math.sin(rot) * s, Math.cos(rot) * s, cx + BX + Math.sin(S * 2.1 + z * .2) * h * .02, h / 2 + BY);
+        rrect(G, -2.2, -1.65, 4.4, 3.3, .45);
+        G.strokeStyle = SH[si(.12 + .5 * near * near + .3 * strobe)]; G.lineWidth = (1.2 + 3 * near) * pxk / s; G.stroke();
+        lumAcc += 15 * s * 3 * pxk * near;
+      }
+      G.setTransform(1, 0, 0, 1, BX, BY);
+    }
+
+    /* ---- words slammed on hits: in from big in three frames, a squash, ghosts while they move (motion blur) ---- */
+    let SQ = 0, SQX = 0;
+    const animSq = (i, n) => { LA.sy = 1 - .2 * SQ; LA.sx = 1 + .14 * SQ; LA.dx = SQX * (i - (n - 1) / 2); };
+    /* L slammed at T0 (picture time), centred on (x, y) px, u px a unit; k0 its starting scale; out: when it leaves (0: never),
+       to dx px and scale ok over .12 s */
+    function word(L, S, T0, x, y, u, k0, out, odx, ody, ok, alpha){
+      if (S < T0) return;
+      const moving = S - T0 < .14 || (out && S > out), ng = moving ? 3 : 1;
+      for (let k = 0; k < ng; k++){
+        const tt = S - k * .011; if (tt < T0) break;
+        const g = tt - T0, sc = 1 + (k0 - 1) * Math.pow(1 - c01(g / .1), 3);
+        const e = out && tt > out ? eI3((tt - out) / .09) : 0;
+        if (e >= 1) continue;
+        const s2 = sc * (1 + (ok - 1) * e), X = x + odx * e, Y = y + ody * e;
+        SQ = g > .1 ? Math.exp(-(g - .1) * 16) * Math.cos((g - .1) * 34) : -.25 * (1 - g / .1); SQX = 0;
+        kHot = Math.max(kHot0, .9 * Math.exp(-g * 12));
+        vlineC(L, X, Y + 3 * u * s2, u * s2, animSq, alpha * (1 - e) * (1 - e) / ng * (k0 > 2.2 && g < .1 ? .75 : 1));
+      }
+      kHot = kHot0;
+    }
+    let kHot0 = 0;
+
+    /* ---- the wall of tubes: a grid on the plane z = 0, a camera that flies it ---- */
+    const TW = 4, TH = 3, GX = 4.9, GY = 3.9, NI = 7, NJ = 4, BZ = .34;
+    const JI = 3, JJ = -1, EI = -3, EJ = 1;          // the J tube and the EDEN tube
+    let VW = [-3, 3, -1, 1], VWS = 1;                 // the video wall's grid box, and its picture's px a unit
+    const CAM = { x: 0, y: 0, z: -10, yaw: 0, pit: 0, rol: 0 }, PCAM = { x: 0, y: 0, z: -10, yaw: 0, pit: 0, rol: 0 };
+    let cyw = 1, syw = 0, cpt = 1, spt = 0, crl = 1, srl = 0, camX = 0, camY = 0, camZ = 0, camF = 1, pjx = 0, pjy = 0, pjz = 0;
+    function setCam(c){ cyw = Math.cos(c.yaw); syw = Math.sin(c.yaw); cpt = Math.cos(c.pit); spt = Math.sin(c.pit); crl = Math.cos(c.rol); srl = Math.sin(c.rol); camX = c.x; camY = c.y; camZ = c.z; }
+    function proj(X, Y, Z){
+      const dx = X - camX, dy = Y - camY, dz = Z - camZ;
+      const x1 = cyw * dx - syw * dz, z1 = syw * dx + cyw * dz, y2 = cpt * dy - spt * z1, z2 = spt * dy + cpt * z1;
+      const x3 = crl * x1 + srl * y2, y3 = -srl * x1 + crl * y2;
+      pjz = z2; const zz = Math.max(.05, z2); pjx = cx + camF * x3 / zz; pjy = h / 2 - camF * y3 / zz;
+    }
+    const dCov = () => Math.min(TH * camF / h, TW * camF / W2) * .97;   // the distance at which a tube fills the frame
+    const lerpC = (o, x, y, z, yaw, pit, rol) => { o.x = x; o.y = y; o.z = z; o.yaw = yaw; o.pit = pit; o.rol = rol; };
+    const bumpZ = (S, t0, t1, up, down, d0, d1) => d0 + (d1 - d0) * eO3((S - t0) / up) * (1 - eI3((S - (t1 - down)) / down));
+    function camAt(S, o){
+      const dc = dCov(), jx = JI * GX, jy = JJ * GY, ex = EI * GX, ey = EJ * GY;
+      if (S < T_J){                                    // out of the middle tube, along the wall, a whip, into J
+        const d = Math.exp(lerp(Math.log(dc), Math.log(tall ? 30 : 17), eO3((S - T_I1) / .42)) * 1) * (1 - eI3((S - 2.8) / .4)) + dc * eI3((S - 2.8) / .4);
+        const x = jx * eIO((S - 1.75) / 1.45), y = jy * eIO((S - 2.3) / .9);
+        const yaw = .62 * eIO((S - 1.75) / .5) - .62 * eO5((S - 2.4) / .32), rol = -.14 * Math.sin(Math.PI * c01((S - 1.7) / 1.3));
+        lerpC(o, x, y, -d, yaw, -.08 * Math.sin(Math.PI * c01((S - 1.7) / 1.2)), rol);
+      } else if (S < T_E){                             // out of J in a barrel roll, along, into EDEN
+        const d = bumpZ(S, T_OUTJ, T_E, .3, .3, dc, tall ? 24 : 14);
+        const p = eIO((S - 4.45) / .6);
+        lerpC(o, lerp(jx, ex, p), lerp(jy, ey, p), -d, -.42 * Math.sin(Math.PI * c01((S - 4.45) / .62)), .1 * Math.sin(Math.PI * c01((S - 4.45) / .62)), -TAU * eIO((S - 4.42) / .45));
+      } else if (S < T_W4){                            // out to the whole wall, a dutch angle settling, a push in
+        const vx = (VW[0] + VW[1]) / 2 * GX, vy = (VW[2] + VW[3]) / 2 * GY, pw = (VW[1] - VW[0] + 1) * GX, ph = (VW[3] - VW[2] + 1) * GY;
+        const dw = Math.max(pw * camF / W2, ph * camF / h) * 1.08, p = eO5((S - T_W3) / .4);
+        const d = Math.exp(lerp(Math.log(dc), Math.log(dw), p)) * lerp(1, .84, sstep(6.75, 7.2, S));
+        lerpC(o, lerp(ex, vx, p), lerp(ey, vy, p), -d, .05 * Math.sin(S * 3), 0, lerp(.35, -.05, p) + .03 * Math.sin(S * 5));
+      } else {                                         // every tube a KN: dive into the middle one
+        const p = eI3((S - T_W4) / .4);
+        lerpC(o, 0, 0, -Math.exp(lerp(Math.log(tall ? 22 : 12), Math.log(dc), p)), 0, 0, lerp(.3, 0, eO3((S - T_W4) / .4)));
+      }
+    }
+    /* each tube: its picture, power (open: the raster's height, line: the hot line it opens from) and brightness, by the
+       section of the film; returns when it switched on (for its sound), or -1 */
+    let tsOpen = 0, tsLine = 0, tsBr = 1, tsTex = null, tsSub = 0, lastTubeS = 0, tubeSnd = 0;
+    function powerOn(S, on){ const o = c01((S - on) / .11); tsOpen = sstep(.35, 1, o); tsLine = sstep(0, .4, o); }
+    function powerOff(S, off){ const f = c01((S - off) / .1); tsOpen = 1 - sstep(0, .6, f); tsLine = 1 - sstep(.6, 1, f); }
+    function tubeState(i, j, S){
+      const d = Math.abs(i) + Math.abs(j), base = (hash(i * 7.31 + j * 13.7) * NT) | 0, cyc = hash(i * 3.1 - j * 5.3) > .45;
+      const beat = Math.floor((S - (i - j) * .03) / (BT / 2));
+      tsTex = TEX[cyc ? (base + beat) % NT : base]; tsSub = 0;
+      const ph = ((S - (i + j) * .045) % BT + BT) % BT;   // a wave of light across the wall on every beat
+      tsBr = .55 + .45 * Math.exp(-ph * 9);
+      tsOpen = tsLine = 1;
+      if (S < T_J){
+        if (i === JI && j === JJ) tsTex = TX_J;
+        if (i === 0 && j === 0){ tsTex = TX_NAME; return -1; }
+        const on = 1.68 + d * .045; powerOn(S, on); return on;
+      }
+      if (S < T_E){
+        if (i === JI && j === JJ) tsTex = TX_J;
+        if (i === EI && j === EJ) tsTex = TX_E;
+        return -1;
+      }
+      if (S < T_W4){
+        const de = Math.abs(i - EI) + Math.abs(j - EJ);
+        if (i === EI && j === EJ) tsTex = TX_E;
+        if (i >= VW[0] && i <= VW[1] && j >= VW[2] && j <= VW[3]){
+          const col = tall ? VW[3] - j : i - VW[0], on = 6.55 + col * (tall ? .1 : .07);
+          if (S >= on - .02){ tsTex = TX_VW; tsSub = 1; powerOn(S, on); tsBr = 1.15 + .55 * Math.exp(-((S - 7.0 + 10) % .1) * 30) * sstep(6.98, 7.0, S); return on; }
+        }
+        powerOff(S, 6.42 + de * .03); return -1;
+      }
+      tsTex = i === 0 && j === 0 ? TX_KN : TEX[7];
+      const on = T_W4 - .1 + d * .025; powerOn(S, on); return on;
+    }
+    const WLF = new Float32Array(8);
+    function tube(c, i, j, S, sk){
+      const X = i * GX, Y = j * GY;
+      proj(X, Y, 0); const zc = pjz;
+      proj(X - TW / 2, Y + TH / 2, 0); if (pjz < .3 || pjz < zc * .8) return; WLF[0] = pjx; WLF[1] = pjy;
+      proj(X + TW / 2, Y + TH / 2, 0); if (pjz < .3 || pjz < zc * .8) return; WLF[2] = pjx; WLF[3] = pjy;
+      proj(X - TW / 2, Y - TH / 2, 0); if (pjz < .3 || pjz < zc * .8) return; WLF[4] = pjx; WLF[5] = pjy;
+      proj(X + TW / 2, Y - TH / 2, 0); if (pjz < .3 || pjz < zc * .8) return; WLF[6] = pjx; WLF[7] = pjy;
+      const mx = Math.max(WLF[0], WLF[2], WLF[4], WLF[6]), nx = Math.min(WLF[0], WLF[2], WLF[4], WLF[6]), my = Math.max(WLF[1], WLF[3], WLF[5], WLF[7]), ny = Math.min(WLF[1], WLF[3], WLF[5], WLF[7]);
+      const m = (mx - nx) * .12; if (mx < -m || nx > W2 + m || my < -m || ny > h + m) return;
+      const ax = (WLF[2] - WLF[0]) / TW, ay = (WLF[3] - WLF[1]) / TW, bx = (WLF[4] - WLF[0]) / TH, by = (WLF[5] - WLF[1]) / TH;
+      const det = Math.abs(ax * by - ay * bx); if (det < 1e-3) return;
+      const on = tubeState(i, j, S);
+      if (sk && on > lastTubeS && on <= S && (mx - nx) > W2 * .04 && tubeSnd < 1e9){ TUBEOPT.i = tubeSnd++; sfx('tubeOn', TUBEOPT); }
+      c.setTransform(ax * rw, ay * rw, bx * rw, by * rw, WLF[0] * rw, WLF[1] * rw);
+      const lu = 1.4 * pxk / Math.sqrt(det);
+      rrect(c, -BZ, -BZ, TW + 2 * BZ, TH + 2 * BZ, .55); c.fillStyle = SH[si(.06)]; c.fill(); c.strokeStyle = SH[si(.24)]; c.lineWidth = lu; c.stroke();
+      rrect(c, -.04, -.04, TW + .08, TH + .08, .3); c.fillStyle = SH[si(.025)]; c.fill(); c.strokeStyle = SH[si(.14)]; c.stroke();
+      const open = tsOpen, line = tsLine;
+      if (open > 0){
+        const tex = tsTex, sx = tsSub ? (i - VW[0]) * GX * VWS : 0, sy = tsSub ? (VW[3] - j) * GY * VWS : 0, sw = tsSub ? TW * VWS : tex.width, sh = tsSub ? TH * VWS : tex.height;
+        c.globalAlpha = c01(tsBr); c.drawImage(tex, sx, sy, sw, sh, 0, TH / 2 * (1 - open), TW, TH * open);
+        if (tsBr > 1){ c.globalCompositeOperation = 'lighter'; c.globalAlpha = tsBr - 1; c.drawImage(tex, sx, sy, sw, sh, 0, TH / 2 * (1 - open), TW, TH * open); c.globalCompositeOperation = 'source-over'; }
+        c.globalAlpha = 1; lumAcc += det * TW * TH * .14 * tsBr * open;
+      } else if (S > T_W3 && S < T_W4){ c.fillStyle = SH[si(.04 + .03 * hash(i + j * 9 + Math.floor(S * 15)))]; c.fillRect(0, 0, TW, TH); }
+      if (open < 1 && line > 0){ c.fillStyle = P.bright; const lw = TW * line; c.fillRect(TW / 2 - lw / 2, TH / 2 - lu, lw, 2 * lu); }
+      /* the glass: a glint along its top */
+      c.strokeStyle = SH[si(.3)]; c.globalAlpha = .5; c.beginPath(); c.moveTo(.35, .22); c.lineTo(1.6, .22); c.stroke(); c.globalAlpha = 1;
+    }
+    /* dust between the camera and the wall: parallax, drawn as streaks from where the last instant's camera saw it */
+    const ND = 46, dxs = new Float32Array(ND), dys = new Float32Array(ND), dzs = new Float32Array(ND);
+    for (let i = 0; i < ND; i++){ dxs[i] = rnd(); dys[i] = rnd(); dzs[i] = rnd(); }
+    const wrapD = (v, c, span) => c - span / 2 + (((v * span - c) % span) + span * 2) % span;
+    function dust(){
+      G.strokeStyle = SH[si(.55)]; G.lineCap = 'round';
+      for (let i = 0; i < ND; i++){
+        const X = wrapD(dxs[i], CAM.x, 40), Y = wrapD(dys[i], CAM.y, 26), Z = Math.min(-.6, CAM.z + 1 + dzs[i] * Math.max(4, -CAM.z - 1.5));
+        setCam(PCAM); proj(X, Y, Z); const x0 = pjx, y0 = pjy, z0 = pjz; setCam(CAM); proj(X, Y, Z);
+        if (pjz < .4 || z0 < .4) continue;
+        let ddx = pjx - x0, ddy = pjy - y0; const l = Math.hypot(ddx, ddy); if (l > W2 * .5) continue;
+        G.lineWidth = clamp(10 / pjz, 1, 5) * pxk; G.beginPath(); G.moveTo(pjx, pjy); G.lineTo(pjx - ddx * 1.6 - .01, pjy - ddy * 1.6); G.stroke();
+      }
+      G.lineCap = 'square';
+    }
+    /* the wall: drawn whole into its layer, then laid on the tube once per motion-blur sample (the camera's motion over
+       the shutter as a 2D similarity, measured from two points of the wall) */
+    let lastWallA = -1;
+    function wallShot(S, a){
+      camF = h * 1.05;
+      const s0 = S >= T_W4 ? T_W4 : S >= T_W3 ? T_W3 : S >= T_OUTJ ? T_OUTJ : T_I1;   // (the shutter never reaches back across a cut)
+      camAt(Math.max(s0, warp(a - .02)), PCAM); camAt(S, CAM);
+      /* the blur's transform: where two wall points were an instant ago */
+      setCam(CAM);
+      const fx = syw * cpt, fz = cyw * cpt, fy = spt, t = fz > .05 ? -CAM.z / fz : 10, Pax = CAM.x + fx * t, Pay = CAM.y + fy * t;
+      proj(Pax, Pay, 0); const ax0 = pjx, ay0 = pjy; proj(Pax + 2, Pay, 0); const bx0 = pjx, by0 = pjy;
+      setCam(PCAM); proj(Pax, Pay, 0); const ax1 = pjx, ay1 = pjy; proj(Pax + 2, Pay, 0); const bx1 = pjx, by1 = pjy;
+      setCam(CAM);
+      const disp = Math.max(Math.hypot(ax1 - ax0, ay1 - ay0), Math.hypot(bx1 - bx0, by1 - by0));
+      /* the wall into its layer */
+      wg.setTransform(1, 0, 0, 1, 0, 0); wg.clearRect(0, 0, wlc.width, wlc.height);
+      const sk = a > lastWallA && a - lastWallA < .2;
+      for (let j = -NJ; j <= NJ; j++) for (let i = -NI; i <= NI; i++) tube(wg, i, j, S, sk);
+      lastTubeS = S; lastWallA = a;
+      wg.setTransform(1, 0, 0, 1, 0, 0);
+      /* onto the tube */
+      const ns = clamp(Math.ceil(disp / (5 * pxk)), 1, TAP ? 5 : 7);
+      const qx = bx0 - ax0, qy = by0 - ay0, rx = bx1 - ax1, ry = by1 - ay1, qq = qx * qx + qy * qy || 1;
+      const mr = (rx * qx + ry * qy) / qq, mi = (ry * qx - rx * qy) / qq, tx = ax1 - (mr * ax0 - mi * ay0), ty = ay1 - (mi * ax0 + mr * ay0);
+      tg.globalCompositeOperation = 'lighter';
+      for (let k = 0; k < ns; k++){
+        const u = ns > 1 ? k / (ns - 1) : 0, a1 = 1 + (mr - 1) * u, b1 = mi * u;
+        tg.globalAlpha = 1 / ns;
+        tg.setTransform(a1 / rw, b1 / rw, -b1 / rw, a1 / rw, tx * u + BX, ty * u + BY);
+        tg.drawImage(wlc, 0, 0);
+      }
+      tg.globalAlpha = 1; tg.globalCompositeOperation = 'source-over'; tg.setTransform(1, 0, 0, 1, BX, BY);
+      dust();
+    }
+
+    /* ---- the opening: the name ---- */
+    function nameScene(S, a){
+      const boost = Math.exp(-((S - T_K) % BT + BT) % BT * 5);   // the tunnel surges on every beat
+      tunnel(S, 22 + 30 * boost, S > T_K ? .5 * Math.exp(-(S % (BT / 2)) * 14) : 0);
+      typeOn(tg, true);
+      speedLines(S, cx, h / 2, .9, .22 + .2 * boost, 1, 40);
+      const u = LO.uName, up = eO5((S - T_16) / .12), y1 = lerp(h * .4, h * .12, up), y2 = lerp(h * .64, h * .12 + 9.6 * u * .42, up), su = lerp(1, .42, up);
+      const pk = 1 + .06 * Math.exp(-c01(S - 1.4) * 9) * (S > 1.4 ? 1 : 0);
+      word(LO.w1, S, T_K, cx, y1, u * su, 3, 0, 0, 0, 1, 1);
+      word(LO.w2, S, T_N, cx, y2, u * su, 3, 0, 0, 0, 1, 1);
+      if (S >= T_16){ word(LO.n16, S, T_16, cx, h * .64, LO.u16 * pk * (1 + .06 * (S - T_16)), 2, 0, 0, 0, 1, 1); }
+      tg.globalCompositeOperation = 'source-over';
+      if (a < .22){   // the tube igniting: a hot line, then the raster opening from it
+        const op = sstep(.08, .2, a), oh = h * .5 * op * op, m = h * .5, lw = W2 * (.25 + .75 * sstep(0, .07, a));
+        tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, h + m - oh); tg.fillRect(-W2, m + oh, 3 * W2, 2 * h);
+        tg.fillStyle = P.bright; tg.fillRect(cx - lw / 2, m - oh - 2 * pxk, lw, 4 * pxk); if (oh > 2) tg.fillRect(cx - lw / 2, m + oh - 2 * pxk, lw, 4 * pxk);
+        lumAcc += lw * 8 * pxk;
+      }
+    }
+    /* ---- inside J: a globe of founders ---- */
+    const GN = 29, GLAT = [-.9, -.45, 0, .45, .9], NGL = 5 + 8, gpx = new Float32Array(NGL * GN), gpy = new Float32Array(NGL * GN), gpz = new Float32Array(NGL * GN);
+    const NFD = 44, fdT = new Float32Array(NFD), fdP = new Float32Array(NFD), fdx = new Float32Array(NFD), fdy = new Float32Array(NFD), fdz = new Float32Array(NFD);
+    for (let i = 0; i < NFD; i++){ fdT[i] = Math.asin(rnd() * 2 - 1); fdP[i] = rnd() * TAU; }
+    function gP3(lat, lon, k, spin, ct, st){ const cl = Math.cos(lat), X = cl * Math.cos(lon + spin), Z = cl * Math.sin(lon + spin), Y = Math.sin(lat); gpx[k] = X; gpy[k] = Y * ct - Z * st; gpz[k] = Y * st + Z * ct; }
+    function globe(S, x, y, R, spin, v){
+      const ct = Math.cos(.42), st = Math.sin(.42);
+      for (let l = 0; l < 5; l++) for (let k = 0; k < GN; k++) gP3(GLAT[l], k / (GN - 1) * TAU, l * GN + k, spin, ct, st);
+      for (let m = 0; m < 8; m++) for (let k = 0; k < GN; k++) gP3(-Math.PI / 2 + k / (GN - 1) * Math.PI, m / 8 * TAU, (5 + m) * GN + k, spin, ct, st);
+      for (let pass = 0; pass < 2; pass++){
+        G.beginPath();
+        for (let l = 0; l < NGL; l++) for (let k = 0; k < GN - 1; k++){
+          const a = l * GN + k, b = a + 1, front = gpz[a] + gpz[b] < 0;
+          if (front !== (pass === 1)) continue;
+          G.moveTo(x + R * gpx[a], y - R * gpy[a]); G.lineTo(x + R * gpx[b], y - R * gpy[b]);
+        }
+        G.strokeStyle = SH[si(pass ? v : v * .35)]; G.lineWidth = (pass ? 2 : 1.3) * pxk; G.stroke();
+      }
+      lumAcc += R * 40 * pxk * v;
+      /* the founders: points on it that light up */
+      G.fillStyle = P.bright;
+      for (let i = 0; i < NFD; i++){
+        const cl = Math.cos(fdT[i]), X = cl * Math.cos(fdP[i] + spin), Z = cl * Math.sin(fdP[i] + spin), Y = Math.sin(fdT[i]), yy = Y * ct - Z * st, zz = Y * st + Z * ct;
+        if (zz > 0) continue;
+        const lit = ((S * 2.5 + hash(i * 3.3)) % 1), s = (2 + 5 * Math.max(0, 1 - lit * 4)) * pxk;
+        G.globalAlpha = .4 + .6 * Math.max(0, 1 - lit * 3); G.fillRect(x + R * X - s / 2, y - R * yy - s / 2, s, s);
+      }
       G.globalAlpha = 1;
     }
-    function beamLine(x0, y, w, k){ G.globalAlpha = .22 * k; G.fillStyle = P.normal; G.fillRect(x0, y - 4 * pxk, w, 8 * pxk); G.globalAlpha = .9 * k; G.fillStyle = P.bright; G.fillRect(x0, y - pxk, w, 2 * pxk); G.globalAlpha = 1; }
-    function sName(a){
-      if (a < T_NAME || a >= T_HEAD + .6) return;
-      const cv = LO.nameCv, ch2 = cv.height;
-      if (a < T_HEAD){
-        const pop = a > F2 + FD ? .025 * Math.exp(-(a - F2 - FD) * 9) : 0;   // the second field lands: a small settle
-        const push = 1 + .035 * sstep(1.3, T_HEAD, a) + pop, sw = cv.width * push, sh = ch2 * push, x0 = cx - sw / 2, y0 = LO.nameY + ch2 / 2 - sh / 2;
-        if (a < F2 + FD){
-          const e1 = eIO((a - F1) / FD), e2 = eIO((a - F2) / FD);
-          field(cv, x0, y0, push, e1 * ch2, 0, .8); if (e2 > 0) field(cv, x0, y0, push, e2 * ch2, 1, 1);
-          if (e1 < 1) beamLine(x0 + sw * .02, y0 + e1 * sh, sw * .96, Math.sin(Math.PI * c01((a - F1) / FD)));
-          if (e2 > 0 && e2 < 1) beamLine(x0 + sw * .02, y0 + e2 * sh, sw * .96, Math.sin(Math.PI * c01((a - F2) / FD)));
-        } else G.drawImage(cv, x0, y0, sw, sh);
-        lumAcc += sw * sh * .12;
-        const gl = (a - 1.45) / .55;                    // a glint across the finished name
-        if (gl > 0 && gl < 1){
-          G.save(); const bw = sw * .12, gx = x0 - bw + (sw + 2 * bw) * eIO(gl);
-          G.beginPath(); G.moveTo(gx, y0); G.lineTo(gx + bw, y0); G.lineTo(gx + bw - sh * .3, y0 + sh); G.lineTo(gx - sh * .3, y0 + sh); G.closePath(); G.clip();
-          G.globalAlpha = .9 * Math.sin(gl * Math.PI); G.drawImage(cv, x0, y0, sw, sh); G.drawImage(cv, x0, y0, sw, sh); G.restore();
-        }
-        /* the beam prints the line under it */
-        if (LO.subCv && a >= T_SUB){
-          const sc = LO.subCv, p = eIO((a - T_SUB) / .55), xw = sc.width * p, sx0 = cx - sc.width / 2, sy0 = LO.subY - 8 * LO.uS;
-          G.drawImage(sc, 0, 0, Math.max(1, xw), sc.height, sx0, sy0, Math.max(1, xw), sc.height);
-          if (p < 1){ const bx = sx0 + xw, by = LO.subY - 3 * LO.uS, r = LO.uS * 1.2;
-            G.globalAlpha = .35; G.fillStyle = P.normal; G.fillRect(bx - r * 2, by - r * .6, r * 4, r * 1.2); G.globalAlpha = 1; G.fillStyle = P.bright; G.fillRect(bx - r * .5, by - r * .5, r, r); }
-        }
-      } else drawHead(a);
+    function jScene(S){
+      const R = Math.min(W2, h) * (.4 + .12 * eO3((S - 4.0) / .2)), spin = S * 1.4 + 3 * eIO((S - 3.95) / .45);
+      typeOn(tg, false);
+      globe(S, cx, h * .5, R, spin, .45 + .3 * Math.exp(-(((S - T_J) % BT + BT) % BT) * 7));
+      streaks(S, false, 1.6, .3);
+      typeOn(tg, true);
+      const drift = 1 + .08 * c01((S - T_J) / .4);
+      word(LO.J, S, T_J, cx, h * .42, LO.uJ * drift, 1.9, 3.6, -W2 * 1.1, 0, 1, 1);
+      word(LO.cof, S, 3.4, cx, h * .82, LO.uCof, 2.4, 3.6, -W2 * 1.1, 0, 1, 1);
+      word(LO.young, S, 3.6, cx, h * .36, LO.uYF, 2.6, 4.0, 0, 0, 2, 1);
+      word(LO.founders, S, 3.8, cx, h * .6, LO.uYF, 2.6, 4.0, 0, 0, 2, 1);
+      word(LO.global, S, 4.0, cx, h * .5, LO.uGl, 2.2, 4.25, 0, 0, 2.2, 1);
+      tg.globalCompositeOperation = 'source-over';
     }
-    /* the name gliding up into the header (then held there by the cards) */
-    function headPose(a){ return s5((a - T_HEAD) / .55); }
-    function drawHead(a, zm){
-      const cv = LO.nameCv, u = headPose(a), s = lerp(1.035, LO.headK, u), sw = cv.width * s, sh = cv.height * s;
-      const yc0 = LO.nameY + cv.height / 2;
-      let x = cx - sw / 2, y = lerp(yc0, LO.headY + cv.height * LO.headK / 2, u) - sh / 2;
-      if (zm){ x = cx + (x - cx) * ZM.z + ZM.x; y = h / 2 + (y - h / 2) * ZM.z + ZM.y; }
-      const k = zm ? ZM.z : 1;
-      if (LO.subCv && a < T_HEAD + .3){ const sc = LO.subCv, f = 1 - c01((a - T_HEAD) / .3); G.globalAlpha = f; G.drawImage(sc, cx - sc.width / 2, LO.subY - 8 * LO.uS + 12 * (1 - f) * pxk); G.globalAlpha = 1; }
-      G.drawImage(cv, x, y, sw * k, sh * k);
-      lumAcc += sw * sh * k * k * .12;
+    /* ---- inside EDEN: a turning graph of agents, packets of context running along it ---- */
+    const NN = 18, nx3 = new Float32Array(NN), ny3 = new Float32Array(NN), nz3 = new Float32Array(NN), nsx = new Float32Array(NN), nsy = new Float32Array(NN), nsz = new Float32Array(NN);
+    for (let i = 0; i < NN; i++){ const th = rnd() * TAU, ph = Math.acos(rnd() * 2 - 1), r = .55 + .45 * rnd(); nx3[i] = r * Math.sin(ph) * Math.cos(th) * 1.5; ny3[i] = r * Math.cos(ph) * .8; nz3[i] = r * Math.sin(ph) * Math.sin(th); }
+    const ED = []; for (let i = 0; i < NN; i++){ const d = []; for (let j = 0; j < NN; j++) if (j !== i) d.push([Math.hypot(nx3[i] - nx3[j], ny3[i] - ny3[j], nz3[i] - nz3[j]), j]); d.sort((p, q) => p[0] - q[0]); for (let k = 0; k < 2; k++){ const j = d[k][1]; if (!ED.some(e => e[0] === j && e[1] === i)) ED.push([i, j]); } }
+    const NE = ED.length, EA = new Int8Array(NE), EB = new Int8Array(NE), EP = new Float32Array(NE); ED.forEach((e, k) => { EA[k] = e[0]; EB[k] = e[1]; EP[k] = rnd(); });
+    function graph(S, x, y, R, rot, fire, v){
+      const c = Math.cos(rot), s = Math.sin(rot);
+      for (let i = 0; i < NN; i++){ const X = nx3[i] * c - nz3[i] * s, Z = nx3[i] * s + nz3[i] * c, k = 1 / (1 + Z * .35); nsx[i] = x + R * X * k; nsy[i] = y - R * ny3[i] * k; nsz[i] = Z; }
+      G.strokeStyle = SH[si(v * .6)]; G.lineWidth = 1.6 * pxk; G.beginPath();
+      for (let e = 0; e < NE; e++){ G.moveTo(nsx[EA[e]], nsy[EA[e]]); G.lineTo(nsx[EB[e]], nsy[EB[e]]); }
+      G.stroke();
+      G.fillStyle = P.bright;
+      for (let e = 0; e < NE; e++){ const f = (S * (1.2 + fire * 2) + EP[e]) % 1, px = lerp(nsx[EA[e]], nsx[EB[e]], f), py = lerp(nsy[EA[e]], nsy[EB[e]], f), q = 4 * pxk; G.fillRect(px - q / 2, py - q / 2, q, q); }
+      G.strokeStyle = SH[si(v)];
+      for (let i = 0; i < NN; i++){ const q = (7 - 2 * nsz[i]) * pxk; G.lineWidth = 2 * pxk; G.strokeRect(nsx[i] - q / 2, nsy[i] - q / 2, q, q);
+        if (fire > .02){ const r = q * (1 + 5 * (1 - fire)); G.globalAlpha = fire; G.beginPath(); G.arc(nsx[i], nsy[i], r, 0, TAU); G.stroke(); G.globalAlpha = 1; } }
+      lumAcc += NE * R * .5 * pxk * v + NN * 200 * pxk;
     }
-    /* J: the card lies flat in 3D, and the camera cranes up until it stands */
-    const animRise = (i, n) => { const p = (cardA - i * .022) / .32; LA.a = c01(p * 3); LA.dy = -1.6 * (1 - eO5(p)); };
-    let cardA = 0, subA = 0, subN = 0;
-    const animType = i => { const p = (subA - i * .014) / .06; if (p <= 0){ LA.on = false; return; } LA.a = c01(p); LA.dy = -.5 * (1 - eO3(p)); };
-    function subLines(ls, y, u, anim){ for (let k = 0; k < ls.length; k++){ if (anim) subA = subA0 - k * ls[0].n * .014; vlineC(ls[k], cx, y + k * 9 * u, u, anim, 1); } }
-    let subA0 = 0;
-    function crane(a){
-      const p = (a - T_J) / .9;
-      CR.th = lerp(1.32, 0, back(p, .55)); CR.ps = lerp(-.42, 0, eO5(p)) + .06 * Math.sin((a - T_J - .9) * 1.1) * sstep(T_J + .6, T_J + 1.4, a) * (1 - sstep(T_PULL - .7, T_PULL - .05, a));   // the camera drifts round while it holds
-      CR.D0 = 1.5 * Math.max(W2, h); CR.D = CR.D0 * lerp(1.3, 1, eO3(p)); CR.py = LO.y2 + 1.5 * LO.uC;
+    function bracket(x, y, hh, d, dir){
+      G.beginPath(); G.moveTo(x + d * dir, y - hh / 2); G.lineTo(x, y - hh / 2); G.lineTo(x, y + hh / 2); G.lineTo(x + d * dir, y + hh / 2);
+      G.lineWidth = 9 * pxk; G.globalAlpha = .2; G.strokeStyle = SH[si(.6)]; G.stroke(); G.globalAlpha = 1; G.lineWidth = 4 * pxk; G.strokeStyle = P.bright; G.stroke();
+      lumAcc += hh * 10 * pxk;
     }
-    function sJ(a){
-      if (a < T_J || a >= T_PULL) return;
-      if (a >= T_HEAD + .6) drawHead(a);
-      crane(a); MAPF = 1; cardA = a - T_J;
-      vlineC(LO.a1, cx, LO.y1, LO.uC, animRise, 1); vlineC(LO.a2, cx, LO.y2, LO.uC, animRise, 1);
-      MAPF = 0;
-      if (a >= T_JSUB){ subA0 = a - T_JSUB; subLines(LO.jsub, LO.ys, LO.uCs, animType); }
-    }
-    /* EDEN: the wall of tubes. Wall space: the middle tube is the screen; tube (i, j) sits at (i pX, j pY) */
-    const ORDR = [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]];   // the spiral they switch on in
-    const TR = new Float32Array(4);
-    function tubeRect(i, j){ const z = ZM.z; TR[0] = cx + (i * LO.pX - W2 / 2) * z + ZM.x; TR[1] = h / 2 + (j * LO.pY - h / 2) * z + ZM.y; TR[2] = W2 * z; TR[3] = h * z; }
-    let bezA = 1;
-    function bezel(x, y, w, hh, on){
-      const r = Math.min(w, hh) * .06;
-      G.beginPath(); G.moveTo(x + r, y); G.lineTo(x + w - r, y); G.quadraticCurveTo(x + w, y, x + w, y + r); G.lineTo(x + w, y + hh - r); G.quadraticCurveTo(x + w, y + hh, x + w - r, y + hh);
-      G.lineTo(x + r, y + hh); G.quadraticCurveTo(x, y + hh, x, y + hh - r); G.lineTo(x, y + r); G.quadraticCurveTo(x, y, x + r, y); G.closePath();
-      G.strokeStyle = SH[si(.16 + .14 * on)]; G.lineWidth = Math.max(1, 2.5 * pxk * ZM.z * 2); G.globalAlpha = bezA; G.stroke(); G.globalAlpha = 1;
-    }
-    function tubeContent(k, x, y, w, hh, a, on){        // lines of context streaming up a tube (after it warms up: the raster opening from a line)
-      const p = on, lineW = w * sstep(0, .35, p), open = sstep(.3, 1, p);
-      if (open < 1){ G.fillStyle = P.bright; G.globalAlpha = .9; G.fillRect(x + w / 2 - lineW / 2, y + hh / 2 - 1, lineW, 2.5 * pxk); G.globalAlpha = 1; }
-      if (open <= 0) return;
-      G.save(); G.beginPath(); G.rect(x, y + hh / 2 - hh / 2 * open, w, hh * open); G.clip();
-      const rows = 11, rh = hh / (rows + 1), sp = 3 + (k % 3), sc = (a - T_WALL) * sp, base = Math.floor(sc), fr = sc - base;
-      for (let r = -1; r <= rows; r++){
-        const id = base + r + k * 37, yy = y + hh - (r + 1 + fr) * rh, ind = Math.floor(hash(id) * 3) * .06 * w;
-        let xx = x + w * .08 + ind; const segs = 1 + Math.floor(hash(id + .5) * 4);
-        for (let s = 0; s < segs; s++){
-          const sw = w * (.06 + .2 * hash(id * 3.1 + s)), v = s === 0 && hash(id + .9) > .7 ? .75 : .38;
-          if (xx + sw > x + w * .92) break;
-          G.fillStyle = SH[si(v)]; G.fillRect(xx, yy, sw, rh * .42); xx += sw + w * .03;
-        }
+    function edenScene(S){
+      const ph = ((S - T_E) % BT + BT) % BT, fire = Math.max(Math.exp(-c01(S - 5.6) * 6) * (S >= 5.6 ? 1 : 0), Math.exp(-ph * 9) * .5);
+      typeOn(tg, false);
+      graph(S, cx, h * .5, Math.min(W2 * .46, h * .62), S * .9 + 2 * eIO((S - 5.55) / .3), fire, .55);
+      streaks(S, true, 1.1, .2);
+      typeOn(tg, true);
+      word(LO.eden, S, T_E, cx, h * .44, LO.uEden * (1 + .06 * c01(S - T_E)), 1.9, 5.6, 0, 0, 2.2, 1);
+      word(LO.fdr, S, 5.4, cx, h * .74, LO.uFdr, 2.4, 5.6, 0, 0, 2.2, 1);
+      word(LO.agents, S, 5.6, cx, h * .5, LO.uAg, 2.6, 6.0, 0, -h * .7, 1, 1);
+      word(LO.context, S, 6.0, cx, h * .5, LO.uCtx * (1 + .07 * Math.exp(-c01(S - 6.2) * 10) * (S > 6.2 ? 1 : 0)), 2.2, 0, 0, 0, 1, 1);
+      tg.globalCompositeOperation = 'source-over';
+      if (S >= 6.0){   // brackets slam shut round it
+        const bw = LO.context.sw * LO.uCtx / 2 + 26 * pxk, e = back((S - 6.0) / .12, 2.2), pu = 1 + .08 * Math.exp(-c01(S - 6.2) * 10) * (S > 6.2 ? 1 : 0), off = W2 * .6 * (1 - e);
+        bracket(cx - bw * pu - off, h * .5, LO.uCtx * 11 * pu, 22 * pxk, 1); bracket(cx + bw * pu + off, h * .5, LO.uCtx * 11 * pu, 22 * pxk, -1);
       }
-      lumAcc += w * hh * .12;
-      G.restore();
     }
-    let fadeK = 1; const animFade = () => { LA.a = fadeK; };
-    function sWall(a){
-      if (a < T_PULL || a >= T_GOAT) return;
-      /* the camera: pull back to the wall, hold, push back in */
-      const zo = eO5((a - T_PULL) / .45), zi = eXIO((a - T_PUSH) / .55);
-      ZM.z = a < T_PUSH ? lerp(1, LO.zW, zo) : lerp(LO.zW, 1, zi) + .045 * s5((a - T_PUSH - .5) / (T_GOAT - T_PUSH - .5)); ZM.x = 0; ZM.y = 0;   // (then a slow push while EDEN holds)
-      const far = (1 - ZM.z) / (1 - LO.zW);           // 1 when the whole wall shows
-      bezA = c01(far * 5);
-      if (far > .002){
-        for (let k = 0; k < 8; k++){
-          tubeRect(ORDR[k][0], ORDR[k][1]); const x = TR[0], y = TR[1], w = TR[2], hh = TR[3];
-          if (x > W2 || y > h || x + w < 0 || y + hh < 0) continue;
-          const on = c01((a - T_WALL - k * .0625) / .14);
-          bezel(x, y, w, hh, on);
-          if (on > 0) tubeContent(k, x, y, w, hh, a, on);
-        }
-        tubeRect(0, 0); bezel(TR[0], TR[1], TR[2], TR[3], 1);
-      }
-      /* the middle tube: the J card, rolling over to EDEN */
-      tubeRect(0, 0);
-      G.save(); G.beginPath(); G.rect(TR[0], TR[1], TR[2], TR[3]); G.clip();
-      MAPF = 2; drawHead(a, true);
-      const rp = eIO((a - T_ROLL) / .32), ry = -rp * h * .62;
-      ZM.y = ry * ZM.z;
-      if (rp < 1){ cardA = 9; vlineC(LO.a2, cx, LO.y2, LO.uC, null, 1); }
-      ZM.y = (ry + h * .62) * ZM.z;
-      if (rp > 0){ vlineC(LO.b2, cx, LO.y2, LO.uC, null, 1); }
-      ZM.y = 0;
-      /* FOUNDER stays: CO- slides off */
-      const fo = LO.a1.t.indexOf(fontText(LO.b1.t)), mv = eIO((a - T_ROLL) / .4);
-      if (fo > 0 && LO.a1.t.slice(fo) === LO.b1.t){
-        const xa = cx - LO.a1.sw * LO.uC / 2, xb = cx - LO.b1.sw * LO.uC / 2, xs = xa + LO.a1.ox[fo] * COND * LO.uC;
-        vline(LO.b1, lerp(xs, xb, mv), LO.y1, LO.uC, null, 1);
-        if (mv < 1){ const pre = LO.pre || (LO.pre = mkLine(LO.a1.t.slice(0, fo))); vline(pre, xa - mv * W2 * .5, LO.y1, LO.uC, null, 1 - mv); }
-      } else { vlineC(rp < .5 ? LO.a1 : LO.b1, cx, LO.y1, LO.uC, null, 1); }
-      if (a < T_ROLL){ subA0 = 9; subLines(LO.jsub, LO.ys, LO.uCs, null); }
-      else if (a < T_ROLL + .15){ fadeK = 1 - c01((a - T_ROLL) / .15); subLines(LO.jsub, LO.ys, LO.uCs, animFade); }
-      if (a >= T_ESUB){ subA0 = a - T_ESUB; subLines(LO.esub, LO.ys, LO.uCs, animType); }
-      MAPF = 0;
-      G.restore();
+
+    /* ---- impact frames: one picture held for two or three frames over a hit-stop ---- */
+    function hollow(L, x, y, u, rot){   // a word in outline only
+      kHot = 0; LA.rot = 0;
+      VMODE = 1; ROT = rot || 0; vlineC(L, x, y + 3 * u, u, rot ? animRot : null, 1); VMODE = 0; ROT = 0; kHot = kHot0;
     }
-    /* THE GOAT?: dropped onto a line, one letter a sixteenth; a riser; the letters sink through the line */
-    const GT = new Float32Array(16);
-    let goatA = 0;
-    function bounce(t, tc, H, Tf, e){   // height above the line (units) and the squash, for a drop landing at tc
-      if (t < tc){ const u = (tc - t) / Tf; return u >= 1 ? H : H * u * u; }
-      const gv = 2 * H / (Tf * Tf); let v = gv * Tf * e, tt = t - tc;
-      for (let k = 0; k < 4; k++){ const d = 2 * v / gv; if (tt < d) return v * tt - .5 * gv * tt * tt; tt -= d; v *= e; }
-      return 0;
+    function halftone(L, x, y, u){ VMODE = 2; vlineC(L, x, y + 3 * u, u, null, 1); VMODE = 0; }
+    let ROT = 0; const animRot = () => { LA.rot = ROT; };
+    function polyPath(arr, o){ G.beginPath(); G.moveTo(arr[o], arr[o + 1]); for (let k = 2; k < 8; k += 2) G.lineTo(arr[o + k], arr[o + k + 1]); G.closePath(); }
+    function impact1(){   // 16 in outline over a radial burst and a halftone ring
+      tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h);
+      tg.globalAlpha = .55; tg.drawImage(htc, 0, 0); tg.globalAlpha = 1;
+      radial(cx, h * .58, Math.min(W2, h) * .32, SH[si(.75)], .35);
+      typeOn(tg, true); hollow(LO.n16, cx, h * .68, LO.u16 * .95);
+      const u = LO.uName * .42; vlineC(LO.w1, cx, h * .12 + 3 * u, u, null, 1); vlineC(LO.w2, cx, h * .12 + 12.6 * u, u, null, 1);
+      tg.globalCompositeOperation = 'source-over'; lumAcc += W2 * h * .1;
     }
-    const animThe = i => { const a = goatA, p = (a - T_GOAT - .06 - i * .06) / .05; LA.on = p > 0; LA.a = c01(p); if (a >= T_PAY){ const q = (a - T_PAY - i * .022) / .3; LA.dy -= 30 * eI3(q); } };
-    const animGoat = (i, n) => {
-      const a = goatA, ch = LO.goat.t[i];
-      if (ch !== '?'){
-        const k = i, tc = T_GOAT + .25 + k * .125, H = (LO.goat.drop || 12);
-        if (a < tc - .3) { LA.on = false; return; }
-        LA.dy = bounce(a, tc, H, .3, .3); const tt = a - tc;
-        if (tt >= 0){ const q = Math.exp(-tt * 18) * Math.cos(tt * 30); LA.sy = 1 - .22 * q; LA.sx = 1 + .16 * q; }
-      } else {
-        const tc = T_GOAT + 1.0, H = (LO.goat.drop || 12) * 1.2;
-        if (a < tc - .36){ LA.on = false; return; }
-        LA.dy = bounce(a, tc, H, .36, .48); const tt = a - tc;
-        if (tt >= 0){ const q = Math.exp(-tt * 14) * Math.cos(tt * 26); LA.sy = 1 - .25 * q; LA.sx = 1 + .18 * q; LA.rot = -.2 * (1 - Math.exp(-tt * 5)) + .25 * Math.exp(-tt * 4) * Math.sin(tt * 13); }
-        LA.s = 1.12;
+    function impact2(a){   // J in halftone, a white ring
+      tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h);
+      radial(cx, h * .45, Math.min(W2, h) * .45, SH[si(.45)], .5);
+      const r = Math.min(W2, h) * (.42 + 1.6 * (a - T_J));
+      tg.strokeStyle = P.bright; tg.lineWidth = 10 * pxk; tg.beginPath(); tg.arc(cx, h * .45, r, 0, TAU); tg.stroke();
+      tg.lineWidth = 3 * pxk; tg.beginPath(); tg.arc(cx, h * .45, r * 1.12, 0, TAU); tg.stroke();
+      typeOn(tg, true); halftone(LO.J, cx, h * .42, LO.uJ * 1.12); tg.globalCompositeOperation = 'source-over';
+      lumAcc += W2 * h * .12;
+    }
+    function impact3(){   // two slashed panels: EDEN / FOUNDER
+      tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h);
+      for (let p = 0; p < 2; p++){
+        tg.save(); polyPath(PANEL2, p * 8); tg.clip();
+        streaks(7 + p * 3.1, false, 0, p ? .35 : .5);
+        const L = p ? LO.fdr : LO.eden, x = tall ? cx : (p ? W2 * .7 : W2 * .3), y = tall ? (p ? h * .76 : h * .26) : (p ? h * .68 : h * .36);
+        typeOn(tg, true); if (p) vlineC(L, x, y + 3 * LO.uFdr * 1.3, LO.uFdr * 1.3, null, 1); else hollow(L, x, y, Math.min(LO.uEden, uFit(L, W2 * (tall ? .84 : .5), h * .4)));
+        tg.globalCompositeOperation = 'source-over'; tg.restore();
       }
-      /* the riser: everything crouches; then the payoff */
-      const cr = sstep(T_PAY - .45, T_PAY, a) * (1 - sstep(T_PAY, T_PAY + .06, a)); LA.sy *= 1 - .09 * cr; LA.sx *= 1 + .04 * cr;
-      if (a >= T_PAY){
-        if (ch === '?'){ const p = (a - T_PAY) / .45; LA.dy += 14 * eO3(p); LA.dx += 8 * eO3(p); LA.rot -= 5 * eO3(p); LA.a = 1 - c01((p - .5) * 2); }
-        else { const p = (a - T_PAY - (i + 3) * .022) / .3; LA.dy -= 9 * eI3(p); }
+      tg.strokeStyle = P.bright; tg.lineWidth = 4 * pxk; for (let p = 0; p < 2; p++){ polyPath(PANEL2, p * 8); tg.stroke(); }
+      lumAcc += W2 * h * .1;
+    }
+    /* THE / GOAT / ?: three comic panels, frozen on the hit, then alive (speed lines running, the panels easing apart) */
+    function panels(S, a){
+      const live = S - T_GOAT, sep = eO3(live / .35) * 10 * pxk;
+      tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h);
+      for (let p = 0; p < 3; p++){
+        const o = p * 8, pcx = (PANEL3[o] + PANEL3[o + 2] + PANEL3[o + 4] + PANEL3[o + 6]) / 4, pcy = (PANEL3[o + 1] + PANEL3[o + 3] + PANEL3[o + 5] + PANEL3[o + 7]) / 4;
+        const dx = tall ? 0 : (p - 1) * sep, dy = tall ? (p - 1) * sep : 0;
+        tg.save(); tg.translate(dx, dy); polyPath(PANEL3, o); tg.clip();
+        if (p === 0){ tg.globalAlpha = .7; tg.drawImage(htc, pcx - cx - W2 * .3, pcy - h / 2, W2, h); tg.globalAlpha = 1; streaks(S, !tall, .6, .3); }
+        if (p === 1){ G = tg; speedLines(S, pcx, pcy, 1.2, .55, 1); radial(pcx, pcy, Math.min(W2, h) * .3, SH[si(.25)], .4); }
+        if (p === 2) rings(S, pcx, pcy, 1.4, .45);
+        typeOn(tg, true);
+        const pw = tall ? W2 * .86 : (PANEL3[o + 2] - PANEL3[o]) * .82, phh = tall ? (PANEL3[o + 5] - PANEL3[o + 1]) * .62 : h * .5;
+        const L = p === 0 ? LO.the : p === 1 ? LO.goat : LO.q, u = uFit(L, pw, p === 0 ? phh * .7 : phh), jit = live > .1 ? Math.sin(S * 61 + p) * pxk : 0;
+        if (p === 1){ hollow(L, pcx + jit, pcy, u * 1.04); vlineC(L, pcx + jit, pcy + 3 * u, u, null, 1); }
+        else if (p === 2){ ROT = -.22 + .05 * Math.sin(S * 7); hollow(L, pcx, pcy, u * 1.06, ROT); vlineC(L, pcx, pcy + 3 * u, u, animRot, 1); ROT = 0; }
+        else vlineC(L, pcx, pcy + 3 * u, u, null, 1);
+        tg.globalCompositeOperation = 'source-over'; tg.restore();
       }
-      void n;
-    };
-    function sGoat(a){
-      if (a < T_GOAT || a >= T_PAY + .5) return;
-      goatA = a; const u = LO.uG, y = hy;
-      LO.goat.drop = (y + 2 * u) / u;
-      /* the line: a short faint stroke at first, drawn out to the edges by the riser, and a hot flash on the downbeat */
-      const ext = lerp(.2, 1, eO3((a - T_PAY + .5) / .45)), lv = .25 + .35 * sstep(T_PAY - .5, T_PAY, a);
-      if (a < T_PAY + .1){ G.fillStyle = SH[si(lv)]; G.fillRect(cx - W2 * ext / 2, y - pxk, W2 * ext, 2 * pxk); }
-      if (a >= T_PAY && a < T_PAY + .1){ const f = 1 - (a - T_PAY) / .1; G.globalAlpha = f; G.fillStyle = P.bright; G.fillRect(0, y - 3 * pxk, W2, 6 * pxk); G.globalAlpha = 1; lumAcc += W2 * 6 * f; }
-      G.save(); G.beginPath(); G.rect(-W2, -h, 3 * W2, y + h - pxk); G.clip();   // the letters sink through the line
-      vline(LO.goat, LO.goatX, y - .15 * u, u, animGoat, 1);
-      vline(LO.the, LO.goatX + 2 * SLANT * u * 6, y - 8.6 * u, u * .42, animThe, 1);   // THE: small, over GOAT's shoulder
-      G.restore();
+      tg.strokeStyle = P.bright; tg.lineWidth = 5 * pxk;
+      for (let p = 0; p < 3; p++){ tg.save(); tg.translate(tall ? 0 : (p - 1) * sep, tall ? (p - 1) * sep : 0); polyPath(PANEL3, p * 8); tg.stroke(); tg.restore(); }
+      void a; lumAcc += W2 * h * .12;
     }
 
     /* ---- the scene: copper bars, the floor, stars ---- */
@@ -2145,14 +2390,14 @@ M.createTerminal = function createTerminal(opts){
       for (let i = 0; i < NB; i++){
         const ph = T * 1.55 + i * .58;
         let y = mid + am * Math.sin(ph); const d = Math.cos(ph);
-        if (!still && a < SLAM) y = sky0 - bh - 12 + (y - sky0 + bh + 12) * back((a - T_PAY - .5 - i * .25) / .45, 1.7);   // they drop in on the eighths
+        if (!still && a < SLAM) y = sky0 - bh - 12 + (y - sky0 + bh + 12) * back((a - T_CH - i * .1) / .2, 1.7);   // they drop in on the sixteenths
         bY[i] = y; bD[i] = d;
         let k = i; while (k > 0 && bD[bo[k - 1]] > d){ bo[k] = bo[k - 1]; k--; } bo[k] = i;
       }
       const nb = 8, st = bh / nb;
       for (let r = 0; r < NB; r++){
         const i = bo[r], d = bD[i], peak = c01(.18 + .1 * d + .55 * bp[i] + .14 * bk), y0 = Math.round(bY[i]);
-        if (!still && a < T_PAY + .5 + i * .25 - .1) continue;
+        if (!still && a < T_CH + i * .1 - .02) continue;
         for (let k = 0; k < nb; k++){
           const e = 1 - Math.abs(2 * (k + .5) / nb - 1), hp = (cyc + i * 2.3) % (nb + 6) - 3, dd = k - hp, v = peak * (.12 + .88 * e * e + .28 * Math.exp(-dd * dd * .7));
           const y = y0 + k * st; if (y < sky0 || y + st > sky1) continue;
@@ -2161,7 +2406,7 @@ M.createTerminal = function createTerminal(opts){
       }
     }
     function floor(a, still, shT, shS, zl, bk, floorD){
-      const reveal = still ? 1 : eO3((a - T_PAY) / .7), bot = h, y1 = hy + (bot - hy) * reveal;
+      const reveal = still ? 1 : eO3((a - T_CH) / .25), bot = h, y1 = hy + (bot - hy) * reveal;
       for (let k = 0; k < 5; k++){ G.fillStyle = SH[si((.17 - k * .032))]; G.fillRect(0, hy - 4 - k * 4, W2, 4); }
       if (reveal > 0){
         const gs = 4, nz = 40, span = nz * gs, zf = zN + span, flw = Math.round(2 * pxk);
@@ -2215,44 +2460,54 @@ M.createTerminal = function createTerminal(opts){
     }
 
     /* ---- the clock, the physics, the quality ---- */
-    let lastT = -1, lastA = 0, sync = 0, dist = 0, floorD = 0, kick = 0, nextBar = 0, lastKey = 0, keyGlint = -9, ageNow = 0;
+    let lastT = -1, dist = 0, floorD = 0, kick = 0, nextBar = 0, lastKey = 0, keyGlint = -9, ageNow = 0, cueA = -1;
     let lean = 0, leanV = 0, leanT = 0, tilt = 0, tiltV = 0, tiltT = 0, spin = 0, spinV = 0, spinT = 0, hop = 0, hopV = 0;
     let pu = -1, pv = -1, down = false, lastU = -1, dragV = 0;
-    let prevOk = false, pYaw = 0, pPit = 0, pRol = 0, pY = 0, pZ = 0, pSx = 1, pSy = 1;
+    let prevOk = false, pYaw = 0, pPit = 0, pRol = 0, pY = 0, pZ = 0, pSx = 1, pSy = 1, lastShot = -1;
     const NTOP = TAP ? 3 : 4; let NMAX = NTOP, slowAcc = 0, fastAcc = 0, lastW = 0, qAt = 0;
     const POSE = new Float32Array(8);
-    function pose(a, L, still){
-      /* the logo's pose in the opening (a pure function of time) or the loop (smooth curves, plus the springs) */
-      let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, sx = 1, sy = 1;
-      if (!still && a < SLAM){
-        if (a < T_HOVER){                               // tumbling in from the vanishing point
-          const u = eO3((a - T_FLY) / (T_HOVER - T_FLY));
-          z = Z0 * Math.exp(lerp(Math.log(11), Math.log(1.25), u)); yaw = lerp(-TAU * 1.25, -.32, u); pit = lerp(-.62, -.2, u); rol = lerp(.35, 0, u);
-          y = logoY + lerp(-2.5, 0, u);
-        } else if (a < T_WIND){                        // hovering as it settles
-          const u = (a - T_HOVER) / (T_WIND - T_HOVER);
-          z = Z0 * 1.25; yaw = -.32 + .06 * Math.sin(u * Math.PI); pit = -.2; y = logoY + .25 * Math.sin(u * Math.PI);
-        } else if (a < T_RUSH){                        // the wind-up: it draws back and squashes
-          const u = s5((a - T_WIND) / (T_RUSH - T_WIND));
-          z = Z0 * lerp(1.25, 1.5, u); yaw = lerp(-.32, -.5, u); pit = lerp(-.2, -.12, u); sx = 1 + .1 * u; sy = 1 - .13 * u;
-        } else {                                       // and rushes in on the beat, stretching
-          const v = (a - T_RUSH) / (SLAM - T_RUSH), u = eI3(v);
-          z = Z0 * lerp(1.5, 1, u); yaw = -.5 * (1 - u); pit = -.12 - .16 * u; sx = 1.1 - .2 * v; sy = .87 + .33 * v;
-        }
-      } else {
-        const wI = still ? 1 : s5(L / 2);
-        if (!still){
-          const e = Math.exp(-L * 6);
-          z -= Z0 * .12 * e * Math.cos(L * 13);        // the punch: in past its mark, and back
-          const q = Math.exp(-L * 9) * Math.cos(L * 17); sx = 1 + .12 * q; sy = 1 - .16 * q;
-        }
-        yaw = wI * (.36 * Math.sin(L * .5) + .07 * Math.sin(L * 1.3));
-        pit = -.28 + wI * .1 * Math.sin(L * .7 + .6);
-        rol = wI * .045 * Math.sin(L * .43);
-        y = logoY + wI * .55 * Math.sin(L * 1.2);
-        z += wI * 2 * Math.sin(L * .33);
-        if (!still && L > SECTION - TURN){ const k = Math.floor((L + TURN) / SECTION), sec = L + TURN - k * SECTION; yaw += TAU * (k - 1 + s5(sec / TURN)); }   // a full turn ends each section, on its downbeat
+    /* the KN's shots before the slam, one a hit: which, and its framing (FK: the lens, PCX/PCY: where its axis meets the tube) */
+    let SHOT = 9, FK = 1, SOLID = 1, CHK = 1, ALPHA = 1, SWEEP = -1, SETK = 1;
+    const K_BURST = 0, K_CHROME = 1, K_HERO = 2, K_PROFILE = 3, K_CLOSE = 4, K_TOP = 5, K_WIND = 6, K_HOLD = 7, K_RUSH = 8, K_LOOP = 9;
+    function shotPose(S){
+      let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, sx = 1, sy = 1, u;
+      FK = 1; SOLID = 1; CHK = 1; ALPHA = 1; SWEEP = -1; SETK = 0;
+      if (S < T_CH){ SHOT = K_BURST; u = (S - T_KN) / .4;   // out of the tube in wireframe, tumbling
+        z = Z0 * Math.exp(lerp(Math.log(3.2), Math.log(1.1), eO3(u))); yaw = lerp(-TAU * 1.25, -.35, eO3(u)); pit = lerp(-.8, -.18, eO3(u)); rol = lerp(.7, 0, eO3(u)); SOLID = 0; CHK = 0;
+      } else if (S < 8.8){ SHOT = K_CHROME; u = (S - T_CH) / .4; SETK = 1;   // chrome, on the set, a glint crossing
+        z = Z0 * lerp(1.18, 1.05, u); yaw = lerp(-.4, .32, eIO(u * .9)); pit = -.2; y = logoY + .3 * Math.sin(u * Math.PI); SWEEP = u * 1.2;
+      } else if (S < 9.2){ SHOT = K_HERO; u = (S - 8.8) / .4;                // from below, looking up
+        z = Z0 * lerp(.98, .9, u); yaw = lerp(.6, .18, u); pit = lerp(.42, .3, u); rol = -.12; y = logoY + lerp(1.2, 1.7, u);
+      } else if (S < T_EDGE){ SHOT = K_PROFILE; u = (S - 9.2) / .4;          // a whip in profile
+        z = Z0; yaw = lerp(-1.45, 1.55, eIO(u)); pit = -.12; rol = lerp(.22, -.12, u);
+      } else if (S < 9.8){ SHOT = K_CLOSE; u = (S - T_EDGE) / .2;            // an extreme close-up on the K's arm
+        FK = 3.6; yaw = lerp(.28, .4, u); pit = lerp(-.3, -.22, u); SWEEP = u;
+      } else if (S < 10.0){ SHOT = K_TOP; u = (S - 9.8) / .2;                // from above, rolling
+        z = Z0 * 1.08; pit = -1.15; yaw = .15; rol = lerp(-.7, .45, u);
+      } else if (S < 10.4){ SHOT = K_WIND; u = s5((S - 10.0) / .4); SETK = 1;   // the wind-up: it draws back and squashes
+        z = Z0 * lerp(1.15, 1.5, u); yaw = lerp(.45, -.5, u); pit = lerp(-.2, -.12, u); sx = 1 + .1 * u; sy = 1 - .13 * u;
+      } else if (S < 10.8){ SHOT = K_HOLD; u = (S - 10.4) / .4;              // closer: the held breath
+        FK = 1.45; z = Z0 * 1.5; yaw = lerp(-.5, -.64, u); pit = -.12; sx = 1.1; sy = .87; rol = .03 * Math.sin(u * 40) * u;
+      } else { SHOT = K_RUSH; u = (S - 10.8) / .4; SETK = 1;                // and rushes in on the hit, stretching
+        const e = eI3(u); z = Z0 * lerp(1.5, 1, e); yaw = -.64 * (1 - e); pit = -.12 - .16 * e; sx = 1.1 - .2 * u; sy = .87 + .33 * u;
       }
+      POSE[0] = yaw; POSE[1] = pit; POSE[2] = rol; POSE[3] = y; POSE[4] = z; POSE[5] = sx; POSE[6] = sy;
+    }
+    function pose(L, still){
+      /* the loop's pose: smooth curves, plus the springs */
+      let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, sx = 1, sy = 1;
+      const wI = still ? 1 : s5(L / 2);
+      if (!still){
+        const e = Math.exp(-L * 6);
+        z -= Z0 * .12 * e * Math.cos(L * 13);          // the punch: in past its mark, and back
+        const q = Math.exp(-L * 9) * Math.cos(L * 17); sx = 1 + .12 * q; sy = 1 - .16 * q;
+      }
+      yaw = wI * (.36 * Math.sin(L * .5) + .07 * Math.sin(L * 1.3));
+      pit = -.28 + wI * .1 * Math.sin(L * .7 + .6);
+      rol = wI * .045 * Math.sin(L * .43);
+      y = logoY + wI * .55 * Math.sin(L * 1.2);
+      z += wI * 2 * Math.sin(L * .33);
+      if (!still && L > SECTION - TURN){ const k = Math.floor((L + TURN) / SECTION), sec = L + TURN - k * SECTION; yaw += TAU * (k - 1 + s5(sec / TURN)); }   // a full turn ends each section
       POSE[0] = yaw + lean + spin; POSE[1] = pit + tilt; POSE[2] = rol; POSE[3] = y + hop; POSE[4] = z; POSE[5] = sx; POSE[6] = sy;
     }
     function physics(dt){
@@ -2276,16 +2531,7 @@ M.createTerminal = function createTerminal(opts){
       fit(hh);
       const dt = lastT < 0 || still ? 0 : clamp(t - lastT, 0, .1); lastT = t;
       if (still) a = SLAM + 22;
-      /* the clock: the picture's own, leaning onto the tune's while it plays (at most 6% faster or slower, so nothing
-         ever jumps; a big difference, only at the tune's start, is taken at once) */
-      const mu = M.sound && M.sound.music;
-      if (mu && !still){
-        let mt = -1; try { if (mu.alive(a + sync)) mt = mu.time(); } catch (e){}
-        if (mt >= 0){ const d = mt - (a + sync); if (Math.abs(d) > .75) sync += d; else sync += clamp(d, -dt * .06, dt * .06); }
-      }
-      a += sync; if (a < 0) a = 0;
       ageNow = a; api.age = a;
-      const L = a - SLAM;
       /* quality: when frames keep coming late, fewer blur samples, then no mirror under the scroller (never the
          resolution, so nothing pops); back up after a long run of good frames */
       const wn = performance.now();
@@ -2293,82 +2539,113 @@ M.createTerminal = function createTerminal(opts){
         if (slowAcc > .5 && wn - qAt > 2000){ qAt = wn; slowAcc = 0; if (NMAX > 2) NMAX = 2; else SS = 1; }
         else if (fastAcc > 8000 && wn - qAt > 8000){ qAt = wn; fastAcc = 0; if (SS < 2) SS = 2; else if (NMAX < NTOP) NMAX = NTOP; } } }
       lastW = wn;
-      /* the beat, from the tune's pattern at the picture's time (the same with or without sound): brightness only */
-      let bk = 0;
-      if (mu && mu.env && !still){ const e = mu.env(a); bk = e.kick * (a < SLAM ? .5 : .8); }
       if (dt > 0) physics(dt);
-      tg.save(); G = tg; OY = t0; tg.setTransform(1, 0, 0, 1, 0, t0);
-      tg.fillStyle = P.bg; tg.fillRect(0, 0, W2, h); lumAcc += W2 * h * SL[0];
-      if (still || a >= T_PAY) scene(a, L, dt, still, bk);
-      if (!still && a < T_PAY + .5){
-        typeOn(tg, true);
-        sName(a); sJ(a); sWall(a); sGoat(a);
-        tg.globalCompositeOperation = 'source-over'; tg.setTransform(1, 0, 0, 1, 0, t0);
-        rasterOn(a);
+      kHot0 = kHot;
+      const S = still ? a : warp(a);
+      /* the jolts: decaying shakes from the hits (the real clock: they keep going through a hit-stop) */
+      let shx = 0, shy = 0;
+      if (!still) for (let i = 0; i < KK.length; i += 2){ const d = a - KK[i]; if (d < 0) break; if (d > .6) continue; const e = KK[i + 1] * Math.exp(-d * 11); shx += e * Math.sin(d * 71 + KK[i] * 13); shy += e * Math.cos(d * 59 + KK[i] * 7); }
+      const sk = Math.min(W, h) * .014;
+      tg.save(); G = tg; OY = t0;
+      tg.setTransform(1, 0, 0, 1, 0, t0); tg.fillStyle = P.bg; tg.fillRect(0, 0, W2, h); lumAcc += W2 * h * SL[0];
+      BX = Math.round(shx * sk); BY = t0 + Math.round(shy * sk);
+      tg.setTransform(1, 0, 0, 1, BX, BY);
+      if (still || S >= T_KN) knScene(a, S, dt, still);
+      else if (S >= T_W4) wallShot(S, a);
+      else if (S >= T_GOAT) panels(S, a);
+      else if (S >= T_W3) wallShot(S, a);
+      else if (S >= T_E) edenScene(S);
+      else if (S >= T_OUTJ) wallShot(S, a);
+      else if (S >= T_J) jScene(S);
+      else if (S >= T_I1) wallShot(S, a);
+      else nameScene(S, a);
+      /* the impact frames over the cuts they hide (the real clock: two or three frames each) */
+      if (!still){
+        tg.setTransform(1, 0, 0, 1, BX, BY);
+        if (a >= T_I1 && a < T_I1 + .07) impact1();
+        else if (a >= T_J && a < T_J + .07) impact2(a);
+        else if (a >= T_E && a < T_E + .07) impact3();
       }
-      tg.restore(); G = tg;
-      lastA = a;
+      /* the sound effects whose moment this frame reached (none from a jump: those are skipped, never queued) */
+      if (!still && a < SLAM + 1){
+        if (cueA < 0 || a - cueA > .25 || a < cueA) cueA = a - 1e-4;
+        for (let i = 0; i < CUES.length; i++){ const c = CUES[i]; if (c[0] > cueA && c[0] <= a) sfx(c[1], c[2]); }
+        cueA = a;
+      }
+      tg.restore(); G = tg; BX = 0; BY = 0;
     }
-    function scene(a, L, dt, still, bk){
+    function knScene(a, S, dt, still){
+      const L = S - SLAM, A = a - SLAM;
+      if (still || L >= 0){ SHOT = K_LOOP; FK = 1; SOLID = 1; CHK = 1; ALPHA = 1; SWEEP = -1; SETK = 1; pose(L, still); }
+      else shotPose(S);
+      if (SHOT !== lastShot){ prevOk = false; lastShot = SHOT; }   // a cut: no blur across it
+      const yaw = POSE[0], pit = POSE[1], rol = POSE[2], y = POSE[3], z = POSE[4], sx = POSE[5], sy = POSE[6];
       /* the shock of the slam, for the floor and the flash */
       let shT = 9, shS = 0;
-      if (!still && a >= SLAM && L < 3){ shT = L; shS = 1; }
+      if (!still && L >= 0 && L < 3){ shT = L; shS = 1; }
       else if (!still && L > SECTION){ const sec = L % SECTION; if (sec < 2.5){ shT = sec; shS = .5; } }   // each section's downbeat: a softer wave
-      pose(a, L, still);
-      const yaw = POSE[0], pit = POSE[1], rol = POSE[2], y = POSE[3], z = POSE[4], sx = POSE[5], sy = POSE[6];
-      /* stars and the floor's run */
-      let speed = still ? 0 : a < SLAM ? 6 + 300 * sstep(T_RUSH, SLAM, a) * (a < SLAM ? 1 : 0) : 9;
-      speed += 70 * kick + 20 * bk;
-      dist += speed * dt; floorD += (still ? 0 : 3 + 9 * sstep(T_PAY, T_FLY + .5, a) * (1 - sstep(T_HOVER, T_WIND, a)) + 6 * kick) * dt;
-      /* the logo's place on the tube and its fade in (out of the vanishing point) */
-      const alpha = still ? 1 : sstep(T_FLY, T_FLY + .25, a), solid = still || a >= T_HOVER ? 1 : sstep(T_SOLID, T_SOLID + .75, a), chromeK = still ? 1 : sstep(T_SOLID + .45, T_HOVER + .1, a);
-      let shake = 0, shakeX = 0;
-      if (!still && L >= 0 && L < 1.2){ const e = Math.exp(-L * 6.5); shake = e * Math.sin(L * 40 + 1.2) * h * .02; shakeX = e * Math.sin(L * 47) * h * .011; }
+      let speed = still ? 0 : SHOT === K_RUSH ? 6 + 300 * sstep(10.8, SLAM, S) : SHOT === K_LOOP ? 9 : 40;
+      speed += 70 * kick;
+      dist += speed * dt; floorD += (still ? 0 : SHOT === K_LOOP ? 3 + 6 * kick : 14) * dt;
+      F = F0 * FK; pcx = cx; pcy = hy;
       xform(yaw, pit, rol, 0, y, z, sx, sy);
-      const lsx = cx, lsy = hy - F * y / z, lr = F * 8.5 / z;
-      /* the backdrop (the tube was cleared to the background already) */
+      if (SHOT === K_CLOSE){   // the close-up: the tip of the K's upper arm held near the middle of the frame
+        const k = LET[0].o + LET[0].n + 6, u = (S - T_EDGE) / .2;
+        pcx += lerp(W2 * .56, W2 * .5, u) - qx[k]; pcy += lerp(h * .36, h * .44, u) - qy[k];
+        xform(yaw, pit, rol, 0, y, z, sx, sy);
+      }
+      const lsx = SHOT === K_CLOSE ? pcx : cx, lsy = pcy - F * y / z, lr = F * 8.5 / z;
       G = tg;
-      if (shake || shakeX) tg.translate(Math.round(shakeX), Math.round(shake));
-      bars(still ? 3.1 : a, a, still, bk);
-      floor(a, still, shT, shS, z, bk, floorD);
-      const sb = still ? 1 : sstep(T_PAY + .1, T_PAY + .8, a), nst = NST;
-      drawStars(dist + (still ? 37 : 0), speed, z, 1e9, sb, nst);
-      if (alpha > .02) drawShadow(alpha * solid);
-      if (!still && a >= T_RUSH && a < SLAM){ const u = (a - T_RUSH) / (SLAM - T_RUSH); tg.globalAlpha = u * u; radial(lsx, lsy, lr * (1.5 - .5 * u), SH[si(.3)], .6); tg.globalAlpha = 1; }
+      /* the backdrop: the set (bars, floor, stars), or a shot's own field of lines */
+      if (SETK){
+        bars(still ? 3.1 : S, S, still, 0);
+        floor(S, still, shT, shS, z, 0, floorD);
+        drawStars(dist + (still ? 37 : 0), speed, z, 1e9, 1, NST);
+        drawShadow(SOLID);
+      } else if (SHOT === K_BURST){ speedLines(S, cx, hy - F * logoY / Z0, 1.6, .55, 1); rings(S, cx, hy - F * logoY / Z0, 2.5, .3); }
+      else if (SHOT === K_HERO) streaks(S, true, 2.2, .34);
+      else if (SHOT === K_PROFILE) streaks(S, false, 2.6, .34);
+      else if (SHOT === K_CLOSE) speedLines(S, lsx, lsy, .7, .2, 1, 30);
+      else if (SHOT === K_TOP) rings(S, cx, lsy, 2.2, .35);
+      else if (SHOT === K_HOLD){ speedLines(S, cx, lsy, .9, .3, -1); drawStars(dist, 0, z, 1e9, .7, NST); }
+      if (!still && SHOT === K_RUSH){ const u = (S - 10.8) / .4; tg.globalAlpha = u * u; radial(lsx, lsy, lr * (1.5 - .5 * u), SH[si(.3)], .6); tg.globalAlpha = 1; }
       /* the logo: crisp on the tube, or (moving fast) blurred: sub-frame poses added up on a layer */
-      let sweep = -1;
-      if (!still && a >= T_SOLID + .5 && a < T_HOVER + .5) sweep = (a - T_SOLID - .5) / 1.1;   // the chrome forming
-      if (!still && L >= .05 && L < .95) sweep = (L - .05) / .9;
-      else if (!still && L > SECTION - .3){ const sec = (L + TURN) % SECTION; if (sec >= TURN - .1 && sec < TURN + .8) sweep = (sec - TURN + .1) / .9; }
+      let sweep = SWEEP;
+      if (!still && SHOT === K_LOOP){
+        if (L >= .05 && L < .95) sweep = (L - .05) / .9;
+        else if (L > SECTION - .3){ const sec = (L + TURN) % SECTION; if (sec >= TURN - .1 && sec < TURN + .8) sweep = (sec - TURN + .1) / .9; }
+      }
       if (!still && ageNow - keyGlint < .7) sweep = (ageNow - keyGlint) / .7;
-      envT = a * .7;
+      envT = S * .7;
       const lw = clamp(F / z * .1, 1.5, 4.5) * Math.max(1, pxk * .8);
       let ns = 1;
-      if (prevOk && !still && dt > 0 && alpha > .02 && !(L >= 0 && L < .14)){   // (no blur across the slam's jump)
-        const disp = Math.abs(yaw - pYaw) * lr * .9 + Math.abs(pit - pPit) * lr * .7 + Math.abs(F * y / z - F * pY / pZ) + Math.abs(F * 8.5 / z - F * 8.5 / pZ) * .5;
+      if (prevOk && !still && dt > 0 && SHOT !== K_CLOSE && !(L >= 0 && L < .14)){
+        const disp = Math.abs(yaw - pYaw) * lr * .9 + Math.abs(pit - pPit) * lr * .7 + Math.abs(rol - pRol) * lr * .7 + Math.abs(F * y / z - F * pY / pZ) + Math.abs(F * 8.5 / z - F * 8.5 / pZ) * .5;
         ns = clamp(Math.ceil(disp / 7), 1, NMAX);
       }
-      const impact = !still && L >= 0 && L < .067;
-      if (alpha > .02 && !impact){
-        if (ns <= 1){ drawLogo(alpha, solid, chromeK, lw, sweep); }
+      const impact = !still && A >= 0 && A < .06, imp5 = !still && a >= T_CH && a < T_CH + .06, imp6 = !still && a >= T_EDGE && a < T_EDGE + .067;
+      if (!impact && !imp5 && !imp6){
+        if (ns <= 1) drawLogo(ALPHA, SOLID, CHK, lw, sweep);
         else {
           /* the samples, from the last frame's pose to this one's over a 0.6 shutter, each painted whole on a clear layer
              and added at 1/ns: the exact average */
           BB[0] = BB[1] = 1e9; BB[2] = BB[3] = -1e9;
           grow(); xform(lerp(yaw, pYaw, .6), lerp(pit, pPit, .6), lerp(rol, pRol, .6), 0, lerp(y, pY, .6), lerp(z, pZ, .6), lerp(sx, pSx, .6), lerp(sy, pSy, .6)); grow();
           const bx0 = BB[0], by0 = BB[1], bx1 = BB[2], by1 = BB[3], l0 = lumAcc;
-          const pad = 6 * lw, X0 = Math.max(0, Math.floor((bx0 - pad) * rk)), Y0 = Math.max(0, Math.floor((by0 - pad) * rk)), X1 = Math.min(lay.width, Math.ceil((bx1 + pad) * rk)), Y1 = Math.min(lay.height, Math.ceil((by1 + pad) * rk));
-          ns = Math.min(ns, Math.max(2, Math.floor((TAP ? 1e5 : 1.6e5) / Math.max(1, (X1 - X0) * (Y1 - Y0)))));   // (a cap on the pixels painted: big and fast gets fewer, wider-spaced samples)
+          const pad = 6 * lw, ox = BX, oy = BY;
+          const X0 = Math.max(0, Math.floor((bx0 - pad) * rk)), Y0 = Math.max(0, Math.floor((by0 - pad) * rk)), X1 = Math.min(lay.width, Math.ceil((bx1 + pad) * rk)), Y1 = Math.min(lay.height, Math.ceil((by1 + pad) * rk));
+          ns = Math.min(ns, Math.max(2, Math.floor((TAP ? 1e5 : 1.6e5) / Math.max(1, (X1 - X0) * (Y1 - Y0)))));   // (a cap on the pixels painted)
           if (X1 > X0 && Y1 > Y0){
             lg.setTransform(1, 0, 0, 1, 0, 0); lg.clearRect(X0, Y0, X1 - X0, Y1 - Y0);
             for (let k = 0; k < ns; k++){
               const u = .6 * k / (ns - 1);
               xform(lerp(yaw, pYaw, u), lerp(pit, pPit, u), lerp(rol, pRol, u), 0, lerp(y, pY, u), lerp(z, pZ, u), lerp(sx, pSx, u), lerp(sy, pSy, u));
               sg.setTransform(1, 0, 0, 1, 0, 0); sg.clearRect(X0, Y0, X1 - X0, Y1 - Y0);
-              G = sg; sg.setTransform(rk, 0, 0, rk, 0, 0); drawLogo(alpha, solid, chromeK, lw, sweep);
+              G = sg; sg.setTransform(rk, 0, 0, rk, 0, 0); drawLogo(ALPHA, SOLID, CHK, lw, sweep);
               lg.globalCompositeOperation = 'lighter'; lg.globalAlpha = 1 / ns; lg.drawImage(smp, X0, Y0, X1 - X0, Y1 - Y0, X0, Y0, X1 - X0, Y1 - Y0);
             }
             lg.globalCompositeOperation = 'source-over'; lg.globalAlpha = 1; G = tg;
+            tg.setTransform(1, 0, 0, 1, ox, oy);
             tg.drawImage(lay, X0, Y0, X1 - X0, Y1 - Y0, X0 / rk, Y0 / rk, (X1 - X0) / rk, (Y1 - Y0) / rk);
             lumAcc = l0 + (lumAcc - l0) / ns;   // (each sample was tallied whole)
           }
@@ -2376,21 +2653,34 @@ M.createTerminal = function createTerminal(opts){
         }
       }
       pYaw = yaw; pPit = pit; pRol = rol; pY = y; pZ = z; pSx = sx; pSy = sy; prevOk = true;
-      drawStars(dist + (still ? 37 : 0), speed, 0, z, sb, NST);
-      if (still || a > SCROLL0 - .5) scroller(a, L, still);
+      if (SETK) drawStars(dist + (still ? 37 : 0), speed, 0, z, 1, NST);
+      if (still || S > SCROLL0 - .5) scroller(S, L, still);
       if (!still && ageNow - sparkAt < .28){        // a key's spark: short rays off the logo's edge
         const u = (ageNow - sparkAt) / .28, r0 = lr * (.7 + .5 * u), r1 = r0 + lr * .35 * (1 - u * .5);
         tg.strokeStyle = SH[si(1 - u * .6)]; tg.lineWidth = 3 * pxk; tg.beginPath();
         for (let k = 0; k < 7; k++){ const an = sparkA + (k - 3) * .16; tg.moveTo(lsx + Math.cos(an) * r0, lsy + Math.sin(an) * r0); tg.lineTo(lsx + Math.cos(an) * r1, lsy + Math.sin(an) * r1); }
         tg.stroke();
       }
-      if (impact){                                     // the impact frames: the field burns white, the logo a black cut-out, black rays
+      if (impact || imp5){                             // inverted: the field burns, the logo a black cut-out, black rays
         tg.fillStyle = SH[si(.92)]; tg.fillRect(-W2, -h, 3 * W2, 3 * h); lumAcc += W2 * h * .9;
-        silhouette(P.bg); radial(lsx, lsy, lr * 1.05, P.bg, L < .034 ? 1 : .55);
+        silhouette(P.bg); radial(lsx, lsy, lr * 1.05, P.bg, (impact ? A : a - T_CH) < .034 ? 1 : .55);
       }
-      const flash = !still && L >= .067 ? .3 * Math.exp(-(L - .067) * 12) : 0;
+      if (imp6){                                       // the close-up as line art: every edge, hot, rays off the tip
+        tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h);
+        radial(lsx, lsy, 0, SH[si(.4)], .45);
+        drawLogo(1, 0, 0, lw * 2.2, -1);
+        lumAcc += W2 * h * .08;
+      }
+      if (!still && A >= .067 && A < .7){              // the shockwave: a white ring out of the slam, through the hit-stop
+        const u = (A - .067) / .63, r = lr * (1.1 + 5 * eO3(u));
+        tg.globalAlpha = 1 - u; tg.strokeStyle = P.bright; tg.lineWidth = (14 * (1 - u) + 2) * pxk; tg.beginPath(); tg.arc(lsx, lsy, r, 0, TAU); tg.stroke();
+        tg.lineWidth = 3 * pxk; tg.beginPath(); tg.arc(lsx, lsy, r * .8, 0, TAU); tg.stroke(); tg.globalAlpha = 1;
+        lumAcc += r * TAU * 10 * pxk * (1 - u);
+      }
+      const flash = !still && A >= .067 ? .22 * Math.exp(-(A - .067) * 12) : !still && a >= T_CH + .067 && a < T_CH + .4 ? .15 * Math.exp(-(a - T_CH - .067) * 14) : 0;
       if (flash > .01){ tg.globalAlpha = flash; tg.fillStyle = P.bright; tg.fillRect(-W2, -h, 3 * W2, 3 * h); tg.globalAlpha = 1; lumAcc += W2 * h * flash; }
-      tg.setTransform(1, 0, 0, 1, 0, OY);
+      F = F0; pcx = cx; pcy = hy;
+      tg.setTransform(1, 0, 0, 1, BX, BY);
     }
     let sparkAt = -9, sparkA = 0;
     const BB = new Float32Array(4);
@@ -2401,11 +2691,11 @@ M.createTerminal = function createTerminal(opts){
       draw,
       live: () => (M.reader && M.reader.isOpen) ? 0 : 30,
       LENGTH: SLAM + 1.5,                            // the opening, through the slam (phones play this once, then the title card)
-      /* a key: in the cards, a glint over the type; in the scene, one more smooth turn (two at most ahead), a small
+      /* a key: in the opening, a glint over the type; in the loop, one more smooth turn (two at most ahead), a small
          hop, the next bar lit, the stars pushed; a spark and a glint at most ~8 times a second */
       key(){
         const now = performance.now(); if (now - lastKey < 120) return; lastKey = now;
-        if (ageNow < T_PAY){ kHot = Math.min(.55, kHot + .35); return; }
+        if (ageNow < SLAM){ kHot = Math.min(.55, kHot + .35); return; }
         if (spinT - spin < 2 * TAU) spinT = Math.round((spinT + TAU) / TAU) * TAU;
         hopV = Math.min(hopV + 2.6, 4);
         kick = Math.min(1.2, kick + .35);
@@ -2420,6 +2710,7 @@ M.createTerminal = function createTerminal(opts){
         down = !!isDown && on; lastU = on ? u : -1;
         if (on){ pu = u; pv = v; } else { pu = pv = -1; }
       },
+      stop(){ sfx('stopAll'); cueA = -1; },
     };
     return api;
   })(g);
