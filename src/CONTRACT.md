@@ -93,6 +93,7 @@ MAC.createTerminal({ content, aspect, cols? }) -> {   // cols: 54 on desktop, 40
                                 // command that needs no argument (main.js then sends Enter)
   line, app, page,              // the line being typed; the running app's name or ''; the page on screen ('' = welcome)
   canBack,                      // a page is open and nothing is running: back has somewhere to go
+  appStatus,                    // the running app's status(), if it has one: { note, keys: [{ label, key, ctrl?, hint? }] } (the phone strip)
   scrollInfo,                   // { off: rows up from the bottom, max, rowH: a row as 0..1 of the canvas } (1:1 touch scrolling)
 }
 ```
@@ -119,10 +120,16 @@ repeated render errors. Desktops get one centred column, unchanged. Touch screen
   each press and release plays `MAC.sound.key(code, down)` with the key's real code. A strip of function keys above:
   the pages (they fold the keyboard away, for reading), `term.suggest` words while typing, the app's name in an app. The
   keyboard folds down to the strip (its last key; also when a drag reads back up a page) and comes back on a tap on the tube.
-- games (snake, tetris, breakout) swap the letters for a pad (big arrows, space, return, pause, esc; `abc` / `pad` swaps
-  back); on a phone on its side the pad's halves sit either side of the tube, like a handheld (body.land.gaming). Pad keys
-  never auto-repeat: games time held `touchKey` keys themselves (tetris: 170 ms / 50 ms auto-shift and soft drop;
-  breakout: the paddle moves while held). Touches on the tube go to the app's `drag` first (swipes, the paddle).
+- every full-screen app gets controls made for it (main.js `PADS`, and the app's `status()`):
+  tetris: left / right side by side and soft drop under them for the left thumb, turn either way and hard drop for the
+  right, hold and pause above (170 ms / 50 ms auto-shift, held soft drop); snake: one round pad (direction from the thumb's
+  angle, a dead spot and some give between axes so a diagonal thumb never turns twice; sliding round turns again), pause
+  and esc either side; breakout: two big halves for the paddle (it speeds up while held), serve and pause over them;
+  typing: the letters with `,` and `'` in place of `-` and `/`, and the test's speed and keys on the strip; the editor:
+  the letters, and its shortcuts of the moment on the strip; timer and clock: the keyboard folds away and their keys sit
+  on the strip. Pads swap with the letters (`abc` / `pad`); on a phone on its side a pad's halves sit either side of the
+  tube, like a handheld (body.land.gaming). Pad keys never auto-repeat: games time held `touchKey` keys themselves. Touches
+  on the tube go to the app's `drag` first (swipes, the paddle).
 - 1:1 drag scrolling with momentum and rubber-band ends; a swipe right (and the phone's own back, through one history
   entry) goes `back`; `MAC.toast(label, text)`, which terminal.js calls when it copies an address (never for secrets).
 Test hook: with `?debug` in the URL, flat() sets `MAC._term` to the terminal. localStorage is swapped for an in-memory store when the browser blocks it (head.html).
@@ -166,7 +173,8 @@ MAC.TERM.cmds[name] = { desc: 'one line', usage: 'name [args]', run(argv, io) } 
 // Full-screen apps (vim, games, top...) take over the whole terminal grid until they exit
 MAC.TERM.apps[name] = { desc, usage, start(api, argv) -> { key(e) -> bool, tick(dt) -> bool /*dirty*/, render(scr),
                                                           keyUp?(e), insertText?(str) /* phones */, tap?(col, row) -> bool /* phones */,
-                                                          drag?(col, row, phase) -> bool /* phones: swipes; true once the gesture is the app's */ } }
+                                                          drag?(col, row, phase) -> bool /* phones: swipes; true once the gesture is the app's */,
+                                                          status?() -> { note, keys } /* phones: state and keys for the strip */ } }
 // key events from the phone's keyboard carry touchKey: true (a keyUp always follows; no auto-repeat). A full-screen app
 // pauses itself when the tab is hidden (apps.js)
 // api = { cols, rows, fs, env, cwd, exit(code), print(text) /* goes to scrollback after exit */, sound: MAC.sound }

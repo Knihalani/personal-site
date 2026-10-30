@@ -724,7 +724,9 @@ function start(api, argv, flavor){
     return true;
   }
 
-  return { key, tick, render, tap, insertText };
+  /* phones: the shortcuts of the moment (the same as the bar on screen) as keys on the strip over the letters (main.js) */
+  function status(){ return { keys: barFor().flat().filter(it => it[2]).map(([hint, label, e]) => ({ hint, label, key: e.key, ctrl: e.ctrlKey })) }; }
+  return { key, tick, render, tap, insertText, status };
 }
 
 /* one editor; nano, vi and vim are quiet aliases (they work, but help lists edit once) */

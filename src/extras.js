@@ -333,6 +333,8 @@ T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer durati
     let lastRows = api.rows || 18;                     // the grid can change size under the app; render keeps this current
     const pause = () => { if (paused){ t0 += now() - pausedAt; paused = false; } else { pausedAt = now(); paused = true; } };
     return {
+      /* phones: its keys on the strip over the folded keyboard (main.js) */
+      status(){ return done ? { note: "time's up", keys: [{ label: 'close', key: 'q' }] } : { note: paused ? 'paused' : 'timer', keys: [{ label: paused ? 'resume' : 'pause', key: ' ' }, { label: '\u2212 1 min', key: '-' }, { label: '+ 1 min', key: '+' }, { label: 'restart', key: 'r' }, { label: 'quit', key: 'q' }] }; },
       /* phones: a tap pauses and resumes, and closes the finished timer; the bottom row is the way out */
       tap(col, row){ if (row >= lastRows - 1) return false; if (done) finish(); else pause(); return true; },
       key(e){
@@ -377,7 +379,7 @@ T.apps.timer = { g: 'tools', desc: 'count down, then beep', usage: 'timer durati
         scr.fill(bx, y, bw, 1, '·', 'faint'); scr.fill(bx, y, Math.round(bw * frac), 1, ' ', blk(done ? 'bright' : 'dim'));
         y += 2;
         center(scr, y, done ? "time's up" : paused ? 'paused' : fmtHMS(dur) + ' timer', done ? 'bright' : 'normal');
-        keysLine(scr, H - 1, done ? [['any key', 'close']] : [['space', paused ? 'resume' : 'pause'], ['q', 'quit'], ['+/-', 'a minute'], ['r', 'restart']]);
+        keysLine(scr, H - 1, done ? [['any key', 'close']] : TOUCH ? [['space', paused ? 'resume' : 'pause'], ['q', 'quit']] : [['space', paused ? 'resume' : 'pause'], ['q', 'quit'], ['+/-', 'a minute'], ['r', 'restart']]);   // phones: the rest are on the strip
       },
     };
   } };
@@ -389,6 +391,7 @@ T.apps.clock = { g: 'tools', desc: 'the time, in big digits', usage: 'clock',
     let last = '';
     let tz = ''; try { tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || '').replace(/_/g, ' '); } catch (e){}
     return {
+      status(){ return { note: 'clock', keys: [{ label: 'quit', key: 'q' }] }; },   // phones: the strip over the folded keyboard
       key(e){
         if (e.ctrlKey || e.metaKey) return false;
         if (isQuit(e)){ api.exit(0); return true; }
@@ -453,7 +456,9 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
     }
     const quit = () => { api.print(done ? 'typing: ' + wpm() + ' wpm, ' + acc() + '% accurate' + (newBest ? ', a new best' : '') : 'typing: stopped'); api.exit(0); };
     return {
-      /* phones have no esc: a tap on the keys line (the bottom row) quits */
+      /* phones: the test's state and its two keys on the strip over the letters (main.js) */
+      status(){ return { note: done ? wpm() + ' wpm \u00b7 ' + acc() + '%' : t0 ? wpm() + ' wpm \u00b7 ' + acc() + '% \u00b7 ' + fmtHMS(secs()) : 'start typing', keys: done ? [{ label: 'again', key: 'Enter' }, { label: 'quit', key: 'Escape' }] : [{ label: 'new passage', key: 'Tab' }, { label: 'quit', key: 'Escape' }] }; },
+      /* a tap on the keys line (the bottom row) quits */
       tap(col, row){ if (row >= lastRows - 1){ quit(); return true; } if (done){ reset(); return true; } return false; },
       key(e){
         if (e.ctrlKey || e.metaKey || e.altKey) return false;
@@ -506,9 +511,9 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
           scr.put(sx, sy + 1, 'time', 'dim'); scr.put(sx + 10, sy + 1, fmtHMS(secs()), 'normal');
           scr.put(sx, sy + 2, 'best', 'dim'); scr.put(sx + 10, sy + 2, best ? best + ' wpm' + (newBest ? '  new best' : '') : '-', newBest ? 'bright' : 'normal');
           if (acc() < 80) center(scr, H - 3, 'a best needs 80% accuracy', 'faint');
-          keysLine(scr, H - 1, TOUCH ? [['tap above', 'again'], ['q', 'quit']] : [['enter', 'again'], ['q', 'quit']]);
+          keysLine(scr, H - 1, TOUCH ? [['return', 'again'], ['q', 'quit']] : [['enter', 'again'], ['q', 'quit']]);
         } else {
-          keysLine(scr, H - 1, TOUCH ? [['esc', 'quit']] : t0 ? [['tab', 'new passage'], ['esc', 'quit']] : [['start typing', ''], ['tab', 'new passage'], ['esc', 'quit']]);
+          keysLine(scr, H - 1, TOUCH ? [['tab', 'new passage'], ['esc', 'quit']] : t0 ? [['tab', 'new passage'], ['esc', 'quit']] : [['start typing', ''], ['tab', 'new passage'], ['esc', 'quit']]);
         }
       },
     };

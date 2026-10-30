@@ -15,7 +15,7 @@ demoscene-style intro on the screen (a chrome 3D "KN", copper bars, a sine scrol
 | **type** | everything goes to the terminal. Start with `help`, or click a highlighted word |
 | **move the cursor** | look around. Move it down to lean back and see the whole desk and the hands |
 | **scroll** | scroll back through the terminal (also Page Up / Page Down, or Space when the prompt is empty) |
-| **phones** | the computer in your hand: the green tube in its beige bezel, and the desk's keyboard under it (real key sounds, esc, tab, ctrl and arrows, two layers of symbols for the shell). Above the keys, the main pages, then the matching commands as you type. Fold the keyboard away to read, tap the screen to bring it back. Games get a pad (a handheld, on its side) and take swipes. Drag or flick to scroll, swipe right (or the phone's back) to go back, tap an email to copy it |
+| **phones** | the computer in your hand: the green tube in its beige bezel, and the desk's keyboard under it (real key sounds, esc, tab, ctrl and arrows, two layers of symbols for the shell). Above the keys, the main pages, then the matching commands as you type. Fold the keyboard away to read, tap the screen to bring it back. Every game gets controls of its own (tetris a handheld's two thumbs, snake a round pad, breakout two big halves; a handheld on its side) and takes swipes; the editor and the typing test keep the letters with their keys on the strip, the timer and clock fold the keyboard away. Drag or flick to scroll, swipe right (or the phone's back) to go back, tap an email to copy it |
 
 Without WebGL the desktop gets the same terminal-only page. Deep links run a page on load:
 `#about`, `#j`, `#eden`, `#writing`, `#contact`, `#links`, `#help`, and `#post/<slug>` opens a post.

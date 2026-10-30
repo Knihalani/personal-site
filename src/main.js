@@ -437,12 +437,41 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       sym: ['{esc:1.25} 1 2 3 4 5 6 7 8 9 0 {bksp:1.75}', '{tab:1.5} - / : ; ( ) $ & @ {ret:2.5}', `{sym2:2} " . , ? ! ' | ~ * {up}`, '{ctrl:1.5} {abc:1.5} _ {space:5} = {left} {down} {right}'],
       sym2: ['{esc:1.25} [ ] { } # % ^ * + = {bksp:1.75}', '{tab:1.5} _ \\ | ~ < > ` & ; {ret:2.5}', `{sym1:2} : . , ? ! ' " @ $ {up}`, '{ctrl:1.5} {abc:1.5} _ {space:5} = {left} {down} {right}'],
     };
+    /* typing tests want the comma and the apostrophe where a shell wants - and / */
+    const VARIANT = { typing: { let4: "{n123:1.25} , {space:3.75} . ' {ret:1.75}" } };
+    /* pads: a layout per app, from how each is played. Grid areas name the keys; '.' is a gap (portrait) or the tube
+       (a phone on its side, where the pad's halves sit either side of it, like a handheld). Every landscape pad has an
+       'letters' key, the way back to the keyboard (portrait has it on the strip) */
+    const PK = {
+      left: { key: 'ArrowLeft', icon: ARROW.left }, right: { key: 'ArrowRight', icon: ARROW.right },
+      soft: { key: 'ArrowDown', icon: ARROW.down, sub: 'soft drop' },
+      drop: { key: ' ', code: 'Space', icon: 'M12 3.5v11M7 10l5 5 5-5M5 20h14', sub: 'drop' },
+      cw: { key: 'ArrowUp', code: 'KeyX', icon: 'M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5V9H15', sub: 'turn' },
+      ccw: { key: 'z', code: 'KeyZ', icon: 'M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5V9H9', sub: 'turn' },
+      hold: { key: 'c', code: 'KeyC', lg: 'hold' }, p: { key: 'p', code: 'KeyP', lg: 'pause' }, esc: { key: 'Escape', lg: 'esc' },
+      serve: { key: ' ', code: 'Space', lg: 'serve' },
+      bleft: { key: 'ArrowLeft', icon: 'M15 5l-7 7 7 7', big: 1 }, bright: { key: 'ArrowRight', icon: 'M9 5l7 7-7 7', big: 1 },
+      letters: { lg: 'abc', code: 'AltLeft', unpad: 1 }, dpad: { dpad: 1 },
+    };
+    const S2 = 'calc(var(--side) / 2 - 2px)';
+    const PADS = {
+      /* movement on the left thumb (left, right side by side; soft drop under them), turning and dropping on the right */
+      tetris: { cols: '1fr 1fr .28fr 1fr 1fr', rows: '.62fr 1fr 1fr', areas: ['esc p . hold hold', 'left right . ccw cw', 'soft soft . drop drop'],
+        lcols: [S2, S2, '1fr', S2, S2].join(' '), lrows: '.7fr 1fr 1fr', lareas: ['esc p . letters hold', 'left right . ccw cw', 'soft soft . drop drop'] },
+      /* one round pad in the middle (either thumb), pause and esc either side */
+      snake: { cols: '.8fr 2.4fr .8fr', rows: '1fr', areas: ['p dpad esc'],
+        lcols: 'var(--side) 1fr var(--side)', lrows: '1fr 1fr 1fr', lareas: ['dpad . p', 'dpad . esc', 'dpad . letters'] },
+      /* two big halves for the paddle, serve over them */
+      breakout: { cols: '1fr 1fr 1fr 1fr', rows: '.72fr 1.3fr', areas: ['esc p serve serve', 'bleft bleft bright bright'],
+        lcols: [S2, S2, '1fr', S2, S2].join(' '), lrows: '.7fr 1fr 1fr', lareas: ['esc serve . p letters', 'bleft bleft . bright bright', 'bleft bleft . bright bright'] },
+    };
+    for (const n in PK){ const k = PK[n]; Object.assign(k, { name: n, w: 1, mod: k.lg ? 1 : 0, c: 1 }); if (!k.code) k.code = k.key || 'KeyA'; if (k.icon){ k.lg = SVG(k.icon) + (k.sub ? '<small>' + k.sub + '</small>' : ''); k.html = 1; k.arrow = 1; } }
     const parse = tok => {
       const m = /^\{(\w+)(?::([\d.]+))?\}$/.exec(tok);
       if (m) return Object.assign({ name: m[1], w: +(m[2] || 1) }, SP[m[1]]);
       return { ch: tok, w: 1, code: codeOf(tok), c: !/[a-z]/i.test(tok) };
     };
-    let land = null, layer = 'let', pad = false, shiftSt = 0, shiftAt = 0, ctrlOn = false, folded = false;   // shiftSt: 0 off, 1 once, 2 caps lock
+    let land = null, layer = 'let', pad = '', variant = '', shiftSt = 0, shiftAt = 0, ctrlOn = false, folded = false;   // shiftSt: 0 off, 1 once, 2 caps lock
     const slots = new Map();   // slot id -> key element (so a held key survives a layer change)
     const keyEl = (k, slot) => {
       const d = D.createElement('div'); d.className = 'key' + (k.mod ? ' mod' : '') + (k.c ? ' c' : '') + (k.arrow ? ' arrow' : '') + (k.gap ? ' gap' : '') + (k.name ? ' k-' + k.name : '');
@@ -456,13 +485,20 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       d._k = k; d._slot = slot; slots.set(slot, d); return d;
     };
     const render = () => {
-      board.textContent = ''; slots.clear(); board.classList.toggle('gaming', pad);
+      board.textContent = ''; slots.clear(); board.classList.toggle('gaming', !!pad);
       if (pad){
-        const g = D.createElement('div'); g.className = 'pad';
-        for (const n of ['esc', 'up', 'p', 'left', 'down', 'right', 'ret', 'space', 'letters']) g.appendChild(keyEl(Object.assign({ name: n, w: 1 }, SP[n], n === 'space' ? { lg: 'space', mod: 1, c: 1 } : {}), 'pad:' + n));
-        board.appendChild(g); paintMods(); return;
+        const def = PADS[pad], areas = land ? def.lareas : def.areas, g = D.createElement('div'); g.className = 'pad pad-' + pad;
+        g.style.gridTemplateColumns = land ? def.lcols : def.cols; g.style.gridTemplateRows = land ? def.lrows : def.rows;
+        g.style.gridTemplateAreas = areas.map(r => '"' + r + '"').join(' ');
+        for (const n of new Set(areas.join(' ').split(' '))){
+          if (n === '.') continue;
+          const d = PK[n].dpad ? dpadEl() : keyEl(PK[n], 'pad:' + n);
+          d.style.gridArea = n; g.appendChild(d);
+        }
+        board.appendChild(g); return;
       }
       const rows = (land ? L : P)[layer].slice();
+      if (!land && layer === 'let' && VARIANT[variant]) rows[3] = VARIANT[variant].let4;
       if (!land) rows.unshift(P.fn);
       rows.forEach((r, y) => {
         const row = D.createElement('div'); row.className = 'row' + (!land && y === 0 ? ' fn' : '');
@@ -484,6 +520,33 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       for (const a of held){ const n = slots.get(a.el._slot); if (n && n._k.name === a.el._k.name && a.el._k.name){ a.el = n; n.classList.add('down'); } }
     };
 
+    /* the round pad (snake): one control, four arms. The direction is the thumb's angle from the middle, with a dead
+       spot in the middle and some give before a held thumb changes axis, so a slightly diagonal thumb never turns
+       twice; sliding the thumb round turns again, as on a real pad */
+    const DIRS = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+    function dpadEl(){
+      const d = D.createElement('div'); d.className = 'key dpad'; d._k = { name: 'dpad', dpad: 1, c: 1 };
+      const ring = D.createElement('div'); ring.className = 'dp'; d.appendChild(ring);
+      for (const n of ['up', 'right', 'down', 'left']){ const c = D.createElement('span'); c.className = 'cap arm ' + n; c.innerHTML = '<span class="lg">' + SVG(ARROW[n]) + '</span>'; ring.appendChild(c); }
+      const hub = D.createElement('span'); hub.className = 'hub'; ring.appendChild(hub);
+      return d;
+    }
+    const dpadDir = (a, x, y) => {
+      const r = a.el.querySelector('.dp').getBoundingClientRect(), dx = x - (r.left + r.width / 2), dy = y - (r.top + r.height / 2);
+      if (Math.hypot(dx, dy) < r.width * 0.12) return a.dir || '';
+      const horiz = a.dir === 'left' || a.dir === 'right', vert = a.dir === 'up' || a.dir === 'down';
+      const H = Math.abs(dx) > Math.abs(dy) * (vert ? 1.35 : horiz ? 1 / 1.35 : 1);
+      return H ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'up' : 'down');
+    };
+    const dpadSet = (a, dir) => {
+      if (dir === a.dir) return;
+      const ring = a.el.querySelector('.dp');
+      if (a.dir){ const c = ring.querySelector('.arm.' + a.dir); c.classList.remove('down'); if (sound) try { sound.key(DIRS[a.dir], false); } catch (e){} sendUp(DIRS[a.dir], DIRS[a.dir]); }
+      a.dir = dir;
+      if (dir){ ring.querySelector('.arm.' + dir).classList.add('down'); unlock(); buzz(); if (sound) try { sound.key(DIRS[dir], true); } catch (e){} send(DIRS[dir], DIRS[dir], {}); }
+    };
+    board.addEventListener('pointermove', e => { const a = active.get(e.pointerId); if (a && a.dpad) dpadSet(a, dpadDir(a, e.clientX, e.clientY)); });
+
     /* ---- sending keys ---- */
     const ev = (type, key, code, o = {}) => ({ type, key, code, repeat: !!o.repeat, isComposing: false, ctrlKey: !!o.ctrl, altKey: false, metaKey: false, shiftKey: !!o.shift, synthetic: true, touchKey: true, preventDefault(){}, stopPropagation(){} });
     const send = (key, code, o) => { try { term.handleKey(ev('keydown', key, code, o)); } catch (e){ oops(e); } };
@@ -493,7 +556,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     /* what a key does on the way down */
     const act = (k, a) => {
       if (k.layer){ setLayer(k.layer); return; }
-      if (k.unpad){ api.setPad(false); return; }   // a phone on its side: the pad's own way to the letters
+      if (k.unpad){ api.setPad(''); return; }   // a phone on its side: the pad's own way to the letters
       if (k.name === 'shift'){
         const t = performance.now();
         shiftSt = shiftSt === 2 ? 0 : shiftSt === 1 ? (t - shiftAt < 380 ? 2 : 0) : 1; shiftAt = t; paintMods(); return;
@@ -525,17 +588,24 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     const popFor = (a, k) => {
       if (k.ch == null) return;
       let p = pops.find(x => !x._on); if (!p){ p = D.createElement('div'); p.className = 'pop'; D.body.appendChild(p); pops.push(p); }
-      const r = a.el.querySelector('.cap').getBoundingClientRect(), w = Math.max(44, r.width * 1.45), h = Math.max(50, r.height * 1.12);
+      const r = a.rect, w = Math.max(44, r.width * 1.45), h = Math.max(50, r.height * 1.12);
       p.textContent = a.key && a.key.length === 1 ? a.key : k.ch;
       p.style.width = w + 'px'; p.style.height = h + 'px';
       p.style.left = clamp(r.left + r.width / 2 - w / 2, 3, innerWidth - w - 3) + 'px'; p.style.top = (r.top - h - 8) + 'px';
       p._on = true; p.classList.add('on'); a.pop = p; a.popAt = performance.now();
     };
     const popOff = a => { const p = a.pop; if (!p) return; a.pop = null; const wait = Math.max(0, 70 - (performance.now() - a.popAt)); setTimeout(() => { p._on = false; p.classList.remove('on'); }, wait); };
-    const press = (el, id) => {
+    /* where a cap is, for its preview: measured once (keys stay put) and before the press changes any style, so a
+       fast typist never waits on a layout */
+    let rectGen = 0; addEventListener('resize', () => { rectGen++; });
+    const capRect = el => { if (el._rg !== rectGen){ el._rect = el.querySelector('.cap').getBoundingClientRect(); el._rg = rectGen; } return el._rect; };
+    const press = (el, id, x, y) => {
       const k = el._k; if (!k || k.gap) return;
+      const a = { id, el };
+      if (k.dpad){ a.dpad = true; active.set(id, a); dpadSet(a, dpadDir(a, x, y)); return; }
+      if (!pad && k.ch != null) a.rect = capRect(el);
       unlock(); buzz();
-      const a = { id, el }; active.set(id, a);
+      active.set(id, a);
       el.classList.add('down');
       if (sound) try { sound.key(k.code || 'KeyA', true); } catch (e){}
       a.code = k.code;
@@ -544,6 +614,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     };
     const release = id => {
       const a = active.get(id); if (!a) return;
+      if (a.dpad){ dpadSet(a, ''); active.delete(id); return; }
       active.delete(id); clearTimeout(a.rep); a.el.classList.remove('down'); popOff(a);
       if (sound) try { sound.key(a.code || 'KeyA', false); } catch (e){}
       const k = a.el._k;
@@ -558,7 +629,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       e.preventDefault();
       const el = e.target.closest('.key'); if (!el || !board.contains(el)) return;
       if (active.has(e.pointerId)) release(e.pointerId);
-      press(el, e.pointerId);
+      press(el, e.pointerId, e.clientX, e.clientY);
     });
     for (const t of ['pointerup', 'pointercancel']) addEventListener(t, e => release(e.pointerId), true);
     /* no magnifier, callout, double-tap zoom or emulated mouse on the keys */
@@ -579,7 +650,10 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       el, echo, height,
       layout(l){ if (l === land) return; land = l; render(); },
       get pad(){ return pad; },
-      setPad(on){ on = !!on; if (on === pad) return; pad = on; if (!on) layer = 'let'; for (const id of [...active.keys()]) release(id); D.body.classList.toggle('gaming', on); render(); if (relayout()) build(); if (onPad) onPad(); },
+      /* name: an app with a pad of its own (PADS), or '' for the keyboard */
+      hasPad: name => !!PADS[name],
+      setPad(name){ name = PADS[name] ? name : ''; if (name === pad) return; pad = name; if (!name) layer = 'let'; for (const id of [...active.keys()]) release(id); D.body.classList.toggle('gaming', !!name); render(); if (relayout()) build(); if (onPad) onPad(); },
+      setVariant(v){ v = v || ''; if (v === variant) return; variant = v; if (!pad && layer === 'let') render(); },
       set onPad(f){ onPad = f; },
       get folded(){ return folded; },
       fold(f){
@@ -599,7 +673,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   function phone(){
     const strip = keys.el.querySelector('.sk'), foldBtn = keys.el.querySelector('.fold'), toastEl = $('#toast');
     const PAGES = ['about', 'j', 'eden', 'writing', 'contact', 'help'];
-    const GAMES = /^(snake|tetris|breakout)$/;
+    const STRIP_ONLY = /^(timer|clock)$/;
     const SVG = d => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg>';
     const keyEv = (key, type) => ({ type, key, code: key === ' ' ? 'Space' : key, repeat: false, isComposing: false, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, synthetic: true, preventDefault(){}, stopPropagation(){} });
     const fk = (label, act, o = {}) => {
@@ -615,8 +689,19 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       mode = m; strip.textContent = ''; strip.className = 'sk ' + m.split(':')[0];
       strip.setAttribute('aria-label', m.startsWith('app:') ? 'Keys' : m.startsWith('sug:') ? 'Suggestions' : 'Pages');
       if (m.startsWith('app:')){
-        const n = D.createElement('span'); n.className = 'note'; n.textContent = term.app; strip.appendChild(n);
-        if (GAMES.test(term.app)) strip.appendChild(fk(keys.pad ? 'abc' : 'pad', () => { keys.setPad(!keys.pad); render('app:' + term.app + ':' + keys.pad); }, { aria: keys.pad ? 'Letters' : 'Game pad' }));
+        /* the app's name or its state (a typing test's speed), the pad / letters swap for a game, then the app's own
+           keys of the moment (the editor's shortcuts, the timer's) from its status() */
+        const st = term.appStatus || {}, app = term.app;
+        const n = D.createElement('span'); n.className = 'note'; n.textContent = st.note || app; strip.appendChild(n);
+        if (keys.hasPad(app)) strip.appendChild(fk(keys.pad ? 'abc' : 'pad', () => { keys.setPad(keys.pad ? '' : app); mode = null; }, { aria: keys.pad ? 'Letters' : 'Game pad' }));
+        for (const k of st.keys || []){
+          const b = fk(k.label, () => {
+            const e = Object.assign(keyEv(k.key, 'keydown'), { ctrlKey: !!k.ctrl, touchKey: true, code: { ' ': 'Space', '-': 'Minus', '+': 'Equal' }[k.key] || (/^[a-z]$/i.test(k.key) ? 'Key' + k.key.toUpperCase() : k.key) });
+            term.handleKey(e); if (term.handleKeyUp) term.handleKeyUp(Object.assign({}, e, { type: 'keyup' }));
+          }, { aria: k.label });
+          if (k.hint){ const i = D.createElement('i'); i.textContent = k.hint; b.prepend(i); }
+          strip.appendChild(b);
+        }
         return;
       }
       if (m.startsWith('sug:')){
@@ -635,7 +720,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     };
     const fits = () => strip.classList.toggle('over', strip.scrollWidth > strip.clientWidth + 1);   // the edge fades only when there is more to swipe to
     const modeNow = () => {
-      if (term.app) return 'app:' + term.app + ':' + keys.pad;
+      if (term.app){ const st = term.appStatus; return 'app:' + term.app + ':' + keys.pad + ':' + (st ? JSON.stringify(st) : ''); }
       const l = term.line; if (l && l.trim()) return 'sug:' + l;
       return 'nav:' + (term.page || '') + ':' + term.canBack;
     };
@@ -684,12 +769,16 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     let wasReading = false, n = 0, wasApp = '';
     return changed => {
       const r = reading(); if (r !== wasReading){ wasReading = r; D.body.classList.toggle('reading', r); }
-      /* a game takes the pad (and the keyboard comes up for it); leaving it brings the letters back */
+      /* each app gets its controls: a game its own pad (and the keyboard comes up for it); the editor and the typing
+         test the letters (the typing test with , and ' to hand); the timer and the clock only their keys on the strip,
+         the keyboard folded away so the digits get the screen. Leaving brings the letters back */
       if (term.app !== wasApp){
-        const g = GAMES.test(term.app);
-        if (g){ keys.setPad(true); keys.fold(false); } else if (keys.pad) keys.setPad(false);
-        if (term.app && !g) keys.fold(false);
-        wasApp = term.app;
+        const a = term.app, base = a.split(' ')[0];
+        keys.setVariant(base === 'typing' ? 'typing' : '');
+        keys.setPad(keys.hasPad(base) ? base : '');
+        if (STRIP_ONLY.test(base)) keys.fold(true);
+        else if (a || STRIP_ONLY.test(wasApp) || keys.folded && wasApp) keys.fold(false);
+        wasApp = a;
       }
       placeMute();
       const m = modeNow();

@@ -107,6 +107,9 @@ body.touch.land #kb{ padding-bottom: max(5px, env(safe-area-inset-bottom, 0px)) 
   box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 2px 0 #7c7262, 0 3px 3px rgba(0,0,0,.28); -webkit-tap-highlight-color: transparent }
 .fk.down, #kb #mute:active{ transform: translateY(1.5px); box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 .5px 0 #7c7262, 0 1px 1px rgba(0,0,0,.25); background: linear-gradient(180deg, #bab09c, #a99e88) }
 .fk b{ font-weight: 700 }
+.fk i{ font-style: normal; font-weight: 700; font-size: 11.5px; color: #6a5f50; margin-right: -1px }
+.strip .sk.app .fk{ padding: 0 9px }
+@media (max-width: 359px){ .pad .key.c .lg{ font-size: 12px; letter-spacing: 0 } .pad .key .lg small{ font-size: 9.5px } }
 .fk.on::before, .fk .dot{ content: ""; width: 5px; height: 5px; border-radius: 50%; flex: none; background: #8dffb4; box-shadow: 0 0 5px rgba(141,255,180,.95) }
 .fk svg{ width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
 .fk.ico{ padding: 0 8px }
@@ -146,12 +149,26 @@ body.fold .board{ display: none }
 .key.on .led{ background: radial-gradient(circle at 40% 35%, #f0fff3, #8dffb4 60%); box-shadow: 0 0 6px rgba(141,255,180,.95) }
 .key.lock .led{ background: radial-gradient(circle at 40% 35%, #f0fff3, #8dffb4 60%); box-shadow: 0 0 8px 1px rgba(141,255,180,1) }
 /* the pad, for games: a big cross, and space, return, pause, esc */
-.pad{ display: grid; grid-template-columns: 1fr 1fr 1fr .3fr 1.15fr 1.15fr; grid-template-rows: 1fr 1fr }
-.pad{ height: calc(var(--fh) + 4 * var(--rh)) } body.land .pad{ height: calc(4 * var(--rh)) }
-.pad .key .lg{ font-size: 13px }
-.pad .key.arrow .lg svg{ width: 26px; height: 26px; stroke-width: 2.2 }
-.pad .k-up{ grid-area: 1 / 2 } .pad .k-left{ grid-area: 2 / 1 } .pad .k-down{ grid-area: 2 / 2 } .pad .k-right{ grid-area: 2 / 3 }
-.pad .k-esc{ grid-area: 1 / 1 } .pad .k-p{ grid-area: 1 / 3 } .pad .k-ret{ grid-area: 1 / 5 / 2 / 7 } .pad .k-space{ grid-area: 2 / 5 / 3 / 7 }
+.pad{ display: grid; height: calc(var(--fh) + 4 * var(--rh)) } body.land .pad{ height: calc(4 * var(--rh)) }
+.pad .key{ padding: 3.5px }
+.pad .key.c .lg{ flex-direction: column; gap: 3px; font-size: 14px; letter-spacing: .03em }
+.pad .key .lg small{ font: 500 10.5px/1 var(--hel); letter-spacing: .06em; color: #5d5246 }
+.pad .key.arrow .lg svg{ width: 30px; height: 30px; stroke-width: 2.1 }
+.pad .k-bleft .lg svg, .pad .k-bright .lg svg{ width: 44px; height: 44px; stroke-width: 2.4 }
+.pad .k-left .lg svg, .pad .k-right .lg svg{ width: 34px; height: 34px }
+.pad .k-drop .cap::before, .pad .k-serve .cap::before{ background: radial-gradient(130% 95% at 50% 12%, #f3ecdc 0, #e6dcc8 45%, #d8cdb6 100%) }
+/* the round pad: four arms on a dished disc, a hub in the middle */
+.dpad{ display: flex; align-items: center; justify-content: center; touch-action: none; container-type: size }
+.dp{ position: relative; flex: none; width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); border-radius: 50%;
+  background: radial-gradient(circle at 50% 45%, #3a332b 0, #2a2520 62%, #1f1b17 100%); box-shadow: inset 0 2px 6px rgba(0,0,0,.7), 0 1px 0 rgba(255,255,255,.12) }
+.dp .arm{ position: absolute; width: 33%; height: 33%; border-radius: 7px }
+.dp .arm.up{ left: 33.5%; top: 2% } .dp .arm.down{ left: 33.5%; bottom: 2% } .dp .arm.left{ left: 2%; top: 33.5% } .dp .arm.right{ right: 2%; top: 33.5% }
+.dp .arm .lg{ left: 0; right: 0; top: 0; bottom: 4px; display: flex; align-items: center; justify-content: center }
+.dp .arm .lg svg{ width: 28px; height: 28px; stroke: var(--ink); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.dp .hub{ position: absolute; left: 36%; top: 36%; width: 28%; height: 28%; border-radius: 50%; background: radial-gradient(circle at 45% 35%, #4a4239, #2a2520); box-shadow: inset 0 1px 2px rgba(0,0,0,.6) }
+.cap.down{ transform: translateY(2.5px); box-shadow: 0 .5px 0 #4d453a, 0 1px 1px rgba(0,0,0,.4); transition: none }
+.cap.down::before{ inset: 1.5px 2.5px 2.5px; background: radial-gradient(130% 95% at 50% 12%, #e9e0cd 0, #dbd0ba 50%, #cdc1a8 100%) }
+.cap.down::after{ opacity: 1; inset: 1.5px 2.5px 2.5px }
 .pad .k-letters{ display: none }
 /* a phone on its side, in a game: a handheld. The cross and esc / pause to the left of the tube, space, return and
    abc to the right, on the bezel itself; the tube keeps the whole height */
@@ -160,12 +177,9 @@ body.land.gaming #tube{ left: calc(var(--sxl) + var(--side)); right: calc(var(--
 body.land.gaming #kb{ top: 0; padding: 0; background: none; box-shadow: none; pointer-events: none }
 body.land.gaming #kb::before, body.land.gaming .strip{ display: none }
 body.land.gaming .board{ position: absolute; inset: 0; margin: 0; padding: max(10px, env(safe-area-inset-top, 0px)) var(--sxr) max(10px, env(safe-area-inset-bottom, 0px)) var(--sxl); background: none; box-shadow: none; border-radius: 0 }
-body.land.gaming .pad{ height: 100%; grid-template-columns: repeat(3, calc(var(--side) / 3 - 2px)) 1fr repeat(2, calc(var(--side) / 2 - 3px)); grid-template-rows: .8fr 1fr 1fr 1fr; column-gap: 0 }
+body.land.gaming .pad{ height: 100%; column-gap: 0 }
 body.land.gaming .pad .key{ pointer-events: auto; padding: 4px }
-body.land.gaming .pad .k-esc{ grid-area: 1 / 1 } body.land.gaming .pad .k-p{ grid-area: 1 / 3 }
-body.land.gaming .pad .k-up{ grid-area: 2 / 2 } body.land.gaming .pad .k-left{ grid-area: 3 / 1 } body.land.gaming .pad .k-right{ grid-area: 3 / 3 } body.land.gaming .pad .k-down{ grid-area: 4 / 2 }
-body.land.gaming .pad .k-letters{ display: flex; grid-area: 1 / 5 } body.land.gaming .pad .k-ret{ grid-area: 1 / 6 }
-body.land.gaming .pad .k-space{ grid-area: 2 / 5 / 5 / 7 }
+body.land.gaming .pad .k-letters{ display: flex }
 /* the key under a thumb, shown above it (the thumb hides the cap) */
 .pop{ position: fixed; z-index: 6; pointer-events: none; display: none; place-items: center; box-sizing: border-box; padding-bottom: 4px; border-radius: 9px;
   background: radial-gradient(130% 95% at 50% 12%, #f3ebdb 0, #e3d9c4 55%, #d2c6ad 100%); box-shadow: 0 0 0 1px rgba(60,50,40,.35), 0 3px 0 #9f927a, 0 10px 18px rgba(0,0,0,.45);

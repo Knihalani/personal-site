@@ -3323,6 +3323,7 @@ M.createTerminal = function createTerminal(opts){
   return { canvas, handleKey, handleKeyUp, handleTap, handleDrag, hitTest, insertText, update, run, scroll, resize, pointer, suggest, pick,
     get line(){ return input; },                          // the line being typed
     get app(){ return app ? app.name : ''; },             // the full-screen app running, or ''
+    get appStatus(){ const r = app ? appCall('status') : null; return r && typeof r === 'object' ? r : null; },   // phones: an app's optional status() -> { note, keys: [{ label, key, ctrl? }] } for main.js's strip
     get page(){ return page; },                           // the page on screen ('' = the welcome)
     get canBack(){ return !booting && !landing && !app && !job && !!(page || pages.length); },   // a page is open: back has somewhere to go
     get scrollInfo(){ return { off: scrollOff, max: Math.max(0, totalUnits() - ROWS), rowH: ch / H }; },   // off: rows up from the bottom; rowH: a row, 0..1 of the canvas
