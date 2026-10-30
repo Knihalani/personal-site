@@ -2189,7 +2189,7 @@ M.createTerminal = function createTerminal(opts){
       if (sk && on > lastTubeS && on <= S && (mx - nx) > W2 * .04 && tubeSnd < 1e9){ TUBEOPT.i = tubeSnd++; sfx('tubeOn', TUBEOPT); }
       c.setTransform(ax * rwc, ay * rwc, bx * rwc, by * rwc, WLF[0] * rwc + TOX, WLF[1] * rwc + TOY);
       const lu = 1.4 * pxk / Math.sqrt(det);
-      const big = (mx - nx) * rwc > 70;   // (small tubes: square corners, no inner rim)
+      const big = (mx - nx) * rwc > 70 && S < T_KN;   // (small tubes, and the wall behind the KN: square corners, no inner rim)
       if (big) rrect(c, -BZ, -BZ, TW + 2 * BZ, TH + 2 * BZ, .55); else { c.beginPath(); c.rect(-BZ, -BZ, TW + 2 * BZ, TH + 2 * BZ); }
       c.fillStyle = SH[si(.06)]; c.fill(); c.strokeStyle = SH[si(.24)]; c.lineWidth = lu; c.stroke();
       if (big){ rrect(c, -.04, -.04, TW + .08, TH + .08, .3); c.fillStyle = SH[si(.025)]; c.fill(); c.strokeStyle = SH[si(.14)]; c.stroke(); }
