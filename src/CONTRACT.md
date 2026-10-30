@@ -104,7 +104,7 @@ MAC.createTerminal({ content, aspect, cols?, width? }) -> {   // width: phones a
   scrollInfo,                   // { off: rows up from the bottom, max, rowH: a row as 0..1 of the canvas } (1:1 touch scrolling)
 }
 ```
-Phones (pointer: coarse) play the intro once, its opening (`DEMO.LENGTH`, about 15.5 s; any tap or key skips it), then settle on a title card:
+Phones (pointer: coarse) play the intro once, its opening (`DEMO.LENGTH`, about 12.7 s; any tap or key skips it), then settle on a title card:
 the name, the role line and a boot-disk menu of big rows (about, j, eden, writing when published, contact, links, play),
 tapped or chosen by number, the arrows and return; a returning visitor lands on the card with "welcome back", and `demo`
 plays the intro again. Home and back on phones are this card. Contact on phones gives each address [email] (mailto) and
@@ -112,16 +112,22 @@ plays the intro again. Home and back on phones are this card. Contact on phones 
 (the phone's afterglow). Test hooks: `intro` and `home` (read-only). On phones the card carries a slowly turning KN badge
 (its own small vector drawing, not the intro's logo), and when an animation is all that changes and nothing scrolls,
 only its rows are redrawn (the brightness tally `lum` swaps that drawing's share, so it stays the whole screen's). On desktops:
-The landing (every load, until the first command; deep links skip it) is a demoscene-style intro drawn on the canvas,
-a 14 s opening scored beat for beat by the tune (sound.js), each beat its own idea: the name painted by the beam in two
-interlaced fields (with "16 · Hong Kong" printed under it), gliding up into a header; "Co-founder / of J" craned up out
-of the floor in 3D; a pull-back to a wall of nine tubes streaming context, the middle one rolling to "Founder / of Eden"
-and the push back in; THE GOAT? (letters dropped onto a line with bounce, a riser, the letters sinking through the line,
-which becomes the horizon); then the answer: a wireframe "KN" tumbling in over copper bars and a floor, solidifying
-into chrome, winding up and slamming on the drop. Then a loop: the logo breathing on smooth curves with a full turn a
-section, and a sine scroller of `MAC.CONTENT` facts. Keys glint the type, or give the logo one more smooth turn and a
-hop; reduced motion gets one still frame. It animates at 30 fps through the viz `live` mechanism and stops when
-dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's clock, s) and
+The landing (every load, until the first command; deep links skip it) is an anime-OP-style opening drawn on the canvas,
+11.2 s to the slam on its own fixed 150 bpm grid (a cut or a hit every half beat or beat), in one phosphor: the tube
+ignites on a tunnel of bezels; KAIAV, NIHALANI and a huge 16 slam in; an impact frame; the picture was the middle tube of
+a wall of CRTs: the camera blasts back, flies along the wall as the tubes switch on in cascades (each a word or motif:
+KN, J, EDEN, AGENTS, CONTEXT, FOUNDERS, 16, a globe, a graph), whips round and dives into the J tube (J, CO-FOUNDER,
+YOUNG FOUNDERS, GLOBAL over a globe), out in a barrel roll and into the EDEN tube (EDEN, FOUNDER, AGENTS over a graph of
+agents, CONTEXT in brackets); the wall spells THE GOAT? column by column and hits as three comic panels; every tube a KN,
+a dive, and the KN bursts out in wireframe, turns chrome on an inverted frame and is cut from angle to angle on the hits
+(low hero, profile whip, an extreme close-up as line art, from above, the wind-up, the rush) into the slam (an inverted
+frame, a hit-stop with a white ring shockwave). Impact frames last two or three frames over a short hit-stop (the
+picture's clock holds, then catches up); only two are bright full frames (8.4 s, 11.2 s), the rest dark field with
+bright line art. Motion blur is real (sub-frame samples averaged). Then a loop: the logo breathing on smooth curves with
+a full turn a section, and a sine scroller of `MAC.CONTENT` facts (the name, J, Eden). Keys glint the type, or give the
+logo one more smooth turn and a hop; reduced motion gets one still frame. It is silent until the page has been touched;
+then it cues `MAC.sound.sfx(name, opts)` on its hits, and `sfx('stopAll')` when dismissed. It animates at 30 fps through
+the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's clock, s) and
 `introPose` (the logo's pose in the last frame).
 
 ## main.js (integrator)
