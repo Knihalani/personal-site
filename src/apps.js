@@ -94,7 +94,7 @@ T.apps.tetris = {
       const d = h - (BH || h);
       board = board.length ? (d >= 0 ? Array.from({ length: d }, () => Array(BW).fill(null)).concat(board) : board.slice(-d)) : Array.from({ length: h }, () => Array(BW).fill(null));
       BH = h;
-      if (cur){ cur.y += d; while (!fits(cur.p, cur.r, cur.x, cur.y) && cur.y > -4) cur.y--; }
+      if (cur){ const y0 = cur.y; cur.y += d; if (TOUCH && d < 0) cur.y = Math.max(cur.y, Math.min(y0, 0)); while (!fits(cur.p, cur.r, cur.x, cur.y) && cur.y > -4) cur.y--; }   // (phones: a shorter well, as the keyboard comes up, never lifts the piece out of sight)
     }
     let bag = [], queue = [], cur = null, hold = null, canHold = true;
     layout(api.cols || 72, api.rows || 23);
@@ -291,9 +291,9 @@ T.apps.tetris = {
           scr.put(rx, ry + 4, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx, ry + 5, canHold ? 'normal' : 'faint');
           [['SCORE', score, 'bright'], ['HIGH', Math.max(hi, score), score > hi ? 'bright' : 'normal'], ['LEVEL', level, 'normal'], ['LINES', lines, 'normal']]
             .forEach(([a, v, st], i) => { scr.put(rx, ny + i, a.padEnd(6), 'dim'); scr.put(rx + 6, ny + i, String(v), st); });
-          const ks = TOUCH ? [['\u2190\u2192', 'move'], ['turn', 'L R'], ['drop', 'hard'], ['\u2193', 'soft'], ['hold', 'swap'], ['swipe', 'move']]   // the phone's pad
+          const ks = TOUCH ? [['move', 'sideways'], ['turn', 'two ways'], ['drop', 'to floor'], ['soft', 'a row'], ['hold', 'swap']]   // the phone's pad, in words (VT323 has no arrows)
             : [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
-          ks.forEach(([a, b], i) => { const y = ny + 5 + i; if (y >= scr.rows - 1) return; scr.put(rx, y, a.padEnd(7), b ? 'normal' : 'faint'); scr.put(rx + 7, y, b, 'faint'); });
+          ks.forEach(([a, b], i) => { const y = ny + 5 + i; if (y >= scr.rows - 1) return; scr.put(rx, y, a.padEnd(TOUCH ? 5 : 7), b ? 'normal' : 'faint'); scr.put(rx + (TOUCH ? 5 : 7), y, b, 'faint'); });
         } else if (compact){
           const rx = STACK ? ox + 2 : ox + W + 3, ry = STACK ? oy + BH + 3 : oy;
           scr.put(rx, ry, 'NEXT', 'dim'); mini(queue[0], rx, ry + 1, 'bright');
@@ -302,7 +302,7 @@ T.apps.tetris = {
             .forEach(([a, v, st], i) => { scr.put(rx, ry + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, ry + 4 + i, String(v), st); });
           const ks = [['\u2190\u2192', 'move'], ['\u2191 x', 'turn'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           const ky = ry + 9, two = STACK || scr.rows - ky < ks.length;
-          const short = TOUCH ? [['\u2190\u2192', 'move'], ['turn', 'L R'], ['drop', 'hard'], ['hold', 'swap']]
+          const short = TOUCH ? [['move', ''], ['turn', ''], ['drop', ''], ['hold', '']]
             : [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           (two ? short : ks).forEach(([a, b], i) => {
             const x = rx + (two ? (i % 2) * (TOUCH ? 15 : 11) : 0), y = ky + (two ? i >> 1 : i);
@@ -378,7 +378,7 @@ T.apps.snake = {
     function reset(){
       const cx = GW / 2 | 0, cy = GH / 2 | 0;
       body = [[cx, cy], [cx - 1, cy], [cx - 2, cy], [cx - 3, cy]];
-      dir = 'right'; queue = []; score = 0; eaten = 0; step = TOUCH ? 0.15 : 0.13; acc = 0; paused = false; over = false; newHi = false; started = false;   // (a phone's first seconds a touch gentler)
+      dir = 'right'; queue = []; score = 0; eaten = 0; step = TOUCH ? 0.165 : 0.13; acc = 0; paused = false; over = false; newHi = false; started = false;   // (a phone's first seconds a touch gentler)
       food = placeFood();
     }
     reset();
@@ -501,7 +501,7 @@ T.apps.snake = {
         } else if (!started){
           box(scr, cx, cy + 1, cw, 7, 'dim');
           c(2, 'S N A K E', 'bright');
-          c(4, TOUCH ? 'the arrows below steer' : 'arrows or wasd to start', 'normal');
+          c(4, TOUCH ? 'the arrow keys steer' : 'arrows or wasd to start', 'normal');
           c(5, TOUCH ? 'press one to start' : 'p pause  \u00b7  q quit', 'faint');
         }
       },

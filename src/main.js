@@ -211,7 +211,9 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   let term = prev || null, cv = null, bw = 0, bh = 0, shift = 0, rub = 0;
   /* phones: the tube (the canvas, its bloom, the glass over them) and the keyboard. #kbd stays the real text field
      for assistive tech, but never brings up the phone's keyboard */
-  let tube = null, scr = null, bloom = null, bx = null, keys = null;
+  let tube = null, scr = null, bloom = null, bx = null, keys = null, kbTouch = { t: -1e9, x: 0, y: 0 };
+  /* the click a browser may send where a key's touch ended, when the key folded or changed under it */
+  const strayClick = e => performance.now() - kbTouch.t < 350 && Math.hypot(e.clientX - kbTouch.x, e.clientY - kbTouch.y) < 20;
   if (TOUCH){
     kbd.setAttribute('inputmode', 'none'); kbd.setAttribute('virtualkeyboardpolicy', 'manual');
     tube = D.createElement('div'); tube.id = 'tube'; scr = D.createElement('div'); scr.className = 'scr';
@@ -228,6 +230,18 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     }
     const tc = $('meta[name="theme-color"]'); if (tc) tc.content = '#c3b79f';
     keys = keyboard();
+    /* a page turn: the old page, copied once, glows green and fades over ~300 ms as the new one types in */
+    if (!REDUCED){
+      const ghost = D.createElement('canvas'); ghost.className = 'ghost'; scr.appendChild(ghost); const gx = ghost.getContext('2d');
+      let gt = 0;
+      M.pageTurn = src => {
+        if (!src || !src.width) return;
+        if (ghost.width !== src.width || ghost.height !== src.height){ ghost.width = src.width; ghost.height = src.height; }
+        try { gx.drawImage(src, 0, 0); } catch (e){ return; }
+        ghost.classList.remove('fade'); ghost.style.opacity = '1'; void ghost.offsetWidth; ghost.classList.add('fade'); ghost.style.opacity = '0';
+        clearTimeout(gt); gt = setTimeout(() => ghost.classList.remove('fade'), 400);
+      };
+    }
   }
   /* the canvas's offset: the prompt lifted above the keyboard (shift, desktops) plus a rubber-band pull at the ends (rub) */
   const paint = () => { const y = Math.round(shift + rub), t = y ? 'translateY(' + y + 'px)' : ''; cv.style.transform = t; if (bloom) bloom.style.transform = t; };
@@ -263,6 +277,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
      One cheap draw per changed frame */
   function glow(){ if (!bx) return; try { bx.drawImage(cv, 0, 0, bloom.width, bloom.height); } catch (e){} }
   build();
+  if (TOUCH) keys.fold(true);   // home opens on the title card, the keyboard folded until a letter is wanted
   if (/[?&]debug\b/.test(location.search)) M._term = term;   // test hook (see CONTRACT.md), never otherwise
   let rt = 0;
   addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => {
@@ -301,9 +316,12 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   stage.addEventListener('click', e => {
     if (caught){ caught = false; return; }   // that touch stopped a fling: it was not a tap
     if (performance.now() < swallow){ swallow = 0; return; }
+    if (TOUCH && strayClick(e)) return;   // a key's own touch, its cap gone under it (a fold, a new layer): not a tap on the tube
     const r = cv.getBoundingClientRect();
     if (term.handleTap && term.handleTap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)){ unlock(); return; }   // a card row: copy / open
-    if (TOUCH) keys.fold(false);   // a tap on the tube brings the keyboard back (the phone's own never opens)
+    /* a tap on the prompt line (or under it) brings the keyboard back (the phone's own never opens); elsewhere on a page a
+       tap is just a reader's touch */
+    if (TOUCH){ const v = (e.clientY - r.top) / r.height, i = term.scrollInfo; if (v >= term.cursorY - 2.5 * (i ? i.rowH : 0.05)) keys.fold(false); }
     else kbd.focus();
   });
 
@@ -607,14 +625,16 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       if (k.name === 'ctrl' && a.used){ ctrlOn = false; }
       if (k.name === 'shift' || k.name === 'ctrl') paintMods();
     };
+    const kbPointers = new Set();   // touches that began on the keys (a fold can take their caps away mid-touch)
     board.addEventListener('pointerdown', e => {
+      kbPointers.add(e.pointerId);
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.preventDefault();
       const el = e.target.closest('.key'); if (!el || !board.contains(el)) return;
       if (active.has(e.pointerId)) release(e.pointerId);
       press(el, e.pointerId, e.clientX, e.clientY);
     });
-    for (const t of ['pointerup', 'pointercancel']) addEventListener(t, e => release(e.pointerId), true);
+    for (const t of ['pointerup', 'pointercancel']) addEventListener(t, e => { if (kbPointers.delete(e.pointerId)) kbTouch = { t: performance.now(), x: e.clientX, y: e.clientY }; release(e.pointerId); }, true);
     /* no magnifier, callout, double-tap zoom or emulated mouse on the keys */
     board.addEventListener('touchstart', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
     board.addEventListener('contextmenu', e => e.preventDefault());
@@ -647,6 +667,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
         const b = el.querySelector('.fold'); if (b){ b.setAttribute('aria-expanded', String(!f)); b.setAttribute('aria-label', f ? 'Bring the keyboard back' : 'Fold the keyboard away'); }
         if (!f && !REDUCED){ board.classList.remove('rise'); void board.offsetWidth; board.classList.add('rise'); }
         relayout(); build();
+        if (!f && !term.app && term.scrollInfo && term.scrollInfo.off > 0) term.scroll(1e5);   // the keys come up for typing: show the prompt
       },
     };
     let onPad = null, appEndedAt = 0;
@@ -656,7 +677,8 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   /* ---- phones: the strip over the keys, the copied note and the phone's own back ---- */
   function phone(){
     const strip = keys.el.querySelector('.sk'), foldBtn = keys.el.querySelector('.fold'), toastEl = $('#toast');
-    const PAGES = ['about', 'j', 'eden', 'writing', 'contact', 'help'];
+    /* the pages on the strip: writing only once something is published */
+    const pages = () => ['about', 'j', 'eden', ...(M.reader && M.reader.posts && M.reader.posts().length ? ['writing'] : []), 'contact', 'links', 'help'];
     const STRIP_ONLY = /^(timer|clock)$/;
     const SVG = d => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg>';
     const keyEv = (key, type) => ({ type, key, code: key === ' ' ? 'Space' : key, repeat: false, isComposing: false, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, synthetic: true, preventDefault(){}, stopPropagation(){} });
@@ -698,9 +720,9 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
         }
         strip.scrollLeft = 0; return;
       }
-      const cur = m.slice(4);
+      const cur = m.split(':')[1] || '', on = p => p === cur || (p === 'help' && /^help\b/.test(cur));   // (the page, from 'nav:<page>:<canBack>')
       if (term.canBack) strip.appendChild(fk('back', () => { if (term.canBack) term.run('back'); }, { cls: 'ico', html: SVG('M15 6l-6 6 6 6'), aria: 'Back' }));
-      for (const p of PAGES){ const b = fk(p, () => go(p)); if (p === cur) b.classList.add('on'); strip.appendChild(b); }
+      for (const p of pages()){ const b = fk(p, () => go(p)); if (on(p)) b.classList.add('on'); strip.appendChild(b); }
     };
     const fits = () => strip.classList.toggle('over', strip.scrollWidth > strip.clientWidth + 1);   // the edge fades only when there is more to swipe to
     const modeNow = () => {
@@ -725,8 +747,9 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       const up = () => { b.classList.remove('down'); fkSound(b, false); removeEventListener('pointerup', up, true); removeEventListener('pointercancel', up, true); };
       addEventListener('pointerup', up, true); addEventListener('pointercancel', up, true);
     });
-    row.addEventListener('click', e => { const b = e.target.closest('.fk'); if (b && b._act) b._act(); });
-    foldBtn.addEventListener('click', () => keys.fold(!keys.folded));
+    /* a key's touch whose cap folded away under it ends over the strip: that is not a press of the strip */
+    row.addEventListener('click', e => { if (strayClick(e)) return; const b = e.target.closest('.fk'); if (b && b._act) b._act(); });
+    foldBtn.addEventListener('click', e => { if (!strayClick(e)) keys.fold(!keys.folded); });
     keys.onPad = () => { mode = null; };
     /* copied: a note over the tube (terminal.js calls M.toast) */
     let toastT = 0;
@@ -750,7 +773,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       if (reading()){ try { M.reader.close(); } catch (e){} return; }
       if (term.canBack) term.run('back');
     });
-    let wasReading = false, n = 0, wasApp = '', exitAt = 0;
+    let wasReading = false, n = 0, wasApp = '', exitAt = 0, lastPage = '';
     return changed => {
       const r = reading(); if (r !== wasReading){ wasReading = r; D.body.classList.toggle('reading', r); }
       /* each app gets its controls: a game its own pad (and the keyboard comes up for it); the editor and the typing
@@ -770,6 +793,9 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
         if (keys.pad) keys.setPad('');
         if (exitAt && performance.now() - exitAt < 1200 && keys.folded) keys.fold(false);
       }
+      /* every way into a page (strip, menu, a tapped word, a typed command) gives it the whole tube */
+      const pg = term.app ? lastPage : term.page || '';
+      if (pg !== lastPage){ if (pg) keys.fold(true); lastPage = pg; }
       placeMute();
       const m = modeNow();
       if (m !== mode){ render(m); fits(); }

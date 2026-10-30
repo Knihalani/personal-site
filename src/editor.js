@@ -9,6 +9,8 @@
 'use strict';
 const M = window.MAC = window.MAC || {};
 const T = M.TERM = M.TERM || { cmds: {}, apps: {} };
+/* phones carry the shortcuts on the keyboard's strip (main.js, status()): the tube gives those rows to the text */
+const STRIP = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 T.cmds = T.cmds || {}; T.apps = T.apps || {};
 
 const GUTTER_KEY = 'kaiav.edit.gutter';
@@ -121,7 +123,7 @@ function start(api, argv, flavor){
     for (let l = a.l + 1; l < b.l && d < cap; l++) d += segs(l).length;
     return d + b.s;
   }
-  const textRows = () => Math.max(1, ROWS - 4);
+  const textRows = () => Math.max(1, ROWS - (STRIP ? 2 : 4));
   function ensureVisible(){
     if (top.l >= lines.length) top = { l: lines.length - 1, s: 0 };
     if (top.s >= segs(top.l).length) top.s = 0;
@@ -660,7 +662,7 @@ function start(api, argv, flavor){
     }
   }
   function drawMsg(scr){
-    const y = ROWS - 3; if (y < 1) return;
+    const y = ROWS - (STRIP ? 1 : 3); if (y < 1) return;
     if (mode){
       const label = mode.label;
       if (mode.input == null){ scr.put(0, y, label.slice(0, COLS - 1), 'bright'); scr.cursor(Math.min(COLS - 1, label.length), y, 'block'); return; }
@@ -689,7 +691,7 @@ function start(api, argv, flavor){
     scr.clear();
     drawTitle(scr);
     drawText(scr);
-    drawBar(scr);
+    if (!STRIP) drawBar(scr);
     scr.cursor(null);
     if (!mode){
       const p = vpos(cy, cx), d = distV(top, p, textRows());

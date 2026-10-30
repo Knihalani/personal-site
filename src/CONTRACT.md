@@ -97,6 +97,12 @@ MAC.createTerminal({ content, aspect, cols? }) -> {   // cols: 54 on desktop, 40
   scrollInfo,                   // { off: rows up from the bottom, max, rowH: a row as 0..1 of the canvas } (1:1 touch scrolling)
 }
 ```
+Phones (pointer: coarse) play the intro once, about six seconds (any tap or key skips it), then settle on a title card:
+the name, the role line and a boot-disk menu of big rows (about, j, eden, writing when published, contact, links, play),
+tapped or chosen by number, the arrows and return; a returning visitor lands on the card with "welcome back", and `demo`
+plays the intro again. Home and back on phones are this card. Contact on phones gives each address [email] (mailto) and
+[copy] (one confirmation: the toast), the profiles inline. `leave()` calls `MAC.pageTurn(canvas)` when main.js offers it
+(the phone's afterglow). Test hooks: `intro` and `home` (read-only). On desktops:
 The landing (every load, until the first command; deep links skip it) is a demoscene-style intro drawn on the canvas:
 a title card, then an extruded vector "KN" over copper bars, a starfield and a perspective floor, with a sine scroller of
 `MAC.CONTENT` facts. Keys typed while it shows flash a bar and kick the logo; reduced motion gets one still frame. It
@@ -122,7 +128,10 @@ repeated render errors. Desktops get one centred column, unchanged. Touch screen
   KeyboardEvent-shaped objects (`synthetic: true, touchKey: true`) to `term.handleKey`, then `term.handleKeyUp` on release;
   each press and release plays `MAC.sound.key(code, down)` with the key's real code. A strip of function keys above:
   the pages (they fold the keyboard away, for reading), `term.suggest` words while typing, the app's name in an app. The
-  keyboard folds down to the strip (its last key; also when a drag reads back up a page) and comes back on a tap on the tube.
+  keyboard folds down to the strip (its last key; also when a drag reads back up a page). It starts folded on the title
+  card and folds for every page however it was opened (strip, menu, a tapped word, a typed command); it comes back on a
+  tap on the prompt line (or under it; elsewhere a tap is a reader's), its key, or an app that wants letters. Strip pages: about, j, eden, writing (when
+  published), contact, links, help; the current one lit.
 - every full-screen app gets controls made for it (main.js `PADS`, and the app's `status()`):
   tetris: left / right side by side and soft drop under them for the left thumb, turn either way and hard drop for the
   right, hold and pause above (170 ms / 50 ms auto-shift, held soft drop); snake: the arrows only, four big keys in a cross

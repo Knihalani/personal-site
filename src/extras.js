@@ -457,7 +457,7 @@ T.apps.typing = { g: 'fun', desc: 'a typing test', usage: 'typing',
     const quit = () => { api.print(done ? 'typing: ' + wpm() + ' wpm, ' + acc() + '% accurate' + (newBest ? ', a new best' : '') : 'typing: stopped'); api.exit(0); };
     return {
       /* phones: the test's state and its two keys on the strip over the letters (main.js) */
-      status(){ return { note: done ? wpm() + ' wpm \u00b7 ' + acc() + '%' : t0 ? wpm() + ' wpm \u00b7 ' + acc() + '% \u00b7 ' + fmtHMS(secs()) : 'start typing', keys: done ? [{ label: 'again', key: 'Enter' }, { label: 'quit', key: 'Escape' }] : [{ label: 'new passage', key: 'Tab' }, { label: 'quit', key: 'Escape' }] }; },
+      status(){ return { note: done ? 'done' : t0 ? 'typing' : 'start typing', keys: done ? [{ label: 'again', key: 'Enter' }, { label: 'quit', key: 'Escape' }] : [{ label: 'new passage', key: 'Tab' }, { label: 'quit', key: 'Escape' }] }; },
       /* a tap on the keys line (the bottom row) quits */
       tap(col, row){ if (row >= lastRows - 1){ quit(); return true; } if (done){ reset(); return true; } return false; },
       key(e){

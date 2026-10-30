@@ -416,7 +416,7 @@ const linesOf = t => t ? t.replace(/\n$/, '').split('\n') : [];
 M.createTerminal = function createTerminal(opts){
   const C = (opts && opts.content) || M.CONTENT || {};
   if (opts && opts.cols >= 32) COLS = opts.cols | 0;
-  let aspect = opts && opts.aspect > 0.3 && opts.aspect < 5 ? opts.aspect : 4 / 3;   // (up to 5: a phone on its side, over its keyboard)
+  let aspect = opts && opts.aspect > 0.3 && opts.aspect < 8 ? opts.aspect : 4 / 3;   // (up to 8: a phone on its side, over its keyboard)
   const W = WIDTH; let H = Math.round(WIDTH / aspect);   // (resize() changes H, the grid and the font size)
   const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d', { alpha: false });
@@ -461,6 +461,7 @@ M.createTerminal = function createTerminal(opts){
   let input = '', cur = 0;
   let scrollOff = 0, wheelAcc = 0;
   let booting = !store.get(BOOT_KEY, 0), bootT = 0, bootLastDraw = -1;
+  const RETURNING = !booting;   // phones: a returning visitor lands straight on the title card
   let now = 0, blinkT0 = 0, blinkOn = true, dirty = true;
   let animFps = 0, lastAnim = 0;
   let rate = RATE, rateRows = -1, rateShown = 0;   // the typing-out speed for what is pending (see update)
@@ -816,7 +817,7 @@ M.createTerminal = function createTerminal(opts){
   function landingRows(){
     const o = out();
     o.viz(Math.max(4, ROWS - 2), (x, y, w, h, age, t) => DEMO.draw(x, y, w, h, age, t), DEMO.live);
-    if (TAP) o.at(2, ['tap here or type help to get started', 'd', { cmd: 'help' }]);
+    if (TAP) o.at(0, ['tap anywhere to begin', 'f']);   // phones: any tap or key goes to the title card
     else o.at(2, ['type ', 'f'], chip('help', 'b'), [' and press enter to get started', 'f']);
     landing = { viz: o.rows[0], note: o.rows[1] };
     return o;
@@ -834,7 +835,48 @@ M.createTerminal = function createTerminal(opts){
       .flow(PAGE_WORDS.map(w => [chip(w, 'b')]), '  ')
       .blank();
   }
-  const PAGE_WORDS = ['about', 'j', 'eden', 'writing', 'contact', 'links'];   // the welcome's words: each opens as a page, clicked or typed
+  const PAGE_WORDS = ['about', 'j', 'eden', 'writing', 'contact', 'links'];
+  /* phones: home is a title card over a boot-disk menu of big rows: tap one, or press its number; the arrows move the
+     bar and return opens it. The prompt still works under it */
+  let homeMenu = null;
+  function phoneHome(o, note){
+    const tight = COLS >= 50;   // a phone on its side: a short tube, so fewer blank rows
+    if (!tight) o.blank();
+    o.big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' \u00b7 '), 'n']);
+    if (note && tight) o.line([note, 'd']); o.blank();
+    if (note && !tight) o.line([note, 'd']).blank();
+    const items = [['about', 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is'], ['j', J.title || 'J'], ['eden', E.line || E.title || 'Eden'],
+      ...(posts().length ? [['writing', 'posts']] : []), ['contact', 'email addresses'], ['links', 'LinkedIn, X and GitHub'], ['games', 'snake, tetris, breakout, typing', 'play']];
+    const m = { items, rows: [], sel: 0, top: o.rows[0] };
+    const wide = tight;   // and one line a row, so the whole menu shows
+    items.forEach(([cmd, desc, label], i) => {
+      o.at(1, ['x', 'n']); const a = o.rows[o.rows.length - 1];
+      let b = null; if (!wide){ o.at(1, ['x', 'n']); b = o.rows[o.rows.length - 1]; }
+      m.rows.push([a, b, (i + 1) + '  ' + (label || cmd).toUpperCase(), '   ' + desc, { cmd, nl: true }]);
+    });
+    o.blank().line(['tap a row, or type help', 'f']).blank();
+    homeMenu = m; paintHome();
+    return o;
+  }
+  function paintHome(){
+    const m = homeMenu; if (!m) return;
+    const w = COLS - 3;
+    m.rows.forEach(([a, b, t1, t2, link], i) => {
+      const on = i === m.sel;
+      if (!b){   // one line: number, name, what it is
+        const t = (' ' + t1.padEnd(14) + t2.trim()).slice(0, w).padEnd(w);
+        a.s = on ? [[t, 'i', link]] : [[t.slice(0, 4), 'd', link], [t.slice(4, 15), 'b', link], [t.slice(15), 'd', link]];
+        return;
+      }
+      a.s = on ? [[(' ' + t1).padEnd(w), 'i', link]] : [[' ' + t1.slice(0, 3), 'd', link], [t1.slice(3).padEnd(w - 4), 'b', link]];
+      b.s = on ? [[(' ' + t2).slice(0, w).padEnd(w), 'i', link]] : [[(' ' + t2).slice(0, w).padEnd(w), 'd', link]];
+    });
+    dirty = true;
+  }
+  const homeOn = () => !!(homeMenu && page === '' && !app && !job && !rs && rows.includes(homeMenu.rows[0][0]));
+  function homePick(i){ const m = homeMenu; m.sel = i; paintHome(); sfx('beep'); touched(); nav(m.items[i][0]); }
+  function toHome(){ dismissLanding(); goHome(); }
+  function showDemo(){ leave(); pages = []; page = ''; const w = landingRows(); landing.full = true; pageRow = null; emit(w); dirty = true; }   // the welcome's words: each opens as a page, clicked or typed
   /* a command chip: a word that, clicked or tapped, types and runs itself. A faint underline marks it. */
   const TAP = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   function chip(w, st = 'n', cmd){ return [w, st, { cmd: cmd || w }]; }
@@ -854,10 +896,12 @@ M.createTerminal = function createTerminal(opts){
     },
     j(o){
       o.blank().big(J.title || 'J').line([J.role || '', 'd']).blank()
-        .para(J.line || '', 'b').blank().para(J.body || '', 'n').blank()
+        .para(J.line || '', 'b').blank().para(J.body || '', 'n').blank();
+      if (TAP && URLS.j) o.at(2, ['[ visit ' + bare(URLS.j) + ' ]', 'b', { url: URLS.j }]).blank();   // phones: one clear button, before the details
+      o
         .card({ title: 'J', note: 'j.txt', items: [...(J.facts || []).map(f => ({ label: f[0], value: f[1] })),
-          { label: 'site', value: bare(URLS.j), full: URLS.j, url: URLS.j, hint: 'open' }] }).blank()
-        .line(['see also  ', 'f'], ...chips(['contact', 'eden', 'about'], 'n')).blank();
+          { label: 'site', value: bare(URLS.j), full: URLS.j, url: URLS.j, hint: 'open' }] }).blank();
+      o.line(['see also  ', 'f'], ...chips(['contact', 'eden', 'about'], 'n')).blank();
       return o;
     },
     writing(o){
@@ -874,7 +918,7 @@ M.createTerminal = function createTerminal(opts){
     },
     links(o){
       o.blank().card({ title: 'LINKS', note: 'links.txt', items: LINKLIST().map(t => ({ label: t.title, value: t.short, full: t.url, url: t.url, hint: 'open' })) })
-        .blank().at(2, ['also  ', 'f'], ...chips(['contact', 'j'], 'n'), ['  ', 'f'], ['open <name>', 'n']).blank();
+        .blank().at(2, ['also  ', 'f'], ...chips(['contact', 'j'], 'n'), ...(TAP ? [] : [['  ', 'f'], ['open <name>', 'n']])).blank();
       return o;
     },
   };
@@ -975,6 +1019,15 @@ M.createTerminal = function createTerminal(opts){
   def('x', linkCmd('x', 'X (Twitter)'));
   def('contact', { g: 'read', desc: 'email addresses', usage: 'contact', run(argv, io){
     if (!io.tty){ io.write(EMAILS.map(e => pad(e.label, 20) + e.email).join('\n') + '\n'); return; }
+    if (TAP){   // phones: each address with its two actions, and the profiles under them
+      const o = out().blank().head('contact').blank();
+      for (const e of EMAILS){
+        o.at(2, [e.label, 'n']).at(2, [e.email, 'b']).at(2, ['[ email ]', 'b', { mail: e.email }], ['   ', 'f'], ['[ copy ]', 'b', { copy: e.email }]).blank();
+      }
+      const ls = LINKLIST();
+      if (ls.length){ o.at(2, ['elsewhere', 'd']); o.at(2, ...ls.flatMap((t, i) => [...(i ? [['   ', 'f']] : []), [t.title, 'b', { url: t.url }]])); o.blank(); }
+      io.rich(o); return;
+    }
     const o = out().blank().card({ title: 'CONTACT', note: 'email', verb: 'copy', items: EMAILS.map(e => ({ label: e.label, value: e.email, copy: e.email, hint: 'copy' })) }).blank()
       .line(['see also  ', 'f'], ...chips(['about', 'links', 'j'], 'n')).blank();
     io.rich(o); return io.pick(o.lastCard);
@@ -1233,6 +1286,7 @@ M.createTerminal = function createTerminal(opts){
   const HELP_TOP = [['about ' + ((C.name || 'Kaiav').split(' ')[0]), 'who he is, what he builds', PAGE_WORDS]];
   const HELP_ALSO = ['edit', 'todo', 'tetris', 'snake', 'weather'];
   const HELP_ALL = [['read', 'about'], ['net', 'net'], ['tools', 'tools'], ['fun', 'play'], ['files', 'files'], ['text', 'text'], ['system', 'system'], ['shell', 'shell'], ['misc', 'misc']];
+  if (TAP) def('demo', { g: 'fun', desc: 'the intro, again', usage: 'demo', run(){ setTimeout(showDemo, 0); } });   // phones play it once
   def('help', { g: 'system', desc: 'what you can type here', usage: 'help [all | command]', ex: ['help', 'help all', 'help weather'], run(argv, io){
     if (argv[1] && argv[1] !== 'all' && argv[1] !== '-a'){
       const n = argv[1];
@@ -1258,7 +1312,8 @@ M.createTerminal = function createTerminal(opts){
     const add = (n, c) => { const gk = c.g && HELP_ALL.some(x => x[0] === c.g) ? c.g : 'misc'; (by[gk] = by[gk] || []).push(n); };
     for (const [n, c] of Object.entries(M.TERM.cmds)) if (c && !c.hidden && typeof c.run === 'function') add(n, c);
     for (const [n, a] of Object.entries(M.TERM.apps)) if (a && !a.hidden && typeof a.start === 'function' && !M.TERM.cmds[n]) add(n, Object.assign({ g: 'fun' }, a));
-    const groups = HELP_ALL.filter(([k]) => by[k]).map(([k, label]) => [label, by[k]]);
+    const more = TAP && argv[2] !== 'more';   // phones: the everyday groups, the rest behind a "more" row
+    const groups = HELP_ALL.filter(([k]) => by[k] && (!more || ['read', 'fun', 'tools', 'net'].includes(k))).map(([k, label]) => [label, by[k]]);
     if (!io.tty){ io.write(groups.map(([l, ns]) => pad(l, 8) + ns.join(' ')).join('\n') + '\n'); return; }
     const LW = COLS >= 50 ? 9 : 8, room = COLS - 2 - LW;
     const o = out(); o.blank().head('every command').blank();
@@ -1272,6 +1327,7 @@ M.createTerminal = function createTerminal(opts){
       }
       if (line.length) flush();
     }
+    if (more) o.blank().at(2, chip('more commands', 'b', 'help all more'), ['  files, text, system, shell', 'f']);
     o.blank().flow([[['man <cmd>', 'n'], [' details', 'f']], ...(TAP ? [] : [[['tab', 'n'], [' completes', 'f']], [['ctrl+c', 'n'], [' stops', 'f']]])], '   ').blank();
     io.rich(o);
   } });
@@ -2274,6 +2330,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function handleTap(fx, fy){
     if (booting) return false;
+    if (TAP && landing && !app){ toHome(); return true; }   // phones: a tap skips the intro
     if (app){                                   // an app with tap(col, row) gets the grid cell (the editor's shortcut bar, cursor placement)
       const st = app;
       const col = clamp(Math.floor((fx * W - PADX) / cw), 0, COLS - 1), row = clamp(Math.floor((fy * H - PADY) / ch), 0, ROWS - 1);
@@ -2307,6 +2364,8 @@ M.createTerminal = function createTerminal(opts){
       if (px < h.x0 - slack || px > h.x1 + slack || py < h.top - 4 || py >= h.bot + 4) continue;
       if (h.link.stop){ if (job && !app) interrupt(); touched(); return true; }
       if (h.link.bottom){ toBottom(); dirty = true; return true; }
+      if (h.link.mail){ try { const a = document.createElement('a'); a.href = 'mailto:' + h.link.mail; document.body.appendChild(a); a.click(); a.remove(); } catch (e){} touched(); return true; }   // phones: [email] opens the mail app
+      if (h.link.copy){ const ok = copyText(h.link.copy); sfx('beep'); toast(ok, h.link.copy); touched(); return true; }   // phones: [copy], one note (the toast)
       if (h.link.cmd){
         if (app || job) return false;
         nudgeOff = true; touched();
@@ -2554,6 +2613,7 @@ M.createTerminal = function createTerminal(opts){
     if (!ents) return { kind: 'path', q, from: i + slash + 1, items: [] };
     return { kind: 'path', q, from: i + slash + 1, items: ents.filter(e => (uq[0] === '.' || e.name[0] !== '.') && (cname !== 'cd' || e.dir)).map(e => ({ name: shEsc(e.name) + (e.dir ? '/' : '') })) };
   }
+  const VISITOR = new Set(['help', 'about', 'j', 'eden', 'contact', 'links', 'writing']);
   function candidates(ctx){
     if (!ctx) return [];
     if (ctx.kind === 'path'){
@@ -2567,6 +2627,7 @@ M.createTerminal = function createTerminal(opts){
       let s = fscore(ctx.q, it.name);
       for (const a of it.alias || []) s = Math.max(s, fscore(ctx.q, a) - 5);
       for (const k of it.kw || []) s = Math.max(s, fscore(ctx.q, k) * 0.8);
+      if (TAP && s >= 150 && ctx.kind === 'cmd' && VISITOR.has(it.name)) s += 400;   // phones: the pages before the Unix
       if (s >= 150) scored.push([s, it.name]);
     }
     scored.sort((a, b) => b[0] - a[0] || a[1].length - b[1].length);
@@ -2645,6 +2706,7 @@ M.createTerminal = function createTerminal(opts){
   /* ---- pages ---- */
   /* a fresh page: what was on screen scrolls off above (still there, scrolling up), the prompt line is reset */
   function leave(){
+    try { if (typeof M.pageTurn === 'function') M.pageTurn(canvas); } catch (e){}   // phones: the old page's afterglow (main.js)
     revealAll(); disarm(); openRow = null; toBottom();
     input = ''; cur = 0; suggestion = ''; tabState = null; rs = null; hIdx = history.length; hDraft = '';
     pageKeys = true; nudgeOff = true; hoverKey = ''; dirty = true;
@@ -2658,11 +2720,12 @@ M.createTerminal = function createTerminal(opts){
     eatBlank = true;
     runLine(forgive(cmd), noHist, true);   // a chip or page means the real command, whatever is aliased over it
   }
-  function goHome(note){
+  function goHome(note, say){
     leave(); pages = []; page = '';
-    const w = welcome(out()); if (w.rows[0]) w.rows[0].wel = true;
+    const w = TAP ? phoneHome(out(), say) : welcome(out()); if (w.rows[0]) w.rows[0].wel = true;
     pageRow = w.rows[0] || null;
-    emit(w, (note ? note + ' ' : '') + (C.name || '') + '. ' + (A.role || '') + '. Type help to begin.');
+    emit(w, (note ? note + ' ' : '') + (say ? say + '. ' : '') + (C.name || '') + '. ' + (A.role || '') + '. Type help to begin.');
+    if (TAP) pinned = true;   // the card from its top (a short tube may not show it all)
   }
   function goBack(){
     if (!pages.length){ goHome(page ? 'Back to the welcome.' : ''); return; }
@@ -2721,7 +2784,10 @@ M.createTerminal = function createTerminal(opts){
     if (e.metaKey) return false;
     if (/^F\d+$/.test(k)) return false;
     if (booting){ skipBoot(); if (k === 'Escape' || k === 'Enter' || k === ' ') return true; }   // any other key skips the boot AND counts
-    if (landing && !app && !e.repeat) DEMO.key();              // the intro answers each key (held keys: once)
+    if (landing && !app && !e.repeat){                         // the intro answers each key (held keys: once)
+      if (!TAP) DEMO.key();
+      else { toHome(); if (k === 'Enter' || k === ' ' || k === 'Escape') return true; }   // phones: a key skips to the title card
+    }
     const ctrl = e.ctrlKey, alt = e.altKey, c = k.toLowerCase();
     if (app){                                   // apps get keys first
       const st = app;
@@ -2764,6 +2830,12 @@ M.createTerminal = function createTerminal(opts){
       if (k === 'Home'){ scrollBy(1e6); return true; }
       if (k === 'End'){ toBottom(); dirty = true; return true; }
       return false;
+    }
+    if (TAP && !input && !ctrl && !alt && homeOn()){             // the title card's menu
+      const m = homeMenu, n = m.items.length;
+      if (/^[1-9]$/.test(k) && +k <= n){ homePick(+k - 1); return true; }
+      if (k === 'ArrowDown' || k === 'ArrowUp'){ m.sel = (m.sel + (k === 'ArrowDown' ? 1 : n - 1)) % n; paintHome(); sfx('beep'); return true; }
+      if (k === 'Enter' && !suggestion){ homePick(m.sel); return true; }
     }
     switch (k){
       case 'Enter': {
@@ -2813,7 +2885,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function insertText(str){
     if (booting){ skipBoot(); }
-    if (landing && !app && str) DEMO.key();
+    if (landing && !app && str){ if (TAP) toHome(); else DEMO.key(); }
     if (app){                                   /* phones and IME: an app takes the text whole (app.insertText), or as key events */
       const st = app;
       if (st.inst && typeof st.inst.insertText === 'function'){ if (appCall('insertText', String(str)) !== false && app === st) st.dirty = true; return; }
@@ -2853,6 +2925,7 @@ M.createTerminal = function createTerminal(opts){
   function endBoot(){
     booting = false; rows = []; shown = 0; partial = 0;
     store.set(BOOT_KEY, 1);
+    if (TAP && RETURNING){ pageRow = null; page = ''; pages = []; goHome('', 'welcome back'); blinkT0 = now; dirty = true; return; }
     const w = landingRows();
     pageRow = null; page = ''; pages = [];
     emit(w, (C.name || '') + '. ' + (A.role || '') + '. An animated intro: the letters K N spin over copper bars while a message scrolls along the bottom. Type help and press Enter to get started.');
@@ -2922,8 +2995,8 @@ M.createTerminal = function createTerminal(opts){
         fillT(s.replace(SPAN_VEC_G, ' '), X(col), top + fs * 0.68);
         for (let q = 0; q < s.length; q++) if (SPAN_VEC.test(s[q])) vecGlyph(s[q], col + q, top, selected ? P.bg : hov ? P.bright : color(sp[1]));
       } else fillT(s, X(col), top + fs * k * 0.68);
-      if (link && !selected){ g.fillStyle = hov ? P.normal : link.cmd || link.stop ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, hov ? 3 : 2); }
-      if (link && (link.cmd || link.url || link.stop) && s.trim()) drawnHits.push({ x0: X(col), x1: X(col + s.length * k), top, bot: top + ch * k, link });
+      if (link && !selected && !link.nl){ g.fillStyle = hov ? P.normal : link.cmd || link.stop ? P.faint : P.dim; g.fillRect(X(col), top + fs * k * 0.76, s.length * cw * k, hov ? 3 : 2); }
+      if (link && (link.cmd || link.url || link.stop || link.mail || link.copy) && s.trim()) drawnHits.push({ x0: X(col), x1: X(col + s.length * k), top, bot: top + ch * k, link });
       col += s.length * k;
     }
   }
@@ -3206,6 +3279,8 @@ M.createTerminal = function createTerminal(opts){
   /* ---- frame ---- */
   function update(dt, t){
     now = t;
+    /* phones: the intro plays once, about six seconds, then settles on the title card (not while something is typed) */
+    if (TAP && landing && !landing.full && !app && !job && !input && landing.viz.t0 >= 0 && now - landing.viz.t0 > 6) toHome();
     let changed = dirty;
     if (booting){
       bootT += dt;
@@ -3255,13 +3330,14 @@ M.createTerminal = function createTerminal(opts){
     /* only the height changing (a phone's keyboard folding away): whoever was reading back, or a page held at its
        top, keeps the same top row in view; a new width reflows and goes to the prompt */
     const same = !(cols >= 32) || (cols | 0) === COLS, keep = same && (scrollOff > 0 || pinned) ? { top: totalUnits() - ROWS - scrollOff, pin: pinned } : null;
-    if (asp > 0.3 && asp < 5) aspect = asp;
+    if (asp > 0.3 && asp < 8) aspect = asp;
     if (cols >= 32) COLS = cols | 0;
     H = Math.round(W / aspect); canvas.height = H;          // (resets the context: shaping and font are set again below)
     cw = (W - 2 * PADX) / COLS; ch = Math.round(cw / 0.4 * LINE); fs = cw / advance;
     ROWS = Math.floor((H - 64) / ch); PADY = Math.round((H - ROWS * ch) / 2);
     fontStr = {}; curFont = ''; noShaping();
     ENV.COLUMNS = String(COLS); ENV.LINES = String(ROWS);
+    if (homeMenu) paintHome();   // the menu's bars to the new width, before the rows are fitted
     grid.length = 0; for (let y = 0; y < ROWS; y++) grid.push(new Array(COLS));
     scr.cols = COLS; scr.rows = ROWS; scr.aspect = ch / cw; scr.clear();
     if (app){ if (app.api){ app.api.cols = COLS; app.api.rows = ROWS; } if (gridCursor && (gridCursor.x >= COLS || gridCursor.y >= ROWS)) gridCursor = null; app.dirty = true; }
@@ -3324,7 +3400,9 @@ M.createTerminal = function createTerminal(opts){
     get line(){ return input; },                          // the line being typed
     get app(){ return app ? app.name : ''; },             // the full-screen app running, or ''
     get appStatus(){ const r = app ? appCall('status') : null; return r && typeof r === 'object' ? r : null; },   // phones: an app's optional status() -> { note, keys: [{ label, key, ctrl? }] } for main.js's strip
-    get page(){ return page; },                           // the page on screen ('' = the welcome)
+    get page(){ return page; },
+    get intro(){ return !!landing; },                     // the demo is on the tube
+    get home(){ return homeOn(); },                       // phones: the title card's menu is up                           // the page on screen ('' = the welcome)
     get canBack(){ return !booting && !landing && !app && !job && !!(page || pages.length); },   // a page is open: back has somewhere to go
     get scrollInfo(){ return { off: scrollOff, max: Math.max(0, totalUnits() - ROWS), rowH: ch / H }; },   // off: rows up from the bottom; rowH: a row, 0..1 of the canvas
     get cursorY(){ return promptY / H; },

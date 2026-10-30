@@ -58,7 +58,7 @@ body.touch{ --hel: Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif; --in
   background: #15120f; overscroll-behavior: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none }
 @media (max-height: 760px){ body.touch{ --rh: 45px; --fh: 33px; --sh: 34px; --bz: calc(env(safe-area-inset-top, 0px) + 30px); --sb: 24px } }
 @media (max-height: 600px){ body.touch{ --rh: 43px; --fh: 32px; --sh: 33px; --bz: calc(env(safe-area-inset-top, 0px) + 26px); --sb: 11px; --sxl: max(10px, env(safe-area-inset-left, 0px)); --sxr: max(10px, env(safe-area-inset-right, 0px)) } }
-body.touch.land{ --bz: max(8px, env(safe-area-inset-top, 0px)); --sb: 8px; --rh: 31px; --sh: 31px }
+body.touch.land{ --bz: max(22px, env(safe-area-inset-top, 0px)); --sb: 8px; --rh: 31px; --sh: 31px }
 body.touch::before{ display: none }
 /* the case: cream plastic under a warm lamp from above left, darker toward its edges, with a fine grain */
 body.touch #stage{ bottom: var(--kbh); overflow: hidden; touch-action: none; border-radius: 0 0 14px 14px;
@@ -76,6 +76,8 @@ body.touch #stage::before{ display: none }
 @keyframes tube-on{ 0%{ transform: scale(.5, .004); filter: brightness(5) } 30%{ transform: scale(1, .008); filter: brightness(4) } 62%{ transform: scale(1, 1.02); filter: brightness(1.7) } 100%{ transform: none; filter: none } }
 #tube canvas.phone-term{ position: absolute; top: 0; left: 0; transition: transform .25s cubic-bezier(.2,.8,.2,1) }
 #tube canvas.phone-term.drag{ transition: none }
+#tube .ghost{ position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; opacity: 0; mix-blend-mode: screen; filter: blur(.6px) brightness(1.25) saturate(1.4) }
+#tube .ghost.fade{ transition: opacity .32s cubic-bezier(.3,.6,.4,1) }
 #tube .bloom{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; filter: blur(5px); opacity: .55; mix-blend-mode: screen }
 /* the glass: scanlines, the tube's dark curved edges, a faint reflection of the room */
 #tube::after{ content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit;
@@ -91,7 +93,10 @@ body.touch #stage::before{ display: none }
 #stage .plate span{ font-weight: 600; letter-spacing: .2em; font-size: 7px; text-transform: uppercase }
 @media (max-height: 760px){ #stage .plate{ top: calc(var(--bz) - 25px); height: 15px } }
 @media (max-height: 600px){ #stage .plate{ top: calc(var(--bz) - 22px) } }
-body.touch.land #stage .plate{ display: none }
+body.touch.land #stage .plate{ top: calc(var(--bz) - 19px); height: 13px; font-size: 9px }   /* on its side: a slim brow, the plate still on it */
+body.touch.land.gaming #stage .plate{ display: none }
+body.touch.land.gaming, body.touch.land:not(.fold){ --bz: max(8px, env(safe-area-inset-top, 0px)) }   /* the keys up: every row for the text */
+body.touch.land:not(.fold) #stage .plate{ display: none }
 /* the chin: a floppy slot with a lamp that flickers while the disk runs (tall screens; a short one keeps the rows) */
 #stage .chin{ position: absolute; left: var(--sxl); right: var(--sxr); bottom: 0; height: calc(var(--sb) - 7px); display: flex; align-items: center; justify-content: flex-end; gap: 10px; pointer-events: none; padding-right: 10px }
 #stage .slot{ display: block; position: relative; width: 38%; height: 11px; border-radius: 6px; background: linear-gradient(180deg, #b9ae97, #d3c9b5); box-shadow: inset 0 1px 2px rgba(60,48,32,.4), 0 1px 0 rgba(255,255,255,.5) }
@@ -123,7 +128,7 @@ body.touch.land #kb{ padding-bottom: max(5px, env(safe-area-inset-bottom, 0px));
 .strip .sk{ flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 5px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; padding: 0 2px }
 .strip .sk::-webkit-scrollbar{ display: none }
 .strip .sk.over{ -webkit-mask: linear-gradient(90deg, #000 calc(100% - 22px), transparent); mask: linear-gradient(90deg, #000 calc(100% - 22px), transparent) }
-.strip .sk.nav .fk{ flex: 1 1 auto; padding: 0 6px }
+.strip .sk.nav .fk{ flex: 1 0 auto; padding: 0 6px 3px }   /* never narrower than its word: past the width the row scrolls, its edge fading */
 .strip .sk.nav .fk.ico{ flex: 0 0 auto; padding: 0 6px }
 .fk, #kb #mute{ position: relative; flex: 0 0 auto; box-sizing: border-box; height: 28px; min-width: 34px; padding: 0 10px 3px; border: 0; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
   background: linear-gradient(180deg, #bdb6a8 0, #b2ab9c 55%, #9c9587 100%); color: #2f2a24; font: 500 12.5px/1 var(--hel); letter-spacing: .01em; text-transform: none; text-shadow: 0 1px 0 rgba(255,255,255,.25); white-space: nowrap;
@@ -133,7 +138,7 @@ body.touch.land #kb{ padding-bottom: max(5px, env(safe-area-inset-bottom, 0px));
 .fk i{ font-style: normal; font-weight: 700; font-size: 11px; color: #5d564b; margin-right: -1px }
 .strip .sk.app .fk{ padding: 0 9px 3px }
 .fk.on::before, .fk .dot{ content: ""; width: 5px; height: 5px; border-radius: 50%; flex: none; background: radial-gradient(circle at 40% 35%, #f0fff3, #8dffb4 60%); box-shadow: 0 0 5px rgba(141,255,180,.95), 0 0 0 1px rgba(60,52,40,.3) }
-.fk svg{ width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+.fk.fold svg{ width: 22px; height: 19px } .fk svg{ width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
 .fk.fold{ width: 42px; padding: 0 0 3px }
 .fk.fold .dn{ display: none } body.fold .fk.fold .up{ display: none } body.fold .fk.fold .dn{ display: block }
 /* words pressed into the frame (an app's name, a test's speed) */
@@ -171,7 +176,8 @@ body.fold .board{ display: none }
 .key.arrow .lg svg{ width: 15px; height: 15px; stroke: #2c2721; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 .row.fn .key.mod .lg{ bottom: 9px }
 .key.down .lg{ transform: translateY(-1px) }
-@media (max-width: 359px){ .lg{ left: 6px; top: 4px; font-size: 14.5px } .key.mod .lg{ left: 5px; font-size: 9.5px; letter-spacing: 0 } .key.mod.c .lg{ font-size: 10.5px }
+@media (max-width: 359px){ .strip .sk.nav .fk{ padding: 0 5px 3px; font-size: 11.5px } .strip .sk{ gap: 4px }
+  .lg{ left: 6px; top: 4px; font-size: 14.5px } .key.mod .lg{ left: 5px; font-size: 9.5px; letter-spacing: 0 } .key.mod.c .lg{ font-size: 10.5px }
   .fk, #kb #mute{ font-size: 11.5px } .strip .sk, .strip{ gap: 4px } .fk.fold{ width: 36px } }
 .led{ position: absolute; z-index: 1; right: 8px; top: 6px; width: 5px; height: 5px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #6f8a6c, #2b3a2a 70%); box-shadow: 0 0 0 1px rgba(60,52,40,.35); pointer-events: none }
 .key.on .led{ background: radial-gradient(circle at 40% 35%, #f0fff3, #8dffb4 60%); box-shadow: 0 0 6px rgba(141,255,180,.95) }
@@ -252,7 +258,7 @@ for (const n of ['localStorage', 'sessionStorage']){
 <div id="hint" class="ui" aria-hidden="true" hidden>move the cursor down to lean back</div>
 <textarea id="kbd" aria-label="Terminal: type a command, like help, and press Enter" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
 <button id="mute" class="ui" type="button" aria-pressed="true">sound</button>
-<div id="kb" hidden><div class="strip"><nav class="sk" aria-label="Pages"></nav><button class="fk fold" type="button" aria-label="Fold the keyboard away" aria-expanded="true"><svg class="up" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><svg class="dn" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7.5 14h9"/></svg></button></div><div class="board" aria-hidden="true"></div></div>
+<div id="kb" hidden><div class="strip"><nav class="sk" aria-label="Pages"></nav><button class="fk fold" type="button" aria-label="Fold the keyboard away" aria-expanded="true"><svg class="up" viewBox="0 0 28 24" aria-hidden="true"><rect x="1.5" y="3" width="19" height="12" rx="2"/><path d="M5 7h.01M8.5 7h.01M12 7h.01M15.5 7h.01M6.5 11h9M24 9v10M21 16l3 3 3-3"/></svg><svg class="dn" viewBox="0 0 28 24" aria-hidden="true"><rect x="1.5" y="9" width="19" height="12" rx="2"/><path d="M5 13h.01M8.5 13h.01M12 13h.01M15.5 13h.01M6.5 17h9M24 15V5M21 8l3-3 3 3"/></svg></button></div><div class="board" aria-hidden="true"></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="swipe" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>back</div>
 <main class="sr">
