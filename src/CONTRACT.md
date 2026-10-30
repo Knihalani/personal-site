@@ -88,6 +88,8 @@ MAC.createTerminal({ content, aspect, cols?, width? }) -> {   // width: phones a
   cursorY,                      // bottom of the prompt line, 0..1 of the canvas (phones keep it above the keyboard)
   lum,                          // mean brightness of the last frame drawn, 0..1, tallied while drawing
   busy,                         // an app or command is running (don't rebuild the terminal under it)
+  cursorOn,                     // the blinking block is lit right now (main.js copies the phone bloom only while it is dark,
+                                // so its halo never lingers over a blink); every key restarts the blink, lit
   pointer(u, v, down),          // optional: the mouse over the tube (u, v: 0..1 of the canvas, -1, -1 when off it or gone;
                                 // down: the main button held). Only the landing uses it: its logo leans toward the pointer
                                 // and a drag spins it. main.js calls it from pointermove (both layouts) and on leave
@@ -134,11 +136,14 @@ repeated render errors. Desktops get one centred column, unchanged. Touch screen
 - the keyboard (#kb in head.html, `keyboard()` in main.js), which replaces the phone's own: #kbd keeps
   `inputmode="none"` and is never focused by a tap. QWERTY with esc / tab / ctrl / arrows (portrait: a row on top;
   landscape: around the letters), two symbol layers, shift (tap: once, double tap: caps lock, or hold), ctrl (a one-shot
-  modifier, or hold), delete and arrows repeat while held. Keys act on pointerdown, one pointer per finger, and send
+  modifier, or hold), delete and arrows repeat while held (delete held past ~1.5 s goes a word at a time, ctrl+Backspace).
+  Space types when it is let go (or as soon as another key is pressed, keeping order); held and slid sideways it is a
+  trackpad, an ArrowLeft/Right per ~9 px. Other keys act on pointerdown, one pointer per finger, and send
   KeyboardEvent-shaped objects (`synthetic: true, touchKey: true`) to `term.handleKey`, then `term.handleKeyUp` on release;
   each press and release plays `MAC.sound.key(code, down)` with the key's real code. A strip of function keys above:
   the pages (they fold the keyboard away, for reading), `term.suggest` words while typing, the app's name in an app. The
-  keyboard folds down to the strip (its last key; also when a drag reads back up a page). It starts folded on the title
+  keyboard folds down to the strip (its last key; also when a drag reads back up a page), sliding like a tray: one
+  WAAPI transform (240 ms down / 260 ms up) with the tube resized once, at the start of a fold and the end of an unfold. It starts folded on the title
   card and folds for every page however it was opened (strip, menu, a tapped word, a typed command); it comes back on a
   tap on the prompt line (or under it; elsewhere a tap is a reader's), its key, or an app that wants letters. Strip pages: about, j, eden, writing (when
   published), contact, links, help; the current one lit.
@@ -154,7 +159,7 @@ repeated render errors. Desktops get one centred column, unchanged. Touch screen
   on the tube go to the app's `drag` first (swipes, the paddle).
 - 1:1 drag scrolling with momentum and rubber-band ends; a swipe right (and the phone's own back, through one history
   entry) goes `back`; `MAC.toast(label, text)`, which terminal.js calls when it copies an address (never for secrets).
-Test hook: with `?debug` in the URL, flat() sets `MAC._term` to the terminal. localStorage is swapped for an in-memory store when the browser blocks it (head.html).
+Test hook: with `?debug` in the URL, flat() and room() set `MAC._term` to the terminal. localStorage is swapped for an in-memory store when the browser blocks it (head.html).
 
 ## Testing
 Build into your own scratch folder: `python3 build.py --out <dir>`. Add `--dev` to include `src/stubs.js`, which

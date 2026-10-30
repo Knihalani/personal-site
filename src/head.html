@@ -151,6 +151,8 @@ body.touch.land #kb{ padding-bottom: max(5px, env(safe-area-inset-bottom, 0px));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -3px 0 rgba(70,62,50,.28), 0 0 0 1px rgba(70,60,46,.35), 0 2px 2px rgba(40,32,22,.35); -webkit-tap-highlight-color: transparent }
 .fk.down, #kb #mute:active{ transform: translateY(1.5px); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), inset 0 -1.5px 0 rgba(70,62,50,.25), 0 0 0 1px rgba(70,60,46,.35), 0 .5px 1px rgba(40,32,22,.35); background: linear-gradient(180deg, #b5ae9f, #a49d8f) }
 .fk b{ font-weight: 700 }
+.fk::after{ content: ""; position: absolute; inset: calc((28px - var(--sh)) / 2) 0 }   /* the strip's whole height answers a fingertip (inside the scroller: no overflow) */
+.key.track .cap::before{ background: radial-gradient(110% 80% at 50% 78%, #f6f1e6 0, #efe8da 50%, #e6dccb 100%) } .key.k-space.track .lg{ left: 0; right: 0; top: 34%; text-align: center } .key.track .lg::after{ content: "\2190  \2192"; font-size: 12px; letter-spacing: .1em; color: #6a5f50 }   /* space held and slid: a trackpad */
 .fk i{ font-style: normal; font-weight: 700; font-size: 11px; color: #5d564b; margin-right: -1px }
 .strip .sk.app .fk{ padding: 0 9px 3px }
 .fk.on{ transform: translateY(1.5px); background: linear-gradient(180deg, #a9a294, #b4ad9f); box-shadow: inset 0 1px 2px rgba(40,32,22,.35), inset 0 -1px 0 rgba(255,255,255,.25), 0 0 0 1px rgba(70,60,46,.35), 0 .5px 1px rgba(40,32,22,.3) }   /* the page you are on: its key latched down */
@@ -161,14 +163,12 @@ body.touch.land #kb{ padding-bottom: max(5px, env(safe-area-inset-bottom, 0px));
 .fk.fold .dn{ display: none } body.fold .fk.fold .up{ display: none } body.fold .fk.fold .dn{ display: block }
 /* words pressed into the frame (an app's name, a test's speed) */
 .strip .note{ flex: none; padding: 0 6px 0 4px; font: 600 10px/1 var(--hel); font-stretch: 75%; letter-spacing: .22em; text-transform: uppercase; color: #ada28b; text-shadow: 0 1px 0 rgba(255,255,255,.7), 0 -1px 0 rgba(80,66,46,.35); white-space: nowrap }
-body.touch.land .fk, body.touch.land #kb #mute{ height: 25px }
+body.touch.land .fk, body.touch.land #kb #mute{ height: 25px } body.touch.land .fk::after{ inset: calc((25px - var(--sh)) / 2) 0 }
 /* the well the keys sit in */
 .board{ position: relative; margin-top: 7px; padding: 3px; border-radius: 9px; display: flex; flex-direction: column;
   background: linear-gradient(180deg, #332c25, #463e34 60%, #4d453a); box-shadow: inset 0 4px 7px rgba(0,0,0,.7), inset 0 0 0 1px rgba(0,0,0,.4), inset 0 -1px 0 rgba(255,255,255,.08), 0 1.5px 0 rgba(255,255,255,.75), 0 -1px 0 rgba(120,104,80,.4), 0 0 0 3px rgba(150,132,104,.12) }
 body.touch.land .board{ margin-top: 5px }
 body.fold .board{ display: none }
-.board.rise{ animation: kb-rise .22s cubic-bezier(.2,.8,.2,1) }
-@keyframes kb-rise{ from{ transform: translateY(24px); opacity: 0 } to{ transform: none; opacity: 1 } }
 .row{ display: flex; height: var(--rh) }
 .row.fn{ height: var(--fh) }
 .key{ position: relative; flex: var(--w, 1) 1 0; min-width: 0; box-sizing: border-box; padding: 2.5px; display: flex }
@@ -241,7 +241,7 @@ body.land.gaming .pad .k-letters{ display: flex }
 #swipe svg{ width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 #swipe.go{ color: #f0ffe8; border-color: rgba(141,255,180,.7); box-shadow: 0 0 18px rgba(141,255,180,.3) }
 #swipe.off{ transition: opacity .25s, transform .25s }
-@media (prefers-reduced-motion: reduce){ #hint, #loading, #stage .phone-term, #toast, .cap{ transition: none } #tube .scr.on, .board.rise{ animation: none } }
+@media (prefers-reduced-motion: reduce){ #hint, #loading, #stage .phone-term, #toast, .cap{ transition: none } #tube .scr.on{ animation: none } }
 /* high contrast: the sound toggle's dot keeps showing its state in system colours */
 @media (forced-colors: active){ #mute::before{ forced-color-adjust: none; border-color: ButtonText } #mute[aria-pressed="true"]::before{ background: ButtonText; box-shadow: none } }
 </style>

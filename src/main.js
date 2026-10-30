@@ -84,6 +84,7 @@ M.world = {
   get lampOn(){ return !!api.lampOn; },
 };
 const term = M.createTerminal({ content: M.CONTENT, aspect: api.screenAspect });
+if (/[?&]debug\b/.test(location.search)) M._term = term;   // test hook (CONTRACT.md), never otherwise
 api.setScreenCanvas(term.canvas);
 let typist;
 try { typist = M.createTypist(api); if (typist.object3d && !typist.object3d.parent) api.add(typist.object3d); }
@@ -273,7 +274,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     cv = term.canvas; cv.className = 'phone-term'; cv.style.width = W + 'px'; cv.style.height = H + 'px';
     if (TOUCH){
       if (cv.parentNode !== scr){ scr.appendChild(cv); scr.appendChild(bloom); }
-      bloom.width = Math.round(cv.width / 6); bloom.height = Math.round(cv.height / 6); glow();
+      bloom.width = Math.round(cv.width / 6); bloom.height = Math.round(cv.height / 6); glowShow(false, true); glow();   // (an old glow never stretches over a new tube)
     } else stage.appendChild(cv);
     bw = innerWidth; bh = innerHeight; shift = 0; rub = 0; paint();
   };
@@ -282,25 +283,28 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   /* the bloom is drawn when the picture settles: the downscale is the costliest thing a phone does in a frame, so while
      the tube animates (the intro, a game, a fling) the glow fades out instead of chasing every frame, and comes back
      ~150 ms after the last change */
-  let glowDue = false, lastChange = -1e9, runFrom = -1e9, glowOn = true;
-  const glowShow = on => { if (on !== glowOn){ glowOn = on; bloom.style.opacity = on ? '' : '0'; } };
+  let glowDue = false, lastChange = -1e9, glowOn = true;
+  const changes = [];   // when the picture last changed (the last ten), to tell an animation from typing
+  const glowShow = (on, now) => { if (on !== glowOn){ glowOn = on; bloom.style.transition = now ? 'none' : ''; bloom.style.opacity = on ? '' : '0'; } };
   function glow(){
     if (!bx) return;
     const t = performance.now();
-    if (t - lastChange > 250) runFrom = t;   // a still picture before this change
     lastChange = t; glowDue = true;
-    if (t - runFrom > 120) glowShow(false);   // changing frame after frame: animating
+    changes.push(t); if (changes.length > 10) changes.shift();
+    if (changes.length === 10 && t - changes[0] < 400) glowShow(false);   // ten changes in 0.4 s: an animation, not keys
   }
   let glowAt = -1e9;
   function glowSettle(){
     const t = performance.now();
-    if (!glowDue || t - lastChange < 150 || t - glowAt < 600 || ty != null || fling) return;   // (a blinking cursor alone: a redraw a second at most; never under a finger or a fling)
+    /* the glow is copied from a still picture, with the cursor out (so its halo never lingers half-on over a blink),
+       a beat after the last change, never under a finger or a fling */
+    if (!glowDue || t - lastChange < 150 || t - glowAt < 600 || ty != null || fling || term.cursorOn) return;
     glowDue = false; glowAt = t;
     try { bx.imageSmoothingQuality = 'low'; bx.drawImage(cv, 0, 0, bloom.width, bloom.height); } catch (e){}
     glowShow(true);
   }
   build();
-  if (TOUCH) keys.fold(true);   // home opens on the title card, the keyboard folded until a letter is wanted
+  if (TOUCH) keys.fold(true, true);   // home opens on the title card, the keyboard folded until a letter is wanted
   if (/[?&]debug\b/.test(location.search)) M._term = term;   // test hook (see CONTRACT.md), never otherwise
   let rt = 0;
   addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => {
@@ -328,6 +332,11 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   addEventListener('wheel', e => { if (reading() || !term.scroll || e.ctrlKey) return; term.scroll(wheelPx(e)); e.preventDefault(); }, { passive: false });
   stage.addEventListener('pointerdown', e => {
     unlock();
+    if (tube && e.pointerType !== 'mouse' && term.hitTest){   // phones: the word under the finger lights at once (its tap follows)
+      const c = cv.getBoundingClientRect(); term.hitTest((e.clientX - c.left) / c.width, (e.clientY - c.top) / c.height);
+      const clear = () => { removeEventListener('pointerup', clear, true); removeEventListener('pointercancel', clear, true); setTimeout(() => term.hitTest(-1, -1), 160); };
+      addEventListener('pointerup', clear, true); addEventListener('pointercancel', clear, true);
+    }
     if (!tube || REDUCED || e.pointerType === 'mouse') return;   // phones: the phosphor answers under the finger
     const r = tube.getBoundingClientRect(); if (e.clientY > r.bottom || e.clientY < r.top) return;
     if (!tapGlow){ tapGlow = D.createElement('i'); tapGlow.className = 'tapglow'; tube.appendChild(tapGlow); }
@@ -613,7 +622,8 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       if (used) paintMods();
       /* digits and symbols are a short trip: a space or return takes you back to the letters */
       if (!pad && layer !== 'let' && (k.name === 'space' || k.name === 'ret')) setLayer('let');
-      if (k.rep && !pad) a.rep = setTimeout(function again(n){ if (!active.has(a.id)) return; send(key, code, { repeat: true, shift: a.shift }); a.rep = setTimeout(again, n > 14 ? 40 : 70, (n || 0) + 1); }, 420, 0);
+      /* held: repeats, quicker after a while; delete held long goes a word at a time, as on a phone */
+      if (k.rep && !pad) a.rep = setTimeout(function again(n){ if (!active.has(a.id)) return; send(key, code, { repeat: true, shift: a.shift, ctrl: k.name === 'bksp' && n > 16 }); a.rep = setTimeout(again, n > 16 && k.name === 'bksp' ? 160 : n > 14 ? 40 : 70, (n || 0) + 1); }, 420, 0);
     };
 
     /* ---- touches: pointer events, one per finger ---- */
@@ -636,18 +646,34 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     const press = (el, id, x, y) => {
       const k = el._k; if (!k || k.gap) return;
       const a = { id, el };
+      /* a key pressed while space is still held (two thumbs, fast): the space goes first, in order */
+      for (const o of active.values()) if (o.space && !o.space.track && !o.space.done){ o.space.done = true; act(o.el._k, o); }
       if (!pad && k.ch != null) a.rect = capRect(el);
       unlock(); buzz();
       active.set(id, a);
       el.classList.add('down');
       if (sound) try { sound.key(k.code || 'KeyA', true); } catch (e){}
       a.code = k.code;
+      /* space types when it is let go: held and slid, it moves the cursor instead, a cell per ~9 px (a trackpad) */
+      if (k.name === 'space' && !pad){ a.space = { x0: x, x: x, track: false }; return; }
       act(k, a);
       if (!pad) popFor(a, k);
     };
-    const release = id => {
+    board.addEventListener('pointermove', e => {
+      const a = active.get(e.pointerId); if (!a || !a.space) return;
+      const sp = a.space; if (sp.done) return;
+      if (!sp.track && Math.abs(e.clientX - sp.x0) > 14){ sp.track = true; sp.x = e.clientX; a.el.classList.add('track'); buzz(); }
+      if (!sp.track) return;
+      while (Math.abs(e.clientX - sp.x) >= 9){
+        const d = e.clientX > sp.x ? 1 : -1, k = d > 0 ? 'ArrowRight' : 'ArrowLeft'; sp.x += d * 9;
+        send(k, k, {}); sendUp(k, k);
+        if (sound) try { sound.key(k, true); } catch (e){}
+      }
+    }, { passive: true });
+    const release = (id, up) => {
       const a = active.get(id); if (!a) return;
-      active.delete(id); clearTimeout(a.rep); a.el.classList.remove('down'); popOff(a);
+      if (a.space && up && !a.space.track && !a.space.done) act(a.el._k, a);   // a tap on space: one space, now
+      active.delete(id); clearTimeout(a.rep); a.el.classList.remove('down', 'track'); popOff(a);
       if (sound) try { sound.key(a.code || 'KeyA', false); } catch (e){}
       const k = a.el._k;
       if (a.key) sendUp(a.key, a.code);
@@ -665,7 +691,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       if (active.has(e.pointerId)) release(e.pointerId);
       press(el, e.pointerId, e.clientX, e.clientY);
     });
-    for (const t of ['pointerup', 'pointercancel']) addEventListener(t, e => { if (kbPointers.delete(e.pointerId)) kbTouch = { t: performance.now(), x: e.clientX, y: e.clientY }; release(e.pointerId); }, true);
+    for (const t of ['pointerup', 'pointercancel']) addEventListener(t, e => { if (kbPointers.delete(e.pointerId)) kbTouch = { t: performance.now(), x: e.clientX, y: e.clientY }; release(e.pointerId, t === 'pointerup'); }, true);
     /* no magnifier, callout, double-tap zoom or emulated mouse on the keys */
     board.addEventListener('touchstart', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
     board.addEventListener('contextmenu', e => e.preventDefault());
@@ -687,21 +713,44 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       get pad(){ return pad; },
       /* name: an app with a pad of its own (PADS), or '' for the keyboard */
       hasPad: name => !!PADS[name],
-      setPad(name){ name = PADS[name] ? name : ''; if (!name && pad) appEndedAt = performance.now(); if (name === pad) return; pad = name; if (!name) layer = 'let'; for (const id of [...active.keys()]) release(id); D.body.classList.toggle('gaming', !!name); render(); if (relayout()) build(); if (onPad) onPad(); },
+      setPad(name){
+        name = PADS[name] ? name : ''; if (!name && pad) appEndedAt = performance.now(); if (name === pad) return; pad = name; if (!name) layer = 'let';
+        for (const id of [...active.keys()]) release(id); D.body.classList.toggle('gaming', !!name); render(); if (relayout()) build(); if (onPad) onPad();
+        if (!REDUCED && board.animate && !folded) board.animate([{ opacity: .3, transform: 'scale(.985)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: 'ease-out' });   // letters <-> pad: a crossfade
+      },
       setVariant(v){ v = v || ''; if (v === variant) return; variant = v; if (!pad && layer === 'let') render(); },
       set onPad(f){ onPad = f; },
       get folded(){ return folded; },
-      fold(f){
+      /* the keys slide like a tray: one transform on the compositor, the tube resized once. Folding: the tube grows at
+         once under the keys, which then slide down and away. Unfolding: the keys slide up over the tube's foot, and
+         the tube shrinks to above them when they land (the prompt anchored to the bottom, so nothing jumps) */
+      fold(f, instant){
         f = !!f; if (f === folded) return; folded = f;
         for (const id of [...active.keys()]) release(id);
-        D.body.classList.toggle('fold', f);
         const b = el.querySelector('.fold'); if (b){ b.setAttribute('aria-expanded', String(!f)); b.setAttribute('aria-label', f ? 'Bring the keyboard back' : 'Fold the keyboard away'); }
-        if (!f && !REDUCED){ board.classList.remove('rise'); void board.offsetWidth; board.classList.add('rise'); }
-        relayout(); build();
-        if (!f && !term.app && term.scrollInfo && term.scrollInfo.off > 0) term.scroll(1e5);   // the keys come up for typing: show the prompt
+        if (slide){ slide.cancel(); slide = null; }
+        const anim = !instant && !REDUCED && el.animate && !(land && pad), ease = 'cubic-bezier(.2,.85,.25,1)';
+        const done = () => { if (!f && !term.app && term.scrollInfo && term.scrollInfo.off > 0) term.scroll(1e5); };   // the keys come up for typing: show the prompt
+        if (f){
+          const kb0 = el.offsetHeight;
+          D.body.classList.add('fold'); relayout(); build();
+          const h = kb0 - el.offsetHeight;   // how far the tray drops: the board and its margin
+          if (anim && h > 0){
+            D.body.classList.remove('fold');   // the board stays drawn for the slide (--kbh already folded: the tube full height behind it)
+            slide = el.animate([{ transform: 'none' }, { transform: 'translateY(' + h + 'px)' }], { duration: 240, easing: ease });
+            slide.onfinish = () => { slide = null; D.body.classList.add('fold'); if (relayout()) build(); };
+          }
+          return;
+        }
+        const kbF = el.offsetHeight;
+        D.body.classList.remove('fold');
+        const h = el.offsetHeight - kbF;
+        if (!anim || h <= 0){ relayout(); build(); done(); return; }
+        slide = el.animate([{ transform: 'translateY(' + h + 'px)' }, { transform: 'none' }], { duration: 260, easing: ease });
+        slide.onfinish = () => { slide = null; relayout(); build(); done(); };
       },
     };
-    let onPad = null, appEndedAt = 0;
+    let onPad = null, appEndedAt = 0, slide = null;
     return api;
   }
 
@@ -833,7 +882,11 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
          (the matching runs over every command, and a fast thumb should not wait on it) */
       if (m !== mode){
         const now = performance.now(), typingOn = m.startsWith('sug:') && mode && mode.startsWith('sug:');
-        if (!typingOn || now - sugAt > 90){ render(m); fits(); sugAt = now; }
+        if (!typingOn || now - sugAt > 90){
+          const kind = (mode || '').split(':')[0] !== m.split(':')[0];
+          render(m); fits(); sugAt = now;
+          if (kind && !REDUCED && strip.animate) strip.animate([{ opacity: .25, transform: 'translateY(3px)' }, { opacity: 1, transform: 'none' }], { duration: 160, easing: 'ease-out' });   // a new kind of row: it settles in
+        }
       }
       if (changed || !(n++ % 15)){
         syncHistory();

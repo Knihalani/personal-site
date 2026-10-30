@@ -3359,8 +3359,9 @@ M.createTerminal = function createTerminal(opts){
         g.strokeStyle = P.faint; g.lineWidth = 1.5; g.strokeRect(X(gcol + 4 + gh.text.length) - 4, top + 6, cw * 3 + 8, ch - 12);
       }
     }
-    if (blinkOn){
-      g.fillStyle = P.normal; g.fillRect(cx, top + 3, cw, ch - 6);
+    if (blinkOn){   // the block on whole pixels: crisp edges, the same weight wherever it sits
+      const bx0 = Math.round(cx), bx1 = Math.round(cx + cw);
+      g.fillStyle = P.normal; g.fillRect(bx0, Math.round(top + 3), bx1 - bx0, Math.round(ch - 6));
       const under = input[cur] || (gh && gh.kind === 'prefix' ? gh.text[0] : '');
       if (under && SPAN_VEC.test(under)) vecGlyph(under, PL + cur - off, top, P.bg);
       else if (under){ setFont(); g.fillStyle = P.bg; fillT(under, cx, top + fs * 0.68); }
@@ -3695,6 +3696,7 @@ M.createTerminal = function createTerminal(opts){
     get scrollInfo(){ return { off: scrollOff, max: Math.max(0, totalUnits() - ROWS), rowH: ch / H }; },   // off: rows up from the bottom; rowH: a row, 0..1 of the canvas
     get cursorY(){ return promptY / H; },
     get lum(){ return Math.min(1, lumAcc / (W * H)); },   // 0..1, the mean brightness of the last frame drawn
-    get busy(){ return !!(app || job); } };   // a full-screen app or a running command: don't rebuild under it
+    get busy(){ return !!(app || job); },                 // a full-screen app or a running command: don't rebuild under it
+    get cursorOn(){ return blinkOn && (promptVisible() || !!(app && gridCursor)); } };   // the blinking block is lit (phones keep it out of the glow)
 };
 })();
