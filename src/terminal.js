@@ -1415,24 +1415,29 @@ M.createTerminal = function createTerminal(opts){
      An anime-OP-style opening, 11.2 s to the slam, on its own fixed 150 bpm grid (a beat 0.4 s, a hit every half
      beat or beat), in one phosphor. Sound effects (sound.js sfx) are cued from here once the page has been touched.
        0.0  the tube ignites: a hot line, the raster snaps open on a tunnel of bezels rushing at the viewer
-       0.4  KAIAV slams in; 0.8 NIHALANI; 1.2 the name whips up and a huge 16 slams in; 1.4 a jolt
+       0.4  KAIAV slams in; 0.8 NIHALANI; 1.2 the name becomes a one-line header as a huge 16 slams in; 1.4 a jolt
        1.6  impact: a dark-field still (radial burst, halftone, the 16 in outline). Hit-stop; the picture was the
             middle tube of a wall: the camera blasts back and trucks along a wall of CRTs that switch on in
             cascades, each flashing a word or motif of his; a whip pan, and a dive into the J tube
-       3.2  impact (a white ring, the J in halftone); inside: a huge J, CO-FOUNDER, YOUNG / FOUNDERS, GLOBAL over a
-            spinning globe of lit founders
+       3.2  impact (a white ring, the J in halftone); inside, a globe of founders: a big J, and the words ride its
+            latitudes, swinging round to settle on the front: CO-FOUNDER, YOUNG / FOUNDERS, GLOBAL (a faint ring of it
+            turning round the back)
        4.4  out of the tube in a barrel roll, along the wall, and into the EDEN tube
-       5.2  impact (two slashed panels: EDEN / FOUNDER); inside: a turning graph of agents, AGENTS, CONTEXT in brackets
+       5.2  impact (two slashed panels: EDEN / FOUNDER); inside, a turning graph of agents: EDEN and then AGENTS are
+            drawn by constellations linking up node to node; 6.1 CONTEXT, squeezed in by brackets snapping shut
        6.4  out to the whole wall, which goes dark, then lights column by column on sixteenths into THE GOAT?
        7.2  impact: THE / GOAT / ? as three comic panels, frozen, then alive
-       7.6  every tube shows the KN; a dive into the middle one
-       8.0  the KN bursts out in wireframe; 8.4 impact (an inverted silhouette), chrome; a cut on every hit: 8.8 a
-            low hero angle, 9.2 a whip in profile, 9.6 impact (an extreme close-up of a letter edge), 9.8 from
-            above, 10.0 the wind-up, 10.4 the held breath, 10.8 the rush
-      11.2  the slam: an inverted frame, a hit-stop with a white ring shockwave, a jolt, a wave through the floor
+       7.6  every tube flips to KN in a ripple from the middle, the camera pulls back; 8.0 the KN bursts out of the
+            middle tube in wireframe; 8.4 impact (split: a crash zoom on a bevel | the KN as linework), chrome over the
+            dimmed wall; a cut on every hit, the shots shortening: 8.8 a low hero angle, 9.2 a whip, 9.4 from above,
+            9.6 impact (an extreme close-up as line art), 9.8 a dutch angle; 10.0 the wall collapses into the KN as it
+            pushes in; then a run, each shot a new scale and field: a macro crop, a tiny KN in the dark, then 0.1 s
+            cuts (a hard dutch, from above, from below) into the rush on the set (its first appearance)
+      11.2  the slam: the KN overscaled and inverted over full radial wedges (three frames, a punch), a hit-stop with a
+            white ring shockwave, the land (a scale overshoot), a wave through the floor
      Hit-stops hold the picture's own clock (S) a few frames at each impact and let it catch up just after; the
-     grid (cuts, hits, sounds) stays on the real clock. Bright full frames: two (8.4, 11.2); every other impact is
-     dark field with bright line art. Then it loops: the logo breathes over the turning cylinder of bars, makes one
+     grid (cuts, hits, sounds) stays on the real clock. One bright event (the slam, three frames); every other impact
+     is dark field with bright line art. Then it loops: the logo breathes over the turning cylinder of bars, makes one
      full turn at the top of each section, and a sine scroller runs along the floor. Everything that moves in the
      loop moves on springs and smooth curves. Keys add one more smooth turn and a small hop; the pointer leans it;
      a drag spins it. Under reduced motion: one still frame.
@@ -1480,14 +1485,14 @@ M.createTerminal = function createTerminal(opts){
       return a;
     }
     /* the camera's jolts: [at, strength] */
-    const KK = [.4, .5, .8, .5, 1.2, .8, 1.4, .3, 1.6, 1, 2.4, .25, 3.2, 1, 3.4, .35, 3.6, .45, 3.8, .35, 4.0, .8, 5.2, 1, 5.4, .35, 5.6, .6, 6.0, .7, 6.2, .3,
+    const KK = [.4, .5, .8, .5, 1.2, .8, 1.4, .3, 1.6, 1, 2.4, .25, 3.2, 1, 3.3, .35, 3.6, .45, 4.0, .8, 5.2, 1, 5.4, .35, 5.62, .6, 6.1, .7, 6.2, .3,
       7.0, .25, 7.1, .35, 7.2, 1.1, 8.0, .6, 8.4, 1, 8.8, .4, 9.2, .4, 9.4, .3, 9.6, .8, 9.8, .35, 10.0, .4, 10.4, .45, 10.6, .35, 10.8, .4, 10.9, .45, 11.0, .5, 11.1, .55, 11.2, 1.8];
     /* the sound effects, on the grid: [at, name, options] (sound.js sfx; silent until the page has been touched; each
        fires on the frame its moment is reached, never late: a missed one is skipped). Tubes switching on call 'tubeOn'
        from the wall itself */
     const CUES = [[0, 'boot'], [.4, 'type'], [.8, 'type'], [1.2, 'type', { big: true }], [1.6, 'impact'], [1.6, 'tapeStop', { dur: .13 }], [1.73, 'whoosh', { dur: .45, dir: -1 }],
-      [2.4, 'whip'], [2.8, 'whoosh', { dur: .4, dir: 1 }], [3.2, 'impact'], [3.2, 'tapeStop', { dur: .13 }], [3.4, 'type'], [3.6, 'whip'], [3.8, 'type'], [4.0, 'type', { big: true }],
-      [4.4, 'whoosh', { dur: .55, dir: -1 }], [4.95, 'whoosh', { dur: .25, dir: 1 }], [5.2, 'impact'], [5.2, 'tapeStop', { dur: .13 }], [5.4, 'type'], [5.6, 'type'], [6.0, 'type', { big: true }], [6.1, 'tick'],
+      [2.4, 'whip'], [2.8, 'whoosh', { dur: .4, dir: 1 }], [3.2, 'impact'], [3.2, 'tapeStop', { dur: .13 }], [3.3, 'type'], [3.6, 'whip'], [4.0, 'type', { big: true }],
+      [4.4, 'whoosh', { dur: .55, dir: -1 }], [4.95, 'whoosh', { dur: .25, dir: 1 }], [5.2, 'impact'], [5.2, 'tapeStop', { dur: .13 }], [5.4, 'type'], [5.62, 'type'], [6.1, 'type', { big: true }], [6.2, 'tick'],
       [6.4, 'whoosh', { dur: .4, dir: -1 }], [6.6, 'riser', { dur: .6 }], [7.2, 'impact'], [7.2, 'tapeStop', { dur: .1 }], [7.2, 'zap'],
       [7.6, 'zap'], [7.62, 'whoosh', { dur: .38, dir: -1 }], [8.0, 'whip'], [8.4, 'impact'], [8.4, 'tapeStop', { dur: .1 }], [8.8, 'zap'], [9.2, 'whip'], [9.6, 'impact'], [9.6, 'tapeStop', { dur: .1 }], [9.8, 'zap'],
       [9.4, 'tick'], [10.0, 'riser', { dur: 1.2 }], [10.4, 'zap'], [10.6, 'zap'], [10.8, 'tick'], [10.9, 'tick'], [11.0, 'tick'], [11.1, 'whoosh', { dur: .1, dir: 1 }], [11.2, 'impact', { big: true }], [11.2, 'tapeStop', { dur: .13 }]];
@@ -1857,7 +1862,8 @@ M.createTerminal = function createTerminal(opts){
       const w = x0 + 1, hh = GH + 1, lit = new Uint8Array(w * hh);
       for (let i = 0; i < t.length; i++) rows[i].forEach((row, y) => { for (let x = 0; x < GW; x++) if (row[x] === '#') lit[y * w + xs[i] + x - ext[i]] = 1; });
       const mk = () => { const c = document.createElement('canvas'); c.width = w; c.height = hh; return c; };
-      const face = mk(), da = face.getContext('2d', CPU).createImageData(w, hh), refl = mirror ? mk() : null, db = mirror ? refl.getContext('2d', CPU).createImageData(w, hh) : null;
+      const SW = { willReadFrequently: true };   // (a software canvas: written once by putImageData, which an accelerated one can choke on)
+      const face = mk(), da = face.getContext('2d', SW).createImageData(w, hh), refl = mirror ? mk() : null, db = mirror ? refl.getContext('2d', SW).createImageData(w, hh) : null;
       const cache = {};
       const put = (d, i, v) => { const k = si(v), c = cache[k] || (cache[k] = rgb(SH[k])); d.data[i * 4] = c[0]; d.data[i * 4 + 1] = c[1]; d.data[i * 4 + 2] = c[2]; d.data[i * 4 + 3] = 255; };
       for (let y = 0; y < hh; y++) for (let x = 0; x < w; x++){
@@ -1865,12 +1871,13 @@ M.createTerminal = function createTerminal(opts){
         if (lit[i]){ put(da, i, ROWV[y] || .8); if (db && y < GH) put(db, (GH - 1 - y) * w + x, (ROWV[y] || .8) * .42); }
         else if (x > 0 && y > 0 && lit[i - w - 1]) put(da, i, .12);
       }
-      face.getContext('2d', CPU).putImageData(da, 0, 0); if (refl) refl.getContext('2d', CPU).putImageData(db, 0, 0);
+      face.getContext('2d', SW).putImageData(da, 0, 0); if (refl) refl.getContext('2d', SW).putImageData(db, 0, 0);
       return { face, refl, w: w - 1, xs };
     }
     function makeStrip(){
       const text = font8(scrollText()), at = text.search(/\S/), b = bake(text, true);
-      strip = b.face; stripR = b.refl; stripW = b.w; nameAt = b.xs[at]; nameW = b.xs[at + font8(C.name || 'KN').length] - nameAt;
+      strip = b.face; stripR = b.refl; stripW = b.w;
+      if (typeof createImageBitmap === 'function'){ const f = strip, r = stripR; createImageBitmap(f).then(x => { if (strip === f) strip = x; }, () => {}); if (r) createImageBitmap(r).then(x => { if (stripR === r) stripR = x; }, () => {}); }   // (drawn a column at a time: a bitmap is far cheaper as a source) nameAt = b.xs[at]; nameW = b.xs[at + font8(C.name || 'KN').length] - nameAt;
     }
     /* ---- stars: a box of them flying at the viewer ---- */
     const NST = 200, ZR = 110, stx = new Float32Array(NST), sty = new Float32Array(NST), stz = new Float32Array(NST);
@@ -1893,7 +1900,7 @@ M.createTerminal = function createTerminal(opts){
     /* ---- layout: everything sized from the drawing's own box ---- */
     let rk = 1, lay = null, lg = null, smp = null, sg = null, pxk = 1, fW = 0, fH = 0, F0 = 1000;
     let gradV = null, fan = null;
-    let wlc = null, wg = null, wlc2 = null, wg2 = null, rw = 1, rwc = 1;               // the wall's layer (blurred as a whole by the camera's motion)
+    let wlc = null, wg = null, wlc2 = null, wg2 = null, wlc4 = null, wg4 = null, rw = 1, rwc = 1;               // the wall's layer (blurred as a whole by the camera's motion)
     let htc = null, htPat = null, htTile = null;     // halftone: a full-frame vignette of dots, and a tile for patterns
     const HTM = new DOMMatrix();
     const LO = {}, TEX = [], NT = 15;
@@ -1910,7 +1917,7 @@ M.createTerminal = function createTerminal(opts){
       lay = mkCache(W * rk, h * rk); lg = lay.getContext('2d', CPU);
       smp = mkCache(W * rk, h * rk); sg = smp.getContext('2d', CPU);   // one sample of the blur, on a clear canvas
       rw = Math.min(1, Math.sqrt((TAP ? .3e6 : .42e6) / (W * h)));
-      wlc = mkCache(W * rw, h * rw); wg = wlc.getContext('2d', CPU); wlc2 = mkCache(W * rw / 2, h * rw / 2); wg2 = wlc2.getContext('2d', CPU);   // (half size, for a wall in a fast blur)
+      wlc = mkCache(W * rw, h * rw); wg = wlc.getContext('2d', CPU); wlc2 = mkCache(W * rw / 2, h * rw / 2); wg2 = wlc2.getContext('2d', CPU); wlc4 = mkCache(W * rw / 4, h * rw / 4); wg4 = wlc4.getContext('2d', CPU);   // (half size, for a wall in a fast blur)
       chromeCtxs.fill(null); gradCC = null;
       /* the 3D scene */
       hy = Math.round(h * (tall ? .66 : .58));
@@ -2083,7 +2090,7 @@ M.createTerminal = function createTerminal(opts){
     let kHot0 = 0;
 
     /* ---- the wall of tubes: a grid on the plane z = 0, a camera that flies it ---- */
-    const TW = 4, TH = 3, GX = 4.9, GY = 3.9, NI = 10, NJ = 5, BZ = .34;
+    const TW = 4, TH = 3, GX = 4.9, GY = 3.9, NI = 12, NJ = 5, BZ = .34;
     const JI = 3, JJ = -1, EI = -3, EJ = 1;          // the J tube and the EDEN tube
     let VW = [-3, 3, -1, 1], VWS = 1;                 // the video wall's grid box, and its picture's px a unit
     const CAM = { x: 0, y: 0, z: -10, yaw: 0, pit: 0, rol: 0 }, PCAM = { x: 0, y: 0, z: -10, yaw: 0, pit: 0, rol: 0 };
@@ -2095,7 +2102,7 @@ M.createTerminal = function createTerminal(opts){
       const x3 = crl * x1 + srl * y2, y3 = -srl * x1 + crl * y2;
       pjz = z2; const zz = Math.max(.05, z2); pjx = cx + camF * x3 / zz; pjy = h / 2 - camF * y3 / zz;
     }
-    const dCov = () => Math.min(TH * camF / h, TW * camF / W2) * .97;   // the distance at which a tube fills the frame
+    const dCov = () => Math.min(TH * camF / h, TW * camF / W2) * .92;   // the distance at which a tube fills the frame
     const DK = () => tall ? 40 : 22;                                       // the wall behind the KN
     const lerpC = (o, x, y, z, yaw, pit, rol) => { o.x = x; o.y = y; o.z = z; o.yaw = yaw; o.pit = pit; o.rol = rol; };
     const bumpZ = (S, t0, t1, up, down, d0, d1) => d0 + (d1 - d0) * eO3((S - t0) / up) * (1 - eI3((S - (t1 - down)) / down));
@@ -2104,7 +2111,7 @@ M.createTerminal = function createTerminal(opts){
       if (S < T_J){                                    // out of the middle tube, along the wall, a whip, into J
         const d = Math.exp(lerp(Math.log(dc), Math.log(tall ? 30 : 17), eO3((S - T_I1) / .42)) * 1) * (1 - eI3((S - 2.8) / .4)) + dc * eI3((S - 2.8) / .4);
         const x = jx * eIO((S - 1.75) / 1.45), y = jy * eIO((S - 2.3) / .9);
-        const yaw = .62 * eIO((S - 1.75) / .5) - .62 * eO5((S - 2.4) / .32), rol = -.14 * Math.sin(Math.PI * c01((S - 1.7) / 1.3));
+        const yaw = .5 * eIO((S - 1.75) / .5) - .5 * eO5((S - 2.4) / .32), rol = -.14 * Math.sin(Math.PI * c01((S - 1.7) / 1.3));
         lerpC(o, x, y, -d, yaw, -.08 * Math.sin(Math.PI * c01((S - 1.7) / 1.2)), rol);
       } else if (S < T_E){                             // out of J in a barrel roll, along, into EDEN
         const d = bumpZ(S, T_OUTJ, T_E, .3, .3, dc, tall ? 24 : 14);
@@ -2218,7 +2225,8 @@ M.createTerminal = function createTerminal(opts){
     function wallShot(S, a){
       camF = h * 1.05;
       const s0 = S >= T_KN ? KCUT[shotOf(S)] : S >= T_W4 ? T_W4 : S >= T_W3 ? T_W3 : S >= T_OUTJ ? T_OUTJ : T_I1;   // (the shutter never reaches back across a cut)
-      const knAct = S >= T_KN; CONV = knAct ? 1 - eI3((S - T_CH) / 1.95) : 1;
+      const knAct = S >= T_KN; CONV = knAct ? 1 - eI3((S - 10.0) / .4) : 1;
+      const dim = !knAct || S < T_CH ? 1 : S < 10.0 ? .38 : .38 + .55 * sstep(10.0, 10.1, S);   // (soft behind the chrome KN; back up for the collapse)
       if (CONV <= .02) return;
       camAt(Math.max(s0, warp(a - .02)), PCAM); camAt(S, CAM);
       /* the blur's transform: where two wall points were an instant ago */
@@ -2228,20 +2236,20 @@ M.createTerminal = function createTerminal(opts){
       setCam(PCAM); proj(Pax, Pay, 0); const ax1 = pjx, ay1 = pjy; proj(Pax + 2, Pay, 0); const bx1 = pjx, by1 = pjy;
       setCam(CAM);
       const disp = Math.max(Math.hypot(ax1 - ax0, ay1 - ay0), Math.hypot(bx1 - bx0, by1 - by0));
-      const sk = a > lastWallA && a - lastWallA < .2, ni = knAct ? (tall ? 3 : 6) : NI, nj = knAct ? (tall ? 5 : 4) : NJ;
-      const ns = knAct ? 1 : clamp(Math.ceil(disp / (8 * pxk)), 1, TAP ? 3 : 4);
+      const sk = a > lastWallA && a - lastWallA < .2, ni = knAct ? (tall ? 6 : 10) : NI, nj = knAct ? (tall ? 9 : 6) : NJ;
+      const ns = knAct ? 1 : clamp(Math.ceil(disp / (5 * pxk)), 1, TAP ? 6 : 8);
       if (ns === 1){   // no blur (or behind the KN): straight onto the tube, no layer
         rwc = 1; TOX = BX; TOY = BY;
         for (let j = -nj; j <= nj; j++) for (let i = -ni; i <= ni; i++) tube(tg, i, j, S, sk);
         TOX = TOY = 0; lastTubeS = S; lastWallA = a;
         tg.setTransform(1, 0, 0, 1, BX, BY);
-        if (knAct){ tg.globalAlpha = .5 - .5 * CONV * CONV; tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h); tg.globalAlpha = 1; }   // (dimmed behind the KN)
+        if (dim < 1){ tg.globalAlpha = 1 - dim; tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h); tg.globalAlpha = 1; }   // (dimmed behind the KN)
         else dust();
         return;
       }
       /* the wall into its layer (half size when the blur will soften it anyway) */
-      const half = ns >= 2, lc = half ? wlc2 : wlc, lgc = half ? wg2 : wg;
-      rwc = half ? rw / 2 : rw;
+      const q4 = ns >= 5, half = ns >= 2, lc = q4 ? wlc4 : half ? wlc2 : wlc, lgc = q4 ? wg4 : half ? wg2 : wg;
+      rwc = q4 ? rw / 4 : half ? rw / 2 : rw;
       lgc.setTransform(1, 0, 0, 1, 0, 0); lgc.clearRect(0, 0, lc.width, lc.height);
       for (let j = -nj; j <= nj; j++) for (let i = -ni; i <= ni; i++) tube(lgc, i, j, S, sk);
       lastTubeS = S; lastWallA = a;
@@ -2317,30 +2325,35 @@ M.createTerminal = function createTerminal(opts){
       const X = cl * Math.sin(ph), Z = -cl * Math.cos(ph), Y = Math.sin(BLAT), yy = Y * GCT - Z * GST, zz = Y * GST + Z * GCT;
       const xs = BGX + BR * X, ys = BGY - BR * yy, xn = BX0 + BU * (COND * oc + SLANT * 3);
       const k = 1 / (1 + zz * .3);
-      LA.dx = (xs - xn) / (BU * COND); LA.dy = (BGY - ys) / BU; LA.sx = Math.cos(ph); LA.s = k; LA.a = zz < 0 ? 1 : .16;
+      LA.dx = (xs - xn) / (BU * COND); LA.dy = (BGY - ys) / BU; LA.sx = Math.max(.08, Math.abs(Math.cos(ph))); LA.s = k; LA.a = zz < 0 ? 1 : .1;   // (round the back: faint, never mirrored)
+      if (BBACK && zz < 0) LA.on = false;
     };
+    let BBACK = false;
     function band(L, S, T0, lat, R, gx, gy, u, from, out, ring){
       if (S < T0) return;
-      const g = S - T0; let ph = from * (1 - eO3(g / .3)) - .14 * g;
-      if (ring) ph = from - 2.4 * g;   // (a ring keeps turning)
-      if (out && S > out) ph -= 3 * eI3((S - out) / .16);
-      BLL = L; BPH = ph; BLAT = lat; BR = R; BGX = gx; BGY = gy; BU = u; BK = ring ? TAU / (L.w + VSPACE) : COND * u / (R * Math.cos(lat)); BX0 = gx - L.sw * u / 2;
-      kHot = Math.max(kHot0, .8 * Math.exp(-g * 10));
-      vline(L, BX0, gy + 3 * u, u, animBand, out && S > out ? 1 - c01((S - out) / .16) : 1);
-      kHot = kHot0;
+      const g = S - T0; let ph = from * (1 - eO5(g / .14)) - .05 * g;   // (swings round and settles, centred on the front)
+      if (ring) ph = from - 1.6 * g;   // (the faint ring behind keeps turning)
+      if (out && S > out) ph -= 2.4 * eI3((S - out) / .08);
+      if (out && S > out + .08) return;
+      BLL = L; BPH = ph; BLAT = lat; BR = R; BGX = gx; BGY = gy; BU = u; BK = ring ? TAU / (L.w + VSPACE) : COND * u / (R * Math.cos(lat)); BX0 = gx - L.sw * u / 2; BBACK = ring;
+      kHot = ring ? 0 : Math.max(kHot0, .8 * Math.exp(-g * 10)); GLP = ring || g < .14 ? -9 : (g - .14) / .3 * (L.n + 4) - 2;
+      vline(L, BX0, gy + 3 * u, u, animBandG, (out && S > out ? 1 - c01((S - out) / .08) : 1) * (ring ? .5 : 1));
+      kHot = kHot0; GLP = -9; BBACK = false;
     }
+    const animBandG = (i, n) => { animBand(i); const q = i - GLP; LA.hot = Math.max(LA.hot, .7 * Math.exp(-q * q * .7)); void n; };
     function jScene(S){
       const R = Math.min(W2 * .4, h * .36) * (1 + .1 * eO3((S - 4.0) / .2)), spin = S * 1.4 + 3 * eIO((S - 3.95) / .45), gy = h * .5;
       typeOn(tg, false);
       globe(S, cx, gy, R, spin, .45 + .3 * Math.exp(-(((S - T_J) % BT + BT) % BT) * 7));
       streaks(S, false, 1.6, .3);
       typeOn(tg, true);
-      word(LO.J, S, T_J - .1, cx, gy - R * .12, LO.uJ * .9, 1.9, 3.52, -W2 * 1.1, 0, 1, 1);
-      const ub = Math.min(R * .2, uFit(LO.founders, R * 1.5, h));   // band type: about a fifth of the globe's radius
-      band(LO.cof, S, 3.4, -.5, R * 1.02, cx, gy, ub * .8, 2.4, 3.52, false);
-      band(LO.young, S, 3.6, .38, R * 1.02, cx, gy, ub, -2.4, 3.92, false);
-      band(LO.founders, S, 3.8, -.32, R * 1.02, cx, gy, ub, 2.4, 3.92, false);
-      band(LO.gring, S, 4.0, 0, R * 1.08, cx, gy, LO.uRing * R * .85, 1.9, 4.3, true);   // GLOBAL rings the sphere
+      word(LO.J, S, T_J - .1, cx, gy - R * .22, Math.min(LO.uJ * .78, R * .15), 1.9, 3.54, -W2 * 1.1, 0, 1, 1);
+      const bu = L => Math.min(R * .22, 1.2 * R / L.sw);   // band type: each word about 60% of the globe's width
+      band(LO.cof, S, 3.3, -.62, R * 1.02, cx, gy, bu(LO.cof), 1.2, 3.54, false);
+      band(LO.young, S, 3.6, .34, R * 1.02, cx, gy, bu(LO.founders), -1.6, 3.92, false);
+      band(LO.founders, S, 3.6, -.3, R * 1.02, cx, gy, bu(LO.founders), 1.6, 3.92, false);
+      band(LO.gring, S, 4.0, 0, R * 1.04, cx, gy, LO.uRing * R * .85, 1.2, 0, true);   // GLOBAL rings the sphere: faint round the back
+      band(LO.global, S, 4.0, 0, R * 1.06, cx, gy, bu(LO.global) * 1.15, 1.1, 0, false);
       tg.globalCompositeOperation = 'source-over';
     }
     /* ---- inside EDEN: a turning graph of agents, packets of context running along it ---- */
@@ -2382,12 +2395,12 @@ M.createTerminal = function createTerminal(opts){
         }
       }
       const n = px.length, C = { n, ns: A.length, tx: Float32Array.from(px), ty: Float32Array.from(py), sx: new Float32Array(n), sy: new Float32Array(n), dl: new Float32Array(n), a: Int16Array.from(A), b: Int16Array.from(B) };
-      for (let k = 0; k < n; k++){ const an = hash(k * 1.7 + xc) * TAU, r = (.35 + .65 * hash(k * 2.9)) * Math.max(W, h) * .6; C.sx[k] = xc + Math.cos(an) * r; C.sy[k] = h * .5 + Math.sin(an) * r * .7; C.dl[k] = hash(k * 4.1) * .13; }
+      for (let k = 0; k < n; k++){ const an = hash(k * 1.7 + xc) * TAU, r = (.35 + .65 * hash(k * 2.9)) * Math.max(W, h) * .6; C.sx[k] = xc + Math.cos(an) * r; C.sy[k] = h * .5 + Math.sin(an) * r * .7; C.dl[k] = hash(k * 4.1) * .08; }
       return C;
     }
     let cnX = 0, cnY = 0;
     function cnPos(C, k, g, ex){
-      const p = eO3((g - C.dl[k]) / .16);
+      const p = eO3((g - C.dl[k]) / .1);
       cnX = lerp(C.sx[k], C.tx[k], p); cnY = lerp(C.sy[k], C.ty[k], p);
       if (ex > 0){ const q = eI3(ex); cnX = lerp(cnX, 2 * C.tx[k] - C.sx[k] * .4 - cx * .6, q); cnY = lerp(cnY, 2 * C.ty[k] - C.sy[k] * .4 - h * .3, q); }
     }
@@ -2398,41 +2411,41 @@ M.createTerminal = function createTerminal(opts){
       /* the links, each drawn out from its first node once both have arrived */
       G.strokeStyle = SH[si(.8)]; G.lineWidth = Math.max(1.5 * pxk, u * .22); G.lineCap = 'round'; G.globalAlpha = al; G.beginPath();
       for (let e = 0; e < C.ns; e++){
-        const a = C.a[e], b = C.b[e], r = c01((g - Math.max(C.dl[a], C.dl[b]) - .14) / .07); if (r <= 0) continue;
+        const a = C.a[e], b = C.b[e], r = c01((g - Math.max(C.dl[a], C.dl[b]) - .09) / .05); if (r <= 0) continue;
         cnPos(C, a, g, ex); const ax = cnX, ay = cnY; cnPos(C, b, g, ex);
         G.moveTo(ax, ay); G.lineTo(lerp(ax, cnX, r), lerp(ay, cnY, r));
       }
       G.stroke(); G.lineCap = 'square';
       /* the nodes */
       G.fillStyle = P.bright;
-      for (let k = 0; k < C.n; k++){ cnPos(C, k, g, ex); const q = (3 + 4 * Math.exp(-Math.max(0, g - C.dl[k] - .16) * 12)) * pxk; G.fillRect(cnX - q / 2, cnY - q / 2, q, q); }
+      for (let k = 0; k < C.n; k++){ cnPos(C, k, g, ex); const q = (3 + 4 * Math.exp(-Math.max(0, g - C.dl[k] - .1) * 12)) * pxk; G.fillRect(cnX - q / 2, cnY - q / 2, q, q); }
       /* packets along the links once it stands */
-      if (g > .3 && !ex){ for (let e = 0; e < C.ns; e += 2){ const f = (S * 1.8 + hash(e * 1.3)) % 1, a = C.a[e], b = C.b[e], q = 5 * pxk; G.fillRect(lerp(C.tx[a], C.tx[b], f) - q / 2, lerp(C.ty[a], C.ty[b], f) - q / 2, q, q); } }
+      if (g > .2 && !ex){ for (let e = 0; e < C.ns; e += 2){ const f = (S * 1.8 + hash(e * 1.3)) % 1, a = C.a[e], b = C.b[e], q = 5 * pxk; G.fillRect(lerp(C.tx[a], C.tx[b], f) - q / 2, lerp(C.ty[a], C.ty[b], f) - q / 2, q, q); } }
       G.globalAlpha = 1;
       lumAcc += C.ns * u * 6 * pxk * al;
       /* then the letters light over it */
-      const lit = c01((g - .3) / .1) * al;
-      if (lit > 0){ typeOn(tg, true); kHot = Math.max(kHot0, .6 * Math.exp(-(g - .3) * 8)); GLP = (g - .38) / .32 * (L.n + 4) - 2; vlineC(L, xc, yb, u, animSq, lit); GLP = -9; kHot = kHot0; tg.globalCompositeOperation = 'source-over'; }
+      const lit = c01((g - .16) / .07) * al;
+      if (lit > 0){ typeOn(tg, true); kHot = Math.max(kHot0, .6 * Math.exp(-(g - .16) * 8)); GLP = (g - .24) / .32 * (L.n + 4) - 2; vlineC(L, xc, yb, u, animSq, lit); GLP = -9; kHot = kHot0; tg.globalCompositeOperation = 'source-over'; }
     }
     function edenScene(S){
-      const ph = ((S - T_E) % BT + BT) % BT, fire = Math.max(Math.exp(-c01(S - 5.6) * 6) * (S >= 5.6 ? 1 : 0), Math.exp(-ph * 9) * .5);
+      const ph = ((S - T_E) % BT + BT) % BT, fire = Math.max(Math.exp(-c01(S - 5.62) * 6) * (S >= 5.62 ? 1 : 0), Math.exp(-ph * 9) * .5);
       typeOn(tg, false);
       graph(S, cx, h * .5, Math.min(W2 * .46, h * .62), S * .9 + 2 * eIO((S - 5.55) / .3), fire, .45);
       streaks(S, true, 1.1, .2);
-      const pe = 1 + .05 * c01((S - T_E) / .4), pa = 1 + .05 * c01((S - 5.6) / .4);
+      const pe = 1 + .05 * c01((S - T_E) / .4), pa = 1 + .05 * c01((S - 5.62) / .4);
       tg.save(); tg.translate(cx * (1 - pe), h * .44 * (1 - pe)); tg.scale(pe, pe);   // (a slow push in on each)
-      constellation(LO.cE, LO.eden, LO.uEden, cx, h * .44 + 3 * LO.uEden, S, T_E - .14, 5.5);
+      constellation(LO.cE, LO.eden, LO.uEden, cx, h * .44 + 3 * LO.uEden, S, T_E - .14, 5.6);
       tg.restore(); tg.setTransform(1, 0, 0, 1, BX, BY);
       typeOn(tg, true);
-      word(LO.fdr, S, 5.4, cx, h * .7, LO.uFdr, 1.6, 5.5, 0, 0, 1.6, 1);
+      word(LO.fdr, S, 5.4, cx, h * .7, LO.uFdr, 1.6, 5.58, 0, 0, 1.6, 1);
       tg.globalCompositeOperation = 'source-over';
       tg.save(); tg.translate(cx * (1 - pa), h * .5 * (1 - pa)); tg.scale(pa, pa);
-      constellation(LO.cA, LO.agents, LO.uAg, cx, h * .5 + 3 * LO.uAg, S, 5.56, 5.88);
+      if (S < 6.1) constellation(LO.cA, LO.agents, LO.uAg, cx, h * .5 + 3 * LO.uAg, S, 5.62, 0);
       tg.restore(); tg.setTransform(1, 0, 0, 1, BX, BY);
-      if (S >= 6.0){   // CONTEXT: the brackets snap shut on it, squeezing it into place; a pulse on the off-beat
-        const e = back((S - 6.0) / .12, 2.2), pu = (1 + .08 * Math.exp(-c01(S - 6.2) * 10) * (S > 6.2 ? 1 : 0)) * (1 + .05 * c01((S - 6.1) / .3));
-        typeOn(tg, true); SQ = -.3 * (1 - c01((S - 6.0) / .12)); GLP = (S - 6.14) / .3 * 11 - 2;
-        vlineC(LO.context, cx, h * .5 + 3 * LO.uCtx * pu, LO.uCtx * pu * lerp(1.5, 1, e), animSq, c01((S - 6.0) / .05)); GLP = -9; SQ = 0;
+      if (S >= 6.1){   // CONTEXT: the brackets snap shut on it, squeezing it into place; a pulse on the beat
+        const e = back((S - 6.1) / .1, 2.2), pu = (1 + .08 * Math.exp(-c01(S - 6.2) * 10) * (S > 6.2 ? 1 : 0)) * (1 + .05 * c01((S - 6.15) / .25));
+        typeOn(tg, true); SQ = -.3 * (1 - c01((S - 6.1) / .1)); GLP = (S - 6.2) / .22 * 11 - 2;
+        vlineC(LO.context, cx, h * .5 + 3 * LO.uCtx * pu, LO.uCtx * pu * lerp(1.5, 1, e), animSq, 1); GLP = -9; SQ = 0;
         tg.globalCompositeOperation = 'source-over';
         const bw = LO.context.sw * LO.uCtx / 2 + 26 * pxk, off = W2 * .6 * (1 - e);
         bracket(cx - bw * pu - off, h * .5, LO.uCtx * 11 * pu, 22 * pxk, 1); bracket(cx + bw * pu + off, h * .5, LO.uCtx * 11 * pu, 22 * pxk, -1);
@@ -2588,13 +2601,13 @@ M.createTerminal = function createTerminal(opts){
     /* the KN act: the wall is its spine. Every tube flips to KN, the camera pulls back, the KN bursts out of the middle
        tube; behind it the wall collapses into it while the shots shorten: 0.4, 0.4, 0.4, then 0.2 s each, then a run of
        0.1 s cuts in the last beat, and the set (bars, floor) only for the slam */
-    let SHOT = 9, FK = 1, SOLID = 1, CHK = 1, ALPHA = 1, SWEEP = -1, SETK = 1, WALLK = 0, BGK = 0;
+    let SHOT = 9, FK = 1, SOLID = 1, CHK = 1, ALPHA = 1, SWEEP = -1, SETK = 1, WALLK = 0, BGK = 0, ANCH = -1, AX = 0, AY = 0;
     const K_BURST = 0, K_CHROME = 1, K_HERO = 2, K_WHIP = 3, K_TOP = 4, K_CLOSE = 5, K_DUTCH = 6, K_WIND = 7, K_LOW = 8, K_TQ = 9, K_MG1 = 10, K_MG2 = 11, K_MG3 = 12, K_RUSH = 13, K_LOOP = 14;
     const KCUT = [T_KN, T_CH, 8.8, 9.2, 9.4, T_EDGE, 9.8, 10.0, 10.4, 10.6, 10.8, 10.9, 11.0, 11.1, SLAM];
     function shotOf(S){ let k = 0; while (k < KCUT.length - 2 && S >= KCUT[k + 1]) k++; return k; }
     function shotPose(S){
       let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, sx = 1, sy = 1;
-      FK = 1; SOLID = 1; CHK = 1; ALPHA = 1; SWEEP = -1; SETK = 0; WALLK = 0; BGK = 0;
+      FK = 1; SOLID = 1; CHK = 1; ALPHA = 1; SWEEP = -1; SETK = 0; WALLK = 0; BGK = 0; ANCH = -1;
       SHOT = shotOf(S);
       const u = c01((S - KCUT[SHOT]) / (KCUT[SHOT + 1] - KCUT[SHOT]));
       switch (SHOT){
@@ -2602,16 +2615,17 @@ M.createTerminal = function createTerminal(opts){
           z = Z0 * lerp(2.4, 1.1, e); yaw = lerp(-.55, -.3, e); pit = lerp(-.1, -.2, e); rol = lerp(-1.6, 0, e); SOLID = 0; CHK = 0; break; }
         case K_CHROME: WALLK = 1; z = Z0 * lerp(1.12, 1.0, u); yaw = lerp(-.45, .38, eIO(u)); pit = -.22; y = logoY + .3 * Math.sin(u * Math.PI); SWEEP = u * 1.2; break;
         case K_HERO: WALLK = 1; z = Z0 * lerp(1.02, .84, eO3(u)); yaw = lerp(.75, .1, u); pit = lerp(.48, .3, u); rol = lerp(-.2, -.05, u); y = logoY + lerp(.6, 1.9, eO3(u)); break;
-        case K_WHIP: WALLK = 1; z = Z0; yaw = lerp(-1.05, 1.05, eIO(u)); pit = -.15; rol = lerp(.2, -.15, u); break;   // (a whip that never goes edge-on)
+        case K_WHIP: WALLK = 1; z = Z0; yaw = lerp(-.7, .7, eIO(u)); pit = -.15; rol = lerp(.2, -.15, u); break;   // (a whip that never goes near edge-on)
         case K_TOP: WALLK = 1; z = Z0 * 1.05; pit = -.85; yaw = .12; rol = lerp(-.6, .4, u); break;
-        case K_CLOSE: FK = 2.8; yaw = lerp(.28, .4, u); pit = lerp(-.3, -.22, u); SWEEP = u; BGK = 1; break;   // the extreme close-up on the K's arm
+        case K_CLOSE: FK = 2.8; yaw = lerp(.28, .4, u); pit = lerp(-.3, -.22, u); SWEEP = u; BGK = 1; ANCH = LET[0].o + LET[0].n + 6; AX = lerp(W2 * .56, W2 * .5, u); AY = lerp(h * .36, h * .44, u); break;   // the extreme close-up on the K's arm
         case K_DUTCH: WALLK = 1; z = Z0 * lerp(1.0, .88, u); yaw = .35; pit = -.06; rol = lerp(.42, .3, u); break;
-        case K_WIND: { const e = s5(u); WALLK = 1; z = Z0 * lerp(1.0, 1.45, e); yaw = lerp(.4, -.45, e); pit = lerp(-.2, -.12, e); sx = 1 + .1 * e; sy = 1 - .13 * e; break; }   // the wind-up, the wall pouring into it
-        case K_LOW: FK = 1.5; z = Z0 * lerp(1.45, 1.32, u); yaw = lerp(-.3, -.2, u); pit = .36; y = logoY + .8; sx = 1.1; sy = .87; BGK = 2; break;
-        case K_TQ: FK = 1.25; z = Z0 * 1.3; yaw = lerp(-.85, -.7, u); pit = -.25; rol = .22; sx = 1.1; sy = .87; BGK = 3; break;
-        case K_MG1: FK = 1.4; z = Z0 * 1.4; yaw = .28; pit = -.3; sx = 1.1; sy = .87; BGK = 4; break;   // the machine-gun run
-        case K_MG2: FK = 1.3; z = Z0 * 1.36; yaw = -.62; pit = .3; rol = -.2; sx = 1.1; sy = .87; BGK = 2; break;
-        case K_MG3: FK = 1.3; z = Z0 * 1.3; yaw = .6; pit = -.5; rol = .25; sx = 1.1; sy = .87; BGK = 3; break;
+        case K_WIND: { const e = s5(u); WALLK = 1; z = Z0 * lerp(1.0, .76, e); yaw = lerp(.35, -.15, e); pit = lerp(-.2, -.14, e); break; }   // the wall pours into it as it pushes in
+        /* the run: every shot a new scale and angle on a field of its own */
+        case K_LOW: FK = 2.3; z = Z0 * 1.1; yaw = lerp(-.25, -.12, u); pit = -.18; BGK = 2; ANCH = LET[1].o + LET[1].n + 5; AX = lerp(W2 * .62, W2 * .56, u); AY = lerp(h * .32, h * .36, u); break;   // a macro crop on the N
+        case K_TQ: FK = .5; z = Z0; yaw = lerp(.2, .42, u); pit = -.32; rol = -.08; BGK = 5; break;   // wide: a tiny KN in the dark
+        case K_MG1: FK = 1.3; z = Z0 * 1.2; yaw = -.35; pit = -.1; rol = .62; BGK = 6; break;   // a hard dutch
+        case K_MG2: FK = 1.15; z = Z0 * 1.2; yaw = .1; pit = -1.0; rol = .3; BGK = 3; break;   // from above
+        case K_MG3: FK = 1.35; z = Z0 * 1.25; yaw = .45; pit = .4; rol = -.1; y = logoY + .6; BGK = 4; break;   // from below
         default: { SETK = 1; const e = eI3(u); z = Z0 * lerp(1.5, 1, e); yaw = -.3 * (1 - e); pit = -.12 - .16 * e; sx = 1.1 - .2 * u; sy = .87 + .33 * u; }   // the rush, on the set
       }
       POSE[0] = yaw; POSE[1] = pit; POSE[2] = rol; POSE[3] = y; POSE[4] = z; POSE[5] = sx; POSE[6] = sy;
@@ -2700,7 +2714,7 @@ M.createTerminal = function createTerminal(opts){
     }
     function knScene(a, S, dt, still){
       const L = S - SLAM, A = a - SLAM;
-      if (still || L >= 0){ SHOT = K_LOOP; FK = 1; SOLID = 1; CHK = 1; ALPHA = 1; SWEEP = -1; SETK = 1; pose(L, still); }
+      if (still || L >= 0){ SHOT = K_LOOP; FK = 1; SOLID = 1; CHK = 1; ALPHA = 1; SWEEP = -1; SETK = 1; ANCH = -1; pose(L, still); }
       else shotPose(S);
       if (SHOT !== lastShot){ prevOk = false; lastShot = SHOT; }   // a cut: no blur across it
       const yaw = POSE[0], pit = POSE[1], rol = POSE[2], y = POSE[3], z = POSE[4], sx = POSE[5], sy = POSE[6];
@@ -2713,15 +2727,20 @@ M.createTerminal = function createTerminal(opts){
       dist += speed * dt; floorD += (still ? 0 : SHOT === K_LOOP ? 3 + 6 * kick : 14) * dt;
       /* the backdrop first: the wall behind the KN (its own camera and blur) */
       if (WALLK && !still){ wallShot(S, a); tg.setTransform(1, 0, 0, 1, BX, BY); }
-      const climax = !still && A >= 0 && A < .1, osc = climax ? (A < .033 ? 1.4 : A < .067 ? 1.26 : 1.13) : 1;   // (the slam's frames: the KN overscaled, bleeding off the tube)
+      const climax = !still && A >= 0 && A < .1;   // (the slam's frames: the KN overscaled, bleeding off the tube)
       F = F0 * FK; pcx = cx; pcy = hy;
-      xform(yaw, pit, rol, 0, y, z / osc, sx, sy);
-      if (SHOT === K_CLOSE){   // the close-up: the tip of the K's upper arm held near the middle of the frame
-        const k = LET[0].o + LET[0].n + 6, u = (S - T_EDGE) / .2;
-        pcx += lerp(W2 * .56, W2 * .5, u) - qx[k]; pcy += lerp(h * .36, h * .44, u) - qy[k];
+      if (climax){
+        const k = A >= .033 && A < .067 ? 1.08 : 1, zc = F * 14.4 / ((tall ? 1.3 : 1.1) * W2) / k;
+        xform(0, -.1, 0, 0, logoY, zc, 1, 1);
+        BB[0] = BB[1] = 1e9; BB[2] = BB[3] = -1e9; grow();
+        pcx += cx - (BB[0] + BB[2]) / 2; pcy += h * .5 - (BB[1] + BB[3]) / 2;
+        xform(0, -.1, 0, 0, logoY, zc, 1, 1);
+      } else xform(yaw, pit, rol, 0, y, z, sx, sy);
+      if (ANCH >= 0 && !climax){   // a crop: one corner of a letter held at a point of the frame
+        pcx += AX - qx[ANCH]; pcy += AY - qy[ANCH];
         xform(yaw, pit, rol, 0, y, z, sx, sy);
       }
-      const lsx = SHOT === K_CLOSE ? pcx : cx, lsy = pcy - F * y / z, lr = F * 8.5 / z;
+      const lsx = climax ? cx : ANCH >= 0 ? pcx : cx, lsy = climax ? h * .5 : pcy - F * y / z, lr = F * 8.5 / z;
       G = tg;
       /* the backdrop: the set (bars, floor, stars), or a shot's own field of lines */
       if (SETK){
@@ -2735,6 +2754,8 @@ M.createTerminal = function createTerminal(opts){
       else if (BGK === 2) streaks(S, true, 2.6, .34);
       else if (BGK === 3) rings(S, cx, lsy, 2.4, .35);
       else if (BGK === 4) speedLines(S, cx, lsy, 1.2, .35, -1);
+      else if (BGK === 5) drawStars(dist, 160, 0, 1e9, .8, NST);
+      else if (BGK === 6) streaks(S, false, 3, .32);
       if (!still && SHOT === K_RUSH){ const u = (S - 11.1) / .1; tg.globalAlpha = .4 + .6 * u; radial(lsx, lsy, lr * (1.5 - .5 * u), SH[si(.3)], .6); tg.globalAlpha = 1; }
       /* the logo: crisp on the tube, or (moving fast) blurred: sub-frame poses added up on a layer */
       let sweep = SWEEP;
@@ -2746,7 +2767,7 @@ M.createTerminal = function createTerminal(opts){
       envT = S * .7;
       const lw = clamp(F / z * .1, 1.5, 4.5) * Math.max(1, pxk * .8);
       let ns = 1;
-      if (prevOk && !still && dt > 0 && SHOT !== K_CLOSE && !(L >= 0 && L < .14) && !climax){
+      if (prevOk && !still && dt > 0 && ANCH < 0 && SOLID >= 1 && !(L >= 0 && L < .14) && !climax){   // (no blur on a crop, or on the wireframe: crisp lines read)
         const disp = Math.abs(yaw - pYaw) * lr * .9 + Math.abs(pit - pPit) * lr * .7 + Math.abs(rol - pRol) * lr * .7 + Math.abs(F * y / z - F * pY / pZ) + Math.abs(F * 8.5 / z - F * 8.5 / pZ) * .5;
         ns = clamp(Math.ceil(disp / 7), 1, SOLID < 1 || WALLK ? Math.min(3, NMAX) : NMAX);   // (a wireframe, or the KN over the wall: few samples)   // (a wireframe gets few samples: many read as a blob)
       }
@@ -2790,17 +2811,25 @@ M.createTerminal = function createTerminal(opts){
       }
       if (impact){                                     // the climax, inverted: the field burns, the KN a black cut-out bleeding off it, black rays
         tg.fillStyle = SH[si(.92)]; tg.fillRect(-W2, -h, 3 * W2, 3 * h); lumAcc += W2 * h * .9;
-        silhouette(P.bg); if (A < .067) radial(lsx, lsy, lr * osc * 1.02, P.bg, A < .034 ? 1 : .6);
+        silhouette(P.bg); radial(lsx, lsy, 0, P.bg, A < .034 ? 1 : A < .067 ? .75 : .5);
       }
-      if (imp5){                                       // chrome's arrival: the KN in halftone and a hot outline on black, slashed diagonally
+      if (imp5){                                       // chrome's arrival, split: a crash zoom on one bevel | the whole KN as hot linework on black
         tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h);
-        radial(lsx, lsy, lr * .9, SH[si(.3)], .5);
-        if (!htPat) htPat = tg.createPattern(htTile, 'repeat');
-        HTM.a = 1; HTM.b = 0; HTM.c = 0; HTM.d = 1; HTM.e = 0; HTM.f = 0; htPat.setTransform(HTM); silhouette(htPat);
-        tg.strokeStyle = P.bright; tg.lineWidth = 4 * pxk; tg.lineJoin = 'round';
+        const sx0 = W2 * .62, sx1 = W2 * .38;
+        tg.save(); tg.beginPath(); tg.moveTo(-W2, -h); tg.lineTo(sx0, -h); tg.lineTo(sx1, 2 * h); tg.lineTo(-W2, 2 * h); tg.closePath(); tg.clip();
+        speedLines(S, W2 * .25, h * .45, 1.4, .3, 1, 30);
+        const f0 = F, p0x = pcx, p0y = pcy; F = F0 * 3.4; pcx = cx; pcy = hy; xform(-.35, -.25, 0, 0, logoY, Z0, 1, 1);
+        const kk = LET[0].o + LET[0].n + 6; pcx += W2 * .3 - qx[kk]; pcy += h * .42 - qy[kk]; xform(-.35, -.25, 0, 0, logoY, Z0, 1, 1);
+        drawLogo(1, 1, 1, lw * 2, .55); F = f0; pcx = p0x; pcy = p0y; xform(yaw, pit, rol, 0, y, z, sx, sy);
+        tg.restore();
+        tg.save(); tg.beginPath(); tg.moveTo(sx0, -h); tg.lineTo(3 * W2, -h); tg.lineTo(3 * W2, 2 * h); tg.lineTo(sx1, 2 * h); tg.closePath(); tg.clip();
+        { const p0x = pcx; pcx = cx + (tall ? 0 : W2 * .2); pcy = hy + (tall ? h * .12 : 0); xform(.25, -.2, 0, 0, logoY, Z0 * (tall ? 1.4 : 1.55), 1, 1); pcx = p0x; }
+        tg.strokeStyle = SH[si(.45)]; tg.lineWidth = 1.5 * pxk; tg.lineJoin = 'round';
+        for (const Lt of LET){ ring(Lt.o + 2 * Lt.n, Lt.n); tg.stroke(); }
+        tg.strokeStyle = P.bright; tg.lineWidth = 4 * pxk;
         for (const Lt of LET){ ring(Lt.o, Lt.n); tg.stroke(); }
-        tg.lineJoin = 'miter';
-        tg.lineWidth = 3 * pxk; tg.beginPath(); tg.moveTo(-W2 * .1, h * .92); tg.lineTo(W2 * 1.1, h * .12); tg.moveTo(-W2 * .1, h * .92 + 14 * pxk); tg.lineTo(W2 * 1.1, h * .12 + 14 * pxk); tg.stroke();
+        tg.lineJoin = 'miter'; tg.restore(); pcy = hy; xform(yaw, pit, rol, 0, y, z, sx, sy);
+        tg.strokeStyle = P.bright; tg.lineWidth = 5 * pxk; tg.beginPath(); tg.moveTo(sx0, -h); tg.lineTo(sx1, 2 * h); tg.stroke();
         lumAcc += W2 * h * .14;
       }
       if (imp6){                                       // the close-up as line art: every edge, hot, rays off the tip
