@@ -44,64 +44,146 @@ noscript{ position: fixed; inset: 0; z-index: 4; display: grid; place-content: c
 noscript h1{ margin: 0; font: 500 18px var(--mono) } noscript p{ margin: 0; color: var(--dim) } noscript a{ color: #8dffb4 }
 /* the flat terminal on a desktop (no WebGL, or three.js did not load): one centred column, sized by main.js */
 body.flat #stage .phone-term{ right: 0; margin: 0 auto }
-/* phones (body.touch, main.js flat()): a thumb-reach dock under the terminal (the main pages; the words that match
-   while typing; arrows and esc while a game runs; the on-screen keyboard), riding above the keyboard when it is open.
-   Drawn like the terminal: VT323, the phosphor greens, chips underlined as on the tube. Plus a copied note, the
-   swipe-back cue and a "more" tab when a page runs on below */
-body.touch{ --hdr: calc(env(safe-area-inset-top, 0px) + 36px); --dock-h: 52px; --g: #8dffb4; --gd: #6b9061; --gn: #c8f5b8; --gf: #43603c;
-  overscroll-behavior: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none }
-body.touch.land{ --hdr: calc(env(safe-area-inset-top, 0px) + 6px); --dock-h: 44px }
-body.touch #mute{ top: env(safe-area-inset-top, 0px); right: max(6px, env(safe-area-inset-right, 0px)); height: 36px; padding: 0 12px; border: 0; gap: 8px;
-  font: 20px/1 VT323, monospace; letter-spacing: .02em; color: var(--gd); -webkit-tap-highlight-color: transparent }
-body.touch #mute::after{ inset: -2px -6px -6px -10px }   /* a 44 px target */
-body.touch #mute::before{ width: 7px; height: 7px }
-body.touch #mute:active{ color: var(--gn) }
-body.touch.land #mute{ top: auto; bottom: env(safe-area-inset-bottom, 0px); height: var(--dock-h); right: max(8px, env(safe-area-inset-right, 0px)); z-index: 3 }
-body.touch.land.kb #mute, body.touch.reading #mute{ display: none }
-#dock{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 4px; box-sizing: border-box;
-  height: calc(var(--dock-h) + env(safe-area-inset-bottom, 0px)); padding: 0 max(6px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(6px, env(safe-area-inset-left, 0px));
-  background: #0a0f0a; border-top: 1px solid rgba(141,255,180,.09); font: 22px/1 VT323, monospace; color: var(--gd) }
-body.kb #dock{ height: var(--dock-h); padding-bottom: 0 }
-body.touch.land #dock{ padding-right: calc(max(8px, env(safe-area-inset-right, 0px)) + 96px) }
-body.touch.land.kb #dock{ padding-right: max(6px, env(safe-area-inset-right, 0px)) }
-#dock[hidden], body.reading #dock{ display: none }
-#dock .keys{ flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; justify-content: space-between; overflow-x: auto; scrollbar-width: none; touch-action: pan-x }
-#dock .keys.over{ -webkit-mask: linear-gradient(90deg, #000 calc(100% - 18px), transparent); mask: linear-gradient(90deg, #000 calc(100% - 18px), transparent) }
-#dock .keys::-webkit-scrollbar{ display: none }
-#dock.sug .keys{ justify-content: flex-start; gap: 2px }
-#dock .k{ flex: 0 0 auto; min-width: 38px; height: 44px; padding: 0 7px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; cursor: pointer;
-  text-decoration: underline 1px rgba(107,144,97,.55); text-underline-offset: 5px; transition: background-color .35s, color .35s, text-shadow .35s; -webkit-tap-highlight-color: transparent; touch-action: manipulation }
-#dock.sug .k{ flex: 0 0 auto }
-@media (max-width: 440px){ #dock{ font-size: 20px; gap: 2px } #dock .k{ min-width: 30px; padding: 0 4px } #dock .kb{ width: 42px } }
-@media (max-width: 370px){ #dock{ font-size: 19px; gap: 2px; padding-left: max(4px, env(safe-area-inset-left, 0px)); padding-right: max(4px, env(safe-area-inset-right, 0px)) } #dock .k{ min-width: 28px; padding: 0 3px } #dock .k.ico{ min-width: 36px } #dock .kb{ width: 40px } }
-#dock .k.on{ color: var(--gn); text-decoration-color: rgba(200,245,184,.5) }
-#dock .k b{ font-weight: inherit; color: var(--gn) }
-#dock .k.hit{ background: rgba(141,255,180,.14); color: #f0ffe8; text-shadow: 0 0 9px rgba(141,255,180,.75); transition: none }
-#dock .k svg, #dock .kb svg{ width: 22px; height: 22px; display: block; margin: auto; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round }
-#dock .k.ico{ text-decoration: none; min-width: 42px; padding: 0 6px }
-#dock .note{ padding: 0 10px; color: var(--gf); white-space: nowrap }
-#dock .kb{ flex: 0 0 auto; width: 46px; height: 44px; border: 0; border-left: 1px solid rgba(141,255,180,.1); border-radius: 0; background: none; color: var(--gd); padding: 0 0 0 4px; cursor: pointer; -webkit-tap-highlight-color: transparent }
-#dock .kb.hit{ color: #f0ffe8; filter: drop-shadow(0 0 6px rgba(141,255,180,.7)) }
-#dock .kb .up{ display: none } body.kb #dock .kb .up{ display: block } body.kb #dock .kb .dn{ display: none }
-#more{ position: absolute; left: 50%; top: 0; transform: translate(-50%, -60%); height: 26px; padding: 0 12px 0 10px; border: 1px solid rgba(141,255,180,.28); border-radius: 13px; background: #0a0f0a;
-  color: var(--g); font: 19px/1 VT323, monospace; display: flex; align-items: center; gap: 4px; box-shadow: 0 0 14px rgba(141,255,180,.12); opacity: 0; pointer-events: none; transition: opacity .25s; -webkit-tap-highlight-color: transparent }
-#more::after{ content: ""; position: absolute; inset: -9px -4px }
-#more svg{ width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-#more.on{ opacity: 1; pointer-events: auto }
-#toast{ position: absolute; left: 50%; bottom: calc(100% + 14px); transform: translate(-50%, 10px); max-width: calc(100vw - 32px); box-sizing: border-box; display: flex; align-items: center; gap: 8px;
+/* phones (body.touch, main.js flat()): the computer in your hands. A beige bezel around a curved green tube (scanlines,
+   a soft phosphor bloom, a vignette, a power-on), and under it the desk's keyboard: beige caps with Helvetica
+   legends that travel down under the thumb, real Topre recordings for each press and release. Above the keys a
+   strip of function keys: the main pages, the words that match while typing, a game's name. Games swap the
+   letters for a pad. The keyboard folds down to the strip for reading. Plus a copied note and the swipe-back cue */
+body.touch{ --hel: "Helvetica Neue", Helvetica, Arial, sans-serif; --ink: #3a3229; --g: #8dffb4; --gd: #6b9061; --gn: #c8f5b8;
+  --sxl: max(7px, env(safe-area-inset-left, 0px)); --sxr: max(7px, env(safe-area-inset-right, 0px)); --bz: calc(env(safe-area-inset-top, 0px) + 30px); --sb: 8px;
+  --fh: 36px; --rh: 48px; --sh: 34px; --kbh: 0px;
+  background: #b9ad95; overscroll-behavior: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none }
+@media (max-height: 700px){ body.touch{ --rh: 45px; --fh: 34px; --bz: calc(env(safe-area-inset-top, 0px) + 26px) } }
+body.touch.land{ --bz: max(7px, env(safe-area-inset-top, 0px)); --sb: 6px; --rh: 31px; --sh: 31px }
+body.touch.land .fk, body.touch.land #kb #mute{ height: 25px }
+body.touch.land .board{ margin-top: 4px }
+body.touch::before{ display: none }
+/* the bezel: lamp-lit plastic, a little darker toward the edges; the maker's badge pressed into it */
+body.touch #stage{ bottom: var(--kbh); overflow: hidden; touch-action: none;
+  background: radial-gradient(120% 70% at 50% 35%, #cdc2ab 0, #c2b69e 55%, #a99d85 100%) }
+body.touch #stage::before{ content: "Kaiav Nihalani"; position: absolute; left: calc(var(--sxl) + 7px); top: calc(var(--bz) - 21px); font: 600 10px/14px var(--hel); letter-spacing: .2em; text-transform: uppercase;
+  color: #9a8e78; text-shadow: 0 1px 0 rgba(255,255,255,.45), 0 -1px 0 rgba(60,50,38,.25) }
+body.touch.land #stage::before{ display: none }
+#tube{ position: absolute; top: var(--bz); left: var(--sxl); right: var(--sxr); bottom: var(--sb); border-radius: 18px / 20px; overflow: hidden; background: #0a0f0a; isolation: isolate;
+  box-shadow: 0 0 0 2px #1d1915, 0 -2px 0 3.5px #9c9079, 0 2px 0 3.5px #e1d7c3, 0 0 0 5px #b4a88f }
+#tube .scr{ position: absolute; inset: 0; transform-origin: 50% 50% }
+#tube .scr.on{ animation: tube-on .7s cubic-bezier(.2,.7,.2,1) both }
+@keyframes tube-on{ 0%{ transform: scale(.5, .004); filter: brightness(5) } 30%{ transform: scale(1, .008); filter: brightness(4) } 62%{ transform: scale(1, 1.02); filter: brightness(1.7) } 100%{ transform: none; filter: none } }
+#tube canvas.phone-term{ position: absolute; top: 0; left: 0; transition: transform .25s cubic-bezier(.2,.8,.2,1) }
+#tube canvas.phone-term.drag{ transition: none }
+#tube .bloom{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; filter: blur(5px); opacity: .55; mix-blend-mode: screen }
+/* the glass: scanlines, the tube's dark curved edges, a faint sheen from the room */
+#tube::after{ content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(168deg, rgba(225,255,232,.075) 0, rgba(225,255,232,.02) 34%, transparent 34.5%),
+    repeating-linear-gradient(180deg, transparent 0 2px, rgba(0,0,0,.16) 2px 3px),
+    radial-gradient(ellipse 90% 85% at 50% 50%, transparent 58%, rgba(0,0,0,.5) 100%);
+  box-shadow: inset 0 0 26px 6px rgba(0,0,0,.6), inset 0 0 3px 1px rgba(0,0,0,.9) }
+/* the sound switch: a little lamp on the bezel (landscape: a key on the strip) */
+body.touch #mute{ position: fixed; top: calc(var(--bz) - 30px); right: calc(var(--sxr) + 2px); height: 30px; padding: 0 6px 0 10px; border: 0; gap: 7px; z-index: 3;
+  font: 600 10px/1 var(--hel); letter-spacing: .2em; text-transform: uppercase; color: #8a7e69; text-shadow: 0 1px 0 rgba(255,255,255,.45) }
+@media (max-height: 700px){ body.touch #mute{ height: 26px; top: calc(var(--bz) - 26px) } }
+body.touch #mute::before{ width: 7px; height: 7px; border: 0; background: #7d7261; box-shadow: inset 0 1px 1.5px rgba(0,0,0,.55), 0 1px 0 rgba(255,255,255,.4) }
+body.touch #mute[aria-pressed="true"]::before{ background: radial-gradient(circle at 40% 35%, #e9ffef, #8dffb4 55%, #4fc77c); box-shadow: 0 0 7px rgba(141,255,180,.9), 0 1px 0 rgba(255,255,255,.4) }
+body.touch #mute::after{ content: ""; position: absolute; inset: -6px -6px -8px -10px }
+body.touch #mute:hover{ color: #6f6452 }
+body.touch.reading #mute, body.touch.reading #kb{ display: none }
+#kb #mute{ position: relative; top: auto; right: auto; flex: none }
+/* the keyboard */
+#kb{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; box-sizing: border-box; touch-action: none;
+  padding: 5px var(--sxr) calc(env(safe-area-inset-bottom, 0px) + 6px) var(--sxl);
+  background: linear-gradient(180deg, #d3c8b1 0, #c6baa2 22%, #b9ad94 100%);
+  box-shadow: 0 -1px 0 #6f6555, 0 -2px 0 rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.55) }
+body.touch.land #kb{ padding-bottom: max(5px, env(safe-area-inset-bottom, 0px)) }
+#kb::before{ content: ""; position: absolute; left: 0; right: 0; top: 0; height: 46px; pointer-events: none; background: radial-gradient(55% 46px at 50% 0, rgba(141,255,180,.10), transparent) }
+#kb[hidden]{ display: none }
+.strip{ position: relative; display: flex; align-items: center; gap: 6px; height: var(--sh); padding: 0 1px }
+.strip .sk{ flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; padding: 0 2px }
+.strip .sk::-webkit-scrollbar{ display: none }
+.strip .sk.over{ -webkit-mask: linear-gradient(90deg, #000 calc(100% - 22px), transparent); mask: linear-gradient(90deg, #000 calc(100% - 22px), transparent) }
+.strip .sk.nav .fk{ flex: 1 1 auto; padding: 0 6px }
+.strip .sk.nav .fk.ico{ flex: 0 0 auto; padding: 0 5px }
+.fk, #kb #mute{ position: relative; flex: 0 0 auto; box-sizing: border-box; height: 27px; min-width: 34px; padding: 0 10px; border: 0; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+  background: linear-gradient(180deg, #c3b9a6, #aea38e); color: var(--ink); font: 500 13px/1 var(--hel); letter-spacing: .02em; text-transform: none; text-shadow: 0 1px 0 rgba(255,255,255,.3); white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 2px 0 #7c7262, 0 3px 3px rgba(0,0,0,.28); -webkit-tap-highlight-color: transparent }
+.fk.down, #kb #mute:active{ transform: translateY(1.5px); box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 .5px 0 #7c7262, 0 1px 1px rgba(0,0,0,.25); background: linear-gradient(180deg, #bab09c, #a99e88) }
+.fk b{ font-weight: 700 }
+.fk.on::before, .fk .dot{ content: ""; width: 5px; height: 5px; border-radius: 50%; flex: none; background: #8dffb4; box-shadow: 0 0 5px rgba(141,255,180,.95) }
+.fk svg{ width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
+.fk.ico{ padding: 0 8px }
+.fk.fold{ width: 42px; padding: 0 }
+.fk.fold .dn{ display: none } body.fold .fk.fold .up{ display: none } body.fold .fk.fold .dn{ display: block }
+.strip .note{ flex: none; padding: 0 6px; font: 600 10px/1 var(--hel); letter-spacing: .2em; text-transform: uppercase; color: #8a7e69; text-shadow: 0 1px 0 rgba(255,255,255,.45); white-space: nowrap }
+.board{ position: relative; margin-top: 6px; padding: 3px; border-radius: 8px; background: #2a2520; display: flex; flex-direction: column;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.7), 0 1px 0 rgba(255,255,255,.5) }
+body.fold .board{ display: none }
+.board.rise{ animation: kb-rise .22s cubic-bezier(.2,.8,.2,1) }
+@keyframes kb-rise{ from{ transform: translateY(24px); opacity: 0 } to{ transform: none; opacity: 1 } }
+.row{ display: flex; height: var(--rh) }
+.row.fn{ height: var(--fh) }
+.key{ position: relative; flex: var(--w, 1) 1 0; min-width: 0; box-sizing: border-box; padding: 2.5px; display: flex }
+.key.gap{ visibility: hidden }
+.cap{ position: relative; flex: 1; margin: 0 var(--mr, 0) 0 var(--ml, 0); border-radius: 6px; background: linear-gradient(180deg, #c7baa0, #9f927a);
+  box-shadow: 0 2px 0 #4d453a, 0 3px 4px rgba(0,0,0,.45); transition: transform .09s ease-out, box-shadow .09s ease-out }
+.cap::before{ content: ""; position: absolute; inset: 1px 2.5px 4.5px; border-radius: 4.5px;
+  background: radial-gradient(130% 95% at 50% 12%, #f0e8d7 0, #e3d9c4 45%, #d5c9b1 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 1px 1.5px rgba(70,60,45,.35) }
+.cap::after{ content: ""; position: absolute; inset: 1px 2.5px 4.5px; border-radius: 4.5px; opacity: 0; background: radial-gradient(90% 80% at 50% 40%, rgba(255,250,232,.55), rgba(255,250,232,0) 75%) }
+.key.mod .cap{ background: linear-gradient(180deg, #a59a86, #82786a) }
+.key.mod .cap::before{ background: radial-gradient(130% 95% at 50% 12%, #cdc3b0 0, #bdb29d 50%, #ada28c 100%) }
+.key.down .cap{ transform: translateY(2.5px); box-shadow: 0 .5px 0 #4d453a, 0 1px 1px rgba(0,0,0,.4); transition: none }
+.key.down .cap::before{ inset: 1.5px 2.5px 2.5px; background: radial-gradient(130% 95% at 50% 12%, #e9e0cd 0, #dbd0ba 50%, #cdc1a8 100%) }
+.key.mod.down .cap::before{ background: radial-gradient(130% 95% at 50% 12%, #c4baa6 0, #b4a993 55%, #a59a84 100%) }
+.key.down .cap::after{ opacity: 1; inset: 1.5px 2.5px 2.5px }
+.lg{ position: absolute; z-index: 1; left: 7px; top: 5px; font: 500 16px/1 var(--hel); color: var(--ink); white-space: nowrap; pointer-events: none }
+.key.mod .lg{ top: auto; bottom: 9px; left: 6px; font-size: 11px; letter-spacing: .02em }
+.key.c .lg, .key.mod.c .lg{ left: 0; right: 0; top: 0; bottom: 4px; display: flex; align-items: center; justify-content: center; font-size: 17px }
+.key.mod.c .lg{ font-size: 11.5px; letter-spacing: .04em }
+.key.arrow .lg svg{ width: 15px; height: 15px; stroke: var(--ink); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.row.fn .key.mod .lg{ bottom: 8px }
+.key.down .lg{ transform: translateY(-1px) }
+@media (max-width: 359px){ .lg{ left: 5px; top: 4px; font-size: 14.5px } .key.mod .lg{ left: 5px; font-size: 9.5px; letter-spacing: 0 } .key.mod.c .lg{ font-size: 10.5px }
+  .fk, #kb #mute{ font-size: 12px } .strip .sk, .strip{ gap: 4px } .fk.fold{ width: 36px } }
+.led{ position: absolute; z-index: 1; right: 7px; top: 6px; width: 5px; height: 5px; border-radius: 50%; background: #6c6253; box-shadow: inset 0 1px 1px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.35); pointer-events: none }
+.key.on .led{ background: radial-gradient(circle at 40% 35%, #f0fff3, #8dffb4 60%); box-shadow: 0 0 6px rgba(141,255,180,.95) }
+.key.lock .led{ background: radial-gradient(circle at 40% 35%, #f0fff3, #8dffb4 60%); box-shadow: 0 0 8px 1px rgba(141,255,180,1) }
+/* the pad, for games: a big cross, and space, return, pause, esc */
+.pad{ display: grid; grid-template-columns: 1fr 1fr 1fr .3fr 1.15fr 1.15fr; grid-template-rows: 1fr 1fr }
+.pad{ height: calc(var(--fh) + 4 * var(--rh)) } body.land .pad{ height: calc(4 * var(--rh)) }
+.pad .key .lg{ font-size: 13px }
+.pad .key.arrow .lg svg{ width: 26px; height: 26px; stroke-width: 2.2 }
+.pad .k-up{ grid-area: 1 / 2 } .pad .k-left{ grid-area: 2 / 1 } .pad .k-down{ grid-area: 2 / 2 } .pad .k-right{ grid-area: 2 / 3 }
+.pad .k-esc{ grid-area: 1 / 1 } .pad .k-p{ grid-area: 1 / 3 } .pad .k-ret{ grid-area: 1 / 5 / 2 / 7 } .pad .k-space{ grid-area: 2 / 5 / 3 / 7 }
+.pad .k-letters{ display: none }
+/* a phone on its side, in a game: a handheld. The cross and esc / pause to the left of the tube, space, return and
+   abc to the right, on the bezel itself; the tube keeps the whole height */
+body.touch.land.gaming{ --side: min(190px, 24vw) }
+body.land.gaming #tube{ left: calc(var(--sxl) + var(--side)); right: calc(var(--sxr) + var(--side)) }
+body.land.gaming #kb{ top: 0; padding: 0; background: none; box-shadow: none; pointer-events: none }
+body.land.gaming #kb::before, body.land.gaming .strip{ display: none }
+body.land.gaming .board{ position: absolute; inset: 0; margin: 0; padding: max(10px, env(safe-area-inset-top, 0px)) var(--sxr) max(10px, env(safe-area-inset-bottom, 0px)) var(--sxl); background: none; box-shadow: none; border-radius: 0 }
+body.land.gaming .pad{ height: 100%; grid-template-columns: repeat(3, calc(var(--side) / 3 - 2px)) 1fr repeat(2, calc(var(--side) / 2 - 3px)); grid-template-rows: .8fr 1fr 1fr 1fr; column-gap: 0 }
+body.land.gaming .pad .key{ pointer-events: auto; padding: 4px }
+body.land.gaming .pad .k-esc{ grid-area: 1 / 1 } body.land.gaming .pad .k-p{ grid-area: 1 / 3 }
+body.land.gaming .pad .k-up{ grid-area: 2 / 2 } body.land.gaming .pad .k-left{ grid-area: 3 / 1 } body.land.gaming .pad .k-right{ grid-area: 3 / 3 } body.land.gaming .pad .k-down{ grid-area: 4 / 2 }
+body.land.gaming .pad .k-letters{ display: flex; grid-area: 1 / 5 } body.land.gaming .pad .k-ret{ grid-area: 1 / 6 }
+body.land.gaming .pad .k-space{ grid-area: 2 / 5 / 5 / 7 }
+/* the key under a thumb, shown above it (the thumb hides the cap) */
+.pop{ position: fixed; z-index: 6; pointer-events: none; display: none; place-items: center; box-sizing: border-box; padding-bottom: 4px; border-radius: 9px;
+  background: radial-gradient(130% 95% at 50% 12%, #f3ebdb 0, #e3d9c4 55%, #d2c6ad 100%); box-shadow: 0 0 0 1px rgba(60,50,40,.35), 0 3px 0 #9f927a, 0 10px 18px rgba(0,0,0,.45);
+  font: 500 30px/1 var(--hel); color: var(--ink) }
+.pop.on{ display: grid }
+#toast{ position: fixed; z-index: 5; left: 50%; bottom: calc(var(--kbh) + var(--sb) + 16px); transform: translate(-50%, 10px); max-width: calc(100vw - 40px); box-sizing: border-box; display: flex; align-items: center; gap: 8px;
   padding: 9px 14px 9px 12px; border: 1px solid rgba(141,255,180,.35); border-radius: 6px; background: #0d160e; box-shadow: 0 0 0 1px #0a0f0a, 0 0 26px rgba(141,255,180,.16);
   font: 21px/1 VT323, monospace; color: var(--gd); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .2s, transform .25s cubic-bezier(.2,.8,.2,1) }
 #toast b{ font-weight: inherit; color: #f0ffe8; overflow: hidden; text-overflow: ellipsis }
 #toast svg{ flex: none; width: 18px; height: 18px; stroke: var(--g); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 4px rgba(141,255,180,.6)) }
 #toast.show{ opacity: 1; transform: translate(-50%, 0) }
-#swipe{ position: fixed; left: max(10px, env(safe-area-inset-left, 0px)); top: 50%; z-index: 2; display: flex; align-items: center; gap: 6px; height: 40px; margin-top: -20px; padding: 0 12px 0 8px;
+#swipe{ position: fixed; left: calc(var(--sxl) + 12px); top: 45%; z-index: 4; display: flex; align-items: center; gap: 6px; height: 40px; margin-top: -20px; padding: 0 12px 0 8px;
   border: 1px solid rgba(141,255,180,.3); border-radius: 20px; background: #0a0f0a; color: var(--gd); font: 20px/1 VT323, monospace; pointer-events: none;
   opacity: var(--p, 0); transform: translateX(calc(var(--p, 0) * 18px - 18px)) }
 #swipe svg{ width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
 #swipe.go{ color: #f0ffe8; border-color: rgba(141,255,180,.7); box-shadow: 0 0 18px rgba(141,255,180,.3) }
 #swipe.off{ transition: opacity .25s, transform .25s }
-body.touch #stage .phone-term.drag{ transition: none }
-@media (prefers-reduced-motion: reduce){ #hint, #loading, #stage .phone-term, #toast, #more, #dock .k{ transition: none } }
+@media (prefers-reduced-motion: reduce){ #hint, #loading, #stage .phone-term, #toast, .cap{ transition: none } #tube .scr.on, .board.rise{ animation: none } }
 /* high contrast: the sound toggle's dot keeps showing its state in system colours */
 @media (forced-colors: active){ #mute::before{ forced-color-adjust: none; border-color: ButtonText } #mute[aria-pressed="true"]::before{ background: ButtonText; box-shadow: none } }
 </style>
@@ -133,7 +215,8 @@ for (const n of ['localStorage', 'sessionStorage']){
 <div id="hint" class="ui" aria-hidden="true" hidden>move the cursor down to lean back</div>
 <textarea id="kbd" aria-label="Terminal: type a command, like help, and press Enter" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
 <button id="mute" class="ui" type="button" aria-pressed="true">sound</button>
-<nav id="dock" aria-label="Pages" hidden><div class="keys"></div><button class="kb" type="button" aria-label="Keyboard"><svg class="dn" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7.5 14h9"/></svg><svg class="up" viewBox="0 0 24 24"><rect x="2.5" y="3.5" width="19" height="10" rx="2"/><path d="M6 7.5h.01M9.5 7.5h.01M13 7.5h.01M16.5 7.5h.01M8.5 17.5l3.5 3 3.5-3"/></svg></button><button id="more" type="button" tabindex="-1" aria-hidden="true">more<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><div id="toast" role="status" aria-live="polite"></div></nav>
+<div id="kb" hidden><div class="strip"><nav class="sk" aria-label="Pages"></nav><button class="fk fold" type="button" aria-label="Fold the keyboard away" aria-expanded="true"><svg class="up" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><svg class="dn" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7.5 14h9"/></svg></button></div><div class="board" aria-hidden="true"></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
 <div id="swipe" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>back</div>
 <main class="sr">
   <h1>Kaiav Nihalani</h1>

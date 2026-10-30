@@ -22,6 +22,12 @@ const isQuit = k => k === 'q' || k === 'Q' || k === 'Escape';
 const mq = q => typeof matchMedia === 'function' && matchMedia(q).matches;
 const TOUCH = mq('(pointer: coarse)');                       // phones: tap zones instead of arrows
 const REDUCED = mq('(prefers-reduced-motion: reduce)');
+/* the game on screen pauses when the tab is hidden (a phone locked, an app switched to): the one running sets this */
+let pauseNow = null;
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.hidden && pauseNow) try { pauseNow(); } catch (e) {} });
+/* the phone's keyboard (main.js) marks its keys touchKey: they come with a keyup on release and never repeat on their
+   own, so a game times held keys itself (desktops keep the system's key repeat) */
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
 function box(scr, x, y, w, h, style){                       // ASCII frame, fill inside with spaces
   scr.fill(x, y, w, h, ' ', 'normal');
   scr.put(x, y, '+' + '-'.repeat(w - 2) + '+', style);
@@ -73,7 +79,7 @@ T.apps.tetris = {
   g: 'fun',
   desc: 'the falling blocks',
   usage: 'tetris',
-  more: 'arrows move, \u2191 or x turns, z turns back, \u2193 drops a row, space drops all the way, c holds, p pauses, q quits. on a phone, tap the sides to move, the top to turn and the bottom to drop.',
+  more: 'arrows move, \u2191 or x turns, z turns back, \u2193 drops a row, space drops all the way, c holds, p pauses, q quits. on a phone, the pad under the screen has the arrows, space and pause (hold an arrow to slide or soft-drop), or swipe the piece sideways, flick down to drop, and tap beside it to move or on it to turn.',
   start(api){
     /* the layout follows the grid, which can change under a running game (a phone turned on its side):
        SIDE is a slim panel beside a full-height well (phones), STACK puts the panel under the well (narrower still) */
@@ -82,7 +88,7 @@ T.apps.tetris = {
       if (cols === gridC && rows === gridR) return;
       gridC = cols; gridR = rows;
       SIDE = cols < 47 && cols >= 39; STACK = cols < 39;
-      const h = Math.max(Math.max(4, Math.min(10, rows - 3)), Math.min(20, rows - (STACK ? 15 : TOUCH ? 5 : 2)));   // well + floor + feet (+ panel, + room to tap below) must fit; a short grid (a phone on its side) gets a shorter well
+      const h = Math.max(Math.max(4, Math.min(10, rows - 3)), Math.min(20, rows - (STACK ? 15 : TOUCH ? 3 : 2)));   // well + floor + feet (+ panel, + room to tap below) must fit; a short grid (a phone on its side) gets a shorter well
       if (h === BH) return;
       // a new well height keeps the bottom of the stack; the falling piece keeps its height above the floor
       const d = h - (BH || h);
@@ -158,6 +164,11 @@ T.apps.tetris = {
     }
     next();
     let oyDrawn = 0, bxDrawn = 0;                            // where the well was last drawn (for taps)
+    /* held keys on a phone: left / right auto-shift (a first move, then after 170 ms one every 50 ms), down soft-drops a
+       row every 50 ms; a swipe moves a column per two grid columns, a row per row, and a quick flick down drops */
+    let das = null, soft = null, sw = null;
+    const softStep = () => { if (cur && fits(cur.p, cur.r, cur.x, cur.y + 1)){ cur.y++; score += 1; fall = 0; return true; } return false; };
+    pauseNow = () => { if (!over) paused = true; das = soft = null; };
 
     return {
       /* taps: beside the falling piece moves it that way, on it turns it, below the well drops it */
@@ -187,6 +198,10 @@ T.apps.tetris = {
         if (isQuit(k)){ if (score > hi){ hi = score; newHi = true; hiSet(TETRIS_HI, score); } summary(); api.exit(0); return true; }
         if (k === 'p' || k === 'P'){ paused = !paused; return true; }
         if (paused || !cur || flash) return true;
+        if (e.touchKey && !e.repeat){
+          if (k === 'ArrowLeft' || k === 'ArrowRight'){ const d = k === 'ArrowLeft' ? -1 : 1; shift(d); das = { d, k, t: 0, next: 0.17 }; return true; }
+          if (k === 'ArrowDown'){ softStep(); soft = { t: 0, next: 0.1 }; return true; }
+        }
         switch (k){
           case 'ArrowLeft': shift(-1); break;
           case 'ArrowRight': shift(1); break;
@@ -199,11 +214,34 @@ T.apps.tetris = {
         }
         return true;
       },
+      keyUp(e){
+        if (das && e.key === das.k) das = null;
+        if (e.key === 'ArrowDown') soft = null;
+        return false;
+      },
+      drag(col, row, phase){
+        if (phase === 'start'){ sw = { c: col, r: row, r0: row, t0: now(), used: false }; return false; }
+        if (!sw) return false;
+        const g = sw;
+        if (phase === 'end') sw = null;
+        if (over || paused || !cur || flash) return g.used;
+        help = false;
+        while (col - g.c >= 2){ shift(1); g.c += 2; g.used = true; }
+        while (g.c - col >= 2){ shift(-1); g.c -= 2; g.used = true; }
+        while (row - g.r >= 1){ softStep(); g.r += 1; g.used = true; }
+        if (g.r - row > 1) g.r = row + 1;                    // a finger going back up does not bank rows
+        if (phase === 'end' && row - g.r0 > 2 && (row - g.r0) / Math.max(0.01, now() - g.t0) > 18 && cur){ hardDrop(); g.used = true; }   // a flick down
+        return g.used;
+      },
       tick(dt){
         dt = Math.min(secs(dt), 0.1); t += dt;
         if (over || paused) return Math.floor(t * 2) !== Math.floor((t - dt) * 2);   // blink prompts
         if (flash){ flash.t += dt; if (flash.t > 0.36) finishClear(); return true; }
         if (!cur) return false;
+        let held = false;
+        if (das){ das.t += dt; while (das && das.t >= das.next){ das.next += 0.05; if (!shift(das.d)) break; held = true; } }
+        if (soft){ soft.t += dt; while (soft && soft.t >= soft.next && cur){ soft.next += 0.05; if (!softStep()) break; held = true; } }
+        if (held) return true;
         if (grounded()){
           lockT += dt;
           if (lockT >= 0.5) lock();
@@ -253,7 +291,7 @@ T.apps.tetris = {
           if (!TOUCH){ scr.put(rx, ry + 4, 'HOLD', canHold ? 'dim' : 'faint'); mini(hold, rx, ry + 5, canHold ? 'normal' : 'faint'); }
           [['SCORE', score, 'bright'], ['HIGH', Math.max(hi, score), score > hi ? 'bright' : 'normal'], ['LEVEL', level, 'normal'], ['LINES', lines, 'normal']]
             .forEach(([a, v, st], i) => { scr.put(rx, ny + i, a.padEnd(6), 'dim'); scr.put(rx + 6, ny + i, String(v), st); });
-          const ks = TOUCH ? [['tap', ''], ['beside', 'move'], ['on it', 'turn'], ['below', 'drop']]
+          const ks = TOUCH ? [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['\u2193', 'soft'], ['spc', 'drop'], ['swipe', 'move'], ['flick', 'drop']]
             : [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           ks.forEach(([a, b], i) => { const y = ny + 5 + i; if (y >= scr.rows - 1) return; scr.put(rx, y, a.padEnd(7), b ? 'normal' : 'faint'); scr.put(rx + 7, y, b, 'faint'); });
         } else if (compact){
@@ -264,7 +302,7 @@ T.apps.tetris = {
             .forEach(([a, v, st], i) => { scr.put(rx, ry + 4 + i, a.padEnd(7), 'dim'); scr.put(rx + 7, ry + 4 + i, String(v), st); });
           const ks = [['\u2190\u2192', 'move'], ['\u2191 x', 'turn'], ['space', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           const ky = ry + 9, two = STACK || scr.rows - ky < ks.length;
-          const short = TOUCH ? [['tap', 'beside: move'], ['on', 'it: turn'], ['low', 'drop']]
+          const short = TOUCH ? [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['swp', 'move']]
             : [['\u2190\u2192', 'move'], ['\u2191', 'turn'], ['spc', 'drop'], ['c', 'hold'], ['p', 'pause'], ['q', 'quit']];
           (two ? short : ks).forEach(([a, b], i) => {
             const x = rx + (two ? (i % 2) * (TOUCH ? 15 : 11) : 0), y = ky + (two ? i >> 1 : i);
@@ -307,7 +345,7 @@ T.apps.tetris = {
           if (REDUCED || Math.floor(t * 2) % 2 === 0) c(12, TOUCH ? 'tap again' : 'enter again', 'normal');
           if (!TOUCH) c(13, 'q quit', 'faint');
         } else if (help && score === 0){
-          scr.put(bx + 3, oy + 3, TOUCH ? 'tap to steer' : 'arrows to play', 'dim');
+          scr.put(bx + 3, oy + 3, TOUCH ? 'arrows or swipe' : 'arrows to play', 'dim');
         }
         if (TOUCH) center(scr, scr.rows - 1, paused || over ? 'tap here to quit' : 'tap here to pause', 'faint');
       },
@@ -323,7 +361,7 @@ T.apps.snake = {
   g: 'fun',
   desc: 'the snake game',
   usage: 'snake',
-  more: 'eat, grow, and stay off the walls and your own tail. arrows or wasd turn, p pauses, q quits. on a phone, tap beside the head to turn.',
+  more: 'eat, grow, and stay off the walls and your own tail. arrows or wasd turn, p pauses, q quits. on a phone, use the pad\'s arrows, swipe the way to go, or tap beside the head.',
   start(api){
     let cols = api.cols || 72, rows = api.rows || 23;
     let GW = Math.floor((cols - 2) / 2), GH = rows - 3;      // cells are 2 columns wide, so they look square
@@ -373,7 +411,21 @@ T.apps.snake = {
       const last = queue.length ? queue[queue.length - 1] : dir;
       if (d !== last && !opposite(d, last) && queue.length < 3) queue.push(d);
     }
+    pauseNow = () => { if (started && !over) paused = true; };
+    let sw = null;                                           // a swipe on the field: each stretch of a cell or so is a turn
     return {
+      drag(col, row, phase){
+        if (phase === 'start'){ sw = { c: col, r: row, used: false }; return false; }
+        if (!sw) return false;
+        const g = sw; if (phase === 'end') sw = null;
+        if (over || paused) return g.used;
+        const dx = (col - g.c) / 2, dy = row - g.r;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) >= 1){
+          started = true; turn(Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'up' : 'down'));
+          g.c = col; g.r = row; g.used = true;
+        }
+        return g.used;
+      },
       /* phones: tap on the side of the head you want to go; the snake turns that way */
       tap(col, row){
         if (TOUCH && row >= rows - 1){ if (over || paused || !started) return false; paused = true; return true; }   // the bottom edge: pause, then quit
@@ -469,8 +521,8 @@ T.apps.snake = {
         } else if (!started){
           box(scr, cx, cy + 1, cw, 7, 'dim');
           c(2, 'S N A K E', 'bright');
-          c(4, TOUCH ? 'tap beside the head to turn' : 'arrows or wasd to start', 'normal');
-          c(5, TOUCH ? 'tap to start' : 'p pause  \u00b7  q quit', 'faint');
+          c(4, TOUCH ? 'arrows or a swipe to turn' : 'arrows or wasd to start', 'normal');
+          c(5, TOUCH ? 'an arrow starts it' : 'p pause  \u00b7  q quit', 'faint');
         }
         if (TOUCH) center(scr, scr.rows - 1, paused || over || !started ? ' tap here to quit ' : ' tap here to pause ', 'faint');
       },
@@ -491,7 +543,7 @@ T.apps.breakout = {
   g: 'fun',
   desc: 'knock out the bricks',
   usage: 'breakout',
-  more: 'keep the ball in play with the paddle and clear the wall. where the ball lands on the paddle sets its angle. arrows (or a and d) move, space serves and pauses, q quits. three balls; each wall cleared brings a faster one. on a phone, tap where the paddle should go.',
+  more: 'keep the ball in play with the paddle and clear the wall. where the ball lands on the paddle sets its angle. arrows (or a and d) move, space serves and pauses, q quits. three balls; each wall cleared brings a faster one. on a phone, hold the pad\'s arrows, drag anywhere on the screen, or tap where the paddle should go; space serves.',
   start(api){
     const PTS = [7, 5, 3, 2, 1], LV = ['bright', 'normal', 'normal', 'dim', 'dim'];
     const SH = r => (r % 2) * 2;                          // odd rows sit half a brick over, so the wall reads as bricks, not columns
@@ -567,7 +619,20 @@ T.apps.breakout = {
     const summary = () => api.print('breakout: ' + score + ' points, level ' + level + ', ' + (newHi ? 'a new best' : 'best ' + Math.max(hi, score)));
     function quit(){ if (score > hi){ hi = score; newHi = true; hiSet(BREAKOUT_HI, score); } if (score) summary(); api.exit(0); }
     layout(api.cols || 54, api.rows || 18); wall(); serve();
+    pauseNow = () => { if (state !== 'over') paused = true; };
+    let sw = null;                                        // a finger on the field steers: the paddle's middle follows it
     return {
+      drag(col, row, phase){
+        if (phase === 'start'){ sw = { c: col, used: false }; return false; }
+        if (!sw) return false;
+        const g = sw; if (phase === 'end') sw = null;
+        if (state === 'over' || paused) return g.used;
+        if (!g.used && Math.abs(col - g.c) < 0.6) return false;   // not yet a drag: maybe a tap (serve)
+        g.used = true; held.l = held.r = 0;
+        const x = col - 1 - Math.floor((cols - 2 - IW) / 2) - PW / 2;
+        px = Math.max(0, Math.min(IW - PW, x)); target = null;
+        return true;
+      },
       tap(col, row){
         if (TOUCH && row >= rows - 1){ if (state === 'over' || paused) return false; paused = true; return true; }   // the bottom edge: pause, then quit
         if (state === 'over'){ restart(); return true; }
@@ -585,6 +650,7 @@ T.apps.breakout = {
         }
         if (isQuit(k)){ quit(); return true; }
         const d = k === 'ArrowLeft' || k === 'a' || k === 'A' || k === 'h' ? 'l' : k === 'ArrowRight' || k === 'd' || k === 'D' || k === 'l' ? 'r' : '';
+        if (e.touchKey) gotUp = true;                     // a phone's key always comes back up (keyUp)
         if (d){ held[d] = t || 1e-6; target = null; return true; }
         if (k === ' ' || k === 'ArrowUp' || k === 'Enter'){ if (state === 'serve' && !paused) launch(); else if (k === ' ') paused = !paused; return true; }
         if (k === 'p' || k === 'P'){ paused = !paused; return true; }
@@ -658,8 +724,8 @@ T.apps.breakout = {
         } else if (state === 'serve'){
           const head = level > 1 && left === full ? 'L E V E L   ' + level : score ? balls + (balls === 1 ? ' ball left' : ' balls left') : 'B R E A K O U T';
           c(1, head, 'bright');
-          c(3, TOUCH ? 'tap to serve' : 'space to serve', on ? 'normal' : 'dim');
-          if (!score && level === 1) c(4, TOUCH ? 'then tap where the paddle goes' : '← → move the paddle', 'faint');
+          c(3, TOUCH ? 'space or tap to serve' : 'space to serve', on ? 'normal' : 'dim');
+          if (!score && level === 1) c(4, TOUCH ? 'then hold ← → or drag' : '← → move the paddle', 'faint');
         }
         if (TOUCH) center(scr, scr.rows - 1, state === 'over' || paused ? ' tap here to quit ' : ' tap here to pause ', 'faint');
         else if (state !== 'over'){

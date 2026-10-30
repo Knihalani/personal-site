@@ -15,7 +15,7 @@ demoscene-style intro on the screen (a chrome 3D "KN", copper bars, a sine scrol
 | **type** | everything goes to the terminal. Start with `help`, or click a highlighted word |
 | **move the cursor** | look around. Move it down to lean back and see the whole desk and the hands |
 | **scroll** | scroll back through the terminal (also Page Up / Page Down, or Space when the prompt is empty) |
-| **phones** | just the terminal, full screen, with a dock for the thumb: the main pages, then the matching commands as you type (tap one to run it), arrows and esc while a game runs, and the keyboard key. Drag or flick to scroll, swipe right (or the phone's back) to go back, tap an email to copy it |
+| **phones** | the computer in your hand: the green tube in its beige bezel, and the desk's keyboard under it (real key sounds, esc, tab, ctrl and arrows, two layers of symbols for the shell). Above the keys, the main pages, then the matching commands as you type. Fold the keyboard away to read, tap the screen to bring it back. Games get a pad (a handheld, on its side) and take swipes. Drag or flick to scroll, swipe right (or the phone's back) to go back, tap an email to copy it |
 
 Without WebGL the desktop gets the same terminal-only page. Deep links run a page on load:
 `#about`, `#j`, `#eden`, `#writing`, `#contact`, `#links`, `#help`, and `#post/<slug>` opens a post.
@@ -27,7 +27,7 @@ Without WebGL the desktop gets the same terminal-only page. Deep links run a pag
 - **Do something:** `edit` (a nano-style editor), `todo`, `weather [city]` (where you are, by default), `timer`, `clock`, `qr`, `pass` and an
   encrypted `vault` (kept only in your browser), `cal`, `bc`, `convert`, `roll`, `countdown`
 - **The network** (live site only; the claude.ai preview blocks it): `curl`, `hn`, `wiki`, `define`
-- **Play:** `tetris`, `snake` (tap controls on phones), `breakout`, `typing` (a WPM test), `lamp`
+- **Play:** `tetris`, `snake`, `breakout` (on phones: a game pad, swipes, a drag to steer), `typing` (a WPM test), `lamp`
 - **A real little shell:** pipes, `>` `>>` `<` redirection, `&&` `||` `;`, globs, `$VAR`, aliases,
   history (`!!`, `!n`, ctrl+r), Tab completion, "did you mean", plain phrases like "who are you".
   Also `ls` `cd` `cat` `grep` `sort` `wc` `head` `tail` `tree` `cp` `mv` `rm` `mkdir` `touch` `man`,
@@ -55,7 +55,7 @@ src/
   extras.js      weather, todo, timer, clock, typing test, qr, pass/vault, the network commands and small tools
   editor.js      edit / nano / vi / vim
   reader.js      the typeset post reader
-  main.js        input routing, the terminal-only layout (phones, no WebGL), fallbacks, the loop
+  main.js        input routing, the phone layout (the tube, the keyboard, the game pad), the no-WebGL layout, fallbacks, the loop
   CONTRACT.md    how the modules talk to each other, and the terminal extension API
 build.py         concatenates src/ into index.html, 404.html and site.html (an embeddable fragment), minified, plus _headers
 functions/
@@ -72,7 +72,7 @@ python3 build.py --dev      # include src/stubs.js, so modules can be tested on 
 
 To deploy to Cloudflare Pages, run `./deploy.sh`. It needs a token with *Cloudflare Pages: Edit* in `CLOUDFLARE_API_TOKEN`.
 
-Open `index.html` in a browser. Phones, and browsers without WebGL, get the terminal on its own.
+Open `index.html` in a browser. Phones get the tube and its keyboard; browsers without WebGL get the terminal on its own.
 
 ### Adding a command
 

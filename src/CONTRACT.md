@@ -72,7 +72,11 @@ MAC.createTerminal({ content, aspect, cols? }) -> {   // cols: 54 on desktop, 40
   handleKey(e: KeyboardEvent) -> bool,   // true if consumed (call e.preventDefault()); false lets Tab move focus
   handleKeyUp(e),               // passed to a running app's keyUp (games)
   handleTap(u, v) -> bool,      // a click/tap at canvas fractions 0..1: chips, card rows, app tap(col, row)
-  insertText(str),              // phones, IME, paste
+  handleDrag(u, v, phase) -> bool,   // phones: a finger moving on the tube while an app runs ('start' | 'move' | 'end'); passed
+                                // to app drag(col, row, phase) with fractional cells; true when the app took the gesture
+  insertText(str),              // assistive tech on phones, IME, paste
+  resize(aspect, cols),         // a new tube size (aspect 0.3..5); with the same cols (only the height changed: the phone's
+                                // keyboard folding), a reader scrolled back or a page held at its top keeps its top row
   update(dt, t) -> bool,        // advance animations (cursor blink, typing-out output); true if canvas changed
   run(cmd),                     // run a command programmatically (#hash deep links)
   scroll(dy),                   // wheel / touch scrollback
@@ -103,11 +107,25 @@ Creates the scene, terminal and typist; routes keydown/keyup to terminal + typis
 `term.handleTap`. Hash deep links: #about #eden #j #writing #contact #links #help, and #post/<slug> for the reader
 (anything else in the hash is ignored). One rAF loop, paused when hidden and while the reader is open.
 `flat()` is the terminal-only layout: phones, and desktops without WebGL or three.js, after a context loss or
-repeated render errors. On touch screens it adds a dock under the terminal (#dock in head.html: the main pages; the
-matching commands while typing, from `term.suggest`; esc, arrows and space while an app runs; a key for the on-screen
-keyboard), which rides above the keyboard (visualViewport); 1:1 drag scrolling with momentum and rubber-band ends; a swipe
-right (and the phone's own back, through one history entry) goes `back`; a "more" tab when a page runs on below; and
-`MAC.toast(label, text)`, which terminal.js calls when it copies an address (never for secrets). localStorage is swapped for an in-memory store when the browser blocks it (head.html).
+repeated render errors. Desktops get one centred column, unchanged. Touch screens get the computer in the hand:
+- the tube (#tube, built by main.js): the canvas in a beige bezel, with a bloom (the frame drawn at 1/6 size into a second
+  canvas, blurred by CSS, screen-blended; one drawImage per changed frame), scanlines, vignette and glass in one CSS overlay,
+  and a power-on animation;
+- the keyboard (#kb in head.html, `keyboard()` in main.js), which replaces the phone's own: #kbd keeps
+  `inputmode="none"` and is never focused by a tap. QWERTY with esc / tab / ctrl / arrows (portrait: a row on top;
+  landscape: around the letters), two symbol layers, shift (tap: once, double tap: caps lock, or hold), ctrl (a one-shot
+  modifier, or hold), delete and arrows repeat while held. Keys act on pointerdown, one pointer per finger, and send
+  KeyboardEvent-shaped objects (`synthetic: true, touchKey: true`) to `term.handleKey`, then `term.handleKeyUp` on release;
+  each press and release plays `MAC.sound.key(code, down)` with the key's real code. A strip of function keys above:
+  the pages (they fold the keyboard away, for reading), `term.suggest` words while typing, the app's name in an app. The
+  keyboard folds down to the strip (its last key; also when a drag reads back up a page) and comes back on a tap on the tube.
+- games (snake, tetris, breakout) swap the letters for a pad (big arrows, space, return, pause, esc; `abc` / `pad` swaps
+  back); on a phone on its side the pad's halves sit either side of the tube, like a handheld (body.land.gaming). Pad keys
+  never auto-repeat: games time held `touchKey` keys themselves (tetris: 170 ms / 50 ms auto-shift and soft drop;
+  breakout: the paddle moves while held). Touches on the tube go to the app's `drag` first (swipes, the paddle).
+- 1:1 drag scrolling with momentum and rubber-band ends; a swipe right (and the phone's own back, through one history
+  entry) goes `back`; `MAC.toast(label, text)`, which terminal.js calls when it copies an address (never for secrets).
+Test hook: with `?debug` in the URL, flat() sets `MAC._term` to the terminal. localStorage is swapped for an in-memory store when the browser blocks it (head.html).
 
 ## Testing
 Build into your own scratch folder: `python3 build.py --out <dir>`. Add `--dev` to include `src/stubs.js`, which
@@ -147,7 +165,10 @@ MAC.TERM.cmds[name] = { desc: 'one line', usage: 'name [args]', run(argv, io) } 
 
 // Full-screen apps (vim, games, top...) take over the whole terminal grid until they exit
 MAC.TERM.apps[name] = { desc, usage, start(api, argv) -> { key(e) -> bool, tick(dt) -> bool /*dirty*/, render(scr),
-                                                          keyUp?(e), insertText?(str) /* phones */, tap?(col, row) -> bool /* phones */ } }
+                                                          keyUp?(e), insertText?(str) /* phones */, tap?(col, row) -> bool /* phones */,
+                                                          drag?(col, row, phase) -> bool /* phones: swipes; true once the gesture is the app's */ } }
+// key events from the phone's keyboard carry touchKey: true (a keyUp always follows; no auto-repeat). A full-screen app
+// pauses itself when the tab is hidden (apps.js)
 // api = { cols, rows, fs, env, cwd, exit(code), print(text) /* goes to scrollback after exit */, sound: MAC.sound }
 // scr = { cols, rows, clear(), put(x, y, text, style /* 'normal'|'dim'|'bright'|'faint'|'accent'|'inverse'|{fg, inverse, inset} */),
 //         fill(x, y, w, h, ch, style), cursor(x, y, shape /* 'block'|'bar'|'under'|null */),

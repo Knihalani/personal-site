@@ -416,7 +416,7 @@ const linesOf = t => t ? t.replace(/\n$/, '').split('\n') : [];
 M.createTerminal = function createTerminal(opts){
   const C = (opts && opts.content) || M.CONTENT || {};
   if (opts && opts.cols >= 32) COLS = opts.cols | 0;
-  let aspect = opts && opts.aspect > 0.3 && opts.aspect < 3 ? opts.aspect : 4 / 3;
+  let aspect = opts && opts.aspect > 0.3 && opts.aspect < 5 ? opts.aspect : 4 / 3;   // (up to 5: a phone on its side, over its keyboard)
   const W = WIDTH; let H = Math.round(WIDTH / aspect);   // (resize() changes H, the grid and the font size)
   const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d', { alpha: false });
@@ -2260,6 +2260,18 @@ M.createTerminal = function createTerminal(opts){
     dirty = true;
   }
   /* a tap on the canvas (x, y as 0..1 fractions): a card row acts as if chosen with enter */
+  /* phones: a finger moving on the tube while an app runs (fx, fy: 0..1 of the canvas; phase 'start' | 'move' | 'end').
+     An app with drag(col, row, phase) gets fractional grid cells (swipes in snake and tetris, the breakout paddle);
+     true when it took the gesture, so main.js neither scrolls nor counts the touch as a tap */
+  function handleDrag(fx, fy, phase){
+    if (booting || !app) return false;
+    const st = app;
+    if (!st.inst || typeof st.inst.drag !== 'function') return false;
+    const col = clamp((fx * W - PADX) / cw, 0, COLS - 0.001), row = clamp((fy * H - PADY) / ch, 0, ROWS - 0.001);
+    const r = appCall('drag', col, row, phase);
+    if (r && app === st) st.dirty = true;
+    return !!r;
+  }
   function handleTap(fx, fy){
     if (booting) return false;
     if (app){                                   // an app with tap(col, row) gets the grid cell (the editor's shortcut bar, cursor placement)
@@ -3240,7 +3252,10 @@ M.createTerminal = function createTerminal(opts){
      line being typed and a running app all stay; scrollback rows wider than the grid are wrapped again, cards
      are laid out afresh, and an app sees the new api.cols / api.rows (and scr) on its next render. */
   function resize(asp, cols){
-    if (asp > 0.3 && asp < 3) aspect = asp;
+    /* only the height changing (a phone's keyboard folding away): whoever was reading back, or a page held at its
+       top, keeps the same top row in view; a new width reflows and goes to the prompt */
+    const same = !(cols >= 32) || (cols | 0) === COLS, keep = same && (scrollOff > 0 || pinned) ? { top: totalUnits() - ROWS - scrollOff, pin: pinned } : null;
+    if (asp > 0.3 && asp < 5) aspect = asp;
     if (cols >= 32) COLS = cols | 0;
     H = Math.round(W / aspect); canvas.height = H;          // (resets the context: shaping and font are set again below)
     cw = (W - 2 * PADX) / COLS; ch = Math.round(cw / 0.4 * LINE); fs = cw / advance;
@@ -3280,6 +3295,7 @@ M.createTerminal = function createTerminal(opts){
     }
     if (pageAt >= 0 && next[pageAt]){ if (pageRow.wel) next[pageAt].wel = true; pageRow = next[pageAt]; }
     rows = next; revealAll(); toBottom(); hoverKey = ''; lastFirst = -1; tabState = null;
+    if (keep){ pinned = keep.pin; scrollOff = clamp(totalUnits() - ROWS - keep.top, 0, Math.max(0, totalUnits() - ROWS)); }
     dirty = true; draw();
   }
 
@@ -3304,7 +3320,7 @@ M.createTerminal = function createTerminal(opts){
     accept(word, ctx.from, true); tabState = null; suggestion = ''; touched(); mirror('Completed: ' + input);
     return ctx.kind === 'cmd' && !needsArg(word) && input.trim() === word;
   }
-  return { canvas, handleKey, handleKeyUp, handleTap, hitTest, insertText, update, run, scroll, resize, pointer, suggest, pick,
+  return { canvas, handleKey, handleKeyUp, handleTap, handleDrag, hitTest, insertText, update, run, scroll, resize, pointer, suggest, pick,
     get line(){ return input; },                          // the line being typed
     get app(){ return app ? app.name : ''; },             // the full-screen app running, or ''
     get page(){ return page; },                           // the page on screen ('' = the welcome)
