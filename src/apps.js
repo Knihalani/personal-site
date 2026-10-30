@@ -361,7 +361,7 @@ T.apps.snake = {
   g: 'fun',
   desc: 'the snake game',
   usage: 'snake',
-  more: 'eat, grow, and stay off the walls and your own tail. arrows or wasd turn, p pauses, q quits. on a phone, press or slide on the round pad, swipe the way to go, or tap beside the head.',
+  more: 'eat, grow, and stay off the walls and your own tail. arrows or wasd turn, p pauses, q quits. on a phone, the four big arrows under the screen steer (one press, one turn); pause and quit sit apart from them.',
   start(api){
     let cols = api.cols || 72, rows = api.rows || 23;
     let GW = Math.floor((cols - 2) / 2), GH = rows - 3;      // cells are 2 columns wide, so they look square
@@ -378,7 +378,7 @@ T.apps.snake = {
     function reset(){
       const cx = GW / 2 | 0, cy = GH / 2 | 0;
       body = [[cx, cy], [cx - 1, cy], [cx - 2, cy], [cx - 3, cy]];
-      dir = 'right'; queue = []; score = 0; eaten = 0; step = 0.13; acc = 0; paused = false; over = false; newHi = false; started = false;
+      dir = 'right'; queue = []; score = 0; eaten = 0; step = TOUCH ? 0.15 : 0.13; acc = 0; paused = false; over = false; newHi = false; started = false;   // (a phone's first seconds a touch gentler)
       food = placeFood();
     }
     reset();
@@ -401,43 +401,24 @@ T.apps.snake = {
       body.unshift(head);
       if (willEat){
         eaten++; score += 10 + Math.floor(eaten / 5) * 5;
-        step = Math.max(0.05, step * 0.965);
+        step = Math.max(TOUCH ? 0.06 : 0.05, step * 0.965);
         food = placeFood();
         sound(api, 'beep');
       } else body.pop();
     }
-    let headAt = [0, 0];                                     // the head's screen cell, from the last render
-    function turn(d){
+    /* a turn joins the queue unless it repeats the heading it would follow or reverses it; phones keep two at most, so a
+       nervous double tap can never stack up a fatal turn */
+    function turn(d, touch){
       const last = queue.length ? queue[queue.length - 1] : dir;
-      if (d !== last && !opposite(d, last) && queue.length < 3) queue.push(d);
+      if (d !== last && !opposite(d, last) && queue.length < (touch ? 2 : 3)) queue.push(d);
     }
     pauseNow = () => { if (started && !over) paused = true; };
-    let sw = null;                                           // a swipe on the field: each stretch of a cell or so is a turn
     return {
-      drag(col, row, phase){
-        if (phase === 'start'){ sw = { c: col, r: row, used: false }; return false; }
-        if (!sw) return false;
-        const g = sw; if (phase === 'end') sw = null;
-        if (over || paused) return g.used;
-        const dx = (col - g.c) / 2, dy = row - g.r;
-        if (Math.max(Math.abs(dx), Math.abs(dy)) >= 1){
-          started = true; turn(Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'up' : 'down'));
-          g.c = col; g.r = row; g.used = true;
-        }
-        return g.used;
-      },
-      /* phones: tap on the side of the head you want to go; the snake turns that way */
-      tap(col, row){
-        if (TOUCH && row >= rows - 1){ if (over || paused || !started) return false; paused = true; return true; }   // the bottom edge: pause, then quit
-        if (over){ reset(); return true; }
-        if (paused){ paused = false; return true; }
-        started = true;
-        const last = queue.length ? queue[queue.length - 1] : dir;
-        const dx = (col - headAt[0]) / 2, dy = row - headAt[1];
-        if (last === 'left' || last === 'right'){ if (dy) turn(dy < 0 ? 'up' : 'down'); }
-        else if (dx) turn(dx < 0 ? 'left' : 'right');
-        return true;
-      },
+      /* phones: pause and quit live on the strip (status), away from the thumbs, so no tap on the field ever pauses or quits */
+      status(){ return over ? { keys: [{ label: 'again', key: 'Enter' }, { label: 'quit', key: 'Escape' }] } : { keys: [{ label: paused ? 'resume' : 'pause', key: 'p' }, { label: 'quit', key: 'Escape' }] }; },
+      /* phones steer with the arrow cross under the screen and nothing else: a touch on the field does nothing (and is
+         taken, so the bottom row's tap-to-quit can never fire mid-game) */
+      tap(){ return true; },
       key(e){
         const k = e.key;
         if (over){
@@ -448,7 +429,7 @@ T.apps.snake = {
         if (isQuit(k)){ if (score > hi){ hi = score; newHi = true; hiSet(SNAKE_HI, score); } if (started) summary(); api.exit(0); return true; }
         if (k === 'p' || k === 'P' || (k === ' ' && started)){ paused = !paused; return true; }
         const d = KEYMAP[k];
-        if (d && !paused){ started = true; turn(d); }
+        if (d && !paused){ started = true; turn(d, e.touchKey); }
         else if (!started && (k === ' ' || k === 'Enter')) started = true;
         return true;
       },
@@ -497,13 +478,12 @@ T.apps.snake = {
           at(body[i][0], body[i][1], '  ', blk(f < 0.5 ? 'normal' : f < 0.85 ? 'dim' : 'faint'));
         }
         const [hx, hy] = body[0];
-        headAt = [ox + 1 + hx * 2, oy + 1 + hy];
         at(hx, hy, over ? 'xx' : '  ', blk('bright'));
         // the cards sit in the middle; the one before the start sits higher, so the snake shows under it
         const cw = Math.min(GW * 2 - 2, 34), cx = ox + 1 + ((GW * 2 - cw) / 2 | 0), cy = started || over ? oy + ((GH - 9) / 2 | 0) + 1 : oy + 1;
         const c = (y, s, st) => scr.put(cx + ((cw - s.length) / 2 | 0), cy + y, s, st);
         if (over && GH < 12){
-          const m = ' game over \u00b7 ' + score + ' points \u00b7 ' + (TOUCH ? 'tap' : 'enter') + ' again ';
+          const m = ' game over \u00b7 ' + score + ' points \u00b7 ' + (TOUCH ? 'again' : 'enter again') + ' ';
           scr.put(ox + 1 + Math.max(0, (GW * 2 - m.length) / 2 | 0), oy, m.slice(0, GW * 2), 'bright');
         } else if (over){
           box(scr, cx, cy, cw, 10, 'normal');
@@ -511,20 +491,19 @@ T.apps.snake = {
           c(3, score + ' points', 'normal');
           c(4, 'length ' + n + '   apples ' + eaten, 'dim');
           c(6, newHi ? 'new high score' : 'best ' + hi, newHi ? 'accent' : 'dim');
-          c(8, TOUCH ? 'tap again' : 'enter again  \u00b7  q quit', REDUCED || Math.floor(t * 2) % 2 === 0 ? 'normal' : 'dim');
+          c(8, TOUCH ? 'again starts over' : 'enter again  \u00b7  q quit', REDUCED || Math.floor(t * 2) % 2 === 0 ? 'normal' : 'dim');
         } else if (paused && GH < 12){                          // a short field: say it on the wall, not over the snake
-          const m = ' paused \u00b7 ' + (TOUCH ? 'tap' : 'p') + ' to resume ';
+          const m = ' paused \u00b7 ' + (TOUCH ? 'resume to go on' : 'p to resume') + ' ';
           scr.put(ox + 1 + ((GW * 2 - m.length) / 2 | 0), oy, m, 'bright');
         } else if (paused){
           box(scr, cx, cy + 2, cw, 5, 'dim');
-          c(3, 'PAUSED', 'bright'); c(5, TOUCH ? 'tap to resume' : 'p to resume', 'dim');
+          c(3, 'PAUSED', 'bright'); c(5, TOUCH ? 'resume to go on' : 'p to resume', 'dim');
         } else if (!started){
           box(scr, cx, cy + 1, cw, 7, 'dim');
           c(2, 'S N A K E', 'bright');
-          c(4, TOUCH ? 'the pad or a swipe turns' : 'arrows or wasd to start', 'normal');
-          c(5, TOUCH ? 'any direction starts' : 'p pause  \u00b7  q quit', 'faint');
+          c(4, TOUCH ? 'the arrows below steer' : 'arrows or wasd to start', 'normal');
+          c(5, TOUCH ? 'press one to start' : 'p pause  \u00b7  q quit', 'faint');
         }
-        if (TOUCH) center(scr, scr.rows - 1, paused || over || !started ? ' tap here to quit ' : ' tap here to pause ', 'faint');
       },
     };
   },

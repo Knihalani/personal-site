@@ -15,7 +15,7 @@ demoscene-style intro on the screen (a chrome 3D "KN", copper bars, a sine scrol
 | **type** | everything goes to the terminal. Start with `help`, or click a highlighted word |
 | **move the cursor** | look around. Move it down to lean back and see the whole desk and the hands |
 | **scroll** | scroll back through the terminal (also Page Up / Page Down, or Space when the prompt is empty) |
-| **phones** | the computer in your hand: the green tube in its beige bezel, and the desk's keyboard under it (real key sounds, esc, tab, ctrl and arrows, two layers of symbols for the shell). Above the keys, the main pages, then the matching commands as you type. Fold the keyboard away to read, tap the screen to bring it back. Every game gets controls of its own (tetris a handheld's two thumbs, snake a round pad, breakout two big halves; a handheld on its side) and takes swipes; the editor and the typing test keep the letters with their keys on the strip, the timer and clock fold the keyboard away. Drag or flick to scroll, swipe right (or the phone's back) to go back, tap an email to copy it |
+| **phones** | the computer in your hand, a KN-84: the green tube deep in its beige case (model plate, sound lamp, floppy slot), and the desk's keyboard under it (real key sounds, esc, tab, ctrl and arrows, two layers of symbols for the shell). Above the keys, the main pages, then the matching commands as you type. Fold the keyboard away to read, tap the screen to bring it back. Every game gets controls of its own (tetris a handheld's two thumbs, snake four big arrows and nothing else, breakout two big halves; a handheld on its side) (tetris and breakout also take swipes and drags); the editor and the typing test keep the letters with their keys on the strip, the timer and clock fold the keyboard away. Drag or flick to scroll, swipe right (or the phone's back) to go back, tap an email to copy it |
 
 Without WebGL the desktop gets the same terminal-only page. Deep links run a page on load:
 `#about`, `#j`, `#eden`, `#writing`, `#contact`, `#links`, `#help`, and `#post/<slug>` opens a post.
@@ -27,7 +27,7 @@ Without WebGL the desktop gets the same terminal-only page. Deep links run a pag
 - **Do something:** `edit` (a nano-style editor), `todo`, `weather [city]` (where you are, by default), `timer`, `clock`, `qr`, `pass` and an
   encrypted `vault` (kept only in your browser), `cal`, `bc`, `convert`, `roll`, `countdown`
 - **The network** (live site only; the claude.ai preview blocks it): `curl`, `hn`, `wiki`, `define`
-- **Play:** `tetris`, `snake`, `breakout` (on phones: a game pad, swipes, a drag to steer), `typing` (a WPM test), `lamp`
+- **Play:** `tetris`, `snake`, `breakout` (on phones: a pad made for each), `typing` (a WPM test), `lamp`
 - **A real little shell:** pipes, `>` `>>` `<` redirection, `&&` `||` `;`, globs, `$VAR`, aliases,
   history (`!!`, `!n`, ctrl+r), Tab completion, "did you mean", plain phrases like "who are you".
   Also `ls` `cd` `cat` `grep` `sort` `wc` `head` `tail` `tree` `cp` `mv` `rm` `mkdir` `touch` `man`,

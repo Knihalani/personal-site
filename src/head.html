@@ -44,80 +44,105 @@ noscript{ position: fixed; inset: 0; z-index: 4; display: grid; place-content: c
 noscript h1{ margin: 0; font: 500 18px var(--mono) } noscript p{ margin: 0; color: var(--dim) } noscript a{ color: #8dffb4 }
 /* the flat terminal on a desktop (no WebGL, or three.js did not load): one centred column, sized by main.js */
 body.flat #stage .phone-term{ right: 0; margin: 0 auto }
-/* phones (body.touch, main.js flat()): the computer in your hands. A beige bezel around a curved green tube (scanlines,
-   a soft phosphor bloom, a vignette, a power-on), and under it the desk's keyboard: beige caps with Helvetica
-   legends that travel down under the thumb, real Topre recordings for each press and release. Above the keys a
-   strip of function keys: the main pages, the words that match while typing, a game's name. Games swap the
-   letters for a pad. The keyboard folds down to the strip for reading. Plus a copied note and the swipe-back cue */
-body.touch{ --hel: "Helvetica Neue", Helvetica, Arial, sans-serif; --ink: #3a3229; --g: #8dffb4; --gd: #6b9061; --gn: #c8f5b8;
-  --sxl: max(7px, env(safe-area-inset-left, 0px)); --sxr: max(7px, env(safe-area-inset-right, 0px)); --bz: calc(env(safe-area-inset-top, 0px) + 30px); --sb: 8px;
-  --fh: 36px; --rh: 48px; --sh: 34px; --kbh: 0px;
-  background: #b9ad95; overscroll-behavior: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none }
-@media (max-height: 700px){ body.touch{ --rh: 45px; --fh: 34px; --bz: calc(env(safe-area-inset-top, 0px) + 26px) } }
-body.touch.land{ --bz: max(7px, env(safe-area-inset-top, 0px)); --sb: 6px; --rh: 31px; --sh: 31px }
-body.touch.land .fk, body.touch.land #kb #mute{ height: 25px }
-body.touch.land .board{ margin-top: 4px }
+/* phones (body.touch, main.js flat()): the KN-84 in your hands, made like the desk's machine. Lamp-lit beige plastic with a
+   fine moulded grain; the tube sits deep in a bevelled recess (scanlines, a soft phosphor bloom, a vignette, a power-on);
+   a pressed model plate, a sound lamp behind a little lens, a floppy slot whose lamp flickers when the disk runs. Under
+   it, on the desk, the keyboard: a cream frame, a dark well, sculpted caps (dished tops, walls, warm-grey modifiers,
+   the desk's legends) that travel down under the thumb with a real Topre recording for each press and release. Over
+   the keys a row of function keys: the main pages, the words that match while typing, an app's own keys. Games swap
+   the letters for a pad made for each. Plus a copied note and the swipe-back cue */
+body.touch{ --hel: Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif; --ink: #3a332b; --g: #8dffb4; --gd: #6b9061; --gn: #c8f5b8;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .32 0 0 0 0 .27 0 0 0 0 .2 .55 0 0 0 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --sxl: max(12px, env(safe-area-inset-left, 0px)); --sxr: max(12px, env(safe-area-inset-right, 0px)); --bz: calc(env(safe-area-inset-top, 0px) + 34px); --sb: 30px;
+  --fh: 36px; --rh: 48px; --sh: 36px; --kbh: 0px;
+  background: #15120f; overscroll-behavior: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none }
+@media (max-height: 760px){ body.touch{ --rh: 45px; --fh: 33px; --sh: 34px; --bz: calc(env(safe-area-inset-top, 0px) + 30px); --sb: 24px } }
+@media (max-height: 600px){ body.touch{ --rh: 43px; --fh: 32px; --sh: 33px; --bz: calc(env(safe-area-inset-top, 0px) + 26px); --sb: 11px; --sxl: max(10px, env(safe-area-inset-left, 0px)); --sxr: max(10px, env(safe-area-inset-right, 0px)) } }
+body.touch.land{ --bz: max(8px, env(safe-area-inset-top, 0px)); --sb: 8px; --rh: 31px; --sh: 31px }
 body.touch::before{ display: none }
-/* the bezel: lamp-lit plastic, a little darker toward the edges; the maker's badge pressed into it */
-body.touch #stage{ bottom: var(--kbh); overflow: hidden; touch-action: none;
-  background: radial-gradient(120% 70% at 50% 35%, #cdc2ab 0, #c2b69e 55%, #a99d85 100%) }
-body.touch #stage::before{ content: "Kaiav Nihalani"; position: absolute; left: calc(var(--sxl) + 7px); top: calc(var(--bz) - 21px); font: 600 10px/14px var(--hel); letter-spacing: .2em; text-transform: uppercase;
-  color: #9a8e78; text-shadow: 0 1px 0 rgba(255,255,255,.45), 0 -1px 0 rgba(60,50,38,.25) }
-body.touch.land #stage::before{ display: none }
+/* the case: cream plastic under a warm lamp from above left, darker toward its edges, with a fine grain */
+body.touch #stage{ bottom: var(--kbh); overflow: hidden; touch-action: none; border-radius: 0 0 14px 14px;
+  background: var(--grain), radial-gradient(130% 80% at 30% 18%, #e6ddcb 0, #d9cfbb 42%, #c9bea8 78%, #b3a891 100%);
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.12), inset 0 -1px 0 rgba(255,255,255,.35) }
+body.touch #stage::before{ display: none }
+/* the tube's recess: moulded into the case, in shadow at the top and catching the lamp at the bottom */
+#stage .recess{ position: absolute; top: calc(var(--bz) - 7px); left: calc(var(--sxl) - 7px); right: calc(var(--sxr) - 7px); bottom: calc(var(--sb) - 7px); border-radius: 24px / 26px; pointer-events: none;
+  background: linear-gradient(180deg, #a59a83 0, #c4b9a2 30%, #ddd4c1 85%, #e8e0cf 100%);
+  box-shadow: inset 0 3px 5px rgba(60,48,32,.45), inset 0 -1px 1px rgba(255,255,255,.55), 0 1px 0 rgba(255,255,255,.5), 0 -1px 0 rgba(90,78,60,.25) }
 #tube{ position: absolute; top: var(--bz); left: var(--sxl); right: var(--sxr); bottom: var(--sb); border-radius: 18px / 20px; overflow: hidden; background: #0a0f0a; isolation: isolate;
-  box-shadow: 0 0 0 2px #1d1915, 0 -2px 0 3.5px #9c9079, 0 2px 0 3.5px #e1d7c3, 0 0 0 5px #b4a88f }
+  box-shadow: 0 0 0 1.5px #12100d, 0 0 0 3px #3b342b, 0 2px 3px 3px rgba(0,0,0,.35) }
 #tube .scr{ position: absolute; inset: 0; transform-origin: 50% 50% }
 #tube .scr.on{ animation: tube-on .7s cubic-bezier(.2,.7,.2,1) both }
 @keyframes tube-on{ 0%{ transform: scale(.5, .004); filter: brightness(5) } 30%{ transform: scale(1, .008); filter: brightness(4) } 62%{ transform: scale(1, 1.02); filter: brightness(1.7) } 100%{ transform: none; filter: none } }
 #tube canvas.phone-term{ position: absolute; top: 0; left: 0; transition: transform .25s cubic-bezier(.2,.8,.2,1) }
 #tube canvas.phone-term.drag{ transition: none }
 #tube .bloom{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; filter: blur(5px); opacity: .55; mix-blend-mode: screen }
-/* the glass: scanlines, the tube's dark curved edges, a faint sheen from the room */
+/* the glass: scanlines, the tube's dark curved edges, a faint reflection of the room */
 #tube::after{ content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit;
   background: linear-gradient(168deg, rgba(225,255,232,.075) 0, rgba(225,255,232,.02) 34%, transparent 34.5%),
     repeating-linear-gradient(180deg, transparent 0 2px, rgba(0,0,0,.16) 2px 3px),
     radial-gradient(ellipse 90% 85% at 50% 50%, transparent 58%, rgba(0,0,0,.5) 100%);
   box-shadow: inset 0 0 26px 6px rgba(0,0,0,.6), inset 0 0 3px 1px rgba(0,0,0,.9) }
-/* the sound switch: a little lamp on the bezel (landscape: a key on the strip) */
-body.touch #mute{ position: fixed; top: calc(var(--bz) - 30px); right: calc(var(--sxr) + 2px); height: 30px; padding: 0 6px 0 10px; border: 0; gap: 7px; z-index: 3;
-  font: 600 10px/1 var(--hel); letter-spacing: .2em; text-transform: uppercase; color: #8a7e69; text-shadow: 0 1px 0 rgba(255,255,255,.45) }
-@media (max-height: 700px){ body.touch #mute{ height: 26px; top: calc(var(--bz) - 26px) } }
-body.touch #mute::before{ width: 7px; height: 7px; border: 0; background: #7d7261; box-shadow: inset 0 1px 1.5px rgba(0,0,0,.55), 0 1px 0 rgba(255,255,255,.4) }
-body.touch #mute[aria-pressed="true"]::before{ background: radial-gradient(circle at 40% 35%, #e9ffef, #8dffb4 55%, #4fc77c); box-shadow: 0 0 7px rgba(141,255,180,.9), 0 1px 0 rgba(255,255,255,.4) }
+/* the model plate, pressed into the case over the tube's top left corner */
+#stage .plate{ position: absolute; left: calc(var(--sxl) + 4px); top: calc(var(--bz) - 29px); height: 17px; padding: 0 7px; border-radius: 3px; display: flex; align-items: center; gap: 6px; pointer-events: none;
+  background: linear-gradient(180deg, #cdc3ae, #d8cfbb); box-shadow: inset 0 1px 1.5px rgba(70,58,40,.45), inset 0 -1px 0 rgba(255,255,255,.5), 0 1px 0 rgba(255,255,255,.45);
+  font: 700 10px/1 var(--hel); font-stretch: 75%; letter-spacing: .2em; color: #b9ae97; text-shadow: 0 -1px 0 rgba(255,255,255,.55), 0 1px 0 rgba(80,66,46,.45) }
+#stage .plate i{ width: 1px; height: 9px; background: rgba(80,66,46,.3); box-shadow: 1px 0 0 rgba(255,255,255,.4) }
+#stage .plate span{ font-weight: 600; letter-spacing: .2em; font-size: 7px; text-transform: uppercase }
+@media (max-height: 760px){ #stage .plate{ top: calc(var(--bz) - 25px); height: 15px } }
+@media (max-height: 600px){ #stage .plate{ top: calc(var(--bz) - 22px) } }
+body.touch.land #stage .plate{ display: none }
+/* the chin: a floppy slot with a lamp that flickers while the disk runs (tall screens; a short one keeps the rows) */
+#stage .chin{ position: absolute; left: var(--sxl); right: var(--sxr); bottom: 0; height: calc(var(--sb) - 7px); display: flex; align-items: center; justify-content: flex-end; gap: 10px; pointer-events: none; padding-right: 10px }
+#stage .slot{ display: block; position: relative; width: 38%; height: 11px; border-radius: 6px; background: linear-gradient(180deg, #b9ae97, #d3c9b5); box-shadow: inset 0 1px 2px rgba(60,48,32,.4), 0 1px 0 rgba(255,255,255,.5) }
+#stage .slot::after{ content: ""; position: absolute; left: 7px; right: 7px; top: 4px; height: 3px; border-radius: 2px; background: #1b1713; box-shadow: 0 1px 0 rgba(255,255,255,.35) }
+#stage .dled{ display: block; width: 5px; height: 5px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #8a6a3a, #4a3820); box-shadow: 0 0 0 1.5px #b4a990, inset 0 1px 1px rgba(0,0,0,.5) }
+#stage .dled.on{ background: radial-gradient(circle at 40% 35%, #fff3d0, #ffb347 55%, #c97a1c); box-shadow: 0 0 0 1.5px #b4a990, 0 0 6px 1px rgba(255,170,60,.8) }
+@media (max-height: 600px){ #stage .chin{ display: none } }
+body.touch.land #stage .chin{ display: none }
+/* the sound lamp: a lens in a ring on the case, its caption pressed in beside it (on its side: a key on the function row) */
+body.touch #mute{ position: fixed; top: calc(var(--bz) - 33px); right: calc(var(--sxr) + 2px); height: 30px; padding: 0 4px 0 10px; border: 0; gap: 8px; z-index: 3; flex-direction: row-reverse;
+  font: 600 9.5px/1 var(--hel); font-stretch: 75%; letter-spacing: .24em; text-transform: uppercase; color: #a89c84; text-shadow: 0 1px 0 rgba(255,255,255,.55), 0 -1px 0 rgba(80,66,46,.3) }
+@media (max-height: 760px){ body.touch #mute{ height: 26px; top: calc(var(--bz) - 28px) } }
+@media (max-height: 600px){ body.touch #mute{ top: calc(var(--bz) - 26px) } }
+body.touch #mute::before{ width: 8px; height: 8px; border: 0; background: radial-gradient(circle at 38% 32%, #6f8a6c, #2b3a2a 70%); box-shadow: 0 0 0 2px #bfb39b, 0 0 0 3px rgba(80,66,46,.35), inset 0 1px 2px rgba(0,0,0,.6) }
+body.touch #mute[aria-pressed="true"]::before{ background: radial-gradient(circle at 38% 32%, #f4fff6 0, #a9ffc6 30%, #4fd383 70%, #2b8a52 100%); box-shadow: 0 0 0 2px #bfb39b, 0 0 0 3px rgba(80,66,46,.35), 0 0 8px 2px rgba(141,255,180,.75) }
 body.touch #mute::after{ content: ""; position: absolute; inset: -6px -6px -8px -10px }
-body.touch #mute:hover{ color: #6f6452 }
+body.touch #mute:hover{ color: #8f836c }
 body.touch.reading #mute, body.touch.reading #kb{ display: none }
-#kb #mute{ position: relative; top: auto; right: auto; flex: none }
-/* the keyboard */
+#kb #mute{ position: relative; top: auto; right: auto; flex: none; flex-direction: row; text-transform: none; letter-spacing: .01em; font-stretch: 100%; color: #2f2a24 }
+/* the keyboard, on the desk under the machine: a cream frame, a little lighter than the case */
 #kb{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; box-sizing: border-box; touch-action: none;
-  padding: 5px var(--sxr) calc(env(safe-area-inset-bottom, 0px) + 6px) var(--sxl);
-  background: linear-gradient(180deg, #d3c8b1 0, #c6baa2 22%, #b9ad94 100%);
-  box-shadow: 0 -1px 0 #6f6555, 0 -2px 0 rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.55) }
-body.touch.land #kb{ padding-bottom: max(5px, env(safe-area-inset-bottom, 0px)) }
-#kb::before{ content: ""; position: absolute; left: 0; right: 0; top: 0; height: 46px; pointer-events: none; background: radial-gradient(55% 46px at 50% 0, rgba(141,255,180,.10), transparent) }
+  padding: 7px var(--sxr) calc(env(safe-area-inset-bottom, 0px) + 7px) var(--sxl); border-radius: 12px 12px 0 0;
+  background: var(--grain), linear-gradient(180deg, #e9e1d0 0, #ddd4c1 30%, #cfc5b1 100%);
+  box-shadow: 0 -3px 0 #15120f, 0 -6px 10px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.7), inset 0 2px 3px rgba(255,255,255,.25) }
+body.touch.land #kb{ padding-bottom: max(5px, env(safe-area-inset-bottom, 0px)); padding-top: 5px }
 #kb[hidden]{ display: none }
-.strip{ position: relative; display: flex; align-items: center; gap: 6px; height: var(--sh); padding: 0 1px }
-.strip .sk{ flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; padding: 0 2px }
+/* the function row: low keys in warm grey, set straight into the frame */
+.strip{ position: relative; display: flex; align-items: center; gap: 5px; height: var(--sh); padding: 0 1px }
+.strip .sk{ flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 5px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; padding: 0 2px }
 .strip .sk::-webkit-scrollbar{ display: none }
 .strip .sk.over{ -webkit-mask: linear-gradient(90deg, #000 calc(100% - 22px), transparent); mask: linear-gradient(90deg, #000 calc(100% - 22px), transparent) }
 .strip .sk.nav .fk{ flex: 1 1 auto; padding: 0 6px }
-.strip .sk.nav .fk.ico{ flex: 0 0 auto; padding: 0 5px }
-.fk, #kb #mute{ position: relative; flex: 0 0 auto; box-sizing: border-box; height: 27px; min-width: 34px; padding: 0 10px; border: 0; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
-  background: linear-gradient(180deg, #c3b9a6, #aea38e); color: var(--ink); font: 500 13px/1 var(--hel); letter-spacing: .02em; text-transform: none; text-shadow: 0 1px 0 rgba(255,255,255,.3); white-space: nowrap;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 2px 0 #7c7262, 0 3px 3px rgba(0,0,0,.28); -webkit-tap-highlight-color: transparent }
-.fk.down, #kb #mute:active{ transform: translateY(1.5px); box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 .5px 0 #7c7262, 0 1px 1px rgba(0,0,0,.25); background: linear-gradient(180deg, #bab09c, #a99e88) }
+.strip .sk.nav .fk.ico{ flex: 0 0 auto; padding: 0 6px }
+.fk, #kb #mute{ position: relative; flex: 0 0 auto; box-sizing: border-box; height: 28px; min-width: 34px; padding: 0 10px 3px; border: 0; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+  background: linear-gradient(180deg, #bdb6a8 0, #b2ab9c 55%, #9c9587 100%); color: #2f2a24; font: 500 12.5px/1 var(--hel); letter-spacing: .01em; text-transform: none; text-shadow: 0 1px 0 rgba(255,255,255,.25); white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -3px 0 rgba(70,62,50,.28), 0 0 0 1px rgba(70,60,46,.35), 0 2px 2px rgba(40,32,22,.35); -webkit-tap-highlight-color: transparent }
+.fk.down, #kb #mute:active{ transform: translateY(1.5px); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), inset 0 -1.5px 0 rgba(70,62,50,.25), 0 0 0 1px rgba(70,60,46,.35), 0 .5px 1px rgba(40,32,22,.35); background: linear-gradient(180deg, #b5ae9f, #a49d8f) }
 .fk b{ font-weight: 700 }
-.fk i{ font-style: normal; font-weight: 700; font-size: 11.5px; color: #6a5f50; margin-right: -1px }
-.strip .sk.app .fk{ padding: 0 9px }
-@media (max-width: 359px){ .pad .key.c .lg{ font-size: 12px; letter-spacing: 0 } .pad .key .lg small{ font-size: 9.5px } }
-.fk.on::before, .fk .dot{ content: ""; width: 5px; height: 5px; border-radius: 50%; flex: none; background: #8dffb4; box-shadow: 0 0 5px rgba(141,255,180,.95) }
-.fk svg{ width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
-.fk.ico{ padding: 0 8px }
-.fk.fold{ width: 42px; padding: 0 }
+.fk i{ font-style: normal; font-weight: 700; font-size: 11px; color: #5d564b; margin-right: -1px }
+.strip .sk.app .fk{ padding: 0 9px 3px }
+.fk.on::before, .fk .dot{ content: ""; width: 5px; height: 5px; border-radius: 50%; flex: none; background: radial-gradient(circle at 40% 35%, #f0fff3, #8dffb4 60%); box-shadow: 0 0 5px rgba(141,255,180,.95), 0 0 0 1px rgba(60,52,40,.3) }
+.fk svg{ width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+.fk.fold{ width: 42px; padding: 0 0 3px }
 .fk.fold .dn{ display: none } body.fold .fk.fold .up{ display: none } body.fold .fk.fold .dn{ display: block }
-.strip .note{ flex: none; padding: 0 6px; font: 600 10px/1 var(--hel); letter-spacing: .2em; text-transform: uppercase; color: #8a7e69; text-shadow: 0 1px 0 rgba(255,255,255,.45); white-space: nowrap }
-.board{ position: relative; margin-top: 6px; padding: 3px; border-radius: 8px; background: #2a2520; display: flex; flex-direction: column;
-  box-shadow: inset 0 2px 5px rgba(0,0,0,.7), 0 1px 0 rgba(255,255,255,.5) }
+/* words pressed into the frame (an app's name, a test's speed) */
+.strip .note{ flex: none; padding: 0 6px 0 4px; font: 600 10px/1 var(--hel); font-stretch: 75%; letter-spacing: .22em; text-transform: uppercase; color: #ada28b; text-shadow: 0 1px 0 rgba(255,255,255,.7), 0 -1px 0 rgba(80,66,46,.35); white-space: nowrap }
+body.touch.land .fk, body.touch.land #kb #mute{ height: 25px }
+/* the well the keys sit in */
+.board{ position: relative; margin-top: 7px; padding: 3px; border-radius: 9px; display: flex; flex-direction: column;
+  background: linear-gradient(180deg, #3a332b, #4a4238); box-shadow: inset 0 3px 6px rgba(0,0,0,.65), inset 0 0 0 1px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.7), 0 -1px 0 rgba(120,104,80,.35) }
+body.touch.land .board{ margin-top: 5px }
 body.fold .board{ display: none }
 .board.rise{ animation: kb-rise .22s cubic-bezier(.2,.8,.2,1) }
 @keyframes kb-rise{ from{ transform: translateY(24px); opacity: 0 } to{ transform: none; opacity: 1 } }
@@ -125,64 +150,59 @@ body.fold .board{ display: none }
 .row.fn{ height: var(--fh) }
 .key{ position: relative; flex: var(--w, 1) 1 0; min-width: 0; box-sizing: border-box; padding: 2.5px; display: flex }
 .key.gap{ visibility: hidden }
-.cap{ position: relative; flex: 1; margin: 0 var(--mr, 0) 0 var(--ml, 0); border-radius: 6px; background: linear-gradient(180deg, #c7baa0, #9f927a);
-  box-shadow: 0 2px 0 #4d453a, 0 3px 4px rgba(0,0,0,.45); transition: transform .09s ease-out, box-shadow .09s ease-out }
-.cap::before{ content: ""; position: absolute; inset: 1px 2.5px 4.5px; border-radius: 4.5px;
-  background: radial-gradient(130% 95% at 50% 12%, #f0e8d7 0, #e3d9c4 45%, #d5c9b1 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 1px 1.5px rgba(70,60,45,.35) }
-.cap::after{ content: ""; position: absolute; inset: 1px 2.5px 4.5px; border-radius: 4.5px; opacity: 0; background: radial-gradient(90% 80% at 50% 40%, rgba(255,250,232,.55), rgba(255,250,232,0) 75%) }
-.key.mod .cap{ background: linear-gradient(180deg, #a59a86, #82786a) }
-.key.mod .cap::before{ background: radial-gradient(130% 95% at 50% 12%, #cdc3b0 0, #bdb29d 50%, #ada28c 100%) }
-.key.down .cap{ transform: translateY(2.5px); box-shadow: 0 .5px 0 #4d453a, 0 1px 1px rgba(0,0,0,.4); transition: none }
-.key.down .cap::before{ inset: 1.5px 2.5px 2.5px; background: radial-gradient(130% 95% at 50% 12%, #e9e0cd 0, #dbd0ba 50%, #cdc1a8 100%) }
-.key.mod.down .cap::before{ background: radial-gradient(130% 95% at 50% 12%, #c4baa6 0, #b4a993 55%, #a59a84 100%) }
-.key.down .cap::after{ opacity: 1; inset: 1.5px 2.5px 2.5px }
-.lg{ position: absolute; z-index: 1; left: 7px; top: 5px; font: 500 16px/1 var(--hel); color: var(--ink); white-space: nowrap; pointer-events: none }
-.key.mod .lg{ top: auto; bottom: 9px; left: 6px; font-size: 11px; letter-spacing: .02em }
-.key.c .lg, .key.mod.c .lg{ left: 0; right: 0; top: 0; bottom: 4px; display: flex; align-items: center; justify-content: center; font-size: 17px }
+/* a cap: its walls (lit on the left, the front skirt deepest), and on top a dished face, in shadow under its upper rim */
+.cap{ position: relative; flex: 1; margin: 0 var(--mr, 0) 0 var(--ml, 0); border-radius: 7px;
+  background: linear-gradient(90deg, rgba(255,255,255,.16), rgba(255,255,255,0) 30%, rgba(0,0,0,0) 70%, rgba(0,0,0,.08)), linear-gradient(180deg, #ddd3bf 0, #d2c7b0 55%, #b9ad94 100%);
+  box-shadow: 0 2px 0 #6e6454, 0 3px 4px rgba(0,0,0,.5); transition: transform .09s ease-out, box-shadow .09s ease-out }
+.cap::before{ content: ""; position: absolute; inset: 1.5px 3px 6px; border-radius: 5px;
+  background: radial-gradient(120% 90% at 50% 70%, #f2ecdf 0, #ebe3d2 55%, #e2d9c5 100%);
+  box-shadow: inset 0 1.5px 1.5px rgba(90,74,50,.18), inset 0 -1px 0 rgba(255,255,255,.65), 0 0 0 .5px rgba(120,104,80,.25) }
+.cap::after{ content: ""; position: absolute; inset: 1.5px 3px 6px; border-radius: 5px; opacity: 0; background: radial-gradient(90% 80% at 50% 40%, rgba(255,250,232,.5), rgba(255,250,232,0) 75%) }
+.key.mod .cap{ background: linear-gradient(90deg, rgba(255,255,255,.12), rgba(255,255,255,0) 30%, rgba(0,0,0,0) 70%, rgba(0,0,0,.1)), linear-gradient(180deg, #a8a194 0, #9c9588 55%, #847d71 100%) }
+.key.mod .cap::before{ background: radial-gradient(120% 90% at 50% 70%, #c4beb2 0, #bbb4a7 55%, #b0a99b 100%); box-shadow: inset 0 1.5px 1.5px rgba(40,32,22,.22), inset 0 -1px 0 rgba(255,255,255,.4), 0 0 0 .5px rgba(60,52,40,.3) }
+.key.down .cap, .cap.down{ transform: translateY(3px); box-shadow: 0 .5px 0 #6e6454, 0 1px 1px rgba(0,0,0,.45); transition: none }
+.key.down .cap::before, .cap.down::before{ inset: 1.5px 3px 3.5px; background: radial-gradient(120% 90% at 50% 70%, #ebe4d5 0, #e1d8c5 55%, #d6ccb7 100%) }
+.key.mod.down .cap::before{ background: radial-gradient(120% 90% at 50% 70%, #bcb5a8 0, #b2ab9d 55%, #a7a092 100%) }
+.key.down .cap::after, .cap.down::after{ opacity: 1; inset: 1.5px 3px 3.5px }
+.lg{ position: absolute; z-index: 1; left: 8px; top: 5px; font: 500 16px/1 var(--hel); color: var(--ink); white-space: nowrap; pointer-events: none }
+.key.mod .lg{ top: auto; bottom: 10px; left: 7px; font-size: 11px; letter-spacing: .02em; color: #2c2721 }
+.key.c .lg, .key.mod.c .lg{ left: 0; right: 0; top: 0; bottom: 5px; display: flex; align-items: center; justify-content: center; font-size: 17px }
 .key.mod.c .lg{ font-size: 11.5px; letter-spacing: .04em }
-.key.arrow .lg svg{ width: 15px; height: 15px; stroke: var(--ink); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
-.row.fn .key.mod .lg{ bottom: 8px }
+.key.arrow .lg svg{ width: 15px; height: 15px; stroke: #2c2721; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+.row.fn .key.mod .lg{ bottom: 9px }
 .key.down .lg{ transform: translateY(-1px) }
-@media (max-width: 359px){ .lg{ left: 5px; top: 4px; font-size: 14.5px } .key.mod .lg{ left: 5px; font-size: 9.5px; letter-spacing: 0 } .key.mod.c .lg{ font-size: 10.5px }
-  .fk, #kb #mute{ font-size: 12px } .strip .sk, .strip{ gap: 4px } .fk.fold{ width: 36px } }
-.led{ position: absolute; z-index: 1; right: 7px; top: 6px; width: 5px; height: 5px; border-radius: 50%; background: #6c6253; box-shadow: inset 0 1px 1px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.35); pointer-events: none }
+@media (max-width: 359px){ .lg{ left: 6px; top: 4px; font-size: 14.5px } .key.mod .lg{ left: 5px; font-size: 9.5px; letter-spacing: 0 } .key.mod.c .lg{ font-size: 10.5px }
+  .fk, #kb #mute{ font-size: 11.5px } .strip .sk, .strip{ gap: 4px } .fk.fold{ width: 36px } }
+.led{ position: absolute; z-index: 1; right: 8px; top: 6px; width: 5px; height: 5px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #6f8a6c, #2b3a2a 70%); box-shadow: 0 0 0 1px rgba(60,52,40,.35); pointer-events: none }
 .key.on .led{ background: radial-gradient(circle at 40% 35%, #f0fff3, #8dffb4 60%); box-shadow: 0 0 6px rgba(141,255,180,.95) }
 .key.lock .led{ background: radial-gradient(circle at 40% 35%, #f0fff3, #8dffb4 60%); box-shadow: 0 0 8px 1px rgba(141,255,180,1) }
-/* the pad, for games: a big cross, and space, return, pause, esc */
+/* pads, one per app (main.js PADS): the same caps, made big */
 .pad{ display: grid; height: calc(var(--fh) + 4 * var(--rh)) } body.land .pad{ height: calc(4 * var(--rh)) }
 .pad .key{ padding: 3.5px }
-.pad .key.c .lg{ flex-direction: column; gap: 3px; font-size: 14px; letter-spacing: .03em }
-.pad .key .lg small{ font: 500 10.5px/1 var(--hel); letter-spacing: .06em; color: #5d5246 }
+.pad .key.c .lg{ flex-direction: column; gap: 4px; font-size: 14px; letter-spacing: .03em }
+.pad .key .lg small{ font: 500 10.5px/1 var(--hel); font-stretch: 85%; letter-spacing: .1em; text-transform: uppercase; color: #5d564b }
 .pad .key.arrow .lg svg{ width: 30px; height: 30px; stroke-width: 2.1 }
 .pad .k-bleft .lg svg, .pad .k-bright .lg svg{ width: 44px; height: 44px; stroke-width: 2.4 }
-.pad .k-left .lg svg, .pad .k-right .lg svg{ width: 34px; height: 34px }
-.pad .k-drop .cap::before, .pad .k-serve .cap::before{ background: radial-gradient(130% 95% at 50% 12%, #f3ecdc 0, #e6dcc8 45%, #d8cdb6 100%) }
-/* the round pad: four arms on a dished disc, a hub in the middle */
-.dpad{ display: flex; align-items: center; justify-content: center; touch-action: none; container-type: size }
-.dp{ position: relative; flex: none; width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); border-radius: 50%;
-  background: radial-gradient(circle at 50% 45%, #3a332b 0, #2a2520 62%, #1f1b17 100%); box-shadow: inset 0 2px 6px rgba(0,0,0,.7), 0 1px 0 rgba(255,255,255,.12) }
-.dp .arm{ position: absolute; width: 33%; height: 33%; border-radius: 7px }
-.dp .arm.up{ left: 33.5%; top: 2% } .dp .arm.down{ left: 33.5%; bottom: 2% } .dp .arm.left{ left: 2%; top: 33.5% } .dp .arm.right{ right: 2%; top: 33.5% }
-.dp .arm .lg{ left: 0; right: 0; top: 0; bottom: 4px; display: flex; align-items: center; justify-content: center }
-.dp .arm .lg svg{ width: 28px; height: 28px; stroke: var(--ink); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
-.dp .hub{ position: absolute; left: 36%; top: 36%; width: 28%; height: 28%; border-radius: 50%; background: radial-gradient(circle at 45% 35%, #4a4239, #2a2520); box-shadow: inset 0 1px 2px rgba(0,0,0,.6) }
-.cap.down{ transform: translateY(2.5px); box-shadow: 0 .5px 0 #4d453a, 0 1px 1px rgba(0,0,0,.4); transition: none }
-.cap.down::before{ inset: 1.5px 2.5px 2.5px; background: radial-gradient(130% 95% at 50% 12%, #e9e0cd 0, #dbd0ba 50%, #cdc1a8 100%) }
-.cap.down::after{ opacity: 1; inset: 1.5px 2.5px 2.5px }
+.pad .k-left .lg svg, .pad .k-right .lg svg, .pad .k-up .lg svg, .pad .k-down .lg svg{ width: 36px; height: 36px; stroke-width: 2.3 }
+.pad .key.arrow .cap{ background: linear-gradient(90deg, rgba(255,255,255,.16), rgba(255,255,255,0) 30%, rgba(0,0,0,0) 70%, rgba(0,0,0,.08)), linear-gradient(180deg, #ddd3bf 0, #d2c7b0 55%, #b9ad94 100%) }
+.pad .key.arrow .cap::before{ background: radial-gradient(120% 90% at 50% 70%, #f2ecdf 0, #ebe3d2 55%, #e2d9c5 100%) }
 .pad .k-letters{ display: none }
-/* a phone on its side, in a game: a handheld. The cross and esc / pause to the left of the tube, space, return and
-   abc to the right, on the bezel itself; the tube keeps the whole height */
+@media (max-width: 359px){ .pad .key.c .lg{ font-size: 12px; letter-spacing: 0 } .pad .key .lg small{ font-size: 9.5px } }
+/* a phone on its side, in a game: a handheld. The pad's halves sit on the case either side of the tube, which keeps
+   the whole height */
 body.touch.land.gaming{ --side: min(190px, 24vw) }
 body.land.gaming #tube{ left: calc(var(--sxl) + var(--side)); right: calc(var(--sxr) + var(--side)) }
-body.land.gaming #kb{ top: 0; padding: 0; background: none; box-shadow: none; pointer-events: none }
-body.land.gaming #kb::before, body.land.gaming .strip{ display: none }
+body.land.gaming #stage .recess{ left: calc(var(--sxl) + var(--side) - 7px); right: calc(var(--sxr) + var(--side) - 7px) }
+body.land.gaming #stage{ border-radius: 0 }
+body.land.gaming #kb{ top: 0; padding: 0; background: none; box-shadow: none; pointer-events: none; border-radius: 0 }
+body.land.gaming .strip{ display: none }
 body.land.gaming .board{ position: absolute; inset: 0; margin: 0; padding: max(10px, env(safe-area-inset-top, 0px)) var(--sxr) max(10px, env(safe-area-inset-bottom, 0px)) var(--sxl); background: none; box-shadow: none; border-radius: 0 }
 body.land.gaming .pad{ height: 100%; column-gap: 0 }
 body.land.gaming .pad .key{ pointer-events: auto; padding: 4px }
 body.land.gaming .pad .k-letters{ display: flex }
 /* the key under a thumb, shown above it (the thumb hides the cap) */
 .pop{ position: fixed; z-index: 6; pointer-events: none; display: none; place-items: center; box-sizing: border-box; padding-bottom: 4px; border-radius: 9px;
-  background: radial-gradient(130% 95% at 50% 12%, #f3ebdb 0, #e3d9c4 55%, #d2c6ad 100%); box-shadow: 0 0 0 1px rgba(60,50,40,.35), 0 3px 0 #9f927a, 0 10px 18px rgba(0,0,0,.45);
+  background: radial-gradient(120% 90% at 50% 70%, #f4eee2 0, #ece4d3 55%, #e2d9c5 100%); box-shadow: 0 0 0 1px rgba(60,50,40,.4), inset 0 1.5px 1.5px rgba(90,74,50,.15), 0 4px 0 #b9ad94, 0 5px 0 #6e6454, 0 12px 18px rgba(0,0,0,.45);
   font: 500 30px/1 var(--hel); color: var(--ink) }
 .pop.on{ display: grid }
 #toast{ position: fixed; z-index: 5; left: 50%; bottom: calc(var(--kbh) + var(--sb) + 16px); transform: translate(-50%, 10px); max-width: calc(100vw - 40px); box-sizing: border-box; display: flex; align-items: center; gap: 8px;
@@ -216,6 +236,9 @@ for (const n of ['localStorage', 'sessionStorage']){
    the room when it arrives (or the terminal alone if it fails or hangs). Phones never draw the room, so never fetch it */
 (() => {
   const M = window.MAC = window.MAC || {};
+  if (matchMedia('(pointer: coarse)').matches){   // phones: the case's lettering (Archivo, condensed for labels)
+    const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&display=swap'; document.head.appendChild(l);
+  }
   if (window.THREE || matchMedia('(pointer: coarse)').matches) return;
   const s = document.createElement('script');
   M.three = new Promise(done => { s.onload = () => done(!!window.THREE); s.onerror = () => done(false); });

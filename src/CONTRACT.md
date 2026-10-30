@@ -109,6 +109,9 @@ Creates the scene, terminal and typist; routes keydown/keyup to terminal + typis
 (anything else in the hash is ignored). One rAF loop, paused when hidden and while the reader is open.
 `flat()` is the terminal-only layout: phones, and desktops without WebGL or three.js, after a context loss or
 repeated render errors. Desktops get one centred column, unchanged. Touch screens get the computer in the hand:
+- the case (built by main.js into #stage): the tube's recess, a KN-84 model plate, a floppy slot whose lamp flickers with
+  `MAC.sound.event('disk')`, the sound lamp (#mute) behind a lens; a fine grain from one inline SVG turbulence (static);
+  Archivo (condensed for the case's lettering) loads on phones only (head.html);
 - the tube (#tube, built by main.js): the canvas in a beige bezel, with a bloom (the frame drawn at 1/6 size into a second
   canvas, blurred by CSS, screen-blended; one drawImage per changed frame), scanlines, vignette and glass in one CSS overlay,
   and a power-on animation;
@@ -122,9 +125,9 @@ repeated render errors. Desktops get one centred column, unchanged. Touch screen
   keyboard folds down to the strip (its last key; also when a drag reads back up a page) and comes back on a tap on the tube.
 - every full-screen app gets controls made for it (main.js `PADS`, and the app's `status()`):
   tetris: left / right side by side and soft drop under them for the left thumb, turn either way and hard drop for the
-  right, hold and pause above (170 ms / 50 ms auto-shift, held soft drop); snake: one round pad (direction from the thumb's
-  angle, a dead spot and some give between axes so a diagonal thumb never turns twice; sliding round turns again), pause
-  and esc either side; breakout: two big halves for the paddle (it speeds up while held), serve and pause over them;
+  right, hold and pause above (170 ms / 50 ms auto-shift, held soft drop); snake: the arrows only, four big keys in a cross
+  filling the pad, each a turn on touchdown (two queued at most, repeats and reversals ignored), no swipes or taps on the
+  field, pause / again / quit on the strip; breakout: two big halves for the paddle (it speeds up while held), serve and pause over them;
   typing: the letters with `,` and `'` in place of `-` and `/`, and the test's speed and keys on the strip; the editor:
   the letters, and its shortcuts of the moment on the strip; timer and clock: the keyboard folds away and their keys sit
   on the strip. Pads swap with the letters (`abc` / `pad`); on a phone on its side a pad's halves sit either side of the

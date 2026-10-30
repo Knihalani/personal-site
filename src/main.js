@@ -216,7 +216,16 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     kbd.setAttribute('inputmode', 'none'); kbd.setAttribute('virtualkeyboardpolicy', 'manual');
     tube = D.createElement('div'); tube.id = 'tube'; scr = D.createElement('div'); scr.className = 'scr';
     bloom = D.createElement('canvas'); bloom.className = 'bloom'; bx = bloom.getContext('2d');
-    tube.appendChild(scr); stage.appendChild(tube);
+    tube.appendChild(scr);
+    /* the case's details: the tube's recess, the model plate, the floppy slot and its lamp */
+    const part = (cls, html) => { const d = D.createElement('div'); d.className = cls; if (html) d.innerHTML = html; stage.appendChild(d); return d; };
+    part('recess'); stage.appendChild(tube);
+    part('plate', 'KN-84<i></i><span>personal computer</span>');
+    const chin = part('chin', '<i class="dled"></i><i class="slot"></i>'), dled = chin.querySelector('.dled');
+    if (sound && sound.event){   // the disk lamp flickers with the drive's sound
+      const ev0 = sound.event.bind(sound); let dt = 0;
+      sound.event = name => { if (name === 'disk'){ dled.classList.add('on'); clearTimeout(dt); let n = 0; const f = () => { dled.classList.toggle('on', n % 3 !== 2); if (++n < 9) dt = setTimeout(f, 70 + Math.random() * 60); else dled.classList.remove('on'); }; f(); } return ev0(name); };
+    }
     const tc = $('meta[name="theme-color"]'); if (tc) tc.content = '#c3b79f';
     keys = keyboard();
   }
@@ -368,7 +377,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     if (was !== 'y') return;
     cv.classList.remove('drag'); if (rub){ rub = 0; paint(); }   // the ends spring back (the canvas's transition)
     /* reading back up a long page: the keyboard folds away to give it the whole tube */
-    if (keys && term.scrollInfo && term.scrollInfo.off > 0 && !term.app) keys.fold(true);
+    if (keys && term.scrollInfo && term.scrollInfo.off > 0 && !term.app && keys.settled()) keys.fold(true);
     if (REDUCED || e.timeStamp - tt > 80 || Math.abs(vel) < 0.12) return;   // a held finger, or a slow drag, stops where it is
     vel = clamp(vel, -5, 5); lt = performance.now(); fling = requestAnimationFrame(glide);
   };
@@ -451,16 +460,19 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       hold: { key: 'c', code: 'KeyC', lg: 'hold' }, p: { key: 'p', code: 'KeyP', lg: 'pause' }, esc: { key: 'Escape', lg: 'esc' },
       serve: { key: ' ', code: 'Space', lg: 'serve' },
       bleft: { key: 'ArrowLeft', icon: 'M15 5l-7 7 7 7', big: 1 }, bright: { key: 'ArrowRight', icon: 'M9 5l7 7-7 7', big: 1 },
-      letters: { lg: 'abc', code: 'AltLeft', unpad: 1 }, dpad: { dpad: 1 },
+      again: { key: 'Enter', lg: 'again' }, up: { key: 'ArrowUp', icon: ARROW.up }, down: { key: 'ArrowDown', icon: ARROW.down },
+      letters: { lg: 'abc', code: 'AltLeft', unpad: 1 },
     };
     const S2 = 'calc(var(--side) / 2 - 2px)';
     const PADS = {
       /* movement on the left thumb (left, right side by side; soft drop under them), turning and dropping on the right */
       tetris: { cols: '1fr 1fr .28fr 1fr 1fr', rows: '.62fr 1fr 1fr', areas: ['esc p . hold hold', 'left right . ccw cw', 'soft soft . drop drop'],
         lcols: [S2, S2, '1fr', S2, S2].join(' '), lrows: '.7fr 1fr 1fr', lareas: ['esc p . letters hold', 'left right . ccw cw', 'soft soft . drop drop'] },
-      /* one round pad in the middle (either thumb), pause and esc either side */
-      snake: { cols: '.8fr 2.4fr .8fr', rows: '1fr', areas: ['p dpad esc'],
-        lcols: 'var(--side) 1fr var(--side)', lrows: '1fr 1fr 1fr', lareas: ['dpad . p', 'dpad . esc', 'dpad . letters'] },
+      /* the whole pad is the controller and the only one: four big keys in a cross (up and down full width, left and
+         right halves), each a turn the moment a thumb lands. Pause, again and quit are on the strip, away from the
+         thumbs (a phone on its side: the cross on the left, those keys on the right) */
+      snake: { cols: '1fr 1fr', rows: '.9fr 1.1fr .9fr', areas: ['up up', 'left right', 'down down'],
+        lcols: [S2, S2, '1fr', S2, S2].join(' '), lrows: '1fr 1.15fr 1fr', lareas: ['up up . p letters', 'left right . again again', 'down down . esc esc'] },
       /* two big halves for the paddle, serve over them */
       breakout: { cols: '1fr 1fr 1fr 1fr', rows: '.72fr 1.3fr', areas: ['esc p serve serve', 'bleft bleft bright bright'],
         lcols: [S2, S2, '1fr', S2, S2].join(' '), lrows: '.7fr 1fr 1fr', lareas: ['esc serve . p letters', 'bleft bleft . bright bright', 'bleft bleft . bright bright'] },
@@ -492,7 +504,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
         g.style.gridTemplateAreas = areas.map(r => '"' + r + '"').join(' ');
         for (const n of new Set(areas.join(' ').split(' '))){
           if (n === '.') continue;
-          const d = PK[n].dpad ? dpadEl() : keyEl(PK[n], 'pad:' + n);
+          const d = keyEl(PK[n], 'pad:' + n);
           d.style.gridArea = n; g.appendChild(d);
         }
         board.appendChild(g); return;
@@ -519,33 +531,6 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       const held = [...active.values()]; render();
       for (const a of held){ const n = slots.get(a.el._slot); if (n && n._k.name === a.el._k.name && a.el._k.name){ a.el = n; n.classList.add('down'); } }
     };
-
-    /* the round pad (snake): one control, four arms. The direction is the thumb's angle from the middle, with a dead
-       spot in the middle and some give before a held thumb changes axis, so a slightly diagonal thumb never turns
-       twice; sliding the thumb round turns again, as on a real pad */
-    const DIRS = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
-    function dpadEl(){
-      const d = D.createElement('div'); d.className = 'key dpad'; d._k = { name: 'dpad', dpad: 1, c: 1 };
-      const ring = D.createElement('div'); ring.className = 'dp'; d.appendChild(ring);
-      for (const n of ['up', 'right', 'down', 'left']){ const c = D.createElement('span'); c.className = 'cap arm ' + n; c.innerHTML = '<span class="lg">' + SVG(ARROW[n]) + '</span>'; ring.appendChild(c); }
-      const hub = D.createElement('span'); hub.className = 'hub'; ring.appendChild(hub);
-      return d;
-    }
-    const dpadDir = (a, x, y) => {
-      const r = a.el.querySelector('.dp').getBoundingClientRect(), dx = x - (r.left + r.width / 2), dy = y - (r.top + r.height / 2);
-      if (Math.hypot(dx, dy) < r.width * 0.12) return a.dir || '';
-      const horiz = a.dir === 'left' || a.dir === 'right', vert = a.dir === 'up' || a.dir === 'down';
-      const H = Math.abs(dx) > Math.abs(dy) * (vert ? 1.35 : horiz ? 1 / 1.35 : 1);
-      return H ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'up' : 'down');
-    };
-    const dpadSet = (a, dir) => {
-      if (dir === a.dir) return;
-      const ring = a.el.querySelector('.dp');
-      if (a.dir){ const c = ring.querySelector('.arm.' + a.dir); c.classList.remove('down'); if (sound) try { sound.key(DIRS[a.dir], false); } catch (e){} sendUp(DIRS[a.dir], DIRS[a.dir]); }
-      a.dir = dir;
-      if (dir){ ring.querySelector('.arm.' + dir).classList.add('down'); unlock(); buzz(); if (sound) try { sound.key(DIRS[dir], true); } catch (e){} send(DIRS[dir], DIRS[dir], {}); }
-    };
-    board.addEventListener('pointermove', e => { const a = active.get(e.pointerId); if (a && a.dpad) dpadSet(a, dpadDir(a, e.clientX, e.clientY)); });
 
     /* ---- sending keys ---- */
     const ev = (type, key, code, o = {}) => ({ type, key, code, repeat: !!o.repeat, isComposing: false, ctrlKey: !!o.ctrl, altKey: false, metaKey: false, shiftKey: !!o.shift, synthetic: true, touchKey: true, preventDefault(){}, stopPropagation(){} });
@@ -602,7 +587,6 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     const press = (el, id, x, y) => {
       const k = el._k; if (!k || k.gap) return;
       const a = { id, el };
-      if (k.dpad){ a.dpad = true; active.set(id, a); dpadSet(a, dpadDir(a, x, y)); return; }
       if (!pad && k.ch != null) a.rect = capRect(el);
       unlock(); buzz();
       active.set(id, a);
@@ -614,7 +598,6 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     };
     const release = id => {
       const a = active.get(id); if (!a) return;
-      if (a.dpad){ dpadSet(a, ''); active.delete(id); return; }
       active.delete(id); clearTimeout(a.rep); a.el.classList.remove('down'); popOff(a);
       if (sound) try { sound.key(a.code || 'KeyA', false); } catch (e){}
       const k = a.el._k;
@@ -648,11 +631,12 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     const relayout = () => { const h = height() + 'px', was = D.body.style.getPropertyValue('--kbh'); D.body.style.setProperty('--kbh', h); return was !== h; };
     const api = {
       el, echo, height,
+      settled: () => performance.now() - appEndedAt > 1500,   // a page read back after an app, not the app's last swipe
       layout(l){ if (l === land) return; land = l; render(); },
       get pad(){ return pad; },
       /* name: an app with a pad of its own (PADS), or '' for the keyboard */
       hasPad: name => !!PADS[name],
-      setPad(name){ name = PADS[name] ? name : ''; if (name === pad) return; pad = name; if (!name) layer = 'let'; for (const id of [...active.keys()]) release(id); D.body.classList.toggle('gaming', !!name); render(); if (relayout()) build(); if (onPad) onPad(); },
+      setPad(name){ name = PADS[name] ? name : ''; if (!name && pad) appEndedAt = performance.now(); if (name === pad) return; pad = name; if (!name) layer = 'let'; for (const id of [...active.keys()]) release(id); D.body.classList.toggle('gaming', !!name); render(); if (relayout()) build(); if (onPad) onPad(); },
       setVariant(v){ v = v || ''; if (v === variant) return; variant = v; if (!pad && layer === 'let') render(); },
       set onPad(f){ onPad = f; },
       get folded(){ return folded; },
@@ -665,7 +649,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
         relayout(); build();
       },
     };
-    let onPad = null;
+    let onPad = null, appEndedAt = 0;
     return api;
   }
 
@@ -766,19 +750,25 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
       if (reading()){ try { M.reader.close(); } catch (e){} return; }
       if (term.canBack) term.run('back');
     });
-    let wasReading = false, n = 0, wasApp = '';
+    let wasReading = false, n = 0, wasApp = '', exitAt = 0;
     return changed => {
       const r = reading(); if (r !== wasReading){ wasReading = r; D.body.classList.toggle('reading', r); }
       /* each app gets its controls: a game its own pad (and the keyboard comes up for it); the editor and the typing
          test the letters (the typing test with , and ' to hand); the timer and the clock only their keys on the strip,
          the keyboard folded away so the digits get the screen. Leaving brings the letters back */
       if (term.app !== wasApp){
-        const a = term.app, base = a.split(' ')[0];
-        keys.setVariant(base === 'typing' ? 'typing' : '');
-        keys.setPad(keys.hasPad(base) ? base : '');
-        if (STRIP_ONLY.test(base)) keys.fold(true);
-        else if (a || STRIP_ONLY.test(wasApp) || keys.folded && wasApp) keys.fold(false);
-        wasApp = a;
+        const a = term.app, was = wasApp; wasApp = a;   // (first: a hiccup below must not leave this to be redone every frame)
+        if (!a) exitAt = performance.now();
+        keys.setVariant(a === 'typing' ? 'typing' : '');
+        keys.setPad(keys.hasPad(a) ? a : '');
+        if (STRIP_ONLY.test(a)) keys.fold(true);
+        else if (a || was) keys.fold(false);
+      }
+      /* and with no app running, the plain keyboard, whatever happened on the way out: the letters, unfolded for a moment
+         after an app ends (a fold the visitor asks for later stands) */
+      if (!term.app){
+        if (keys.pad) keys.setPad('');
+        if (exitAt && performance.now() - exitAt < 1200 && keys.folded) keys.fold(false);
       }
       placeMute();
       const m = modeNow();
