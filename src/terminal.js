@@ -1482,13 +1482,14 @@ M.createTerminal = function createTerminal(opts){
     /* the front faces' chrome: bright sky, a hard dark horizon just under the middle, a lit floor (a 1 x 64 sprite) */
     let chrome = null;
     function makeChrome(){
-      chrome = document.createElement('canvas'); chrome.width = 1; chrome.height = 64;
+      chrome = document.createElement('canvas'); chrome.width = 1; chrome.height = 128;   // an environment strip: two skies, two horizons
       const c = chrome.getContext('2d', CPU);
-      for (let y = 0; y < 64; y++){
-        const u = y / 63, v = u < .5 ? 1 - .42 * u / .5 : u < .56 ? .34 : .5 + .42 * (u - .56) / .44;
+      for (let y = 0; y < 128; y++){
+        const u = (y % 64) / 63, v = (u < .5 ? 1 - .42 * u / .5 : u < .56 ? .3 : .5 + .42 * (u - .56) / .44) * (y < 64 ? 1 : .9);
         c.fillStyle = SH[si(v)]; c.fillRect(0, y, 1, 1);
       }
     }
+    let envT = 0, chromePat = null, chromeCtx = null;
     function drawLogo(alpha, lw, sweep){
       /* letters far to near; in each, the visible sides and bevels far to near, then the cap that faces us.
          sweep 0..1: a glint crossing the chrome (left to right), off outside that */
@@ -1519,22 +1520,27 @@ M.createTerminal = function createTerminal(opts){
           const v = (kind ? .18 : .07) + (kind ? .46 : .34) * dif + .45 * spec + (kind ? lit * .3 : 0);
           const c = si(v * alpha);
           quad(i0, i1, i2, i3); g.fillStyle = SH[c]; g.fill();
-          g.strokeStyle = SH[si((v + (kind ? .22 : .14)) * alpha)]; g.lineWidth = lw * .6; g.stroke();
+          if (kind){ g.strokeStyle = SH[si((v + .22) * alpha)]; g.lineWidth = lw * .6; g.stroke(); }   // (the sides go unstroked: the bevels and caps carry the edges)
           lumAcc += area4(i0, i1, i2, i3) * SL[c];
         }
         /* the cap: the front face in chrome, lit by how it faces the lamp; the back plain */
         if (-(l02 * wx[o] + l12 * wy[o] + l22 * wz[o]) < 0){
           const dif = Math.max(0, -(l02 * LX + l12 * LY + l22 * LZ)), al = clamp((.36 + .38 * dif) * alpha, 0, 1);
           ring(o, L.n); g.fillStyle = P.bg; g.fill();
-          g.save(); g.clip(); g.globalAlpha = al;
-          g.drawImage(chrome, 0, 0, 1, 64, bx0, by0, bx1 - bx0, by1 - by0);
+          /* the chrome: the environment strip as a pattern, mapped onto the logo's box by the transform at fill time
+             (the path keeps the coordinates it was built in), so no clip */
+          if (!chromePat || chromeCtx !== g){ chromePat = g.createPattern(chrome, 'repeat'); chromeCtx = g; }
+          const env = clamp(32 + 30 * l12 + 14 * l02 + 10 * Math.sin(envT), 0, 64);   // the reflection slides as the face turns
+          g.save(); g.globalAlpha = al; g.translate(bx0, by0); g.scale(bx1 - bx0, (by1 - by0) / 64); g.translate(0, -env);
+          g.fillStyle = chromePat; g.fill(); g.restore();
           if (lit > 0){                               // the glint: a slanted band of light
+            g.save(); g.clip();
             const bw = (bx1 - bx0) * .1, sk = (by1 - by0) * .45, gx = bx0 - bw + (bx1 - bx0 + 2 * bw + sk) * sweep;
             g.globalAlpha = .75 * alpha; g.fillStyle = P.bright; g.beginPath();
             g.moveTo(gx, by0); g.lineTo(gx + bw, by0); g.lineTo(gx + bw - sk, by1); g.lineTo(gx - sk, by1); g.closePath(); g.fill();
             lumAcc += bw * (by1 - by0) * .5;
+            g.restore();
           }
-          g.restore();
           lumAcc += ringArea(o, L.n) * .75 * al;
           ring(o, L.n); g.strokeStyle = alpha > .6 ? P.bright : SH[si(alpha)]; g.lineWidth = lw; g.stroke();
         } else {
@@ -1558,10 +1564,6 @@ M.createTerminal = function createTerminal(opts){
       for (const L of LET){
         const o = L.o, n = L.n;
         g.beginPath(); sring(o + n, n); sring(o + 2 * n, n); g.fill();
-        for (let i = 0; i < n; i++){
-          const a = o + n + i, b = o + n + (i + 1) % n;
-          g.beginPath(); g.moveTo(sqx[a], sqy[a]); g.lineTo(sqx[b], sqy[b]); g.lineTo(sqx[b + n], sqy[b + n]); g.lineTo(sqx[a + n], sqy[a + n]); g.closePath(); g.fill();
-        }
       }
     }
 
@@ -1602,12 +1604,18 @@ M.createTerminal = function createTerminal(opts){
     }
     const fontText = t => String(t).toUpperCase().replace(/[^A-Z0-9 .,'\-\u00b7:!?/+&()]/g, ' ');
     /* a line of text in the font: its face (with a drop shadow, down and right) and, if asked, its dimmer mirror image */
+    /* proportional: each glyph takes its own inked width plus one column; a space is four */
     function bake(t, mirror){
-      const w = t.length * GW + 1, h = GH + 1, lit = new Uint8Array(w * h);
+      const xs = new Int32Array(t.length + 1), rows = [], ext = [];
+      let x0 = 0;
       for (let i = 0; i < t.length; i++){
-        const gl = FONT8[t[i]]; if (!gl) continue;
-        gl.split('|').forEach((row, y) => { for (let x = 0; x < GW; x++) if (row[x] === '#') lit[y * w + i * GW + x] = 1; });
+        const gl = FONT8[t[i]], rs = gl ? gl.split('|') : [];
+        let a = GW, b = -1; rs.forEach(row => { for (let x = 0; x < GW; x++) if (row[x] === '#'){ if (x < a) a = x; if (x > b) b = x; } });
+        rows.push(rs); ext.push(a); xs[i] = x0; x0 += b < 0 ? 4 : b - a + 2;
       }
+      xs[t.length] = x0;
+      const w = x0 + 1, h = GH + 1, lit = new Uint8Array(w * h);
+      for (let i = 0; i < t.length; i++) rows[i].forEach((row, y) => { for (let x = 0; x < GW; x++) if (row[x] === '#') lit[y * w + xs[i] + x - ext[i]] = 1; });
       const mk = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
       const face = mk(), da = face.getContext('2d', CPU).createImageData(w, h), refl = mirror ? mk() : null, db = mirror ? refl.getContext('2d', CPU).createImageData(w, h) : null;
       const cache = {};
@@ -1618,20 +1626,20 @@ M.createTerminal = function createTerminal(opts){
         else if (x > 0 && y > 0 && lit[i - w - 1]) put(da, i, .12);
       }
       face.getContext('2d', CPU).putImageData(da, 0, 0); if (refl) refl.getContext('2d', CPU).putImageData(db, 0, 0);
-      return { face, refl, w: w - 1 };
+      return { face, refl, w: w - 1, xs };
     }
     function makeStrip(){
-      text = fontText(scrollText()); nameAt = text.search(/\S/);
-      const b = bake(text, true); strip = b.face; stripR = b.refl; stripW = b.w;
+      text = fontText(scrollText()); const at = text.search(/\S/);
+      const b = bake(text, true); strip = b.face; stripR = b.refl; stripW = b.w; nameAt = b.xs[at];
       const tn = fontText(C.name || 'KN'); titleN = tn.length; title = bake(tn); sub = bake('PRESENTS');
     }
     /* ---- the title card: the name typed out letter by letter with a block cursor, PRESENTS rastered in under it on
        the beat; then it squashes to a line, and the line to a dot ---- */
-    const T_TYPE = 1.0, T_LET = .085, T_SUB = 2.5, T_SHUT = 3.4;
+    const T_TYPE = .35, T_LET = .055, T_SUB = 1.5, T_SHUT = 2.5;
     function titleCard(a){
-      if (a < T_TYPE - .05 || a > 4.0) return;
+      if (a < T_TYPE - .05 || a > T_SHUT + .62) return;
       if (!strip) makeStrip();
-      const k = Math.max(2, Math.min(Math.round(s * .75), Math.floor(W * .8 / ((titleN + 1) * GW)))), k2 = Math.max(2, Math.round(k * .55));
+      const k = Math.max(2, Math.min(Math.round(s * .75), Math.floor(W * .8 / (title.w + GW)))), k2 = Math.max(2, Math.round(k * .55));
       const cyT = h * .3, tw = title.w * k, sw = sub.w * k2, th = (GH + 1) * k + k2 * 3 + (GH + 1) * k2;
       const yt = Math.round(cyT - th / 2), xt = Math.round(cx - tw / 2), xs = Math.round(cx - sw / 2), yb = yt + (GH + 1) * k + k2 * 3;
       if (a >= T_SHUT + .25){                         // the line closes to a dot, which fades
@@ -1644,10 +1652,11 @@ M.createTerminal = function createTerminal(opts){
       if (sq < 1){ g.translate(0, cyT); g.scale(1, Math.max(.03, sq)); g.translate(0, -cyT); }
       g.imageSmoothingEnabled = false;
       const typed = (a - T_TYPE) / T_LET, n = clamp(Math.floor(typed) + 1, 0, titleN);
-      if (n > 0) g.drawImage(title.face, 0, 0, n * GW + 1, GH + 1, xt, yt, (n * GW + 1) * k, (GH + 1) * k);
-      if (n > 0 && typed < titleN){ const f = typed - Math.floor(typed); g.globalAlpha = .7 * (1 - f); g.fillStyle = P.bright; g.fillRect(xt + (n - 1) * GW * k + k, yt, 6 * k, 7 * k); g.globalAlpha = 1; }   // each letter burns in
+      const X = title.xs, wn = X[n] + 1;
+      if (n > 0) g.drawImage(title.face, 0, 0, wn, GH + 1, xt, yt, wn * k, (GH + 1) * k);
+      if (n > 0 && typed < titleN){ const f = typed - Math.floor(typed); g.globalAlpha = .7 * (1 - f); g.fillStyle = P.bright; g.fillRect(xt + X[n - 1] * k, yt, (X[n] - X[n - 1] - 1) * k, 7 * k); g.globalAlpha = 1; }   // each letter burns in
       const done = T_TYPE + titleN * T_LET;
-      if (a < done + .9 && (a < done || ((a - done) * 4 | 0) % 2 === 0)){ g.fillStyle = SH[si(.8)]; g.fillRect(xt + n * GW * k + k, yt, 6 * k, 7 * k); }   // the cursor, blinking on the beat once the name is in
+      if (a < done + .9 && (a < done || ((a - done) * 4 | 0) % 2 === 0)){ g.fillStyle = SH[si(.8)]; g.fillRect(xt + X[n] * k + k, yt, 6 * k, 7 * k); }   // the cursor, blinking on the beat once the name is in
       if (a >= T_SUB){                                // PRESENTS, rastered in row by row with a hot scan line
         const rows = Math.min(GH + 1, Math.floor((a - T_SUB) / .3 * (GH + 1)) + 1);
         g.drawImage(sub.face, 0, 0, sub.w + 1, rows, xs, yb, (sub.w + 1) * k2, rows * k2);
@@ -1678,7 +1687,7 @@ M.createTerminal = function createTerminal(opts){
     /* ---- layout: sized from the drawing's own box (its own canvas: y = 0 is the top of the drawing) ---- */
     let fitKey = '', h = 0, s = 8, amp = 20, ys = 0, Z0 = 30, logoY = 4, zN = 2, gradV = null, bh = 24;
     function fit(hh){
-      const k = Math.min(1, Math.sqrt(7.5e5 / (W * hh))), ow = Math.round(W * k), oh = Math.round(hh * k);   // drawn at about 0.75 MP and scaled up: the tube shows it at roughly that size
+      const k = Math.min(1, Math.sqrt([5e5, 3.2e5, 2e5][Q] / (W * hh))), ow = Math.round(W * k), oh = Math.round(hh * k);   // drawn at about 0.75 MP and scaled up: the tube shows it at roughly that size
       if (!off || off.width !== ow || off.height !== oh){
         off = document.createElement('canvas'); off.width = ow; off.height = oh;
         g = off.getContext('2d', { alpha: false, willReadFrequently: true });
@@ -1703,7 +1712,7 @@ M.createTerminal = function createTerminal(opts){
     }
 
     /* ---- the show: the opening (age a, seconds), then the loop (L = a - SLAM) ---- */
-    const T_BARS = 3.75, T_FLOOR = 4.0, T_LOGO = 4.6, T_HOLD = 6.0, T_RUSH = 6.5, SLAM = 7.0, SCROLL0 = 7.25, GPS = 3.6;
+    const T_BARS = 2.75, T_FLOOR = 3.0, T_LOGO = 3.5, T_HOLD = 5.0, T_RUSH = 5.5, SLAM = 6.0, SCROLL0 = 6.25, GPS = 3.6;
     const MOVE0 = 6, MOVE_GAP = 8.5, MOVE_LEN = 2.8, MOVES = 5;   // turn, bounce, twist, flip, zoom
     const NB = 5, bp = new Float32Array(NB), bo = new Int8Array(NB), bY = new Float32Array(NB), bD = new Float32Array(NB);
     let lastT = -1, dist = 0, floorD = 0, kick = 0, nextBar = 0, lastKey = 0, keyGlint = -9;
@@ -1719,9 +1728,12 @@ M.createTerminal = function createTerminal(opts){
     }
     /* the last impact (the slam, a landing from a bounce, the end of a zoom): seconds since, and how hard; for the flash and the floor's shockwave */
     let shT = 9, shS = 0;
+    /* the beat (set each frame from the tune's clock, or a quieter one of our own), the second part's weight, quality */
+    let bk = 0, bs = 0, pwS = 0, dropAt = -9, lastDrop = 0, Q = TAP ? 1 : 0, lastW = 0, slowAcc = 0, qAt = 0;
     function impact(a, L){
       shT = 9; shS = 0;
       if (a >= SLAM && L < 3){ shT = L; shS = 1; }
+      if (a - dropAt < 3 && a - dropAt < shT){ shT = a - dropAt; shS = .8; }   // the tune's drop lands like a slam
       if (mvM === 1 && mvP > .42){ shT = mvP - .42; shS = .55; }
       else if (mvM === 4 && mvP > 2.3){ shT = mvP - 2.3; shS = .45; }
     }
@@ -1733,7 +1745,7 @@ M.createTerminal = function createTerminal(opts){
         const seg = Math.floor((L - 14) / 20), u = sstep(0, 3, (L - 14) - seg * 20), cur = (seg + 1) % 3, prev = seg % 3;
         wA = (cur === 0 ? u : 0) + (prev === 0 ? 1 - u : 0); wB = (cur === 1 ? u : 0) + (prev === 1 ? 1 - u : 0); wC = (cur === 2 ? u : 0) + (prev === 2 ? 1 - u : 0);
       }
-      const beat = still || L < 0 ? 0 : .06 * Math.exp(-((L % 2) / .18));   // a soft accent on each bar's downbeat
+      const beat = .16 * bk, cyc = still ? 2 : T * 9;   // the kick lifts them; a highlight cycles down through each one
       for (let i = 0; i < NB; i++){
         const ph = T * 1.55 + i * .58;
         let y = mid + am * Math.sin(ph), d = Math.cos(ph);
@@ -1750,12 +1762,13 @@ M.createTerminal = function createTerminal(opts){
       for (let r = 0; r < NB; r++){
         const i = bo[r], d = bD[i], peak = clamp(.18 + .1 * d + .55 * bp[i] + beat, 0, 1), y0 = Math.round(bY[i]);
         for (let k = 0; k < nb; k++){
-          const e = 1 - Math.abs(2 * (k + .5) / nb - 1), v = peak * (.12 + .88 * e * e);
+          const e = 1 - Math.abs(2 * (k + .5) / nb - 1), hp = (cyc + i * 2.3) % (nb + 6) - 3, dd = k - hp, v = peak * (.12 + .88 * e * e + .45 * Math.exp(-dd * dd * .7));
           const y = y0 + k * st; if (y < sky0 || y + st > sky1) continue;
           g.fillStyle = SH[si(v)]; g.fillRect(0, y, W, st);
         }
       }
     }
+    let fan = null, fanKey = '';
     function floor(a, L, zl, still){
       const reveal = still ? 1 : sstep(T_FLOOR, T_FLOOR + 1, a), bot = h, y1 = hy + (bot - hy) * reveal;
       const hw = still ? 1 : sstep(T_FLOOR - .2, T_FLOOR + .3, a);   // the horizon draws out from the middle first
@@ -1765,31 +1778,38 @@ M.createTerminal = function createTerminal(opts){
         const wave = still ? 0 : bump(L % 26, 3, 8.5, 1.2) * 1;   // now and then the floor rolls
         for (let k = 0; k < nz; k++){
           const z = zN + ((k * gs - floorD) % span + span) % span; let y = hy + F * FY / z, v = .04 + .26 * Math.pow(1 - (z - zN) / span, 3);
+          if (z > zN + 6 && F * FY / z - F * FY / (z + gs) < 3) continue;   // (far lines closer than 3 px: left out)
           if (wave > 0) y += wave * Math.sin(z * .32 - L * 3.2) * F / z * .45;
           if (shS > 0 && shT < 2.5){ const d = Math.abs(z - zl) - shT * 50, e = shS * Math.exp(-d * d / 40) * Math.exp(-shT * 1.6); y -= e * F / z * .5; v += .4 * e; }
           if (y > y1 || y > bot || y < hy) continue;
-          g.fillStyle = SH[si(v)]; g.fillRect(0, Math.round(y), W, 2);
+          g.fillStyle = SH[si(v + .18 * bk)]; g.fillRect(0, Math.round(y), W, 2);
         }
-        g.save(); g.beginPath(); g.rect(0, hy, W, y1 - hy); g.clip();
-        g.strokeStyle = gradV; g.lineWidth = 2; g.beginPath();
-        for (let k = -26; k <= 26; k++){ const x = k * gs; g.moveTo(cx + F * x / zN, bot); g.lineTo(cx + F * x / zf, hy + F * FY / zf); }
-        g.stroke();
-        const fy = hy + F * FY / zf;                   // haze where the floor runs out toward the horizon
-        for (let y = hy; y < fy; y += 4){ g.fillStyle = SH[si(.1 * (1 - (y - hy) / (fy - hy)))]; g.fillRect(0, y, W, 4); }
-        g.restore();
+        /* the lines running away from us and the haze never change: drawn once per layout, then one blit */
+        if (!fan || fanKey !== fitKey + rk){
+          fanKey = fitKey + rk; fan = document.createElement('canvas'); fan.width = Math.max(1, Math.round(W * rk)); fan.height = Math.max(1, Math.round((bot - hy) * rk));
+          const f = fan.getContext('2d', CPU), gr = f.createLinearGradient(0, 0, 0, bot - hy);
+          gr.addColorStop(0, P.bg); gr.addColorStop(.25, SH[si(.18)]); gr.addColorStop(1, SH[si(.42)]);
+          f.setTransform(rk, 0, 0, rk, 0, 0); f.strokeStyle = gr; f.lineWidth = 2; f.beginPath();
+          for (let k = -26; k <= 26; k++){ const x = k * gs; f.moveTo(cx + F * x / zN, bot - hy); f.lineTo(cx + F * x / zf, F * FY / zf); }
+          f.stroke();
+          const fy = F * FY / zf;                        // haze where the floor runs out toward the horizon
+          for (let y = 0; y < fy; y += 4){ f.fillStyle = SH[si(.1 * (1 - y / fy))]; f.fillRect(0, y, W, 4); }
+        }
+        const fh = Math.max(1, Math.min(fan.height, Math.round((y1 - hy) * rk)));
+        g.drawImage(fan, 0, 0, fan.width, fh, 0, hy, W, fh / rk);
         lumAcc += (bot - hy) * 2 * 30 * .2 * reveal;
       }
       g.fillStyle = SH[si(.5)]; g.fillRect(cx - W * hw / 2, hy - 1, W * hw, 2);
     }
     function scroller(a, L, still){
       if (!strip) makeStrip();
-      const s0 = s; if (still) s = Math.max(3, Math.min(s, Math.floor(W * .9 / ((titleN + 1) * GW))));   // the still frame: the whole name
+      const s0 = s; if (still) s = Math.max(3, Math.min(s, Math.floor(W * .9 / (title.w + GW))));   // the still frame: the whole name
       const cols = Math.ceil(W / s) + 1;
-      const pos = still ? (nameAt + titleN / 2) * GW - cols / 2 : (a - SCROLL0) * GPS * GW - cols;
+      const pos = still ? nameAt + title.w / 2 - cols / 2 : (a - SCROLL0) * GPS * GW - cols;
       if (!still && pos < -cols){ s = s0; return; }
       const ip = Math.floor(pos), fr = pos - ip, gh = (GH + 1) * s, rh = Math.round(gh * .5), y0 = ys - 4 * s;
       /* the wave drifts: its height and length breathe; now and then the letters hop, one after another */
-      const am = still ? amp : amp * (.75 + .3 * Math.sin(L * .23)), wl = W * (still ? .95 : .9 + .22 * Math.sin(L * .11)), ph = still ? 2.1 : a * 2.6;
+      const am = still ? amp : amp * (.75 + .3 * Math.sin(L * .23)) * (1 + .3 * bs), wl = W * (still ? .95 : .9 + .22 * Math.sin(L * .11)), ph = still ? 2.1 : a * 2.6;
       const hopB = still ? 0 : bump(L % 30, 19, 25, 1) * s * 2.4;
       g.imageSmoothingEnabled = false;
       let n = 0;
@@ -1798,10 +1818,10 @@ M.createTerminal = function createTerminal(opts){
         src %= stripW;
         const x = Math.round((j - fr) * s);
         let y = y0 + am * Math.sin(x / wl * TAU - ph);
-        if (hopB > 0) y -= hopB * Math.abs(Math.sin(L * 4.4 - ((src / GW) | 0) * .6));
+        if (hopB > 0) y -= hopB * Math.abs(Math.sin(L * 4.4 - (src >> 3) * .6));
         y = Math.round(y);
         g.drawImage(strip, src, 0, 1, GH + 1, x, y, s, gh);
-        g.drawImage(stripR, src, 0, 1, GH + 1, x, y + 8 * s + Math.round(s * .6), s, rh);
+        if (Q < 1) g.drawImage(stripR, src, 0, 1, GH + 1, x, y + 8 * s + Math.round(s * .6), s, rh);
         n++;
       }
       g.imageSmoothingEnabled = true;
@@ -1811,14 +1831,86 @@ M.createTerminal = function createTerminal(opts){
       s = s0;
     }
 
+    /* ---- part two: a plasma sky (chunky, colour-cycled, darkening to the horizon) and vector bobs round the logo ---- */
+    let pc = null, pimg = null, prad = null, ppw = 0, pph = 0;
+    const RGBT = new Uint8Array(NS * 3); SH.forEach((c, i) => { const v = rgb(c); RGBT[i * 3] = v[0]; RGBT[i * 3 + 1] = v[1]; RGBT[i * 3 + 2] = v[2]; });
+    function plasma(T, alpha){
+      const pw = Q ? 48 : 80, ph = Math.max(6, Math.round(pw * (hy - 10) / W));
+      if (!pc || ppw !== pw || pph !== ph){
+        pc = document.createElement('canvas'); pc.width = pw; pc.height = ph; ppw = pw; pph = ph;
+        pimg = pc.getContext('2d', CPU).createImageData(pw, ph); prad = new Float32Array(pw * ph);
+        for (let y = 0; y < ph; y++) for (let x = 0; x < pw; x++) prad[y * pw + x] = Math.hypot(x - pw * .5, (y - ph * .4) * 1.6) * 80 / pw;
+      }
+      const d = pimg.data, kx = 80 / pw;
+      for (let y = 0, i = 0; y < ph; y++){
+        const fade = 1 - (y / ph) * (y / ph), yy = y * kx;
+        for (let x = 0; x < pw; x++, i++){
+          const xx = x * kx, v = Math.sin(xx * .16 + T * 1.1) + Math.sin(yy * .21 - T * 1.4) + Math.sin((xx + yy) * .09 + T * .8) + Math.sin(prad[i] * .32 - T * 1.9);
+          const q = ((v + 4) * 2.2 + T * 3) % 8, lvl = (q < 4 ? q : 8 - q) / 4;      // eight cycling bands, up and down a little ramp
+          const c = si((.03 + .13 * lvl * lvl) * fade) * 3, o = i * 4;
+          d[o] = RGBT[c]; d[o + 1] = RGBT[c + 1]; d[o + 2] = RGBT[c + 2]; d[o + 3] = 255;
+        }
+      }
+      pc.getContext('2d', CPU).putImageData(pimg, 0, 0);
+      g.imageSmoothingEnabled = false; g.globalAlpha = alpha;
+      g.drawImage(pc, 0, 0, pw, ph, 0, 4, W, hy - 10);
+      g.globalAlpha = 1; g.imageSmoothingEnabled = true;
+      lumAcc += W * hy * .05 * alpha;
+    }
+    const NBOB = 12, bwx = new Float32Array(NBOB), bwy = new Float32Array(NBOB), bwz = new Float32Array(NBOB), bord = new Int8Array(NBOB);
+    let ball = null;
+    function makeBall(){
+      const n = 48; ball = document.createElement('canvas'); ball.width = ball.height = n;
+      const c = ball.getContext('2d', CPU), im = c.createImageData(n, n), d = im.data;
+      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+        const u = (x + .5) / n * 2 - 1, v = (y + .5) / n * 2 - 1, r = Math.hypot(u, v); if (r > 1) continue;
+        const l = .16 + .46 * Math.sqrt(1 - r * r) + .45 * Math.pow(Math.max(0, 1 - Math.hypot(u + .38, v + .38) / .55), 2), k = si(Math.min(1, l)) * 3, o = (y * n + x) * 4;
+        d[o] = RGBT[k]; d[o + 1] = RGBT[k + 1]; d[o + 2] = RGBT[k + 2]; d[o + 3] = r > .94 ? 255 * (1 - r) / .06 : 255;
+      }
+      c.putImageData(im, 0, 0);
+    }
+    function bobsPlace(T, py, pz, alpha){
+      for (let i = 0; i < NBOB; i++){
+        const th = i / NBOB * TAU + T * .9, R = 10.5 + .8 * Math.sin(T * 2 + i);
+        bwx[i] = R * Math.cos(th); bwy[i] = py + 4 * Math.sin(2 * th + T * 1.3); bwz[i] = pz + R * .8 * Math.sin(th);
+        let k = i; while (k > 0 && bwz[bord[k - 1]] < bwz[i]){ bord[k] = bord[k - 1]; k--; } bord[k] = i;
+      }
+    }
+    function bobs(alpha, zc, front){
+      if (!ball) makeBall();
+      for (let j = 0; j < NBOB; j++){
+        const i = bord[j], z = bwz[i]; if ((z <= zc) !== front || z < 2) continue;
+        const r = F * .78 / z * alpha, x = cx + F * bwx[i] / z, y = hy - F * bwy[i] / z;
+        g.drawImage(ball, x - r, y - r, 2 * r, 2 * r); lumAcc += 3.1 * r * r * .45;
+      }
+    }
     function draw(x, t0, w, hh, a, t){
       const still = REDUCED;
       if (!chrome) makeChrome();
       fit(hh);
       const dt = lastT < 0 || still ? 0 : clamp(t - lastT, 0, .1); lastT = t;
       if (still) a = 40;
+      else if (TAP) a = a < SLAM / 1.3 ? a * 1.3 : a + SLAM * (1 - 1 / 1.3);   // phones play it once, in about six seconds: the opening runs a little faster
       ageNow = a;
       const L = a - SLAM, T = still ? 7.3 : a;
+      /* quality: when frames keep coming late (a slow phone, a busy machine), draw smaller and leave out extras */
+      const wn = performance.now();
+      if (lastW && !still){ const iv = wn - lastW; if (iv < 400 && a > 1){ slowAcc = slowAcc * .96 + (iv > 50 ? .04 : 0); if (slowAcc > .45 && Q < 2 && wn - qAt > 1200){ Q++; qAt = wn; slowAcc = 0; } } }
+      lastW = wn;
+      /* the beat: the tune's clock while it plays (from the first touch), otherwise a quieter one of our own */
+      const mu = M.sound && M.sound.music;
+      let mt = -1; bk = 0; bs = 0;
+      if (mu && !still){
+        try { if (mu.alive()) mt = mu.time(); } catch (e){}
+        if (mt >= 0 || L >= 0){
+          const e = mu.env(mt >= 0 ? mt : L + mu.INTRO * mu.BAR), I = mt >= 0 ? (a < SLAM ? .4 : 1) : .45;
+          bk = e.kick * I; bs = e.snare * I;
+          if (mt >= 0 && e.drop > .9 && lastDrop <= .9 && a > SLAM + 1) dropAt = a;
+          lastDrop = mt >= 0 ? e.drop : 0;
+          const want = still || L < 0 ? 0 : (mt >= 0 ? e.part === 2 : L % 64 >= 32) ? 1 : 0;   // part two: the tune's B section, or every other half-minute
+          pwS += (want - pwS) * Math.min(1, dt * 1.1);
+        }
+      }
       move(still ? -1 : L); impact(a, L);
       /* the physical bits: the pointer's lean, the spin (with a soft detent back to the front once it is slow), the hop */
       if (dt > 0){
@@ -1840,9 +1932,9 @@ M.createTerminal = function createTerminal(opts){
       if (Math.abs(spin) > 1e4){ spin %= TAU; }
       /* stars: drift, hyperspace behind the title, back to a drift; the floor's rush, a zoom and keys push them */
       const rush = still ? 0 : bump(L % 26, 15, 19, 1.2);
-      let speed = still ? 0 : a < 1.6 ? 4 : a < 3.6 ? 4 + 320 * Math.pow((a - 1.6) / 2, 2.4) : a < SLAM ? 9 + 315 * (1 - sstep(3.6, 4.9, a)) : 9 + 60 * rush;
+      let speed = still ? 0 : a < .3 ? 8 : a < 2.6 ? 8 + 316 * Math.pow((a - .3) / 2.3, 2) : a < SLAM ? 9 + 315 * (1 - sstep(2.6, 3.9, a)) : 9 + 60 * rush;
       if (mvM === 4) speed += 70 * bump(mvP, 1.6, 2.4, .3);
-      speed += 70 * kick;
+      speed += 70 * kick + 30 * bk;
       dist += speed * dt; floorD += (still ? 0 : 3 + 12 * rush + 6 * kick) * dt;
       /* the logo */
       let z = Z0, yaw = 0, pit = -.28, rol = 0, y = logoY, alpha = 1, flash = 0, shake = 0, tw0 = 0, tw1 = 0, sweep = -1;
@@ -1850,13 +1942,13 @@ M.createTerminal = function createTerminal(opts){
         alpha = sstep(T_LOGO, T_LOGO + .5, a);
         if (a < T_HOLD){                               // out of the vanishing point, tumbling, slowing as it comes
           const u = eOut((a - T_LOGO) / (T_HOLD - T_LOGO));
-          z = 900 + (2.6 * Z0 - 900) * u; yaw = (1 - u) * 3 * Math.PI - .2 * u; pit = -.28 + (1 - u) * TAU * .5; rol = (1 - u) * .6;
+          z = 900 + (1.9 * Z0 - 900) * u; yaw = (1 - u) * 3 * Math.PI - .2 * u; pit = -.28 + (1 - u) * TAU * .5; rol = (1 - u) * .6;
         } else if (a < T_RUSH){                       // a breath: it drifts back and winds up
           const u = sstep(T_HOLD, T_RUSH, a);
-          z = 2.6 * Z0 + .5 * Z0 * u; yaw = -.2 - .25 * u; pit = -.28 + .12 * u;
+          z = 1.9 * Z0 + .4 * Z0 * u; yaw = -.2 - .25 * u; pit = -.28 + .12 * u;
         } else {                                      // and rushes in on the beat
           const u = eIn((a - T_RUSH) / (SLAM - T_RUSH));
-          z = 3.1 * Z0 + (Z0 - 3.1 * Z0) * u; yaw = -.45 * (1 - u); pit = -.16 - .12 * u;
+          z = 2.3 * Z0 + (Z0 - 2.3 * Z0) * u; yaw = -.45 * (1 - u); pit = -.16 - .12 * u;
         }
         y = logoY + (1 - alpha) * 2;
       } else {
@@ -1887,7 +1979,7 @@ M.createTerminal = function createTerminal(opts){
         if (mvM === 4 && mvP > 2.3) shake += Math.exp(-(mvP - 2.3) * 9) * Math.sin((mvP - 2.3) * 46) * h * .007;
       }
       if (!still && a - keyGlint < .7) sweep = (a - keyGlint) / .7;
-      yaw += oy + spin; pit += op; y += hop;
+      yaw += oy + spin; pit += op; y += hop; z -= Z0 * .04 * bs; envT = T * .7;
       /* the camera, in the opening: tilted and craned, righting itself as the logo arrives */
       const cam = still ? 0 : 1 - sstep(T_BARS, SLAM, a);
       g.setTransform(rk, 0, 0, rk, 0, 0);
@@ -1895,19 +1987,22 @@ M.createTerminal = function createTerminal(opts){
       g.save();
       if (cam > .001){ g.translate(cx, h * .5); g.rotate(-.07 * cam); g.scale(1 + .1 * cam, 1 + .1 * cam); g.translate(-cx, -h * .5 + h * .05 * cam); }
       if (shake) g.translate(0, Math.round(shake));
-      if (still || a >= T_BARS) bars(still ? 3.1 : T, a, L, still);
+      if ((still || a >= T_BARS) && pwS < .99){ if (pwS > .01) g.globalAlpha = 1 - pwS; bars(still ? 3.1 : T, a, L, still); g.globalAlpha = 1; }
+      if (pwS > .01) plasma(T, pwS);
       if (still || a >= T_FLOOR - .2) floor(a, L, z, still);
       xform(yaw, pit, rol, 0, y, z, tw0, tw1);
-      const sb = still ? 1 : sstep(.4, 1.2, a);
+      const sb = still ? 1 : sstep(0, .5, a);
       drawStars(dist + (still ? 37 : 0), speed, z, 1e9, sb);
-      if (alpha > .02){ drawShadow(alpha); drawLogo(alpha, clamp(F / z * .1, 1.5, 4.5), sweep); }
+      const bob = pwS > .01 && Q < 2; if (bob){ bobsPlace(T, y, z, pwS); bobs(pwS, z, false); }
+      if (alpha > .02){ if (Q < 2) drawShadow(alpha); drawLogo(alpha, clamp(F / z * .1, 1.5, 4.5), sweep); }
+      if (bob) bobs(pwS, z, true);
       drawStars(dist + (still ? 37 : 0), speed, 0, z, sb);
       if (still || a > SCROLL0 - .5) scroller(a, L, still);
       g.restore();
       if (!still) titleCard(a);
       if (flash > .01){ g.globalAlpha = flash; g.fillStyle = P.bright; g.fillRect(0, 0, W, h); g.globalAlpha = 1; }
-      if (!still && a < .75){                          // the raster opens out from a line
-        const lw = W * sstep(0, .25, a), oh = h * .5 * Math.pow(sstep(.2, .75, a), 2), m = h * .5;
+      if (!still && a < .42){                          // the raster opens out from a line
+        const lw = W * sstep(0, .12, a), oh = h * .5 * Math.pow(sstep(.1, .42, a), 2), m = h * .5;
         g.fillStyle = P.bg; rawFill(0, 0, W, Math.max(0, m - oh)); rawFill(0, m + oh, W, h - m - oh);
         g.fillStyle = P.bright; g.fillRect(cx - lw / 2, m - oh - 2, lw, 3); if (oh > 2) g.fillRect(cx - lw / 2, m + oh - 1, lw, 3);
       }
