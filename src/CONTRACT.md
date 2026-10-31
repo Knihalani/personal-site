@@ -104,7 +104,7 @@ MAC.createTerminal({ content, aspect, cols?, width? }) -> {   // width: phones a
   scrollInfo,                   // { off: rows up from the bottom, max, rowH: a row as 0..1 of the canvas } (1:1 touch scrolling)
 }
 ```
-Phones (pointer: coarse) play the intro once, its opening (`DEMO.LENGTH`, about 14.1 s; any tap or key skips it), then settle on a title card:
+Phones (pointer: coarse) play the intro once, its opening (`DEMO.LENGTH`, about 14.3 s; any tap or key skips it), then settle on a title card:
 the name, the role line and a boot-disk menu of big rows (about, j, eden, writing when published, contact, links, play),
 tapped or chosen by number, the arrows and return; a returning visitor lands on the card with "welcome back", and `demo`
 plays the intro again. Home and back on phones are this card. Contact on phones gives each address [email] (mailto) and
@@ -113,7 +113,7 @@ plays the intro again. Home and back on phones are this card. Contact on phones 
 (its own small vector drawing, not the intro's logo), and when an animation is all that changes and nothing scrolls,
 only its rows are redrawn (the brightness tally `lum` swaps that drawing's share, so it stays the whole screen's). On desktops:
 The landing (every load, until the first command; deep links skip it) is an anime-OP-style opening drawn on the canvas,
-12.6 s to the slam (silent) on its own fixed 150 bpm grid (a film of 11.2 s played through a cut: every word is held whole and
+12.8 s to the slam (silent) on its own fixed 150 bpm grid (a film of 11.2 s played through a cut: every word is held whole and
 still for at least 0.4 s by half beats or beats added while its backdrop keeps moving, and two camera moves play faster) (a cut or a hit every half beat or beat), in one phosphor: the tube
 ignites on a tunnel of bezels; KAIAV, NIHALANI and a huge 16 slam in (the name becoming a header); an impact frame; the
 picture was the middle tube of a wall of CRTs: the camera blasts back, flies along the wall as the tubes switch on in

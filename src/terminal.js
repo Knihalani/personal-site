@@ -1411,7 +1411,7 @@ M.createTerminal = function createTerminal(opts){
       ['Font', 'VT323'], ['Files', files + ' in ~'], ['User', C.name || 'Kaiav'], ...roles.map((r, i) => [i ? '' : 'Role', r])];
   }
   /* ---- the landing: a demoscene intro, drawn straight onto the tube ----
-     An anime-OP-style opening, 11.2 s of film to the slam (12.6 s played: see SEG), on its own fixed 150 bpm grid (a beat 0.4 s, a hit every half
+     An anime-OP-style opening, 11.2 s of film to the slam (12.8 s played: see SEG), on its own fixed 150 bpm grid (a beat 0.4 s, a hit every half
      beat or beat), in one phosphor. Silent.
        0.0  the tube ignites: a hot line, the raster snaps open on a tunnel of bezels rushing at the viewer
        0.4  KAIAV slams in; 0.8 NIHALANI; 1.2 the name becomes a one-line header as a huge 16 slams in; 1.4 a jolt
@@ -1491,9 +1491,9 @@ M.createTerminal = function createTerminal(opts){
        clock, SD); a quickening plays a camera move faster. Every one adds or saves whole half beats, so the hits
        stay on the 150 bpm grid; none falls in a hit-stop. Seen words: KAIAV NIHALANI, 16, CO-FOUNDER, YOUNG
        FOUNDERS, GLOBAL, EDEN / FOUNDER, AGENTS, CONTEXT, THE GOAT? (each whole and still for 0.4 s or more, two
-       words 0.55 s or more). The slam lands at 12.6 s */
+       words 0.55 s or more). The barrel roll out of J plays at its own speed (quickened, it smeared). The slam lands at 12.8 s */
     const SEG = [[1.15, .02, .22], [1.55, .02, .22], [1.95, 1.2, .6], [3.53, .008, .408], [3.86, .02, .42], [4.3, .02, .22],
-      [4.45, .6, .4], [5.54, .02, .42], [6.0, .02, .22], [6.32, .02, .22], [7.52, .02, .22], [7.6, .4, .2]];
+      [5.54, .02, .42], [6.0, .02, .22], [6.32, .02, .22], [7.52, .02, .22], [7.6, .4, .2]];
     /* inside a quickening the film's speed eases up from 1x and back down (a cubic with slope 1 at both ends: no jolt
        in the camera's speed at either edge); a hold is a straight creep */
     const segF = (u, df, dr) => { if (dr >= df) return u * df; const m = dr / df; return df * (u * u * u * (2 * m - 2) + u * u * (3 - 3 * m) + u * m); };
@@ -2224,6 +2224,7 @@ M.createTerminal = function createTerminal(opts){
         setCam(PCAM); proj(X, Y, Z); const x0 = pjx, y0 = pjy, z0 = pjz; setCam(CAM); proj(X, Y, Z);
         if (pjz < .4 || z0 < .4) continue;
         let ddx = pjx - x0, ddy = pjy - y0; const l = Math.hypot(ddx, ddy); if (l > W2 * .5) continue;
+        if (l > W2 * .07){ const k = W2 * .07 / l; ddx *= k; ddy *= k; }   // (a mote close to the lens in a dive: a short streak, never a line across the frame)
         G.lineWidth = clamp(10 / pjz, 1, 5) * pxk; G.beginPath(); G.moveTo(pjx, pjy); G.lineTo(pjx - ddx * 1.6 - .01, pjy - ddy * 1.6); G.stroke();
       }
       G.lineCap = 'square';
@@ -2237,7 +2238,7 @@ M.createTerminal = function createTerminal(opts){
       const knAct = S >= T_KN; CONV = knAct ? 1 - eI3((S - 10.0) / .4) : 1;
       const dim = !knAct || S < T_CH ? 1 : S < 10.0 ? .38 : .38 + .55 * sstep(10.0, 10.1, S);   // (soft behind the chrome KN; back up for the collapse)
       if (CONV <= .02) return;
-      camAt(Math.max(s0, warp(toFilm(AR - .02))), PCAM); camAt(S, CAM);
+      camAt(Math.max(s0, warp(toFilm(AR - (S > T_OUTJ && S < T_E ? .01 : .02)))), PCAM);   // (a half shutter in the barrel roll: a spin, not a vortex) camAt(S, CAM);
       /* the blur's transform: where two wall points were an instant ago */
       setCam(CAM);
       const fx = syw * cpt, fz = cyw * cpt, fy = spt, t = fz > .05 ? -CAM.z / fz : 10, Pax = CAM.x + fx * t, Pay = CAM.y + fy * t;
@@ -2754,6 +2755,7 @@ M.createTerminal = function createTerminal(opts){
       /* the logo: crisp on the tube, or (moving fast) blurred: sub-frame poses added up on a layer */
       let sweep = SWEEP;
       if (!still && SHOT === K_LOOP){
+        const gq = (L - 3.2) % 6.4; if (L > 3.2 && gq < 1.3) sweep = s5(gq / 1.3);   // a slow glint across the chrome every 16 beats (calm: eased, no flash)
         if (L >= .05 && L < .95) sweep = (L - .05) / .9;
         else if (L > SECTION - .3){ const sec = (L + TURN) % SECTION; if (sec >= TURN - .1 && sec < TURN + .8) sweep = (sec - TURN + .1) / .9; }
       }
@@ -2769,27 +2771,32 @@ M.createTerminal = function createTerminal(opts){
       if (!impact && !imp5 && !imp6){
         if (ns <= 1) drawLogo(ALPHA, SOLID, CHK, lw, sweep);
         else {
-          /* the samples, from the last frame's pose to this one's over a 0.6 shutter, each painted whole on a clear layer
-             and added at 1/ns: the exact average */
+          /* the blur: the logo painted once (this frame's pose) and laid down ns times along its motion over a 0.6
+             shutter, added at 1/ns on a clear layer (an average). The motion is the 2D affine map that best carries
+             this frame's projected vertices onto where the last frame's pose put them (least squares over all of
+             them): one paint a frame however many copies, where painting every sample cost a paint each */
           BB[0] = BB[1] = 1e9; BB[2] = BB[3] = -1e9;
-          grow(); xform(lerp(yaw, pYaw, .6), lerp(pit, pPit, .6), lerp(rol, pRol, .6), 0, lerp(y, pY, .6), lerp(z, pZ, .6), lerp(sx, pSx, .6), lerp(sy, pSy, .6)); grow();
-          const bx0 = BB[0], by0 = BB[1], bx1 = BB[2], by1 = BB[3], l0 = lumAcc;
+          grow(); CQX.set(qx); CQY.set(qy);
+          xform(lerp(yaw, pYaw, .6), lerp(pit, pPit, .6), lerp(rol, pRol, .6), 0, lerp(y, pY, .6), lerp(z, pZ, .6), lerp(sx, pSx, .6), lerp(sy, pSy, .6)); grow();
+          const bx0 = BB[0], by0 = BB[1], bx1 = BB[2], by1 = BB[3];
           const pad = 6 * lw, ox = BX, oy = BY;
           const X0 = Math.max(0, Math.floor((bx0 - pad) * rk)), Y0 = Math.max(0, Math.floor((by0 - pad) * rk)), X1 = Math.min(lay.width, Math.ceil((bx1 + pad) * rk)), Y1 = Math.min(lay.height, Math.ceil((by1 + pad) * rk));
-          ns = Math.min(ns, Math.max(2, Math.floor((TAP ? 1e5 : 1.6e5) / Math.max(1, (X1 - X0) * (Y1 - Y0)))));   // (a cap on the pixels painted)
+          ns = Math.min(ns, Math.max(2, Math.floor((TAP ? 2e5 : 3.2e5) / Math.max(1, (X1 - X0) * (Y1 - Y0)))));   // (a cap on the pixels laid down)
           if (X1 > X0 && Y1 > Y0){
+            fitAffine(qx, qy);   // AF: this frame -> 0.6 back
+            xform(yaw, pit, rol, 0, y, z, sx, sy);
+            sg.setTransform(1, 0, 0, 1, 0, 0); sg.clearRect(X0, Y0, X1 - X0, Y1 - Y0);
+            G = sg; sg.setTransform(rk, 0, 0, rk, 0, 0); drawLogo(ALPHA, SOLID, CHK, lw, sweep);
             lg.setTransform(1, 0, 0, 1, 0, 0); lg.clearRect(X0, Y0, X1 - X0, Y1 - Y0);
+            lg.globalCompositeOperation = 'lighter'; lg.globalAlpha = 1 / ns;
             for (let k = 0; k < ns; k++){
-              const u = .6 * k / (ns - 1);
-              xform(lerp(yaw, pYaw, u), lerp(pit, pPit, u), lerp(rol, pRol, u), 0, lerp(y, pY, u), lerp(z, pZ, u), lerp(sx, pSx, u), lerp(sy, pSy, u));
-              sg.setTransform(1, 0, 0, 1, 0, 0); sg.clearRect(X0, Y0, X1 - X0, Y1 - Y0);
-              G = sg; sg.setTransform(rk, 0, 0, rk, 0, 0); drawLogo(ALPHA, SOLID, CHK, lw, sweep);
-              lg.globalCompositeOperation = 'lighter'; lg.globalAlpha = 1 / ns; lg.drawImage(smp, X0, Y0, X1 - X0, Y1 - Y0, X0, Y0, X1 - X0, Y1 - Y0);
+              const f = k / (ns - 1);   // (in layer pixels: the same linear part, the offset scaled by rk)
+              lg.setTransform(1 + f * (AF[0] - 1), f * AF[1], f * AF[2], 1 + f * (AF[3] - 1), f * AF[4] * rk, f * AF[5] * rk);
+              lg.drawImage(smp, X0, Y0, X1 - X0, Y1 - Y0, X0, Y0, X1 - X0, Y1 - Y0);
             }
-            lg.globalCompositeOperation = 'source-over'; lg.globalAlpha = 1; G = tg;
+            lg.setTransform(1, 0, 0, 1, 0, 0); lg.globalCompositeOperation = 'source-over'; lg.globalAlpha = 1; G = tg;
             tg.setTransform(1, 0, 0, 1, ox, oy);
             tg.drawImage(lay, X0, Y0, X1 - X0, Y1 - Y0, X0 / rk, Y0 / rk, (X1 - X0) / rk, (Y1 - Y0) / rk);
-            lumAcc = l0 + (lumAcc - l0) / ns;   // (each sample was tallied whole)
           }
           G = tg; xform(yaw, pit, rol, 0, y, z, sx, sy);
         }
@@ -2845,6 +2852,20 @@ M.createTerminal = function createTerminal(opts){
     }
     let sparkAt = -9, sparkA = 0;
     const BB = new Float32Array(4);
+    /* the least-squares affine map from (CQX, CQY) onto (px, py): AF = [a, b, c, d, e, f] as in setTransform (x' = a x + c y + e,
+       y' = b x + d y + f); a pure translation when the points are degenerate */
+    const CQX = new Float32Array(NV), CQY = new Float32Array(NV), AF = new Float64Array(6);
+    function fitAffine(px, py){
+      let mx = 0, my = 0, mu = 0, mv = 0;
+      for (let k = 0; k < NV; k++){ mx += CQX[k]; my += CQY[k]; mu += px[k]; mv += py[k]; }
+      mx /= NV; my /= NV; mu /= NV; mv /= NV;
+      let sxx = 0, sxy = 0, syy = 0, sxu = 0, syu = 0, sxv = 0, syv = 0;
+      for (let k = 0; k < NV; k++){ const x = CQX[k] - mx, y = CQY[k] - my, u = px[k] - mu, v = py[k] - mv; sxx += x * x; sxy += x * y; syy += y * y; sxu += x * u; syu += y * u; sxv += x * v; syv += y * v; }
+      const det = sxx * syy - sxy * sxy;
+      if (Math.abs(det) < 1e-6 * (sxx * syy + 1)){ AF[0] = 1; AF[1] = 0; AF[2] = 0; AF[3] = 1; }
+      else { AF[0] = (sxu * syy - syu * sxy) / det; AF[2] = (syu * sxx - sxu * sxy) / det; AF[1] = (sxv * syy - syv * sxy) / det; AF[3] = (syv * sxx - sxv * sxy) / det; }
+      AF[4] = mu - AF[0] * mx - AF[2] * my; AF[5] = mv - AF[1] * mx - AF[3] * my;
+    }
     function grow(){ for (let k = 0; k < NV; k++){ if (qx[k] < BB[0]) BB[0] = qx[k]; if (qx[k] > BB[2]) BB[2] = qx[k]; if (qy[k] < BB[1]) BB[1] = qy[k]; if (qy[k] > BB[3]) BB[3] = qy[k]; } }
     const api = {
       age: -1,
