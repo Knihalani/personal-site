@@ -1936,7 +1936,8 @@ M.createTerminal = function createTerminal(opts){
       /* the loop's spelled words, a letter to two tubes, centred over the KN */
       { const ok = t => /^[A-Z0-9]{1,8}$/.test(t);   // (a word too long for the wall is left out)
         MO.kai = ok(LO.w1.t) ? wd(LO.w1.t) : null; MO.nih = ok(LO.w2.t) ? wd(LO.w2.t) : null;
-        MO.agents = wd('AGENTS'); MO.ctx = wd('CONTEXT'); MO.just = wd('JUST'); MO.start = wd('START'); }
+        MO.agents = wd('AGENTS'); MO.ctx = wd('CONTEXT'); MO.just = wd('JUST'); MO.start = wd('START');
+        if (window.__glyphs){ const g7 = window.__glyphs.match(/.{1,7}/g); [MO.agents, MO.ctx, MO.just, MO.start, MO.kai, MO.nih] = g7.map(wd); } }   // (a test hook: every glyph on the wall)
       /* the halftone */
       htTile = mkCache(6 * pxk, 6 * pxk); { const c = htTile.getContext('2d'); c.fillStyle = P.bright; c.beginPath(); c.arc(3 * pxk, 3 * pxk, 1.7 * pxk, 0, TAU); c.fill(); }
       JOBS.length = 0; JOBS.push(() => { htc = mkCache(W, h); const c = htc.getContext('2d'), st = 11 * pxk, R = Math.hypot(W, h) / 2; c.fillStyle = SH[si(.5)];
@@ -2019,13 +2020,14 @@ M.createTerminal = function createTerminal(opts){
       }); });
       VWS = sc;
       /* the loop's pictures (LTX): a letter two tubes tall (the top tube shows its upper part, the one under it the
-         rest; the gap between them is left out), and the pixel: a flat block of light. One a job */
-      LTX = {}; TGAP = Math.round((GY - TH) / TH * TXH);
+         rest), and the pixel: a flat block of light. One a job */
+      LTX = {};
       const put = (key, w, hh, fn) => { JOBS.push(() => { const cv = fn ? mk(w, hh, fn) : mkCache(w, hh); if (!fn){ const c = cv.getContext('2d'); c.fillStyle = SH[si(.86)]; c.fillRect(0, 0, w, hh); } LTX[key] = cv;
         setTimeout(() => { if (typeof createImageBitmap === 'function') createImageBitmap(cv).then(b => { if (LTX[key] === cv) LTX[key] = b; }, () => {}); }, 0); }); };
       put('PX', 16, 12, null);
-      const th = 2 * TXH + TGAP;
-      for (const ch of new Set((LO.w1.t + LO.w2.t + 'AGENTSCONTEXTJUSTSTART').replace(/[^A-Z0-9]/g, ''))) put('T' + ch, TXW, th, (c, w, hh) => { const L = mkLine(ch), u = Math.min(hh * .74 / 6, w * .84 / L.sw); vlineC(L, w / 2, hh / 2 + 3 * u, u, null, 1); });
+      /* (the split between the two tubes falls at 3.8 of the glyph's 6 units: above every crossbar (A at 2.6; B E F G H K P R S Y 3 5 6 8 9 at 3),
+         below the bowls' tops, so no bar is lost in the bezels' gap; the halves are shown whole, nothing is cut out) */
+      for (const ch of new Set((LO.w1.t + LO.w2.t + 'AGENTSCONTEXTJUSTSTART' + (window.__glyphs || '')).replace(/[^A-Z0-9]/g, ''))) put('T' + ch, TXW, 2 * TXH, (c, w, hh) => { const L = mkLine(ch), u = Math.min(TXH * .86 / 3.8, w * .84 / L.sw); vlineC(L, w / 2, TXH + 3.8 * u, u, null, 1); });
     }
 
     /* ---- motion graphics: speed lines, tunnels, rings ---- */
@@ -2671,7 +2673,7 @@ M.createTerminal = function createTerminal(opts){
                                        16      a giant 16 (5x7), lit a column an eighth; two hits
                                        J       a giant J revealed by a scan bar; a hit
          phrase 2 (16-31)       WIDE   EQ      the wall as an equalizer, a new shape every beat (two bars)
-                                       GLOBE   a turning globe: its outline, equator and one meridian stepping a beat
+                                       GLOBE   a planet rising behind the KN, wall-high, meridians stepping a beat, its atmosphere ring pulsing
          phrase 3 (32-47)       CLOSE  AGENTS, then CONTEXT, a letter an eighth; flashes and chases
          phrase 4 (48-63)       CLOSE  JUST a letter a beat, then START; a bar of whole-wall hits
          phrase 5 (64-79)       CLOSE  KAIAV, then NIHALANI on the sixteenths
@@ -2680,7 +2682,7 @@ M.createTerminal = function createTerminal(opts){
        Under a spelled word the lower wall kicks on every beat. Accents on the KN: a light sweep (phrases 1 and 3), a
        punch (2 and 4), both (5), each with a two-frame flare of the chrome */
     const LS = TAP ? 3.2 : 1.6, LP = 32, PH = 6.4, LV = [0, .5, 1.35];   // (the levels: off, dim, lit)
-    let LOOPW = false, LQ = 0, GA = 1, LTX = null, TGAP = 0, LJB = -1;
+    let LOOPW = false, LQ = 0, GA = 1, LTX = null, LJB = -1, LHW = 50, LHT = 30;   // (LHW: half the wall's width in view; LHT: its top)
     const CNOUT = .1;
     const BQ = b => b * BT;
     const rd = (i, j) => Math.round(Math.hypot(i, (j + .5) * .8));   // a tube's ring about the KN
@@ -2701,13 +2703,17 @@ M.createTerminal = function createTerminal(opts){
     const scanX = Q => -16 + 32 * (Q - BQ(12)) / BQ(3), scanAt = i => BQ(12) + (i + 16) / 32 * BQ(3);   // (J's scan bar, in tubes)
     function eqH(i, b){ const a = Math.abs(i), k = b % 4;   // the equalizer's height (rows from the bottom) in column i on beat b
       return k === 0 ? 2 + a * .55 : k === 1 ? 9 - a * .55 : k === 2 ? 5 + 3.2 * Math.sin(i * .55 + b) : 9 - Math.abs(Math.sin(a * .4 + b)) * 6; }
-    function globe(i, j, b){   // the globe's pixels on beat b, around the KN: outline, equator, a meridian turning an eighth of a turn a beat
-      const cj = (7 + LJB) / 2, dx = i * GX, dy = (j - cj) * GY, R = (7 - LJB) / 2 * GY * .95, r = Math.hypot(dx, dy);   // (the whole wall's height, about the KN)
-      if (Math.abs(r - R) < GX * .55) return true;
-      if (r > R) return false;
-      if (Math.abs(dy) < GY * .5) return true;
-      const xm = R * Math.cos((b - 24) * Math.PI / 8) * Math.sqrt(Math.max(0, 1 - dy * dy / (R * R)));
-      return Math.abs(Math.abs(dx) - Math.abs(xm)) < GX * .55;
+    function globe(i, j, b){   // the globe's pixels on beat b: a planet rising behind the KN, its top under the wall's top row (outline,
+      // latitudes, three meridians turning a twelfth of a turn a beat), and its atmosphere: a ring out toward the sides
+      const dx = i * GX, dy = (j + .5) * GY, R = Math.max(3 * GY, (LHT - .5 * GY) * .93), r = Math.hypot(dx, dy), t = GX * .55;
+      if (Math.abs(r - R) < t) return 1;
+      if (Math.abs(r - R * 1.45) < t) return 2;
+      if (r > R) return 0;
+      for (const la of [.34, .64]) if (Math.abs(dy - la * R) < GY * .5) return 1;
+      if (Math.abs(dy) < GY * .5) return 1;
+      const k = Math.sqrt(Math.max(0, 1 - dy * dy / (R * R))), a = (b - 24) * Math.PI / 6;
+      for (let m = 0; m < 3; m++){ const c = Math.cos(a + m * Math.PI / 3); if (Math.sin(a + m * Math.PI / 3) > -.2 && Math.abs(dx - R * c * k) < t) return 1; }   // (the front half of each)
+      return 0;
     }
     const SHOTS = [
       { b0: 0, wide: 1, pz: (i, j, Q) => pz(Q, rd(i, j) * .06) + pz(Q, BQ(1) + rd(i, j) * .06) + pz(Q, BQ(2) + rd(i, j) * .06) + .5 * pz(Q, BQ(3)) },   // IGNITE
@@ -2717,7 +2723,7 @@ M.createTerminal = function createTerminal(opts){
       { b0: 12, wide: 1, scan: 1, pz: (i, j, Q) => { let s = Q < BQ(15) ? .45 * pz(Q, scanAt(i)) : 0;   // J
           if (hold(Q, BQ(12), BQ(16)) && bit(G57.J, i + 2, j) && Q >= scanAt(i)) s += .7 + .5 * (pz(Q, scanAt(i)) + pz(Q, BQ(15))); return s; } },
       { b0: 16, wide: 1, pz: (i, j, Q) => { if (!hold(Q, BQ(16), BQ(24))) return 0; const b = Math.floor(Q / BT); return j >= LJB && j - LJB + 1 <= eqH(i, b) * (8 - LJB) / 9 ? .55 + .45 * pz(Q, BQ(b)) : 0; } },   // EQ
-      { b0: 24, wide: 1, pz: (i, j, Q) => { if (!hold(Q, BQ(24), BQ(32))) return 0; const b = Math.floor(Q / BT); return globe(i, j, b) ? .55 + .45 * pz(Q, BQ(b)) + (b === 31 ? .4 * pz(Q, BQ(31)) : 0) : 0; } },   // GLOBE
+      { b0: 24, wide: 1, pz: (i, j, Q) => { if (!hold(Q, BQ(24), BQ(32))) return 0; const b = Math.floor(Q / BT); const gl = globe(i, j, b); return gl === 1 ? .6 + .4 * pz(Q, BQ(b)) + (b === 31 ? .4 * pz(Q, BQ(31)) : 0) : gl === 2 ? .25 + .6 * pz(Q, BQ(b)) : 0; } },   // GLOBE
       { b0: 32, ox: -.5, kick: 1, w: 'agents', cell: (i, j, Q, o) => inM(MO.agents, i, j) ? spell(MO.agents, i, Q, o, BQ(32), BT / 2, BQ(32)) : false,   // AGENTS
         pz: (i, j, Q) => inM(MO.agents, i, j) ? pz(Q, BQ(35)) + sw(MO.agents, i, Q, 36) + sw(MO.agents, i, Q, 37, 1) + sw(MO.agents, i, Q, 38) + pz(Q, BQ(39)) : 0 },
       { b0: 40, kick: 1, w: 'ctx', cell: (i, j, Q, o) => inM(MO.ctx, i, j) ? spell(MO.ctx, i, Q, o, BQ(40), BT / 2, BQ(40)) : cut(o, Q, BQ(40)),   // CONTEXT
@@ -2758,7 +2764,7 @@ M.createTerminal = function createTerminal(opts){
       let p = pzOf(SK, i, j, Q) + pzOf(SK - 1, i, j, Q);
       if (SHOTS[SK].kick && !CO.tx && j <= 0 && Math.abs(i) >= 2) p += .35 * pz(Q, Math.floor(Q / BT) * BT);   // (under a spelled word: the lower wall kicks on every beat)
       tsTex = tex ? LTX['T' + tex.slice(1)] : null; tsFlip = 1; tsLine = 0; tsSub = 0;
-      if (tsTex){ tsOpen = 1; tsSub = 2; tsSY = j === 2 ? 0 : TXH + TGAP; tsBr = Math.min(1.7, LV[lv] + fl + .6 * p); tsRim = .3 + .3 * Math.min(1, fl + p); }
+      if (tsTex){ tsOpen = 1; tsSub = 2; tsSY = j === 2 ? 0 : TXH; tsBr = Math.min(1.7, LV[lv] + fl + .6 * p); tsRim = .3 + .3 * Math.min(1, fl + p); }
       else { const v = Math.min(1, Math.max(blink, p)); tsTex = v > .01 ? LTX.PX : null; tsOpen = tsTex ? 1 : 0; tsBr = v; tsRim = .09 + .35 * v; }
     }
     /* the camera: frontal (x only to centre an even word, cut with it), one eased push or pull a phrase between two
@@ -2790,7 +2796,8 @@ M.createTerminal = function createTerminal(opts){
       LQ = L < LS ? -1 : (L - LS) % LP;
       SK = SHOTS.length - 1; while (SK > 0 && BQ(SHOTS[SK].b0) > LQ) SK--;
       GA = wf; tg.globalAlpha = GA; LOOPW = true; NRF = 0;
-      const zz = -LCAM.z, hw = W2 / 2 * zz / camF, ht = h / 2 * zz / camF, i0 = Math.floor((LCAM.x - hw) / GX) - 1, i1 = Math.ceil((LCAM.x + hw) / GX) + 1;
+      const zz = -LCAM.z, hw = (LHW = W2 / 2 * zz / camF), ht = h / 2 * zz / camF, i0 = Math.floor((LCAM.x - hw) / GX) - 1, i1 = Math.ceil((LCAM.x + hw) / GX) + 1;
+      LHT = LCAM.y + ht - (GY - TH) / 2;   // (the top of the wall in view)
       const j1 = Math.min(14, Math.ceil((LCAM.y + ht) / GY) + 1), sc = camF / zz, j0 = Math.max(-14, Math.floor((LCAM.y - (hy - h / 2) * zz / camF) / GY));
       LJB = j0 + 1;   // (the lowest row wholly over the horizon)
       /* the glass, all of it dark: one path (the frontal camera keeps every tube an upright rectangle) */
