@@ -187,9 +187,19 @@ function sliceKeys(buf, S, ctx){
   const C = S.clips, normal = set(C.normal), big = set(C.enter) || normal;
   return { normal, soft: normal, heavy: big, space: set(C.space) || normal, backspace: set(C.backspace) || big };
 }
+/* on the web the sprite is a file of its own (MAC.KEYS_SRC, build.py), fetched once the page has loaded or at the first
+   gesture, whichever comes first; keys pressed meanwhile wait in pending like keys pressed while it decodes */
+let fetching = null;
+function fetchKeys(){
+  return fetching || (fetching = new Promise(done => {
+    const s = document.createElement('script'); s.src = M.KEYS_SRC; s.onload = s.onerror = () => done(); document.head.appendChild(s);
+  }));
+}
 function decodeKeys(ctx){
+  if (decoding) return;
+  if (!M.KEY_SAMPLES && M.KEYS_SRC){ decoding = fetchKeys().then(() => { decoding = null; if (M.KEY_SAMPLES) decodeKeys(ctx); }); return; }
   const S = M.KEY_SAMPLES;
-  if (decoding || !S || !S.mp3 || !S.clips || !S.clips.normal) return;
+  if (!S || !S.mp3 || !S.clips || !S.clips.normal) return;
   const bin = atob(S.mp3), bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   decoding = new Promise((ok, no) => { const p = ctx.decodeAudioData(bytes.buffer, ok, no); if (p && p.catch) p.catch(no); })
@@ -197,7 +207,9 @@ function decodeKeys(ctx){
 }
 /* decode ahead of the first gesture (an offline context needs no permission), so the first keystroke has its buffer */
 { const O = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-  if (O) setTimeout(() => { try { decodeKeys(new O(1, 1, 44100)); } catch (e){} }, 0); }
+  const early = () => { if (O) try { decodeKeys(new O(1, 1, 44100)); } catch (e){} };
+  if (M.KEY_SAMPLES || !M.KEYS_SRC || document.readyState === 'complete') setTimeout(early, 0);
+  else addEventListener('load', () => setTimeout(early, 0), { once: true }); }   // after the first paint and the fonts, not before
 
 /* ---------------- key mapping ---------------- */
 const ROWS = [

@@ -146,11 +146,36 @@ _desk = [m for m in BLOCK.finditer(body) if m.group(1) == 'script' and 'loadScen
 if len(_desk) != 1: raise SystemExit('build: could not find the 3D room block')
 DESK_CODE = _desk[0].group(2)
 body = body[:_desk[0].start()] + '<script type="text/plain" id="desk3d">' + DESK_CODE + '</script>' + body[_desk[0].end():]
-(out / 'site.html').write_text(body, encoding='utf-8')
-cut = body.index('</style>') + len('</style>')
+(out / 'site.html').write_text(body, encoding='utf-8')   # the claude.ai artifact: one self-contained page, everything inline
+# The web build (--out) splits two things off the page into files of their own, named by a hash of their content and
+# cached for good: the room's code (desktops only; a phone never downloads it) and the key recordings (an MP3 sprite in
+# base64 that barely compresses), which sound.js fetches once the page has loaded, or at the first gesture. A tiny
+# loader just after the three.js one sets MAC.KEYS_SRC and, on desktops, starts the room's file as early as three.js
+# (MAC.desk: a promise of true/false that main.js waits on). The repo-root build stays one inline page (file://).
+SPLIT = {}
+web = body
+if out != root:
+    for f in list(out.glob('desk.*.js')) + list(out.glob('keys.*.js')): f.unlink()   # last build's
+    name = lambda kind, code: f'{kind}.{hashlib.sha256(code.encode("utf-8")).hexdigest()[:10]}.js'
+    keys = [m for m in BLOCK.finditer(web) if m.group(1) == 'script' and re.search(r'KEY_SAMPLES\s*=\s*\{', m.group(2))]
+    three = [m for m in BLOCK.finditer(web) if m.group(1) == 'script' and 'three@0.147.0' in m.group(2)]
+    if len(keys) != 1 or len(three) != 1: raise SystemExit('build: could not find the key recordings or the three.js loader')
+    SPLIT['keys'], SPLIT['desk'] = name('keys', keys[0].group(2)), name('desk', DESK_CODE)
+    (out / SPLIT['keys']).write_text(keys[0].group(2) + '\n', encoding='utf-8')
+    (out / SPLIT['desk']).write_text(DESK_CODE + '\n', encoding='utf-8')
+    LOADER = ('(()=>{const M=window.MAC=window.MAC||{};M.KEYS_SRC="/' + SPLIT['keys'] + '";'
+              'if(matchMedia("(pointer: coarse)").matches||M.createTypist)return;'
+              'const s=document.createElement("script");M.desk=new Promise(r=>{s.onload=()=>r(!0);s.onerror=()=>r(!1)});'
+              's.src="/' + SPLIT['desk'] + '";document.head.appendChild(s)})();')
+    inert = '<script type="text/plain" id="desk3d">' + DESK_CODE + '</script>'
+    web = web[:keys[0].start()] + web[keys[0].end():]
+    web = web.replace(inert, '', 1)
+    at = web.index(three[0].group(0)) + len(three[0].group(0))
+    web = web[:at] + '\n<script>' + LOADER + '</script>' + web[at:]
+cut = web.index('</style>') + len('</style>')
 page = ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
-        + body[:cut] + '\n</head>\n<body>\n' + body[cut:].lstrip('\n') + '</body>\n</html>\n')
+        + web[:cut] + '\n</head>\n<body>\n' + web[cut:].lstrip('\n') + '</body>\n</html>\n')
 (out / 'index.html').write_text(page, encoding='utf-8')
 ICON = next((l for l in (src / 'head.html').read_text(encoding='utf-8').splitlines() if 'rel="icon"' in l), '')   # same favicon as the site
 # a real 404 (its presence also stops Cloudflare Pages answering unknown paths with the whole site)
@@ -170,7 +195,7 @@ ICON = next((l for l in (src / 'head.html').read_text(encoding='utf-8').splitlin
 def csp_hashes(html):
     return ' '.join(sorted({"'sha256-" + base64.b64encode(hashlib.sha256(m.group(2).encode('utf-8')).digest()).decode() + "'"
                             for m in BLOCK.finditer(html) if m.group(1) == 'script'} |
-                           {"'sha256-" + base64.b64encode(hashlib.sha256(DESK_CODE.encode('utf-8')).digest()).decode() + "'"}))   # the desk block, run as a copy
+                           ({"'sha256-" + base64.b64encode(hashlib.sha256(DESK_CODE.encode('utf-8')).digest()).decode() + "'"} if 'id="desk3d"' in html else set())))   # the desk block, run as a copy
 
 
 CSP = '; '.join([
@@ -242,6 +267,7 @@ WEB and (out / 'llms.txt').write_text('\n'.join([f'# {NAME}', '', f'> {DESC}', '
 SHORT = 'public, max-age=300, stale-while-revalidate=86400'
 LONG = 'public, max-age=2592000, stale-while-revalidate=604800'
 PAGES = ['/', '/index.html', '/404.html']
+TEXT_PAGES = ['/simple', '/simple.html']   # the plain page (no preconnects: it loads nothing)
 TEXT = ['/robots.txt', '/sitemap.xml', '/llms.txt', '/site.webmanifest']
 IMAGES = sorted('/' + f.name for f in (root / 'static').glob('*') if f.suffix in ('.png', '.jpg', '.webp', '.svg', '.ico'))
 LINK = '<https://cdn.jsdelivr.net>; rel=preconnect, <https://fonts.googleapis.com>; rel=preconnect, <https://fonts.gstatic.com>; rel=preconnect; crossorigin'
@@ -253,6 +279,7 @@ rule = lambda path, *lines: path + '\n' + ''.join(f'  {l}\n' for l in lines)
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Content-Security-Policy: {CSP}
 """ + ''.join(rule(pth, 'Cache-Control: ' + SHORT, *(['Link: ' + LINK] if pth != '/404.html' else [])) for pth in PAGES)
-    + ''.join(rule(pth, 'Cache-Control: ' + SHORT) for pth in TEXT)
-    + ''.join(rule(pth, 'Cache-Control: ' + LONG) for pth in IMAGES), encoding='utf-8')
+    + ''.join(rule(pth, 'Cache-Control: ' + SHORT) for pth in TEXT_PAGES + TEXT)
+    + ''.join(rule(pth, 'Cache-Control: ' + LONG) for pth in IMAGES)
+    + ''.join(rule('/' + f, 'Cache-Control: public, max-age=31536000, immutable') for f in SPLIT.values()), encoding='utf-8')   # named by content
 print(f'built {out}/site.html ({len(body) // 1024} KB){" with stubs" if dev else ""}{" minified" if minify else ""}')

@@ -56,15 +56,16 @@ function whenReady(go){
 if (small()){ flat(); return; }
 /* three.js comes in on its own (head.html): the room starts when it is here. A desktop where it fails, or has not
    arrived after 10 s (a hung CDN), gets the terminal alone, as without WebGL */
-/* the room's code ships inert (build.py: <script type="text/plain" id="desk3d">): run it now, desktops only */
-{ const d = D.getElementById('desk3d'); if (d && !M.createTypist){ const s = D.createElement('script'); s.textContent = d.textContent; D.head.appendChild(s); } }
+/* the room's code: on the web it is a file of its own (build.py), already loading beside three.js (MAC.desk, desktops
+   only); in the one-file page (site.html) it ships inert (<script type="text/plain" id="desk3d">): run it now */
+{ const d = D.getElementById('desk3d'); if (d && !M.createTypist && !M.desk){ const s = D.createElement('script'); s.textContent = d.textContent; D.head.appendChild(s); } }
 const start = () => {
   if (window.THREE && !M.createScene && M.loadScene) M.loadScene();   // scene.js was parsed before three.js arrived
-  if (!window.THREE || !M.createScene){ console.warn('3D off: three.js did not load'); flat(); return; }
+  if (!window.THREE || !M.createScene){ console.warn('3D off: ' + (window.THREE ? 'the room\'s code' : 'three.js') + ' did not load'); flat(); return; }
   room();
 };
-if (window.THREE || !M.three) start();
-else Promise.race([M.three, new Promise(r => setTimeout(r, 10000))]).then(start);
+if ((window.THREE || !M.three) && (M.createTypist || !M.desk)) start();
+else Promise.race([Promise.all([M.three, M.desk]), new Promise(r => setTimeout(r, 10000))]).then(start);
 
 function room(){
 let api;
