@@ -2657,33 +2657,39 @@ M.createTerminal = function createTerminal(opts){
     }
     const CA = { x: 0, y: 0, z: 0, yaw: 0, pit: 0, rol: 0 }, CB = { x: 0, y: 0, z: 0, yaw: 0, pit: 0, rol: 0 };
     const KB = new Float32Array(4);   // (the KN's box on the tube this frame)
+    let L0POP = 0;
     function popPlate(n, pe, a, kx, ky, kw, kh){
       const side = n % 2 ? 1 : -1, ic = Math.round(LCAM.x / GX), tex = PWORDS[n % PWORDS.length];
-      /* its tube: on its side of the KN, in the outer third if it can be, the row varying with n */
+      /* where it flies out from: a tube on its side of the KN (the outer third if one is in view), else a point there */
       let best = null, bs = -1;
       for (let di = 1; di <= 4; di++) for (const j of [2, 1, 0]){
         const i = ic + side * di; proj(i * GX, j * GY, 0); if (pjz < 1) continue;
         const x = pjx, y = pjy, out = side > 0 ? x / W2 : 1 - x / W2;
-        if (x < -W2 * .1 || x > W2 * 1.1 || y < -h * .1 || y > hy) continue;   // (roughly in view: the clamp below does the rest)
+        if (x < 0 || x > W2 || y < 0 || y > hy) continue;
         const sc = (out > .66 ? 2 : out > .55 ? 1 : 0) + (j === [2, 1, 2, 0][n % 4] ? .5 : 0) - di * .1;
         if (sc > bs){ bs = sc; best = [x, y, i, j]; }
       }
-      if (!best) return;
-      proj((best[2] - .5) * GX + (GX - TW) / 2, best[3] * GY, 0); const x0 = pjx; proj((best[2] + .5) * GX - (GX - TW) / 2, best[3] * GY, 0);
-      const tw = Math.abs(pjx - x0), pw = lerp(tw, Math.max(tw * 1.5, Math.min(W2 * .2, h * .3)), pe), ph = pw * .75;   // (grows from its tube to a plate that reads)
-      /* clamp into the safe area, then out of the KN's box (plus 10% of its width), towards its own side */
-      let x = best[0], y = best[1];
-      const sx0 = W2 * .08 + pw / 2, sx1 = W2 * .92 - pw / 2, sy0 = h * .08 + ph / 2, sy1 = hy - h * .04 - ph / 2;
-      x = clamp(x, sx0, sx1); y = clamp(y, sy0, Math.max(sy0, sy1));
-      const mx = kw / 2 + kw * .15 + pw / 2, my = kh / 2 + kw * .15 + ph / 2;
-      if (Math.abs(x - kx) < mx && Math.abs(y - ky) < my){ x = kx + side * mx; if (x < sx0 || x > sx1){ x = clamp(x, sx0, sx1); y = ky - my < sy0 ? ky + my : ky - my; } }
-      x = lerp(best[0], x, Math.min(1, pe * 3)); y = lerp(best[1], y, Math.min(1, pe * 3));   // (from its tube, at once into place)
+      let tx = W2 * (.5 + side * .33), ty = hy * .45, tw = W2 * .1;
+      if (best){ tx = best[0]; ty = best[1]; proj((best[2] - .5) * GX + (GX - TW) / 2, best[3] * GY, 0); const x0 = pjx; proj((best[2] + .5) * GX - (GX - TW) / 2, best[3] * GY, 0); tw = Math.abs(pjx - x0); }
+      /* its size: from its tube's to a plate that reads, about two tubes wide */
+      let pw = lerp(tw, Math.max(tw * 1.9, Math.min(W2 * .23, h * .34)), pe), ph = pw * .75;
+      /* where it settles, every frame (the KN moves: tilts, hops): its side of the KN, out of the KN's box plus a margin,
+         inside the safe area; above the KN when the side is too narrow, smaller only as a last resort */
+      const m = kw * .15, x0 = W2 * .08, x1 = W2 * .92, y0 = h * .08, y1 = hy - h * .04;
+      let x, y = clamp(ty, y0 + ph / 2, Math.max(y0 + ph / 2, y1 - ph / 2));
+      const room = side > 0 ? x1 - (KB[2] + m) : (KB[0] - m) - x0;
+      if (room >= pw) x = side > 0 ? Math.max(KB[2] + m + pw / 2, clamp(tx, x0 + pw / 2, x1 - pw / 2)) : Math.min(KB[0] - m - pw / 2, clamp(tx, x0 + pw / 2, x1 - pw / 2));
+      else if (KB[1] - m - y0 >= ph){ x = clamp(kx + side * kw * .25, x0 + pw / 2, x1 - pw / 2); y = KB[1] - m - ph / 2; }
+      else { pw = Math.max(W2 * .08, room); ph = pw * .75; x = side > 0 ? KB[2] + m + pw / 2 : KB[0] - m - pw / 2; }
+      /* it flies out of its tube as it rises (and is in place by a third of the way up); it settles where it stands */
+      const fly = c01(pe * 3), rising = (L0POP % POPE) < .5;
+      if (rising){ x = lerp(tx, x, fly); y = lerp(ty, y, fly); }
       const r = pw * .06, X = x - pw / 2, Y = y - ph / 2;
-      tg.globalAlpha = a; tg.fillStyle = SH[si(.06)]; rrect(tg, X - pw * .06, Y - pw * .06, pw * 1.12, ph + pw * .12, r * 2); tg.fill();
-      tg.strokeStyle = SH[si(.3 + .6 * pe)]; tg.lineWidth = (1 + 1.5 * pe) * pxk; tg.stroke();
-      tg.globalAlpha = a * c01(.7 + .3 * pe); tg.drawImage(tex, X, Y, pw, ph);
-      tg.globalCompositeOperation = 'lighter'; tg.globalAlpha = a * .5 * pe; tg.drawImage(tex, X, Y, pw, ph); tg.globalCompositeOperation = 'source-over'; tg.globalAlpha = 1;
-      lumAcc += pw * ph * .15 * a;
+      tg.globalAlpha = a; tg.fillStyle = SH[si(.05)]; rrect(tg, X - pw * .06, Y - pw * .06, pw * 1.12, ph + pw * .12, r * 2); tg.fill();
+      tg.strokeStyle = SH[si(.45 + .55 * pe)]; tg.lineWidth = (1.5 + 2 * pe) * pxk; tg.stroke();
+      tg.globalAlpha = a * c01(.75 + .25 * pe); tg.drawImage(tex, X, Y, pw, ph);
+      tg.globalCompositeOperation = 'lighter'; tg.globalAlpha = a * .85 * pe; tg.drawImage(tex, X, Y, pw, ph); tg.globalCompositeOperation = 'source-over'; tg.globalAlpha = 1;
+      lumAcc += pw * ph * .2 * a;
     }
     function wallCam(L, o){
       const q = Math.floor(L / SHOTL), u = L - q * SHOTL, b = s5(u / .9);
@@ -2739,16 +2745,16 @@ M.createTerminal = function createTerminal(opts){
         LOOPW = false; TOX = TOY = 0;
         /* the KN's ground: a dark halo behind it, so the logo always wins over the lit wall */
         tg.setTransform(1, 0, 0, 1, BX, BY); tg.globalAlpha = 1;
-        const kw = Math.max(KB[2] - KB[0], W2 * .2), kh = Math.max(KB[3] - KB[1], h * .15), kx = (KB[0] + KB[2]) / 2, ky = (KB[1] + KB[3]) / 2, hr = Math.max(kw, kh) * .85;
-        const hg = tg.createRadialGradient(kx, ky, 0, kx, ky, hr); hg.addColorStop(0, 'rgba(0,0,0,.72)'); hg.addColorStop(.6, 'rgba(0,0,0,.5)'); hg.addColorStop(1, 'rgba(0,0,0,0)');
+        const kw = Math.max(KB[2] - KB[0], W2 * .2), kh = Math.max(KB[3] - KB[1], h * .15), kx = (KB[0] + KB[2]) / 2, ky = (KB[1] + KB[3]) / 2, hr = Math.max(kw, kh) * .82;
+        const hg = tg.createRadialGradient(kx, ky, 0, kx, ky, hr); hg.addColorStop(0, 'rgba(0,0,0,.92)'); hg.addColorStop(.55, 'rgba(0,0,0,.82)'); hg.addColorStop(.8, 'rgba(0,0,0,.45)'); hg.addColorStop(1, 'rgba(0,0,0,0)');
         tg.globalAlpha = a; tg.fillStyle = hg; tg.fillRect(kx - hr, ky - hr, 2 * hr, 2 * hr); tg.globalAlpha = 1;
         /* the pop: one at a time, every POPE s (sides alternating), a tube comes forward with a word (to 1.5x over 0.5 s),
            holds, settles back (0.5 s), and the next starts after it. Drawn as a plate in screen space from where its tube
            is, and kept every frame inside the safe area (8% in from the edges, above the floor) and clear of the KN's
            bounds plus a margin: no camera move can carry it off the tube or over the logo */
-        if (PWORDS){
+        if (PWORDS && k === MVK){   // (only on the movement that is coming in, never on one fading out)
           const n = Math.floor(L / POPE), f = L - n * POPE, pe = s5(c01(f / .5)) * (1 - s5(c01((f - POPL + .5) / .5)));
-          if (f < POPL && pe > .005) popPlate(n, pe, a, kx, ky, kw, kh);
+          L0POP = L; if (f < POPL && pe > .005) popPlate(n, pe, a, kx, ky, kw, kh);
         }
       } else if (k === MV_GLOBE){
         GA = a; tg.globalAlpha = GA;
