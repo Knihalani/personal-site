@@ -97,6 +97,7 @@ setupMute(focusInput, ac.signal);
 /* ---- input: physical keyboards drive the terminal and the typist's hands ---- */
 const held = new Set();
 function onDown(e){
+  if (!reading() && (D.activeElement === D.body || !D.activeElement)) focusInput();   // focus went to the page (a click off the tube): a paste (cmd/ctrl+V) or an IME still lands in #kbd
   if (e.metaKey || reading()) return;   // Ctrl combos go to the terminal; it only consumes the ones it handles
   if (e.target === muteBtn){ if (e.key.length !== 1 || e.key === ' ') return; focusInput(); }   // letters typed on the toggle go back to the prompt
   unlock();
@@ -323,6 +324,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   if (!TOUCH) kbd.addEventListener('compositionend', take);
   /* a hardware keyboard (desktops; a tablet's or a phone's keyboard case) */
   addEventListener('keydown', e => {
+    if (!TOUCH && !reading() && (D.activeElement === D.body || !D.activeElement)) focus();   // (as on the desk: a paste or an IME after a click still lands in #kbd)
     if (e.metaKey || reading()) return;
     if (e.target === muteBtn){ if (e.key.length !== 1 || e.key === ' ') return; focus(); }   // letters typed on the toggle go back to the prompt
     if (TOUCH && e.target === kbd && !special(e)) return;   // assistive tech: letters arrive through the input event
@@ -359,7 +361,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
     if (performance.now() < swallow){ swallow = 0; return; }
     if (TOUCH && strayClick(e)) return;   // a key's own touch, its cap gone under it (a fold, a new layer): not a tap on the tube
     const r = cv.getBoundingClientRect();
-    if (term.handleTap && term.handleTap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)){ unlock(); return; }   // a card row: copy / open
+    if (term.handleTap && term.handleTap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)){ unlock(); if (!TOUCH) kbd.focus({ preventScroll: true }); return; }   // a card row: copy / open
     /* a tap on the prompt line (or under it) brings the keyboard back (the phone's own never opens); elsewhere on a page a
        tap is just a reader's touch */
     if (TOUCH){ const v = (e.clientY - r.top) / r.height, i = term.scrollInfo; if (v >= term.cursorY - 2.5 * (i ? i.rowH : 0.05)) keys.fold(false); }
