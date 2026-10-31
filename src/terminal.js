@@ -1917,7 +1917,7 @@ M.createTerminal = function createTerminal(opts){
       /* the panels: three for JUST / START / ! (side by side, or stacked on a tall tube), two for EDEN */
       const gp = 7 * pxk;
       if (!tall){
-        const a0 = W * .33, a1 = W * .29, b0 = W * .76, b1 = W * .72;
+        const a0 = W * .31, a1 = W * .27, b0 = W * .72, b1 = W * .68;
         PANEL3.set([0, 0, a0 - gp, 0, a1 - gp, h, 0, h, a0 + gp, 0, b0 - gp, 0, b1 - gp, h, a1 + gp, h, b0 + gp, 0, W, 0, W, h, b1 + gp, h]);
         PANEL2.set([0, 0, W * .6 - gp, 0, W * .4 - gp, h, 0, h, W * .6 + gp, 0, W, 0, W, h, W * .4 + gp, h]);
       } else {
@@ -2124,7 +2124,7 @@ M.createTerminal = function createTerminal(opts){
         const pool = LPOOL || TEX; tsTex = pool[(base + k * 5) % pool.length]; tsSub = 0;
         if (uu < .3){ const f = uu / .3; tsOpen = f < .5 ? 1 - sstep(0, .5, f) : sstep(.5, 1, f); }
         tsBr = .62 + .25 * Math.sin(S * .5 + i * .6 + j * 1.1);
-        if (i === POPI && j === POPJ && POPB > .01 && POPX){ tsTex = POPX; tsOpen = 1; tsBr = lerp(tsBr, 1.35, POPB); }   // (the tube that comes forward: a word, bright)
+        if (i === POPI && j === POPJ && POPB > .01 && POPX){ tsTex = POPX; tsOpen = 1; tsBr = lerp(tsBr, 1.6, POPB); }   // (the tube that comes forward: a word, bright)
         return -1;
       }
       if (S < T_J){
@@ -2169,7 +2169,8 @@ M.createTerminal = function createTerminal(opts){
       const lu = 1.4 * pxk / Math.sqrt(det);
       const big = (mx - nx) * rwc > 70 && (S < T_KN || LOOPW);   // (small tubes, and the wall behind the KN: square corners, no inner rim)
       if (big) rrect(c, -BZ, -BZ, TW + 2 * BZ, TH + 2 * BZ, .55); else { c.beginPath(); c.rect(-BZ, -BZ, TW + 2 * BZ, TH + 2 * BZ); }
-      c.fillStyle = SH[si(.06)]; c.fill(); c.strokeStyle = SH[si(.24)]; c.lineWidth = lu; c.stroke();
+      const pop = LOOPW && i === POPI && j === POPJ ? POPB : 0;   // (the loop's tube coming forward: a lit rim)
+      c.fillStyle = SH[si(.06)]; c.fill(); c.strokeStyle = SH[si(.24 + .66 * pop)]; c.lineWidth = lu * (1 + 1.5 * pop); c.stroke();
       if (big){ rrect(c, -.04, -.04, TW + .08, TH + .08, .3); c.fillStyle = SH[si(.025)]; c.fill(); c.strokeStyle = SH[si(.14)]; c.stroke(); }
       const open = tsOpen, line = tsLine;
       if (open > 0){
@@ -2467,7 +2468,7 @@ M.createTerminal = function createTerminal(opts){
         if (p === 1){ G = tg; speedLines(SD, pcx, pcy, 1.6, .7, 1); radial(pcx, pcy, Math.min(W2, h) * .3, SH[si(.25)], .4); }
         if (p === 2) rings(SD, pcx, pcy, 1.4, .45);
         typeOn(tg, true);
-        const pw = tall ? W2 * .72 : (PANEL3[o + 2] - PANEL3[o]) * (p === 0 ? .7 : .8), phh = tall ? (PANEL3[o + 5] - PANEL3[o + 1]) * (p === 2 ? .5 : .7) : h * (p === 2 ? .4 : .42);
+        const pw = tall ? W2 * .72 : (PANEL3[o + 2] - PANEL3[o]) * (p === 0 ? .62 : .8), phh = tall ? (PANEL3[o + 5] - PANEL3[o + 1]) * (p === 2 ? .5 : .7) : h * (p === 2 ? .4 : .42);
         const L = p === 0 ? LO.just : p === 1 ? LO.start : LO.bang, u = uFit(L, pw, phh) * zin, jit = live > .1 ? Math.sin(SD * 61 + p) * pxk : 0;
         if (p === 1){ hollow(L, pcx + jit, pcy, u * 1.04); vlineC(L, pcx + jit, pcy + 3 * u, u, null, 1); }
         else if (p === 2){ ROT = -.1 + .04 * Math.sin(SD * 7); hollow(L, pcx, pcy, u * 1.06, ROT); vlineC(L, pcx, pcy + 3 * u, u, animRot, 1); ROT = 0; }
@@ -2643,6 +2644,7 @@ M.createTerminal = function createTerminal(opts){
     function poseOf(k, t, w){   // into PO, weighted: [z scale, y, yaw, pitch, roll, x offset as a share of the width]
       if (k === MV_WALL){ PO[0] += w * .65; PO[1] += w * .3; PO[2] += w * .26 * Math.sin(t * .21); PO[3] -= w * .05; }
       else if (k === MV_GLOBE){ PO[0] += w * .6; PO[1] += w * .5; PO[2] += w * .14 * Math.sin(t * .25); }
+      else if (k === MV_SET){ PO[0] -= w * .2 * Math.sin(Math.PI * c01((t - TURN) / (SECTION - TURN))); PO[1] += w * .25 * Math.sin(Math.PI * c01((t - TURN) / (SECTION - TURN))); }   // home: one slow push in and back
       else if (k === MV_CONST){ PO[0] += w * .5; PO[1] -= w * .9; PO[5] -= w * .22; PO[2] += w * .18 * Math.sin(t * .17); PO[4] += w * .04 * Math.sin(t * .33); }
     }
     function loopBack(L, S, ox, oy){
@@ -2652,8 +2654,9 @@ M.createTerminal = function createTerminal(opts){
       if (MVK !== MV_SET) mvBack(MVK, 1, L, S, MVU, ox, oy, MVT < 1 ? MVT * Math.hypot(W2, h) : -1);
       else if (MVT >= 1 && MVU > 7 && MVU < 9.6){   // the set's moment: a scanline sweeping down the bars
         const v = (MVU - 7) / 2.6, yb = lerp(-h * .1, hy, v), gr = tg.createLinearGradient(0, yb - h * .08, 0, yb + h * .02);
-        gr.addColorStop(0, 'rgba(' + GLC + ',0)'); gr.addColorStop(.8, 'rgba(' + GLC + ',' + (.1 * Math.sin(Math.PI * v)).toFixed(3) + ')'); gr.addColorStop(1, 'rgba(' + GLC + ',0)');
-        tg.globalCompositeOperation = 'lighter'; tg.fillStyle = gr; tg.fillRect(0, yb - h * .08, W2, h * .1); tg.globalCompositeOperation = 'source-over';
+        const sa = Math.sin(Math.PI * v); gr.addColorStop(0, 'rgba(' + GLC + ',0)'); gr.addColorStop(.85, 'rgba(' + GLC + ',' + (.22 * sa).toFixed(3) + ')'); gr.addColorStop(1, 'rgba(' + GLC + ',0)');
+        tg.globalCompositeOperation = 'lighter'; tg.fillStyle = gr; tg.fillRect(0, yb - h * .08, W2, h * .1);
+        tg.globalAlpha = .3 * sa; tg.fillStyle = P.bright; tg.fillRect(0, yb + h * .005, W2, 1.5 * pxk); tg.globalAlpha = 1; tg.globalCompositeOperation = 'source-over';   // (its leading line)
       }
       if (MVT < 1 && MVM >= 1){   // the change: a soft ring at the edge of the wipe
         const r = MVT * Math.hypot(W2, h); tg.globalAlpha = .22 * (1 - MVT); tg.strokeStyle = P.bright; tg.lineWidth = 2 * pxk;
@@ -2668,18 +2671,23 @@ M.createTerminal = function createTerminal(opts){
       const sv = G; G = tg; tg.setTransform(1, 0, 0, 1, BX, BY);
       if (k === MV_WALL){
         camF = h * 1.05; CONV = 1; rwc = 1; TOX = BX; TOY = BY;
-        LCAM.x = GX * 2.6 * Math.sin(L * .07); LCAM.y = GY * (.9 + .3 * Math.sin(L * .057)); LCAM.z = -(tall ? 30 : 19);
+        LCAM.x = GX * (t - 8) / 3; LCAM.y = GY * (.9 + .3 * Math.sin(L * .057)); LCAM.z = -(tall ? 30 : 19);   // (a steady pan: a tube every 3 s)
         LCAM.yaw = .12 * Math.sin(L * .05); LCAM.pit = .05 + .03 * Math.sin(L * .037); LCAM.rol = .02 * Math.sin(L * .029);
         setCam(LCAM);
         if (!LPOOL && TX_NAME && TX_J && TX_E && TEX.length === NT) LPOOL = [...TEX, TX_NAME, TX_J, TX_E, TX_NAME, TX_J, TX_E];
-        /* the moment: one tube near the middle comes forward with a word, bright, and goes back (4.5 to 10.5 s in) */
-        const ls = L - t + 4.5, pe = s5(c01((t - 4.5) / 1.6)) * (1 - s5(c01((t - 8.9) / 1.6)));
-        POPI = Math.round(2.6 * Math.sin(ls * .07)) + (MVM % 2 ? 1 : -1); POPJ = 1; POPZ = -7 * pe; POPB = pe; POPX = [TX_J, TX_E, TX_NAME][MVM % 3];
+        /* the moment: one tube beside the KN comes forward with a word (1.4x, over 1.5 s), holds, and
+           settles back (5 to 11 s in) */
+        const pe = s5(c01((t - 5) / 1.5)) * (1 - s5(c01((t - 9.5) / 1.5)));
+        POPI = Math.round((7.5 - 8) / 3) + (MVM % 2 ? 2 : -2); POPJ = 2; POPZ = LCAM.z * (1 - 1 / 1.5) * pe; POPB = pe; POPX = [TX_J, TX_E, TX_NAME][MVM % 3];   // (beside the KN, in view)
         GA = a * .85; tg.globalAlpha = GA;
         LOOPW = true;
         for (let j = -3; j <= 5; j++) for (let i = -8; i <= 8; i++) if (i !== POPI || j !== POPJ) tube(tg, i, j, L);
         tube(tg, POPI, POPJ, L);   // (last: in front)
         LOOPW = false; TOX = TOY = 0; POPI = POPJ = 99;
+        /* the KN's ground: a soft dark halo behind it, so it stands off the wall */
+        tg.setTransform(1, 0, 0, 1, BX, BY); const hr = Math.min(W2, h) * .42, hg = tg.createRadialGradient(ox, oy, 0, ox, oy, hr);
+        hg.addColorStop(0, 'rgba(0,0,0,.62)'); hg.addColorStop(.5, 'rgba(0,0,0,.42)'); hg.addColorStop(1, 'rgba(0,0,0,0)');
+        tg.globalAlpha = a; tg.fillStyle = hg; tg.fillRect(ox - hr, oy - hr, 2 * hr, 2 * hr); tg.globalAlpha = 1;
       } else if (k === MV_GLOBE){
         GA = a; tg.globalAlpha = GA;
         globe(L, ox, oy, Math.min(W2 * .46, h * .62), L * .2, .95);
@@ -2697,11 +2705,11 @@ M.createTerminal = function createTerminal(opts){
         GA = a; tg.globalAlpha = GA;
         graph(L, cx, hy - h * .26, Math.min(W2 * .56, h * .56), L * .12, .12 * Math.exp(-(L % 3.2) * 2.2), 1);
         /* the moment: nodes linking up into EDEN, AGENTS, CONTEXT, one at a time, and dissolving */
-        if (!LCC || LCW !== W2){ LCW = W2; LCC = [LO.eden, LO.agents, LO.context].map(Lw => { const uw = uFit(Lw, W2 * .36, h * .11); return { Lw, uw, C: mkConst(Lw, uw, cx + W2 * .22, h * .22 + 3 * uw) }; }); }
+        if (!LCC || LCW !== W2){ LCW = W2; LCC = [LO.eden, LO.agents, LO.context].map(Lw => { const uw = Math.min(uFit(LO.context, W2 * .36, h * .11), uFit(Lw, W2 * .36, h * .11)); return { Lw, uw, C: mkConst(Lw, uw, cx + W2 * .22, h * .22 + 3 * uw) }; }); }   // (one cap height for all)
         GA = 1; tg.globalAlpha = 1; CNOUT = .9;
         for (let p = 0; p < 3; p++){
-          const T0 = S - t + 1.2 + p * 4.9, c = LCC[p];
-          if (S >= T0 && S < T0 + 3.4 + CNOUT){ tg.globalAlpha = a; constellation(c.C, c.Lw, c.uw, cx + W2 * .22, h * .22 + 3 * c.uw, S, T0, T0 + 3.4); }
+          const T0 = S - t + 1.0 + p * 4.2, c = LCC[p];   // (the next word starts linking while the last one dissolves)
+          if (S >= T0 && S < T0 + 3.5 + CNOUT){ tg.globalAlpha = a; constellation(c.C, c.Lw, c.uw, cx + W2 * .22, h * .22 + 3 * c.uw, S, T0, T0 + 3.5); }
         }
         CNOUT = .1;
       }
