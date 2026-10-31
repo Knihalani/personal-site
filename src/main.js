@@ -46,7 +46,9 @@ const wheelPx = e => e.deltaY * (e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? in
 
 /* start once the fonts are in (or after 1.5 s, whichever comes first) */
 function whenReady(go){
-  (D.fonts ? Promise.race([D.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve())
+  /* phones wait only for the terminal's face (the case lettering's Archivo can land after the intro starts) */
+  const fonts = !D.fonts ? null : TOUCH ? D.fonts.load('40px VT323').catch(() => {}) : D.fonts.ready;
+  (fonts ? Promise.race([fonts, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve())
     .then(() => { $('#loading').classList.add('gone'); go(); });
 }
 
