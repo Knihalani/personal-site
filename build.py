@@ -202,12 +202,24 @@ WEB and (out / 'llms.txt').write_text('\n'.join([f'# {NAME}', '', f'> {DESC}', '
     '## Contact', *[f'- {c["label"]}: {c["email"]}' for c in C['contact']], '',
     '## Links', *[f'- [{n}]({u})' for n, u in (('LinkedIn', LK.get('linkedin')), ('X', LK.get('x')), ('GitHub', LK.get('github'))) if u],
     '', '## Note', f'{SITE} is an interactive terminal on a 1980s computer: type help to explore.', '']), encoding='utf-8')
+# Caching is set per file, never on /* as well: Cloudflare joins a header set by two matching rules with a comma, and a
+# doubled max-age is undefined. The page and the small text files are cached briefly and revalidated in the background;
+# the images (icons, share card) change almost never, so they are kept for 30 days. The page also carries its
+# preconnects as a Link header, which Cloudflare sends ahead of the response as Early Hints (fonts.gstatic.com included).
+SHORT = 'public, max-age=300, stale-while-revalidate=86400'
+LONG = 'public, max-age=2592000, stale-while-revalidate=604800'
+PAGES = ['/', '/index.html', '/404.html']
+TEXT = ['/robots.txt', '/sitemap.xml', '/llms.txt', '/site.webmanifest']
+IMAGES = sorted('/' + f.name for f in (root / 'static').glob('*') if f.suffix in ('.png', '.jpg', '.webp', '.svg', '.ico'))
+LINK = '<https://cdn.jsdelivr.net>; rel=preconnect, <https://fonts.googleapis.com>; rel=preconnect, <https://fonts.gstatic.com>; rel=preconnect; crossorigin'
+rule = lambda path, *lines: path + '\n' + ''.join(f'  {l}\n' for l in lines)
 (out / '_headers').write_text(f"""# Cloudflare Pages response headers (written by build.py; do not edit by hand)
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Content-Security-Policy: {CSP}
-  Cache-Control: public, max-age=300, stale-while-revalidate=86400
-""", encoding='utf-8')
+""" + ''.join(rule(pth, 'Cache-Control: ' + SHORT, *(['Link: ' + LINK] if pth != '/404.html' else [])) for pth in PAGES)
+    + ''.join(rule(pth, 'Cache-Control: ' + SHORT) for pth in TEXT)
+    + ''.join(rule(pth, 'Cache-Control: ' + LONG) for pth in IMAGES), encoding='utf-8')
 print(f'built {out}/site.html ({len(body) // 1024} KB){" with stubs" if dev else ""}{" minified" if minify else ""}')
