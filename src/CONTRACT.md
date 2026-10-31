@@ -104,15 +104,16 @@ MAC.createTerminal({ content, aspect, cols?, width? }) -> {   // width: phones a
   scrollInfo,                   // { off: rows up from the bottom, max, rowH: a row as 0..1 of the canvas } (1:1 touch scrolling)
 }
 ```
-Phones (pointer: coarse) play the intro once, its opening (`DEMO.LENGTH`, about 14.3 s; any tap or key skips it), then settle on a title card:
+Phones (pointer: coarse) play the intro once, its opening (`DEMO.LENGTH`, about 14.3 s; any tap or key skips it at once), then switch it off
+(a 0.25 s CRT power-down: squashed to a bright line, then a dot) and settle on a title card:
 the name, the role line and a boot-disk menu of big rows (about, j, eden, writing when published, contact, links, play),
 tapped or chosen by number, the arrows and return; a returning visitor lands on the card with "welcome back", and `demo`
 plays the intro again. Home and back on phones are this card. Contact on phones gives each address [email] (mailto) and
 [copy] (one confirmation: the toast), the profiles inline. `leave()` calls `MAC.pageTurn(canvas)` when main.js offers it
 (the phone's afterglow). Test hooks: `intro` and `home` (read-only). On phones the card carries a slowly turning KN badge
-(its own small vector drawing, not the intro's logo), and when an animation is all that changes and nothing scrolls,
+(its own small vector drawing, not the intro's logo; it flashes as it lands), and when an animation is all that changes and nothing scrolls,
 only its rows are redrawn (the brightness tally `lum` swaps that drawing's share, so it stays the whole screen's). On desktops:
-The landing (every load, until the first command; deep links skip it) is an anime-OP-style opening drawn on the canvas,
+The landing (every load, until the first command, which switches it off with the same 0.25 s power-down before it runs; deep links skip it) is an anime-OP-style opening drawn on the canvas,
 12.8 s to the slam (silent) on its own fixed 150 bpm grid (a film of 11.2 s played through a cut: every word is held whole and
 still for at least 0.4 s by half beats or beats added while its backdrop keeps moving, and two camera moves play faster) (a cut or a hit every half beat or beat), in one phosphor: the tube
 ignites on a tunnel of bezels; KAIAV, NIHALANI and a huge 16 slam in (the name becoming a header); an impact frame; the
@@ -127,14 +128,15 @@ hit-stop with a white ring shockwave, the land). Each act has its own way of put
 bands, constellations, flip tiles). Impact frames last two or three frames over a short hit-stop (the picture's clock
 holds, then catches up); one is a bright full frame (the slam), the rest dark field with bright line art. Motion blur is real (sub-frame samples averaged). Then a loop: a bar on the set while the KN eases back
 and the dark wall fades up behind it, then the wall of CRTs as one display running a fixed 32 s show on the 150 bpm
-grid (five phrases of four bars, each a few named shots of one or two bars). A tube shows a big letter (KAIAV,
-NIHALANI, YOUNG / FOUNDER, EDEN / FOUNDER, AGENTS / CONTEXT, JUST / START spelled a letter to a tube on the two rows
-over the KN), a big glyph (J, 16), a block of light used as a pixel (rings out of the KN, an equalizer, chevrons
-closing in, diagonal sweeps, a scan bar's wake), or dark glass; never a small word. Tubes switch with a blink of
-light. Something lands on every beat, in unison or in staggered waves. Two levels and a flash; the KN still in the
-middle on a dark halo, with one accent a phrase on its downbeat (a
-light sweep or a punch); the camera one slow eased move a phrase. A sine scroller of `MAC.CONTENT` facts (the name, J, Eden) in the intro's vector type. Keys glint the type, or give the
-logo one more smooth turn and a hop; reduced motion gets one still frame. It is silent. It animates at 30 fps through
+grid (five phrases of four bars, each a few named shots of one or two bars), in two framings, a push or a pull a
+phrase (never a slide): wide, the wall a dot-matrix display of small tubes, each a pixel (a flat block of light or
+near-black glass): rings out of the KN, a giant 16 and a giant J (5x7), an equalizer, a turning globe around the KN;
+close, nine tubes across, one word at a time spelled a letter to two stacked tubes and centred over the KN (AGENTS,
+CONTEXT, JUST, START, KAIAV, NIHALANI). Tubes switch with a blink of light; something lands on every beat; the lit
+tubes are reflected faintly on the floor, and a floor line runs toward the viewer on every beat. The KN holds the
+middle on a dark halo, with an accent on every phrase's downbeat (a light sweep, a 7% punch, or both, and a
+two-frame flare of the chrome). A small, dim sine scroller of `MAC.CONTENT` facts (the name, J, Eden) in the intro's vector type. Keys glint the type,
+or give the logo a hop (and one smooth turn for the first key after a 1.6 s pause); reduced motion gets one still frame. It is silent. It animates at 30 fps through
 the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's real age, s, from its first frame) and
 `introPose` (the logo's pose in the last frame).
 
