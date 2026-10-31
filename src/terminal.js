@@ -2027,7 +2027,7 @@ M.createTerminal = function createTerminal(opts){
       JOBS.push(() => { TX_VW = mk(pw * sc, ph * sc, (c, w, hh) => {
         c.fillStyle = SH[si(.03)]; c.fillRect(0, 0, w, hh);
         if (!tall){ texWord(c, LO.the, w, hh, .3, .18, hh * .16); texWord(c, mkLine('GOAT?'), w, hh, .94, .62, hh * .62); }
-        else { texWord(c, LO.the, w, hh, .5, .1, hh * .1); texWord(c, LO.goat, w, hh, .92, .3, hh * .38); texWord(c, LO.q, w, hh, .5, .3, hh * .78); }
+        else { texWord(c, LO.the, w, hh, .5, .13, hh * .29); texWord(c, LO.goat, w, hh, .92, .14, hh * .5); texWord(c, LO.q, w, hh, .5, .14, hh * .71); }   // (tall: one row of tiles each, the middle three, so no letter straddles a gap)
       }); });
       VWS = sc;
     }
@@ -2082,7 +2082,7 @@ M.createTerminal = function createTerminal(opts){
        to dx px and scale ok over .12 s */
     function word(L, S, T0, x, y, u, k0, out, odx, ody, ok, alpha){
       if (S < T0) return;
-      const ng = S - T0 < .04 ? 3 : 1;   // (ghosts on the slam's first frame only; a word leaving goes as one: no doubled glyphs where two words swap)
+      const ng = 1;   // (one copy: the slam's scale-in carries the motion; a word leaving goes as one: no doubled glyphs where two words swap)
       for (let k = 0; k < ng; k++){
         const tt = S - k * .011; if (tt < T0) break;
         const g = tt - T0, sc = (1 + (k0 - 1) * Math.pow(1 - c01(g / .1), 3)) * (1 + .1 * c01((g - .1) / 1.2));   // (then a slow push in)
@@ -2247,7 +2247,7 @@ M.createTerminal = function createTerminal(opts){
       setCam(CAM);
       const disp = Math.max(Math.hypot(ax1 - ax0, ay1 - ay0), Math.hypot(bx1 - bx0, by1 - by0));
       const ni = knAct ? (tall ? 6 : 10) : NI, nj = knAct ? (tall ? 9 : 6) : NJ;
-      const ns = knAct ? 1 : clamp(Math.ceil(disp / (5 * pxk)), 1, TAP ? 6 : 8);
+      const ns = knAct ? 1 : clamp(Math.ceil(disp / (5 * pxk)), 1, S > 4.5 && S < 4.78 ? 3 : TAP ? 6 : 8);   // (the fast middle of the roll: three samples, a spin that stays sharp; slide and dive blur as before)
       if (ns === 1){   // no blur (or behind the KN): straight onto the tube, no layer
         rwc = 1; TOX = BX; TOY = BY;
         for (let j = -nj; j <= nj; j++) for (let i = -ni; i <= ni; i++) tube(tg, i, j, S);
@@ -2421,7 +2421,7 @@ M.createTerminal = function createTerminal(opts){
       G.globalAlpha = 1;
       lumAcc += C.ns * u * 6 * pxk * al;
       /* then the letters light over it */
-      const lit = c01((g - .16) / .07) * al;
+      const lit = ex > 0 ? 0 : c01((g - .16) / .07);   // (the letters go the moment it breaks up: the nodes scatter alone)
       if (lit > 0){ typeOn(tg, true); kHot = Math.max(kHot0, .6 * Math.exp(-(g - .16) * 8)); GLP = ((gd(T0) - .24) / .32 % 1.6) * (L.n + 4) - 2; vlineC(L, xc, yb, u, animSq, lit); GLP = -9; kHot = kHot0; tg.globalCompositeOperation = 'source-over'; }
     }
     function edenScene(S){
