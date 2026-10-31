@@ -127,11 +127,12 @@ hit-stop with a white ring shockwave, the land). Each act has its own way of put
 bands, constellations, flip tiles). Impact frames last two or three frames over a short hit-stop (the picture's clock
 holds, then catches up); one is a bright full frame (the slam), the rest dark field with bright line art. Motion blur is real (sub-frame samples averaged). Then a loop: a bar on the set while the KN eases back
 and the dark wall fades up behind it, then the wall of CRTs as one display running a fixed 32 s show on the 150 bpm
-grid (five phrases of four bars, each a few named shots of one or two bars: the wall powering on in rings out of the
-KN, KAIAV spelled a letter to a tube, a scan bar, checker swaps, a diagonal wall of J, YOUNG / FOUNDERS row by row,
-GLOBAL, EDEN / FOUNDER, AGENTS, CONTEXT spelled, JUST START as the opening's board, the name in a checker, rings,
-a blackout from the edges in; something lands on every beat, in unison or in staggered waves). One type style at two
-sizes, two levels and a flash; the KN still in the middle on a dark halo, with one accent a phrase on its downbeat (a
+grid (five phrases of four bars, each a few named shots of one or two bars). A tube shows a big letter (KAIAV,
+NIHALANI, YOUNG / FOUNDER, EDEN / FOUNDER, AGENTS / CONTEXT, JUST / START spelled a letter to a tube on the two rows
+over the KN), a big glyph (J, 16), a block of light used as a pixel (rings out of the KN, an equalizer, chevrons
+closing in, diagonal sweeps, a scan bar's wake), or dark glass; never a small word. Tubes switch with a blink of
+light. Something lands on every beat, in unison or in staggered waves. Two levels and a flash; the KN still in the
+middle on a dark halo, with one accent a phrase on its downbeat (a
 light sweep or a punch); the camera one slow eased move a phrase. A sine scroller of `MAC.CONTENT` facts (the name, J, Eden) in the intro's vector type. Keys glint the type, or give the
 logo one more smooth turn and a hop; reduced motion gets one still frame. It is silent. It animates at 30 fps through
 the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's real age, s, from its first frame) and

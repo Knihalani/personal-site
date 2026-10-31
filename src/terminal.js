@@ -1908,7 +1908,10 @@ M.createTerminal = function createTerminal(opts){
       LO.cE = mkConst(LO.eden, LO.uEden, cx, h * .44 + 3 * LO.uEden); LO.cA = mkConst(LO.agents, LO.uAg, cx, h * .5 + 3 * LO.uAg);
       LO.just = mkLine('JUST'); LO.start = mkLine('START'); LO.bang = mkLine('!');
       /* the loop's spelled words, a letter to a tube along a row over the KN (centred; JUST START set left, as the opening's board) */
-      MO.kai = /^[A-Z0-9]{1,7}$/.test(LO.w1.t) ? mosaic(LO.w1.t, RT) : null; MO.ctx = mosaic(LO.context.t, RT); MO.just = mosaic('JUST', RT, -2); MO.start = mosaic('START', RU, -2);
+      { const ok = (t, n) => /^[A-Z0-9]+$/.test(t) && t.length <= n;   // (a word too long for the wall is left out)
+        MO.kai = ok(LO.w1.t, 7) ? mosaic(LO.w1.t, RT) : null; MO.nih = ok(LO.w2.t, 8) ? mosaic(LO.w2.t, RU, -4) : null;
+        MO.young = mosaic('YOUNG', RT, -3); MO.fdr = ok(LO.fdr.t, 7) ? mosaic(LO.fdr.t, RU, -3) : null; MO.eden = ok(LO.eden.t, 7) ? mosaic(LO.eden.t, RT, -3) : null;
+        MO.agents = mosaic('AGENTS', RT, -3); MO.ctx = mosaic('CONTEXT', RU, -3); MO.just = mosaic('JUST', RT, -2); MO.start = mosaic('START', RU, -2); }
       /* the halftone */
       htTile = mkCache(6 * pxk, 6 * pxk); { const c = htTile.getContext('2d'); c.fillStyle = P.bright; c.beginPath(); c.arc(3 * pxk, 3 * pxk, 1.7 * pxk, 0, TAU); c.fill(); }
       JOBS.length = 0; JOBS.push(() => { htc = mkCache(W, h); const c = htc.getContext('2d'), st = 11 * pxk, R = Math.hypot(W, h) / 2; c.fillStyle = SH[si(.5)];
@@ -1990,19 +1993,13 @@ M.createTerminal = function createTerminal(opts){
         }
       }); });
       VWS = sc;
-      /* the loop's pictures (LTX): one style at two sizes. A word fills a tube at one height for every word (the
-         longest fits); a letter fills it, for a word spelled across a row of tubes. One a job */
+      /* the loop's pictures (LTX): a big letter or glyph in the intro's type, or a block of light (a pixel). One a job */
       LTX = {};
-      const WD = { W1: [LO.w1], W2: [LO.w2], N16: null, J: null, EDEN: [LO.eden], FDR: [LO.fdr], AGENTS: [LO.agents], CONTEXT: [LO.context], GLOBAL: [LO.global], YOUNG: [LO.young], FOUNDERS: [LO.founders], JS: [LO.just, LO.start] };
-      let uw = TXH * .2 / 6; for (const k in WD) if (WD[k]) for (const L of WD[k]) uw = Math.min(uw, TXW * .88 / L.sw);
       const ul = TXH * .7 / 6, big = (c, L, w, hh) => vlineC(L, w / 2, hh / 2 + 3 * Math.min(ul, w * .8 / L.sw), Math.min(ul, w * .8 / L.sw), null, 1);
       const put = (key, fn) => { JOBS.push(() => { const cv = mk(TXW, TXH, fn); LTX[key] = cv; setTimeout(() => { if (typeof createImageBitmap === 'function') createImageBitmap(cv).then(b => { if (LTX[key] === cv) LTX[key] = b; }, () => {}); }, 0); }); };
-      for (const k in WD) if (WD[k]){
-        const ls = WD[k];
-        put(k, (c, w, hh) => ls.forEach((L, n) => vlineC(L, w / 2, hh * (ls.length > 1 ? .36 + .3 * n : .5) + 3 * uw, uw, null, 1)));
-      }
+      put('PX', (c, w, hh) => { c.globalCompositeOperation = 'source-over'; const gr = c.createRadialGradient(w / 2, hh / 2, hh * .1, w / 2, hh / 2, w * .62); gr.addColorStop(0, SH[si(.82)]); gr.addColorStop(1, SH[si(.5)]); c.fillStyle = gr; c.fillRect(0, 0, w, hh); });
       put('N16', (c, w, hh) => big(c, LO.n16, w, hh)); put('J', (c, w, hh) => big(c, LO.J, w, hh));
-      for (const ch of new Set((LO.w1.t + LO.context.t + 'JUSTSTART').replace(/ /g, ''))) put('L' + ch, (c, w, hh) => big(c, mkLine(ch), w, hh));
+      for (const ch of new Set((LO.w1.t + LO.w2.t + LO.eden.t + LO.fdr.t + 'YOUNGAGENTSCONTEXTJUSTSTART').replace(/[^A-Z0-9]/g, ''))) put('L' + ch, (c, w, hh) => big(c, mkLine(ch), w, hh));
     }
 
     /* ---- motion graphics: speed lines, tunnels, rings ---- */
@@ -2625,30 +2622,33 @@ M.createTerminal = function createTerminal(opts){
     }
     /* ---- the loop: the wall of tubes as ONE display, a show the same every time round: five phrases of four bars
        (80 beats, 32 s) on the 150 bpm grid. The set holds a bar after the slam (two on a phone, whose title card
-       comes first) while the KN eases back and the dark wall fades up behind it; then the show (from LS). Each shot
-       is a few cues: a reveal (the tubes in a pattern turn to the shot's picture, each folding to its hot line and
-       opening again, 0.14 s: a ring out of the KN, a wave, a diagonal, a scan bar, a checker swap, letters landing one to a tube) and accents (a pulse of light across a set
-       of tubes in unison, or staggered the same way). One type style at two sizes (a word to a tube, or a letter to
-       a tube spelling a word along a row above the KN), two levels (the dim field, the lit word) and the flash of a
-       picture landing. The KN holds the centre with one accent a phrase, on its downbeat (a light sweep or a punch);
-       the camera makes one slow eased move a phrase ----
-         phrase 1 (beats 0-15)   IGNITE   the wall powers on in rings out of the KN: NIHALANI on every tube; pulses
+       comes first) while the KN eases back and the dark wall fades up behind it; then the show (from LS).
+       A tube shows one of three things, never a small word: a big letter (a word is spelled a letter to a tube along
+       the two rows over the KN, set left as the opening's board when two rows go together), a big glyph (J, 16), or
+       a solid block of light, a pixel, when the wall plays as one low-res display (rings, an equalizer, chevrons,
+       sweeps); else dark glass. A tube switches with a blink of light, never a fold. Two levels (dim glyphs, lit
+       letters) and the flash as a picture lands or a pulse passes. The KN holds the centre with one accent a phrase,
+       on its downbeat (a light sweep or a punch); the camera makes one slow eased move a phrase. Under a spelled
+       word the lower wall kicks on every beat ----
+         phrase 1 (beats 0-15)   IGNITE   rings of light out of the KN, twice; two whole-wall hits
                                  SPELL    the first name lands a letter to a tube along the top row, on the eighths
-                                 SCAN     a scan bar sweeps left to right; behind it the field turns to 16
-                                 CHECK    16 / NIHALANI in a checker, swapped on every beat
-         phrase 2 (16-31)        J-WALL   a diagonal wave: a J on every tube; pulses
-                                 YOUNG FOUNDERS   a row a beat from the top, then the rows answer each other
-                                 GLOBAL   a ring out of the KN; ring pulses
-         phrase 3 (32-47)        EDEN     EDEN and FOUNDER in a checker, one half a beat, then swapped
-                                 AGENTS   a wave left to right; pulses back and forth
-                                 CONTEXT  spelled along the top row; the rows light from the bottom up
-         phrase 4 (48-63)        JUST     the wall goes dark at once; JUST lands a letter a beat (the opening's board)
+                                 SCAN     a scan bar sweeps left to right, lighting the wall behind it; a row of 16
+                                 CHECK    the 16s swap in a checker on every beat
+         phrase 2 (16-31)        J-WALL   a diagonal wave: a big J on every tube; diagonal pulses
+                                 YOUNG FOUNDER   the wall cuts dark; YOUNG on the eighths, FOUNDER on the sixteenths;
+                                          the rows answer each other
+                                 EQ       the wall as an equalizer, a new shape on every beat, the last one full
+         phrase 3 (32-47)        EDEN     EDEN over FOUNDER; both flash
+                                 AGENTS   cut dark; AGENTS on the eighths
+                                 CONTEXT  CONTEXT under it; the wall lights from the bottom up, then each word
+         phrase 4 (48-63)        JUST     the wall cuts dark; JUST lands a letter a beat (the opening's board)
                                  START    START under it on the eighths; both flash
-                                 JUST START   the field fills with it in a ring; a bar of unison hits
-         phrase 5 (64-79)        NAME     KAIAV / NIHALANI in a checker by a wave; sweeps, a swap, diagonals
-                                 RINGS    rings of light out of the KN on every beat
-                                 BLACKOUT the wall goes dark from the edges in, into the next IGNITE */
-    const LS = TAP ? 3.2 : 1.6, LP = 32, PH = 6.4, RT = 2, RU = 1, FOLD = .14, LV = [0, .46, 1.35];   // (the rows a word is spelled on; the levels: off, dim, lit)
+                                 CHEVRONS chevrons of light close in on the KN a column a beat; a bar of unison hits
+         phrase 5 (64-79)        NAME     cut dark; the first name, then the last under it on the sixteenths; a
+                                          flash; diagonal sweeps of light
+                                 RINGS    the names blink out; rings of light out of the KN on every beat
+                                 BLACKOUT a last ring of light closes in on the KN, into the next IGNITE */
+    const LS = TAP ? 3.2 : 1.6, LP = 32, PH = 6.4, RT = 2, RU = 1, LV = [0, .5, 1.35];   // (the rows a word is spelled on; the levels: off, dim, lit)
     let LOOPW = false, LQ = 0, GA = 1, LTX = null;
     const CNOUT = .1;
     const BQ = b => b * BT;
@@ -2656,77 +2656,81 @@ M.createTerminal = function createTerminal(opts){
     const xl = i => (i + 5), dg = (i, j) => (i + 5) + (5 - j);       // its place in a wave left to right, in a diagonal from the top left
     const pz = (Q, t0) => { const d = Q - t0; return d < 0 || d > .8 ? 0 : Math.exp(-d * 8); };
     const E = (o, tx, lv, at) => { o.tx = tx; o.lv = lv; o.at = at; return true; };
-    const MO = { kai: null, ctx: null, just: null, start: null };   // the spelled words: { t, j, i0 }
+    const cut = (o, Q, at) => at <= Q && E(o, null, 0, at);
+    const MO = {};   // the spelled words: { t, j, i0 }
     const mosaic = (t, j, i0) => ({ t, j, i0: i0 == null ? -Math.floor(t.length / 2) : i0 });
     const inM = (m, i, j) => !!m && j === m.j && i >= m.i0 && i < m.i0 + m.t.length;
-    const inJS = (i, j) => inM(MO.just, i, j) || inM(MO.start, i, j);
     /* a spelled word's tube: its letter (lit) at t0 + k * step, dark before that from d0 (or as it was) */
-    function spell(m, i, Q, o, t0, step, d0){ const k = i - m.i0, at = t0 + k * step; if (at <= Q) return E(o, 'L' + m.t[k], 2, at); return d0 != null && d0 <= Q && E(o, null, 0, d0); }
+    function spell(m, i, Q, o, t0, step, d0){ const k = i - m.i0, at = t0 + k * step; if (at <= Q) return E(o, 'L' + m.t[k], 2, at); return d0 != null && cut(o, Q, d0); }
     const scanAt = i => BQ(8) + (i + 5.5) / 11 * BQ(4);
+    /* the equalizer: each beat a height (in tubes, from the bottom row) for each column out from the middle */
+    const EQH = [[1, 2, 3, 4, 4, 4], [4, 4, 3, 2, 1, 1], [2, 3, 4, 3, 2, 1], [9, 9, 9, 9, 9, 9]];
     const SHOTS = [
-      { b0: 0, cell: (i, j, Q, o) => { const at = BQ(0) + rd(i, j) * .15; return at <= Q && E(o, 'W2', 1, at); },
-        pz: (i, j, Q) => pz(Q, BQ(2) + rd(i, j) * .04) + pz(Q, BQ(3) + rd(i, j) * .04) },
-      { b0: 4, cell: (i, j, Q, o) => { if (j !== RT) return false; if (MO.kai) return inM(MO.kai, i, j) ? spell(MO.kai, i, Q, o, BQ(4), .2, BQ(4)) : BQ(4) <= Q && E(o, null, 0, BQ(4)); return BQ(4) + xl(i) * .05 <= Q && E(o, 'W1', 2, BQ(4) + xl(i) * .05); },
-        pz: (i, j, Q) => j === RT ? pz(Q, BQ(7) + xl(i) * .03) : 0 },
-      { b0: 8, scan: 1, cell: (i, j, Q, o) => { if (j === RT) return false; const at = scanAt(i); return at <= Q && E(o, 'N16', 1, at); }, pz: () => 0 },
-      { b0: 12, cell: (i, j, Q, o) => { if (j === RT) return false; for (let k = 3; k >= 0; k--){ const at = BQ(12 + k); if (at <= Q) return E(o, (i + j + k) & 1 ? 'W2' : 'N16', 1, at); } return false; },
-        pz: (i, j, Q) => j === RT ? pz(Q, BQ(12)) : 0 },
-      { b0: 16, cell: (i, j, Q, o) => { const at = BQ(16) + dg(i, j) * .03; return at <= Q && E(o, 'J', 1, at); },
+      { b0: 0, cell: () => false,   // IGNITE
+        pz: (i, j, Q) => pz(Q, rd(i, j) * .07) + pz(Q, BQ(1) + rd(i, j) * .07) + .8 * pz(Q, BQ(2)) + .8 * pz(Q, BQ(3)) },
+      { b0: 4, kick: 1, cell: (i, j, Q, o) => inM(MO.kai, i, j) && spell(MO.kai, i, Q, o, BQ(4), .2, null),   // SPELL
+        pz: (i, j, Q) => inM(MO.kai, i, j) ? pz(Q, BQ(7) + xl(i) * .03) : 0 },
+      { b0: 8, scan: 1, cell: (i, j, Q, o) => j === RU && Math.abs(i) <= 3 && scanAt(i) <= Q && E(o, 'N16', 1, scanAt(i)),   // SCAN
+        pz: (i, j, Q) => .7 * pz(Q, scanAt(i)) },
+      { b0: 12, kick: 1, cell: (i, j, Q, o) => { if (j !== RU || Math.abs(i) > 3) return false; for (let k = 3; k >= 0; k--){ const at = BQ(12 + k); if (at <= Q) return E(o, (i + k) & 1 ? null : 'N16', 1, at); } return false; },   // CHECK
+        pz: (i, j, Q) => inM(MO.kai, i, j) ? pz(Q, BQ(12)) : 0 },
+      { b0: 16, cell: (i, j, Q, o) => { const at = BQ(16) + dg(i, j) * .03; return at <= Q && E(o, 'J', 1, at); },   // J-WALL
         pz: (i, j, Q) => pz(Q, BQ(18) + dg(i, j) * .02) + pz(Q, BQ(19) + dg(i, j) * .02) },
-      { b0: 20, cell: (i, j, Q, o) => { const r = j >= RT ? 0 : j === RU ? 1 : j === 0 ? 2 : 3, at = BQ(20 + r) + xl(i) * .03; return at <= Q && E(o, j & 1 ? 'FOUNDERS' : 'YOUNG', 1, at); },
-        pz: (i, j, Q) => { let s = 0; for (let b = 24; b < 28; b++) if ((b & 1) === (j & 1)) s += pz(Q, BQ(b) + xl(i) * .02); return s; } },
-      { b0: 28, cell: (i, j, Q, o) => { const at = BQ(28) + rd(i, j) * .1; return at <= Q && E(o, 'GLOBAL', 1, at); },
-        pz: (i, j, Q) => pz(Q, BQ(29) + rd(i, j) * .06) + pz(Q, BQ(30) + rd(i, j) * .06) + pz(Q, BQ(31) + rd(i, j) * .06) },
-      { b0: 32, cell: (i, j, Q, o) => { const p = (i + j) & 1;
-          for (let b = 35; b >= 32; b--){ if (BQ(b) > Q) continue; if (b === 32 && p) continue; if (b === 33 && !p) continue; return E(o, (p + (b >= 34 ? b - 33 : 0)) & 1 ? 'FDR' : 'EDEN', 1, BQ(b)); }
-          return false; }, pz: () => 0 },
-      { b0: 36, cell: (i, j, Q, o) => { const at = BQ(36) + xl(i) * .08; return at <= Q && E(o, 'AGENTS', 1, at); },
-        pz: (i, j, Q) => pz(Q, BQ(38) + xl(i) * .03) + pz(Q, BQ(39) + (10 - xl(i)) * .03) },
-      { b0: 40, cell: (i, j, Q, o) => { if (j !== RT) return false; if (inM(MO.ctx, i, j)) return spell(MO.ctx, i, Q, o, BQ(40), .2, BQ(40)); return BQ(40) <= Q && E(o, null, 0, BQ(40)); },
-        pz: (i, j, Q) => { const r = j === RT ? 3 : j === RU || j > RT ? 2 : j === 0 ? 1 : 0; return pz(Q, BQ(44 + r) + xl(i) * .02); } },
-      { b0: 48, cell: (i, j, Q, o) => { if (inM(MO.just, i, j)) return spell(MO.just, i, Q, o, BQ(48), BT, BQ(48)); return BQ(48) <= Q && E(o, null, 0, BQ(48)); }, pz: () => 0 },
-      { b0: 52, cell: (i, j, Q, o) => inM(MO.start, i, j) && spell(MO.start, i, Q, o, BQ(52), .2, null),
-        pz: (i, j, Q) => inJS(i, j) ? pz(Q, BQ(55) + xl(i) * .03) : 0 },
-      { b0: 56, cell: (i, j, Q, o) => { if (inJS(i, j)) return false; const at = BQ(56) + rd(i, j) * .13; return at <= Q && E(o, 'JS', 1, at); },
-        pz: (i, j, Q) => { let s = inJS(i, j) ? 0 : pz(Q, BQ(58)) + pz(Q, BQ(59)); for (let b = 60; b < 64; b++) s += pz(Q, BQ(b) + rd(i, j) * .02) * (b === 63 ? 1.4 : 1); return s; } },
-      { b0: 64, cell: (i, j, Q, o) => { const p = (i + j) & 1; if (BQ(68) <= Q) return E(o, p ? 'W1' : 'W2', 1, BQ(68)); const at = BQ(64) + xl(i) * .05; return at <= Q && E(o, p ? 'W2' : 'W1', 1, at); },
-        pz: (i, j, Q) => pz(Q, BQ(65) + (10 - xl(i)) * .03) + pz(Q, BQ(66) + xl(i) * .03) + pz(Q, BQ(67) + (10 - xl(i)) * .03)
-          + pz(Q, BQ(69) + dg(i, j) * .02) + pz(Q, BQ(70) + (17 - dg(i, j)) * .02) + pz(Q, BQ(71) + dg(i, j) * .02) },
-      { b0: 72, cell: () => false, pz: (i, j, Q) => { let s = 0; for (let b = 72; b < 78; b++) s += pz(Q, BQ(b) + rd(i, j) * .07); return s; } },
-      { b0: 78, cell: (i, j, Q, o) => { const at = BQ(78) + (6 - Math.min(6, rd(i, j))) * .1; return at <= Q && E(o, null, 0, at); }, pz: () => 0 },
+      { b0: 20, kick: 1, cell: (i, j, Q, o) => inM(MO.young, i, j) ? spell(MO.young, i, Q, o, BQ(20), .2, BQ(20)) : inM(MO.fdr, i, j) ? spell(MO.fdr, i, Q, o, BQ(22), .1, BQ(20)) : cut(o, Q, BQ(20)),   // YOUNG FOUNDER
+        pz: (i, j, Q) => inM(MO.young, i, j) ? pz(Q, BQ(24)) + pz(Q, BQ(26)) : inM(MO.fdr, i, j) ? pz(Q, BQ(25)) + pz(Q, BQ(27)) : 0 },
+      { b0: 28, cell: (i, j, Q, o) => cut(o, Q, BQ(28)),   // EQ
+        pz: (i, j, Q) => { if (Q >= BQ(32)) return 0; const b = Math.floor(Q / BT) - 28; if (b < 0) return 0; return j + 2 <= EQH[b][Math.min(5, Math.abs(i))] ? .6 + .4 * pz(Q, BQ(28 + b)) : 0; } },
+      { b0: 32, kick: 1, cell: (i, j, Q, o) => inM(MO.eden, i, j) ? spell(MO.eden, i, Q, o, BQ(32), .2, null) : inM(MO.fdr, i, j) ? spell(MO.fdr, i, Q, o, BQ(34), .1, null) : false,   // EDEN
+        pz: (i, j, Q) => inM(MO.eden, i, j) || inM(MO.fdr, i, j) ? pz(Q, BQ(35) + xl(i) * .03) : 0 },
+      { b0: 36, kick: 1, cell: (i, j, Q, o) => inM(MO.agents, i, j) ? spell(MO.agents, i, Q, o, BQ(36), .2, BQ(36)) : cut(o, Q, BQ(36)),   // AGENTS
+        pz: (i, j, Q) => inM(MO.agents, i, j) ? pz(Q, BQ(39) + xl(i) * .03) : 0 },
+      { b0: 40, kick: 1, cell: (i, j, Q, o) => inM(MO.ctx, i, j) && spell(MO.ctx, i, Q, o, BQ(40), .2, null),   // CONTEXT
+        pz: (i, j, Q) => inM(MO.agents, i, j) ? pz(Q, BQ(46) + xl(i) * .03) : inM(MO.ctx, i, j) ? pz(Q, BQ(47) + xl(i) * .03) : j >= RU ? 0 : pz(Q, BQ(j < 0 ? 44 : 45) + xl(i) * .02) },
+      { b0: 48, kick: 1, cell: (i, j, Q, o) => inM(MO.just, i, j) ? spell(MO.just, i, Q, o, BQ(48), BT, BQ(48)) : cut(o, Q, BQ(48)) },   // JUST
+      { b0: 52, kick: 1, cell: (i, j, Q, o) => inM(MO.start, i, j) && spell(MO.start, i, Q, o, BQ(52), .2, null),   // START
+        pz: (i, j, Q) => inM(MO.just, i, j) || inM(MO.start, i, j) ? pz(Q, BQ(55) + xl(i) * .03) : 0 },
+      { b0: 56, cell: () => false,   // CHEVRONS: a > on the left and a < on the right, a column nearer the KN each beat
+        pz: (i, j, Q) => { let s = 0; const e = j === RT || j === -1 ? 1 : 0;
+          for (let k = 0; k < 4; k++){ const c = 4 - k; if (Math.abs(i) === c - e && j >= -1 && j <= RT) s += pz(Q, BQ(56 + k)); }
+          for (let b = 60; b < 64; b++) s += pz(Q, BQ(b) + rd(i, j) * .02) * (b === 63 ? 1.3 : .9); return s; } },
+      { b0: 64, kick: 1, cell: (i, j, Q, o) => inM(MO.kai, i, j) ? spell(MO.kai, i, Q, o, BQ(64), .1, BQ(64)) : inM(MO.nih, i, j) ? spell(MO.nih, i, Q, o, BQ(65), .1, BQ(64)) : cut(o, Q, BQ(64)),   // NAME
+        pz: (i, j, Q) => { const w = inM(MO.kai, i, j) || inM(MO.nih, i, j); return (w ? pz(Q, BQ(68) + xl(i) * .03) : 0)
+          + pz(Q, BQ(69) + dg(i, j) * .02) + pz(Q, BQ(70) + (17 - dg(i, j)) * .02) + pz(Q, BQ(71) + dg(i, j) * .02); } },
+      { b0: 72, cell: (i, j, Q, o) => cut(o, Q, BQ(72)), pz: (i, j, Q) => { let s = 0; for (let b = 72; b < 78; b++) s += pz(Q, BQ(b) + rd(i, j) * .07); return s; } },   // RINGS
+      { b0: 78, cell: () => false, pz: (i, j, Q) => pz(Q, BQ(78) + (6 - Math.min(6, rd(i, j))) * .1) },   // BLACKOUT
     ];
-    const CO = { tx: null, lv: 0, at: -9 }, CP = { tx: null, lv: 0, at: -9 };
+    const CO = { tx: null, lv: 0, at: -9 }, CP = { tx: null, lv: 0, at: -9 }, BL = .067;   // (BL: a switch's blink)
     let SK = 0;   // (the shot playing)
     function cellAt(i, j, Q, o){   // the picture on tube (i, j) at show time Q, and when it came: dark before the show's first
       let k = SHOTS.length - 1; while (k > 0 && BQ(SHOTS[k].b0) > Q) k--;
       for (; k >= 0; k--) if (SHOTS[k].cell(i, j, Q, o)) return o;
       o.tx = null; o.lv = 0; o.at = -9; return o;
     }
-    /* a tube in the show: its picture, the fold as it changes, its level, the flash as it lands and the pulses */
+    const pzOf = (k, i, j, Q) => k >= 0 && SHOTS[k].pz ? SHOTS[k].pz(i, j, Q) : 0;
+    /* a tube in the show: its picture (switched with a blink: a block of light for two frames), its level, the flash
+       as it lands; the pulses brighten a picture, or light a dark tube as a pixel */
     function loopTube(i, j){
       const Q = LQ; i = clamp(i, -5, 5); j = clamp(j, -2, 6);
       cellAt(i, j, Q, CO);
-      let tex = CO.tx, lv = CO.lv, open = tex ? 1 : 0, line = 0, fl = 0;
+      let tex = CO.tx, lv = CO.lv, fl = 0, blink = 0;
       const g = Q - CO.at;
       if (g < .9){
         cellAt(i, j, CO.at - 1e-4, CP);
         if (CP.tx !== CO.tx){
-          const f = g / FOLD;
-          if (f < .5){ tex = CP.tx; lv = CP.lv; open = tex ? 1 - s5(f * 2) : 0; line = tex ? 1 : s5(f * 2); }
-          else if (f < 1){ open = tex ? s5(f * 2 - 1) : 0; line = tex ? 1 : 1 - s5(f * 2 - 1); }
-          if (CO.tx && f >= .5) fl = .65 * Math.exp(-(g - FOLD / 2) * 7);
-        } else if (CO.lv > CP.lv) fl = .65 * Math.exp(-g * 7);
+          if (g < BL){ blink = CO.tx ? .8 : CP.tx ? .5 : 0; tex = null; }
+          else if (CO.tx) fl = .65 * Math.exp(-(g - BL) * 7);
+        }
       }
-      let p = 0;
-      if (tex){ p = SHOTS[SK].pz(i, j, Q); if (SK > 0) p += SHOTS[SK - 1].pz(i, j, Q); }
-      tsTex = tex ? LTX[tex] : null; if (!tsTex) open = 0;
-      tsOpen = open; tsLine = line; tsFlip = 1; tsSub = 0;
-      tsBr = Math.min(1.7, LV[lv] + fl + .6 * p);
-      tsRim = .2 + (lv > 1 && open > 0 ? .14 : 0) + .4 * Math.min(1, fl + p);   // (the bezel lights with its picture: a wave's shape reads across the wall)
+      let p = pzOf(SK, i, j, Q) + pzOf(SK - 1, i, j, Q);
+      if (SHOTS[SK].kick && !CO.tx && j <= 0 && Math.abs(i) >= 2) p += .5 * pz(Q, Math.floor(Q / BT) * BT);   // (under a spelled word: the lower wall kicks on every beat)
+      tsTex = tex ? LTX[tex] : null; tsFlip = 1; tsSub = 0; tsLine = 0;
+      if (tsTex){ tsOpen = 1; tsBr = Math.min(1.7, LV[lv] + fl + .6 * p); }
+      else { const v = Math.min(.75, Math.max(blink, .7 * p)); tsTex = v > .01 ? LTX.PX : null; tsOpen = tsTex ? 1 : 0; tsBr = v; }
+      tsRim = .2 + (lv > 1 && tex ? .14 : 0) + .4 * Math.min(1, fl + p + blink);   // (the bezel lights with its picture: a wave's shape reads across the wall)
     }
     /* the camera: frontal, one eased move a phrase between these (x in tubes, distance as a share): a push in, a
        slide right, a pull back to centre, a slide left, home. The KN turns with the slides (an orbit about it) */
-    const KF = [[0, 1], [0, .94], [.25, .94], [0, 1.03], [-.25, 1.03], [0, 1]];
+    const KF = [[0, 1], [0, .94], [.25, .94], [0, 1.03], [-.5, 1.06], [0, 1]];
     let LZM = 1;
     function wallCam(L, o){
       const Q = L < LS ? 0 : (L - LS) % LP, p = Math.min(4, Math.floor(Q / PH)), u = s5((Q - p * PH) / PH), A = KF[p], Z = KF[p + 1], cf = h * 1.05;
