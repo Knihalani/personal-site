@@ -1041,6 +1041,14 @@ M.createTerminal = function createTerminal(opts){
   def('gh', linkCmd('gh', 'the source of this site, on GitHub'));
   def('linkedin', linkCmd('linkedin', 'LinkedIn'));
   def('x', linkCmd('x', 'X (Twitter)'));
+  /* simple: the same facts as one plain HTML page (build.py writes /simple); the claude.ai preview goes to the live one */
+  def('simple', { g: 'read', desc: 'a plain page: about, links and contact', usage: 'simple', run(argv, io){
+    const own = /^https?:$/.test(location.protocol) && !/claude(usercontent)?\.(ai|com)$/i.test(location.hostname);
+    const url = own ? '/simple' : 'https://kaiav.dev/simple';
+    io.write('opening the plain page...\n', 'dim');
+    try { if (own){ location.assign(url); return; } } catch (e){}
+    if (!openTarget(url)) io.write(url + '\n', 'b');
+  } });
   def('contact', { g: 'read', desc: 'email addresses', usage: 'contact', run(argv, io){
     if (!io.tty){ io.write(EMAILS.map(e => pad(e.label, 20) + e.email).join('\n') + '\n'); return; }
     if (TAP){   // phones: each address with its two actions, and the profiles under them
@@ -1972,7 +1980,7 @@ M.createTerminal = function createTerminal(opts){
         PANEL3.set([0, 0, W, 0, W, a1 - gp, 0, a0 - gp, 0, a0 + gp, W, a1 + gp, W, b1 - gp, 0, b0 - gp, 0, b0 + gp, W, b1 + gp, W, h, 0, h]);
         PANEL2.set([0, 0, W, 0, W, h * .44 - gp, 0, h * .56 - gp, 0, h * .56 + gp, W, h * .44 + gp, W, h, 0, h]);
       }
-      VW = tall ? [-1, 1, -2, 2] : [-3, 3, -1, 1];
+      VW = tall ? [-2, 1, -2, 2] : [-2, 2, 0, 1]; BOARD = tall ? [[1, 'THE'], [0, 'GOAT'], [-1, '?']] : [[1, 'THE'], [0, 'GOAT?']];
       makeTex();
     }
 
@@ -2022,12 +2030,20 @@ M.createTerminal = function createTerminal(opts){
       JOBS.push(() => { TX_J = mk(HW, HH, (c, w, hh) => { texWord(c, LO.J, w, hh, .5, .52, hh * .42); texWord(c, LO.cof, w, hh, .8, .1, hh * .84); }); });
       JOBS.push(() => { TX_E = mk(HW, HH, (c, w, hh) => { texWord(c, LO.eden, w, hh, .8, .3, hh * .44); texWord(c, LO.fdr, w, hh, .7, .1, hh * .76); }); });
       JOBS.push(() => { TX_KN = mk(HW, HH, (c, w, hh) => texKN(c, w, hh, 4)); });
-      /* the video wall: THE GOAT? across the tubes it covers (VW: its grid box) */
+      /* the video wall: THE GOAT? as a flip-board, one letter to a tube (VW: its grid box; BOARD: a row of the box ->
+         its text). Wide: THE over GOAT?, centred on five columns; tall: THE / GOAT / ? set left on four, like a
+         departures board. No letter crosses the gap between two tubes */
       const vw = VW, pw = (vw[1] - vw[0] + 1) * GX - (GX - TW), ph = (vw[3] - vw[2] + 1) * GY - (GY - TH), sc = 1100 / Math.max(pw, ph);
       JOBS.push(() => { TX_VW = mk(pw * sc, ph * sc, (c, w, hh) => {
         c.fillStyle = SH[si(.03)]; c.fillRect(0, 0, w, hh);
-        if (!tall){ texWord(c, LO.the, w, hh, .3, .18, hh * .16); texWord(c, mkLine('GOAT?'), w, hh, .94, .62, hh * .62); }
-        else { texWord(c, LO.the, w, hh, .5, .13, hh * .29); texWord(c, LO.goat, w, hh, .92, .14, hh * .5); texWord(c, LO.q, w, hh, .5, .14, hh * .71); }   // (tall: one row of tiles each, the middle three, so no letter straddles a gap)
+        const nc = vw[1] - vw[0] + 1;
+        for (const [j, t] of BOARD){
+          const L0 = mkLine('W'), u = uFit(L0, TW * sc * .62, TH * sc * .7), c0 = vw[0] + (tall ? 0 : Math.floor((nc - t.length) / 2));
+          for (let k = 0; k < t.length; k++){
+            const L = mkLine(t[k]), xc = ((c0 + k - vw[0]) * GX + TW / 2) * sc, yc = ((vw[3] - j) * GY + TH / 2) * sc;
+            vlineC(L, xc, yc + 3 * u, u, null, 1);
+          }
+        }
       }); });
       VWS = sc;
     }
@@ -2101,7 +2117,7 @@ M.createTerminal = function createTerminal(opts){
     /* ---- the wall of tubes: a grid on the plane z = 0, a camera that flies it ---- */
     const TW = 4, TH = 3, GX = 4.9, GY = 3.9, NI = 12, NJ = 5, BZ = .34;
     const JI = 3, JJ = -1, EI = -3, EJ = 1;          // the J tube and the EDEN tube
-    let VW = [-3, 3, -1, 1], VWS = 1;                 // the video wall's grid box, and its picture's px a unit
+    let VW = [-2, 2, 0, 1], VWS = 1, BOARD = [];                 // the video wall's grid box, and its picture's px a unit
     const CAM = { x: 0, y: 0, z: -10, yaw: 0, pit: 0, rol: 0 }, PCAM = { x: 0, y: 0, z: -10, yaw: 0, pit: 0, rol: 0 };
     let cyw = 1, syw = 0, cpt = 1, spt = 0, crl = 1, srl = 0, camX = 0, camY = 0, camZ = 0, camF = 1, pjx = 0, pjy = 0, pjz = 0;
     function setCam(c){ cyw = Math.cos(c.yaw); syw = Math.sin(c.yaw); cpt = Math.cos(c.pit); spt = Math.sin(c.pit); crl = Math.cos(c.rol); srl = Math.sin(c.rol); camX = c.x; camY = c.y; camZ = c.z; }

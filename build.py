@@ -189,9 +189,42 @@ CSP = '; '.join([
 WEB = out != root   # the repo-root build (index.html, site.html) skips the deploy-only files
 for f in (root / 'static').glob('*') if WEB else []: shutil.copyfile(f, out / f.name)
 today = datetime.date.today().isoformat()
+# /simple: the same facts as one plain, fast, script-free page (the terminal's `simple` command opens it)
+SIMPLE_CSS = (":root{color-scheme:light dark;--bg:#fbfaf7;--fg:#1d1c1a;--dim:#5f5c56;--rule:#e2dfd8;--link:#1f5f3a}"
+  "@media (prefers-color-scheme:dark){:root{--bg:#0d110d;--fg:#e4eadf;--dim:#9aa596;--rule:#243024;--link:#8dffb4}}"
+  "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}"
+  "main{max-width:40rem;margin:0 auto;padding:clamp(28px,6vw,64px) max(20px,env(safe-area-inset-right)) 56px max(20px,env(safe-area-inset-left))}"
+  "h1{font-size:clamp(30px,6vw,40px);line-height:1.15;margin:0 0 4px;letter-spacing:-.01em}.role{color:var(--dim);margin:0 0 36px}"
+  "h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:40px 0 10px;padding-top:20px;border-top:1px solid var(--rule)}"
+  "ul{padding-left:1.1em;margin:0}li{margin:.25em 0}p{margin:.5em 0}a{color:var(--link);text-underline-offset:3px}"
+  "dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 18px}dt{color:var(--dim)}dd{margin:0}"
+  ".back{display:inline-block;margin-top:44px;color:var(--dim)}a:focus-visible{outline:2px solid var(--link);outline-offset:3px;border-radius:2px}")
+def _links(): return [(n, u) for n, u in (('LinkedIn', LK.get('linkedin')), ('X', LK.get('x')), ('GitHub', LK.get('github'))) if u]
+SIMPLE = '\n'.join([
+  '<!doctype html>', '<html lang="en">', '<head>', '<meta charset="utf-8">',
+  '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">',
+  f'<title>{e(NAME)}</title>', f'<meta name="description" content="{e(DESC)}">',
+  f'<link rel="canonical" href="{SITE}/simple">', '<meta name="robots" content="index, follow">',
+  '<meta name="theme-color" content="#0d110d" media="(prefers-color-scheme: dark)">', '<meta name="theme-color" content="#fbfaf7" media="(prefers-color-scheme: light)">',
+  '<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png">', '<link rel="apple-touch-icon" href="/apple-touch-icon.png">',
+  f'<meta property="og:type" content="profile">', f'<meta property="og:title" content="{e(NAME)}">', f'<meta property="og:description" content="{e(ROLE)}">',
+  f'<meta property="og:url" content="{SITE}/simple">', f'<meta property="og:image" content="{SITE}/og.png">', '<meta name="twitter:card" content="summary_large_image">',
+  f'<style>{SIMPLE_CSS}</style>', '</head>', '<body>', '<main>',
+  f'<h1>{e(NAME)}</h1>', f'<p class="role">{e(ROLE)}</p>',
+  '<h2>About</h2>', '<ul>' + ''.join(f'<li>{e(b)}</li>' for b in BULLETS) + '</ul>',
+  f'<h2>{e(J["title"])}</h2>', f'<p><strong>{e(J["role"])}.</strong> {e(J["line"][:1].upper() + J["line"][1:])}.</p>'] +
+  [f'<p>{e(p)}</p>' for p in J['body'].split('\n\n')] +
+  ['<dl>' + ''.join(f'<dt>{e(k)}</dt><dd>{e(v)}</dd>' for k, v in J.get('facts', [])) + '</dl>',
+   f'<p><a href="{e(J["url"])}">{e(J["url"].split("//")[-1])}</a></p>',
+   f'<h2>{e(E["title"])}</h2>', f'<p><strong>{e(E["role"])}.</strong> {e(E["line"])}.</p>', f'<p>{e(E["body"])}</p>',
+   '<h2>Contact</h2>', '<dl>' + ''.join(f'<dt>{e(c["label"])}</dt><dd><a href="mailto:{e(c["email"])}">{e(c["email"])}</a></dd>' for c in C['contact']) + '</dl>',
+   '<h2>Links</h2>', '<ul>' + ''.join(f'<li><a rel="me" href="{e(u)}">{e(n)}</a></li>' for n, u in _links()) + '</ul>',
+   '<a class="back" href="/">&larr; back to the terminal</a>', '</main>', '</body>', '</html>', ''])
+WEB and (out / 'simple.html').write_text(SIMPLE, encoding='utf-8')
 WEB and (out / 'robots.txt').write_text(f'User-agent: *\nAllow: /\n\nSitemap: {SITE}/sitemap.xml\n', encoding='utf-8')
 WEB and (out / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    f'  <url><loc>{SITE}/</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>\n</urlset>\n', encoding='utf-8')
+    f'  <url><loc>{SITE}/</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>\n'
+    f'  <url><loc>{SITE}/simple</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>\n</urlset>\n', encoding='utf-8')
 WEB and (out / 'site.webmanifest').write_text(json.dumps({'name': NAME, 'short_name': NAME.split()[0], 'start_url': '/', 'display': 'standalone',
     'background_color': '#0a0f0a', 'theme_color': '#0a0f0a',
     'icons': [{'src': '/icon-512.png', 'sizes': '512x512', 'type': 'image/png'}, {'src': '/apple-touch-icon.png', 'sizes': '180x180', 'type': 'image/png'}]}, indent=1), encoding='utf-8')
