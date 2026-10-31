@@ -79,7 +79,17 @@ function defer(job){
 /* finish every deferred job now (tests, or a caller that needs the textures) */
 function flushJobs(){ while (jobs.length){ try { if (jobs[0].next().done) jobs.shift(); } catch (e){ jobs.shift(); } } }
 function swatch(rgb){ const [c, x] = cnv(1, 1); x.fillStyle = `rgb(${rgb[0] * 255 | 0},${rgb[1] * 255 | 0},${rgb[2] * 255 | 0})`; x.fillRect(0, 0, 1, 1); return c; }
-function swap(t, c){ if (!t) return; t.image = c; t.dispose(); t.needsUpdate = true; }
+function swap(t, c){ if (!t) return; t.image = c; t.dispose(); t.needsUpdate = true; gpuOnly(t); }
+/* A painted canvas is needed only until the GPU has it: nothing repaints these, so once every texture drawing from it
+   has uploaded it (clones with their own wrap modes upload separately), its pixels (often a second, GPU-side copy) are
+   given back. A texture that is never drawn just keeps its canvas */
+const owed = new Map();   // canvas -> the textures that have still to upload it
+function gpuOnly(t){
+  const c = t.image; if (!c || !c.getContext || c.width * c.height < 64) return t;
+  let s = owed.get(c); if (!s) owed.set(c, s = new Set()); s.add(t);
+  t.onUpdate = () => { t.onUpdate = null; const s = owed.get(c); if (!s || t.image !== c) return; s.delete(t); if (!s.size){ owed.delete(c); c.width = c.height = 1; } };
+  return t;
+}
 /* lazyPaint: like paint, but returns textures at once (a mean-colour swatch) and paints them in deferred slices.
    done(c, hc) runs after the swap (e.g. to update clones). */
 function lazyPaint(w, h, f, withHeight, aniso, done){
@@ -186,7 +196,13 @@ function rod(a, b, r, mat, seg = 8){ const d = new V3().subVectors(b, a), L = d.
 /* ================================================================================================= */
 M.createScene = function createScene(container){
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  // no WebGL: say so before three.js does (it logs a console error); with WebGL the context made here, on three's own
+  // attributes, is the one three picks up from the canvas
+  const cv = document.createElement('canvas'); cv.style.display = 'block';   // (as three's own canvas)
+  const CTX = { alpha: true, depth: true, stencil: true, antialias: true, premultipliedAlpha: true,
+    preserveDrawingBuffer: false, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false };
+  if (!['webgl2', 'webgl', 'experimental-webgl'].some(k => { try { return cv.getContext(k, CTX); } catch (e){ return false; } })) throw new Error('no webgl');
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
   if (!renderer.capabilities.isWebGL2 && !renderer.getContext()) throw new Error('no webgl');
   /* pixel ratio: up to 2, but never more than ~3.7 MP of render target (a 1920x1080 window on a 2x display renders
      at ~1.33x; 1280x800 at 2x stays near 1.9x). The tube text is still magnified at rest, so it stays sharp. */
@@ -206,6 +222,7 @@ M.createScene = function createScene(container){
   const ANISO = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
   const scene = new THREE.Scene();
+  scene.matrixWorldAutoUpdate = false;   // render() updates the matrices itself (hideNearEye needs them first): once a frame, not twice
   scene.background = lin(0x050608);
   scene.fog = new THREE.FogExp2(lin(0x06070a), .16);
   const camera = new THREE.PerspectiveCamera(33, 16 / 10, .02, 30);
@@ -347,7 +364,7 @@ M.createScene = function createScene(container){
   { const P = glassGeo.attributes.position, R = .42, z0 = Math.sqrt(R * R - (GW / 2) ** 2 - (GH / 2) ** 2);
     for (let i = 0; i < P.count; i++){ const x = P.getX(i), y = P.getY(i); P.setZ(i, Math.sqrt(R * R - x * x - y * y) - z0); }
     glassGeo.computeVertexNormals(); }
-  const GLASS_BULGE = .42 - Math.sqrt(.42 * .42 - (GW / 2) ** 2 - (GH / 2) ** 2);
+  const GLASS_R = .42, GLASS_Z0 = Math.sqrt(GLASS_R * GLASS_R - (GW / 2) ** 2 - (GH / 2) ** 2), GLASS_BULGE = GLASS_R - GLASS_Z0;
   const blankTex = new THREE.DataTexture(new Uint8Array([10, 13, 10, 255]), 1, 1); blankTex.needsUpdate = true;
   const screenU = {
     uTex: { value: blankTex }, uHas: { value: 0 }, uRes: { value: new THREE.Vector2(1024, 768) }, uTime: { value: 0 },
@@ -873,7 +890,7 @@ M.createScene = function createScene(container){
     const [c, x] = cnv(128, 128), g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
     g.addColorStop(0, 'rgba(255,220,170,.6)'); g.addColorStop(.12, 'rgba(255,196,130,.22)'); g.addColorStop(.4, 'rgba(255,170,100,.05)'); g.addColorStop(1, 'rgba(255,160,90,0)');
     x.fillStyle = g; x.fillRect(0, 0, 128, 128);
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(c, true, 1), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false, toneMapped: false }));
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: gpuOnly(tex(c, true, 1)), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false, toneMapped: false }));
     sp.scale.setScalar(.3); sp.position.copy(bulbPos).addScaledVector(lampDir, .05); sp.renderOrder = 3; sp.raycast = () => {}; scene.add(sp); return sp;
   })();
   /* ---- the grade: one full-screen pass over the frame, blended in place (no render target): a soft vignette and a
@@ -928,7 +945,7 @@ M.createScene = function createScene(container){
     const labelC = (title) => { const [c, x] = cnv(256, 200); x.fillStyle = '#ece4d2'; x.fillRect(0, 0, 256, 200);
       x.fillStyle = '#b8413a'; x.fillRect(0, 0, 256, 14); x.strokeStyle = 'rgba(70,90,140,.35)'; x.lineWidth = 1.5;
       for (let y = 50; y < 200; y += 30){ x.beginPath(); x.moveTo(10, y); x.lineTo(246, y); x.stroke(); }
-      x.fillStyle = '#20263a'; x.font = 'italic 600 30px "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive'; x.fillText(title, 16, 74); return tex(c); };
+      x.fillStyle = '#20263a'; x.font = 'italic 600 30px "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive'; x.fillText(title, 16, 74); return gpuOnly(tex(c)); };
     const diskM = new THREE.MeshStandardMaterial({ color: lin(0x26282c), roughness: .45 });
     const shutM = new THREE.MeshStandardMaterial({ color: lin(0xb9bdc2), roughness: .3, metalness: 1 });
     const disk = (title, x, y, z, ry) => { const d = new THREE.Group();
@@ -1118,10 +1135,13 @@ M.createScene = function createScene(container){
   }
   function applyLamp(dt){
     const L = lampS.level, warm = sstep(.2, 1, L), off = 1 - sstep(0, .8, L);
-    lamp.intensity = 5.6 * L; lamp.visible = L > .002;
+    // a dark lamp is a zero-intensity light, never an invisible one: hiding a light changes the light count every lit
+    // shader is built for, so each switch (and the reveal, which starts dark) would compile a second set of programs
+    const lit = L > .002;
+    lamp.intensity = lit ? 5.6 * L : 0;
     lamp.color.copy(LAMP_DIM).lerp(LAMP_COL, warm);
-    bounce.intensity = .2 * L; keyBounce.value = KEY_BOUNCE * L; wash.intensity = WASH * L; wash.visible = L > .002;
-    halo.material.opacity = Math.pow(L, 1.3); halo.visible = L > .002;
+    bounce.intensity = .2 * L; keyBounce.value = KEY_BOUNCE * L; wash.intensity = lit ? WASH * L : 0;
+    halo.material.opacity = Math.pow(L, 1.3); halo.visible = lit;
     shadeInnerMat.color.setScalar(.03 + .97 * L); shadeLipMat.emissiveIntensity = .35 * L; shadeRim.value = L;
     _c.copy(BULB_DIM).lerp(BULB_HOT, warm).multiplyScalar(Math.min(1, L * 1.4));
     bulbMat.color.setRGB(.07 + _c.r, .065 + _c.g, .06 + _c.b);
@@ -1131,6 +1151,21 @@ M.createScene = function createScene(container){
     lampS.adapt += (off - lampS.adapt) * (1 - Math.exp(-dt * (off > lampS.adapt ? .9 : 4)));
     moon.intensity = .18 + .45 * lampS.adapt; hemi.intensity = .34 + .16 * lampS.adapt;
     renderer.toneMappingExposure = 1.05 + .75 * lampS.adapt;
+  }
+
+  /* shader warm-up: renderer.compile() with every material but one held back, one idle slice at a time */
+  function warmUp(){
+    const ric = window.requestIdleCallback || (f => setTimeout(f, 50)), done = new Set(), held = [];
+    const step = () => {
+      let m = null; scene.traverse(o => { if (!m && o.material && !done.has(o.material)) m = o.material; });
+      if (!m || renderer.getContext().isContextLost()) return;
+      done.add(m);
+      scene.traverse(o => { if (o.material && o.material !== m){ held.push(o, o.material); o.material = null; } });
+      try { renderer.compile(scene, camera); } catch (e){}
+      for (let i = 0; i < held.length; i += 2) held[i].material = held[i + 1];
+      held.length = 0; ric(step);
+    };
+    ric(step);
   }
 
   /* ================= API ================= */
@@ -1143,7 +1178,7 @@ M.createScene = function createScene(container){
      motion, nothing new on the tube) is drawn at ~20 fps so the flicker keeps breathing at a fraction of
      the GPU cost. The shadow map re-renders only while hands or keys move, plus a slow refresh for idle fidgets. */
   let sinceMove = 0, sinceRender = 9, screenDirty = true, shadowAge = 9, drew = false, warmed = false;
-  const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
+  const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2(), _inv = new THREE.Matrix4(), _o = new V3(), _d = new V3();
   const api = {
     renderer, scene, camera, screenAspect: SCREEN_ASPECT,
     setScreenCanvas(c){
@@ -1163,8 +1198,14 @@ M.createScene = function createScene(container){
       const r = renderer.domElement.getBoundingClientRect(); if (!r.width || !r.height) return null;
       _ndc.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
       _ray.setFromCamera(_ndc, camera);
-      const hit = _ray.intersectObject(glass, false)[0]; if (!hit || !hit.uv) return null;
-      const x = hit.uv.x - .5, y = hit.uv.y - .5, b = 1 + .055 * (x * x + y * y);
+      // the glass is a cap of a sphere (radius GLASS_R, centred GLASS_Z0 behind its plane): hit it analytically in its
+      // own frame rather than testing the 2,400 triangles of its mesh on every pointer move (the same answer to ~1e-5)
+      _inv.copy(glass.matrixWorld).invert();
+      _o.copy(_ray.ray.origin).applyMatrix4(_inv); _o.z += GLASS_Z0; _d.copy(_ray.ray.direction).transformDirection(_inv);
+      const hb = _o.dot(_d), hc = _o.lengthSq() - GLASS_R * GLASS_R, disc = hb * hb - hc; if (disc < 0) return null;
+      const ht = -hb - Math.sqrt(disc); if (ht < 0) return null;
+      const hx = _o.x + _d.x * ht, hy = _o.y + _d.y * ht; if (Math.abs(hx) > GW / 2 || Math.abs(hy) > GH / 2) return null;
+      const x = hx / GW, y = hy / GH, b = 1 + .055 * (x * x + y * y);
       const I = screenU.uInset.value, u = (x * b + .5 - I.x) / (1 - 2 * I.x), v = (y * b + .5 - I.y) / (1 - 2 * I.y);
       if (u < 0 || u > 1 || v < 0 || v > 1) return null;
       return { u, v: 1 - v };
@@ -1232,8 +1273,9 @@ M.createScene = function createScene(container){
       } else {
         screenU.uWarm.value = 1;
         // once the reveal is over, compile every material that is still off-screen (desk, keys, room) on idle time,
-        // so the first lean back does not stall on shader compiles
-        if (!warmed){ warmed = true; const ric = window.requestIdleCallback || (f => setTimeout(f, 50)); ric(() => { try { renderer.compile(scene, camera); } catch (e){} }); }
+        // so the first lean back does not stall on shader compiles: one material per idle slice, so no single task
+        // waits on several shader links (each can take tens of ms on some drivers)
+        if (!warmed){ warmed = true; warmUp(); }
       }
       applyLamp(dt);
       if (intro.t < intro.end + .5) renderer.toneMappingExposure *= sstep(0, .6, intro.t);
@@ -1262,7 +1304,9 @@ M.createScene = function createScene(container){
       // shadows: every frame while hands/keys/lamp move; otherwise a slow refresh (hands fidget), slower still at rest
       const leaned = sstep(0, 1, clamp(-pitchS.x / LOOK.down, 0, 1));
       shadowAge++;
-      if (sinceMove < 1.6 || shadowAge > (leaned > .05 ? 3 : 20)){ renderer.shadowMap.needsUpdate = true; shadowAge = 0; }
+      // (only the lamp casts shadows: while it is dark its map is never sampled to any effect, so it is not redrawn)
+      if (lampS.level <= .002) renderer.shadowMap.needsUpdate = false;
+      else if (sinceMove < 1.6 || shadowAge > (leaned > .05 ? 3 : 20)){ renderer.shadowMap.needsUpdate = true; shadowAge = 0; }
       scene.updateMatrixWorld(); hideNearEye(); renderer.render(scene, camera);
     },
     resize(w, h){

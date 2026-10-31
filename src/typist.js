@@ -988,10 +988,25 @@ M.createTypist = function createTypist(api){
     skinStats.push({ verts: nv, tris: SN.idx.length / 3, nets: Math.round(tSN), ms: Math.round(now() - t0) });
   }());
   for (const g of skinJobs) g.next();            // set up now: runs to the 'setup' yield, so the bind pose is the home pose
-  const compileAll = () => { if (api.renderer && api.scene && api.camera) try { api.renderer.compile(api.scene, api.camera); } catch (e){} };
+  /* compile every shader the scene still lacks (the room and desk, off-screen at first), one material per step:
+     renderer.compile() with the other materials held back, so no slice waits on more than one shader link */
+  function* compileAll(){
+    const r = api.renderer, sc = api.scene, cam = api.camera; if (!r || !sc || !cam) return;
+    const done = new Set(), held = [];
+    for (;;){
+      let m = null; sc.traverse(o => { if (!m && o.material && !done.has(o.material)) m = o.material; });
+      if (!m) return;
+      done.add(m);
+      sc.traverse(o => { if (o.material && o.material !== m){ held.push(o, o.material); o.material = null; } });
+      try { r.compile(sc, cam); } catch (e){}
+      for (let i = 0; i < held.length; i += 2) held[i].material = held[i + 1];
+      held.length = 0;
+      yield;
+    }
+  }
   if (api.defer){
     // the scene's deferred queue (slices between frames, after the room's textures): one scheduler for all start-up work
-    api.defer(function*(){ for (const g of skinJobs) yield* g; compileAll(); });
+    api.defer(function*(){ for (const g of skinJobs) yield* g; yield* compileAll(); });
   } else {
     // then mesh in ~6 ms slices between frames; a hidden tab or no idle time still finishes (timeout)
     const idle = window.requestIdleCallback ? (f => requestIdleCallback(f, { timeout: 60 })) : (f => setTimeout(f, 16));
@@ -999,7 +1014,7 @@ M.createTypist = function createTypist(api){
     const slice = () => {
       const end = now() + 8;
       while (j < skinJobs.length && now() < end){ if (skinJobs[j].next().done) j++; }
-      if (j < skinJobs.length) idle(slice); else compileAll();
+      if (j < skinJobs.length) idle(slice); else for (const _ of compileAll());
     };
     setTimeout(() => idle(slice), 250);
   }

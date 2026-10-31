@@ -23,12 +23,16 @@ M.dressRoom = function (api){
     const g = new THREE.ExtrudeGeometry(rrect(w - 2 * b, d - 2 * b, Math.max(.0005, r - b)), { depth: h - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 3, curveSegments: 6 });
     g.rotateX(-Math.PI / 2); g.translate(0, -h / 2 + b, 0); g.computeVertexNormals(); return g;
   }
-  function canvasTex(w, h, draw, repeat){ const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
-    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; if (repeat){ t.wrapS = t.wrapT = THREE.RepeatWrapping; } return t; }
+  // painted once: when the GPU has the pixels, the canvas gives its memory back (keep: the clock face, redrawn every second)
+  function canvasTex(w, h, draw, repeat, keep){ const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; if (repeat){ t.wrapS = t.wrapT = THREE.RepeatWrapping; }
+    if (!keep) t.onUpdate = () => { if (t.userData.wait) return; t.onUpdate = null; c.width = c.height = 1; };
+    return t; }
   // textures lettered in a web font (Caveat, IBM Plex Mono) are painted now with whatever is loaded, then repainted
   // once the font arrives, so a slow font never leaves a note in the fallback hand
   const fontJobs = [];
-  function fontTex(w, h, draw){ const t = canvasTex(w, h, draw); fontJobs.push(() => { const c = t.image, x = c.getContext('2d'); x.clearRect(0, 0, w, h); draw(x, w, h); t.needsUpdate = true; }); return t; }
+  function fontTex(w, h, draw){ const t = canvasTex(w, h, draw); t.userData.wait = true;   // (its canvas is kept until the repaint)
+    fontJobs.push(() => { const c = t.image, x = c.getContext('2d'); x.clearRect(0, 0, w, h); draw(x, w, h); t.userData.wait = false; t.needsUpdate = true; }); return t; }
   function noiseFill(x, w, h, base, amt, n){ x.fillStyle = base; x.fillRect(0, 0, w, h); for (let i = 0; i < n; i++){ const a = rnd() * amt; x.fillStyle = rnd() < .5 ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a * .6})`; x.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 2, 1 + rnd() * 2); } }
   // one material per look: identical calls share it, so the meshes can be merged into one draw (api.mergeStatic)
   const mats = new Map();
@@ -186,7 +190,7 @@ M.dressRoom = function (api){
     mesh(new THREE.PlaneGeometry(.056, .04), new THREE.MeshStandardMaterial({ map: grille, roughness: .7 }), rc, -.036, .031, .0352).castShadow = false;
     const SEG = { a: [0, 0, 1, 0], b: [1, 0, 1, 1], c: [1, 1, 1, 2], d: [0, 2, 1, 2], e: [0, 1, 0, 2], f: [0, 0, 0, 1], g: [0, 1, 1, 1] };
     const DIG = ['abcdef', 'bc', 'abdeg', 'abcdg', 'bcfg', 'acdfg', 'acdefg', 'abc', 'abcdefg', 'abcdfg'];
-    const face = canvasTex(256, 96, () => {});
+    const face = canvasTex(256, 96, () => {}, false, true);
     const draw = () => { const d = new Date(), hh = d.getHours(), mm = d.getMinutes(), c = face.image.getContext('2d');
       c.fillStyle = '#0d0905'; c.fillRect(0, 0, 256, 96);
       const digits = [hh >= 10 ? (hh / 10 | 0) : -1, hh % 10, mm / 10 | 0, mm % 10], X = [20, 70, 140, 190];
