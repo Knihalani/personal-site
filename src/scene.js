@@ -1169,7 +1169,7 @@ M.createScene = function createScene(container){
   }
 
   /* ================= API ================= */
-  let frames = 0, slowAcc = 0, perfT = 0, sag = 0;
+  let frames = 0, slowAcc = 0, perfT = 0, sag = 0, lastT = null;
   /* the reveal: from black, the tube powers on (a bright line opens into the raster) while the lamp glows up and
      the eye adapts. ~1.3 s; the first keystroke or a lean skips to the end. Reduced motion: no reveal. */
   const intro = { t: REDUCED ? 9 : 0, end: 1.35 };
@@ -1244,6 +1244,10 @@ M.createScene = function createScene(container){
     update(dt, t){
       if (intro.t < intro.end && pitchS.t < -.2) skipIntro();   // leaning back skips the reveal too
       const drewLast = drew; drew = false;
+      // wdt: the wall time since the last frame (t is main.js's wall clock). dt is capped at 50 ms for the springs;
+      // the reveal, the settle-in and the frame-time check run on wdt, so a GPU at a few fps neither plays them in slow
+      // motion nor takes 50 frames (a minute) to notice it is slow
+      const wdt = lastT == null ? dt : clamp(t - lastT, 0, 1); lastT = t;
       sinceMove += dt; sinceRender += dt;
       if (Math.abs(yawS.v) + Math.abs(pitchS.v) > 2e-3 || Math.abs(yawS.t - yawS.x) + Math.abs(pitchS.t - pitchS.x) > 1e-3) sinceMove = 0;
       crit(yawS, 6, dt); crit(pitchS, 5.6, dt);   // critically damped: settles in ~0.8 s, never overshoots
@@ -1259,13 +1263,13 @@ M.createScene = function createScene(container){
       }
       // tube: flicker, roll, and how much light the text throws into the room
       screenU.uTime.value = t; cityTime.value = REDUCED ? 40 : t; gradeU.uTime.value = REDUCED ? 0 : t;
-      if (push.t < push.dur){ push.t += dt * (push.fast ? 2.4 : 1); sinceMove = 0; }
+      if (push.t < push.dur){ push.t += wdt * (push.fast ? 2.4 : 1); sinceMove = 0; }
       screenU.uFlicker.value = REDUCED ? 1 : 1 + .0045 * Math.sin(t * 2 * Math.PI * 7.7) + .003 * Math.sin(t * 2 * Math.PI * 1.3) + .002 * (Math.random() - .5);
       lumTimer -= dt; if (lumDirty && !lumFed && lumTimer <= 0){ lumDirty = false; lumTimer = 1.2; sampleLum(); }   // a GPU->CPU readback of the terminal canvas: keep it rare
       lum += (lumTarget - lum) * (1 - Math.exp(-dt * 4));
       lampLevel(dt);
       if (intro.t < intro.end + .5){
-        intro.t += dt; const it = intro.t;
+        intro.t += wdt; const it = intro.t;
         // the lamp's filament glows up a beat after the tube; the eye opens from black over the first half second
         lampS.level = Math.min(lampS.level, lampS.on ? sstep(.25, 1.25, it) : lampS.level);
         screenU.uWarm.value = clamp(it / 1.1, 0, 1);
@@ -1291,8 +1295,8 @@ M.createScene = function createScene(container){
       bloomU.uLum.value = (.04 + .5 * Math.min(lum, .7)) * screenU.uHas.value * screenU.uFlicker.value * screenU.uBright.value * sstep(.3, 1, screenU.uWarm.value) * (1 + .5 * lampS.adapt);
       // keep it smooth on modest GPUs: step the pixel ratio down if frames run long
       // only frames that were actually drawn count (idle frames are throttled), and not during the reveal
-      if (drewLast && intro.t > intro.end){ perfT += dt; frames++; if (dt > .026) slowAcc++; }
-      if (perfT > 2.5){ if (frames > 20 && slowAcc / frames > .5 && pixelRatio > 1){ pixelRatio = prCap = Math.max(1, pixelRatio - .25); renderer.setPixelRatio(pixelRatio);
+      if (drewLast && intro.t > intro.end){ perfT += wdt; frames++; if (wdt > .026) slowAcc++; }
+      if (perfT > 2.5){ if (frames >= 5 && slowAcc / frames > .5 && pixelRatio > 1){ pixelRatio = prCap = Math.max(1, pixelRatio - .25); renderer.setPixelRatio(pixelRatio);
           const s = renderer.getSize(new THREE.Vector2()); renderer.setSize(s.x, s.y, false); } perfT = 0; frames = 0; slowAcc = 0; }
     },
     render(){
