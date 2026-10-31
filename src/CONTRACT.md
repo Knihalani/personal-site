@@ -127,9 +127,11 @@ hit-stop with a white ring shockwave, the land). Each act has its own way of put
 bands, constellations, flip tiles). Impact frames last two or three frames over a short hit-stop (the picture's clock
 holds, then catches up); one is a bright full frame (the slam), the rest dark field with bright line art. Motion blur is real (sub-frame samples averaged). Then a loop in 8 s movements, the wall of CRTs most of the time
 (a camera whose shot changes every ~2.7 s: trucks, push-ins, a look up from below, a dolly past, a short orbit; waves of
-channel changes rippling across the tubes; every 1.4 s a tube beside the KN comes forward with a word: KN, KAIAV, J,
-EDEN, 16, AGENTS, CONTEXT, JUST START, the KN hopping with it), with the J globe and the Eden constellation as
-interludes and the set now and then; each change is one full roll of the KN in the picture plane. A glint every four
+channel changes rippling across the tubes; every 2 s, one at a time and sides alternating, a tube beside the KN
+comes forward as a plate with a word: KN, KAIAV, J, EDEN, 16, AGENTS, CONTEXT, JUST START, kept inside the frame and
+clear of the KN, the KN hopping with it; a dark halo behind the KN), with the J globe and the Eden constellation as
+interludes and the set now and then; every other change is one full roll of the KN in the picture plane, the ones
+between a hop with a tilt. A glint every four
 beats, and a sine scroller of `MAC.CONTENT` facts (the name, J, Eden) in the intro's vector type. Keys glint the type, or give the
 logo one more smooth turn and a hop; reduced motion gets one still frame. It is silent. It animates at 30 fps through
 the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's real age, s, from its first frame) and
