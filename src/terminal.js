@@ -1432,8 +1432,8 @@ M.createTerminal = function createTerminal(opts){
        4.4  out of the tube in a barrel roll, along the wall, and into the EDEN tube
        5.2  impact (two slashed panels: EDEN / FOUNDER); inside, a turning graph of agents (FOUNDER slams under it at 5.3): EDEN and then AGENTS are
             drawn by constellations linking up node to node; 6.1 CONTEXT, squeezed in by brackets snapping shut
-       6.4  out to the whole wall, which goes dark, then lights column by column on sixteenths into THE GOAT?
-       7.2  impact: THE / GOAT / ? as three comic panels, frozen, then alive
+       6.4  out to the whole wall, which goes dark, then lights column by column on sixteenths into JUST START
+       7.2  impact: JUST / START / ! as three comic panels, frozen, then alive
        7.6  every tube flips to KN in a ripple from the middle, the camera pulls back; 8.0 the KN bursts out of the
             middle tube in wireframe; 8.4 impact (split: a crash zoom on a bevel | the KN as linework), chrome over the
             dimmed wall; a cut on every hit, the shots shortening: 8.8 a low hero angle, 9.2 a whip, 9.4 from above,
@@ -1444,8 +1444,9 @@ M.createTerminal = function createTerminal(opts){
             white ring shockwave, the land (a scale overshoot), a wave through the floor
      Hit-stops hold the picture's own clock (S) a few frames at each impact and let it catch up just after; the
      grid (cuts, hits) stays on the real clock. One bright event (the slam, three frames); every other impact
-     is dark field with bright line art. Then it loops: the logo breathes over the turning cylinder of bars, makes one
-     full turn at the top of each section, and a sine scroller runs along the floor. Everything that moves in the
+     is dark field with bright line art. Then it loops, in movements (see mvAt): the logo breathes over the turning
+     cylinder of bars, makes one full turn at the top of each section, and backdrops come and go behind it (the wall,
+     the globe, the constellation); a vector sine scroller runs along the floor. Everything that moves in the
      loop moves on springs and smooth curves. Keys add one more smooth turn and a small hop; the pointer leans it;
      a drag spins it. Under reduced motion: one still frame.
      The logo is a correct painter's renderer: back faces culled exactly (in the logo's own space), the two letters
@@ -1499,7 +1500,7 @@ M.createTerminal = function createTerminal(opts){
        beat (its film creeps on a few ms; the backdrop, the beat pulses and the glints keep moving on the real
        clock, SD); a quickening plays a camera move faster. Every one adds or saves whole half beats, so the hits
        stay on the 150 bpm grid; none falls in a hit-stop. Seen words: KAIAV NIHALANI, 16, CO-FOUNDER, YOUNG
-       FOUNDERS, GLOBAL, EDEN / FOUNDER, AGENTS, CONTEXT, THE GOAT? (each whole and still for 0.4 s or more, two
+       FOUNDERS, GLOBAL, EDEN / FOUNDER, AGENTS, CONTEXT, JUST START (each whole and still for 0.4 s or more, two
        words 0.55 s or more). The barrel roll out of J plays at its own speed (quickened, it smeared). The slam lands at 12.8 s */
     const SEG = [[1.15, .02, .22], [1.55, .02, .22], [1.95, 1.2, .6], [3.53, .008, .408], [3.86, .02, .42], [4.3, .02, .22],
       [5.54, .02, .42], [6.0, .02, .22], [6.32, .02, .22], [7.52, .02, .22], [7.6, .4, .2]];
@@ -1836,67 +1837,10 @@ M.createTerminal = function createTerminal(opts){
       G.globalAlpha = 1;
     }
 
-    /* ---- the scroller's font: 8 x 8, C64 style; the text baked once into a strip, with a drop shadow and its mirror ---- */
-    const FONT8 = {
-      A: '   ##   |  ####  | ##  ## | ###### | ##  ## | ##  ## | ##  ## ', B: ' #####  | ##  ## | ##  ## | #####  | ##  ## | ##  ## | #####  ',
-      C: '  ####  | ##  ## | ##     | ##     | ##     | ##  ## |  ####  ', D: ' ####   | ## ##  | ##  ## | ##  ## | ##  ## | ## ##  | ####   ',
-      E: ' ###### | ##     | ##     | ####   | ##     | ##     | ###### ', F: ' ###### | ##     | ##     | ####   | ##     | ##     | ##     ',
-      G: '  ####  | ##  ## | ##     | ## ### | ##  ## | ##  ## |  ####  ', H: ' ##  ## | ##  ## | ##  ## | ###### | ##  ## | ##  ## | ##  ## ',
-      I: '  ####  |   ##   |   ##   |   ##   |   ##   |   ##   |  ####  ', J: '   #### |    ##  |    ##  |    ##  |    ##  | ## ##  |  ###   ',
-      K: ' ##  ## | ## ##  | ####   | ###    | ####   | ## ##  | ##  ## ', L: ' ##     | ##     | ##     | ##     | ##     | ##     | ###### ',
-      M: ' ##   ##| ### ###| #######| ## # ##| ##   ##| ##   ##| ##   ##', N: ' ##  ## | ### ## | ###### | ###### | ## ### | ##  ## | ##  ## ',
-      O: '  ####  | ##  ## | ##  ## | ##  ## | ##  ## | ##  ## |  ####  ', P: ' #####  | ##  ## | ##  ## | #####  | ##     | ##     | ##     ',
-      Q: '  ####  | ##  ## | ##  ## | ##  ## | ##  ## |  ####  |    ### ', R: ' #####  | ##  ## | ##  ## | #####  | ####   | ## ##  | ##  ## ',
-      S: '  ####  | ##  ## | ##     |  ####  |     ## | ##  ## |  ####  ', T: ' ###### |   ##   |   ##   |   ##   |   ##   |   ##   |   ##   ',
-      U: ' ##  ## | ##  ## | ##  ## | ##  ## | ##  ## | ##  ## |  ####  ', V: ' ##  ## | ##  ## | ##  ## | ##  ## | ##  ## |  ####  |   ##   ',
-      W: ' ##   ##| ##   ##| ##   ##| ## # ##| #######| ### ###| ##   ##', X: ' ##  ## | ##  ## |  ####  |   ##   |  ####  | ##  ## | ##  ## ',
-      Y: ' ##  ## | ##  ## | ##  ## |  ####  |   ##   |   ##   |   ##   ', Z: ' ###### |     ## |    ##  |   ##   |  ##    | ##     | ###### ',
-      0: '  ####  | ##  ## | ## ### | ###### | ### ## | ##  ## |  ####  ', 1: '   ##   |  ###   |   ##   |   ##   |   ##   |   ##   | ###### ',
-      2: '  ####  | ##  ## |     ## |    ##  |  ##    | ##     | ###### ', 3: '  ####  | ##  ## |     ## |   ###  |     ## | ##  ## |  ####  ',
-      4: '     ## |    ### |   #### | ##  ## | #######|     ## |     ## ', 5: ' ###### | ##     | #####  |     ## |     ## | ##  ## |  ####  ',
-      6: '  ####  | ##  ## | ##     | #####  | ##  ## | ##  ## |  ####  ', 7: ' ###### | ##  ## |    ##  |   ##   |   ##   |   ##   |   ##   ',
-      8: '  ####  | ##  ## | ##  ## |  ####  | ##  ## | ##  ## |  ####  ', 9: '  ####  | ##  ## | ##  ## |  ##### |     ## | ##  ## |  ####  ',
-      '.': '|||||   ##   |   ##   ', ',': '|||||   ##   |   ##   |  ##    ', "'": '   ##   |   ##   |  ##    ', '-': '|||  #### ',
-      '·': '|||   ##   |   ##   ', ':': '|   ##   |   ##   ||   ##   |   ##   ', '!': '   ##   |   ##   |   ##   |   ##   ||   ##   ',
-      '?': '  ####  | ##  ## |     ## |    ##  |   ##   ||   ##   ', '/': '      ##|     ## |    ##  |   ##   |  ##    | ##     |##      ',
-      '+': '|   ##   |   ##   | ###### |   ##   |   ##   ', '&': '  ###   | ## ##  |  ###   | ### ## | ## ### | ##  ## |  ### ##',
-      '(': '    ##  |   ##   |  ##    |  ##    |  ##    |   ##   |    ##  ', ')': '  ##    |   ##   |    ##  |    ##  |    ##  |   ##   |  ##    ',
-    };
-    const GW = 8, GH = 8, ROWV = [.95, .9, .8, .68, .55, .66, .8, .84];
-    let strip = null, stripR = null, stripW = 0, nameAt = 0, nameW = 0;
+    /* ---- the scroller's words: the name, J, Eden, and how to look around ---- */
     function scrollText(){
       const parts = [C.name, J.line && 'co-founder of J - ' + J.line, E.line && 'founder of Eden - ' + E.line, 'type help to look around'];
       return '  ' + parts.filter(Boolean).join('  ···  ') + '  ···  ';
-    }
-    const font8 = t => String(t).toUpperCase().replace(/[^A-Z0-9 .,'\-·:!?/+&()]/g, ' ');
-    function bake(t, mirror){
-      const xs = new Int32Array(t.length + 1), rows = [], ext = [];
-      let x0 = 0;
-      for (let i = 0; i < t.length; i++){
-        const gl = FONT8[t[i]], rs = gl ? gl.split('|') : [];
-        let a = GW, b = -1; rs.forEach(row => { for (let x = 0; x < GW; x++) if (row[x] === '#'){ if (x < a) a = x; if (x > b) b = x; } });
-        rows.push(rs); ext.push(a); xs[i] = x0; x0 += b < 0 ? 4 : b - a + 2;
-      }
-      xs[t.length] = x0;
-      const w = x0 + 1, hh = GH + 1, lit = new Uint8Array(w * hh);
-      for (let i = 0; i < t.length; i++) rows[i].forEach((row, y) => { for (let x = 0; x < GW; x++) if (row[x] === '#') lit[y * w + xs[i] + x - ext[i]] = 1; });
-      const mk = () => { const c = document.createElement('canvas'); c.width = w; c.height = hh; return c; };
-      const SW = { willReadFrequently: true };   // (a software canvas: written once by putImageData, which an accelerated one can choke on)
-      const face = mk(), da = face.getContext('2d', SW).createImageData(w, hh), refl = mirror ? mk() : null, db = mirror ? refl.getContext('2d', SW).createImageData(w, hh) : null;
-      const cache = {};
-      const put = (d, i, v) => { const k = si(v), c = cache[k] || (cache[k] = rgb(SH[k])); d.data[i * 4] = c[0]; d.data[i * 4 + 1] = c[1]; d.data[i * 4 + 2] = c[2]; d.data[i * 4 + 3] = 255; };
-      for (let y = 0; y < hh; y++) for (let x = 0; x < w; x++){
-        const i = y * w + x;
-        if (lit[i]){ put(da, i, ROWV[y] || .8); if (db && y < GH) put(db, (GH - 1 - y) * w + x, (ROWV[y] || .8) * .42); }
-        else if (x > 0 && y > 0 && lit[i - w - 1]) put(da, i, .12);
-      }
-      face.getContext('2d', SW).putImageData(da, 0, 0); if (refl) refl.getContext('2d', SW).putImageData(db, 0, 0);
-      return { face, refl, w: w - 1, xs };
-    }
-    function makeStrip(){
-      const text = font8(scrollText()), at = text.search(/\S/), b = bake(text, true);
-      strip = b.face; stripR = b.refl; stripW = b.w;
-      if (typeof createImageBitmap === 'function'){ const f = strip, r = stripR; createImageBitmap(f).then(x => { if (strip === f) strip = x; }, () => {}); if (r) createImageBitmap(r).then(x => { if (stripR === r) stripR = x; }, () => {}); }   // (drawn a column at a time: a bitmap is far cheaper as a source) nameAt = b.xs[at]; nameW = b.xs[at + font8(C.name || 'KN').length] - nameAt;
     }
     /* ---- stars: a box of them flying at the viewer ---- */
     const NST = 200, ZR = 110, stx = new Float32Array(NST), sty = new Float32Array(NST), stz = new Float32Array(NST);
@@ -1964,24 +1908,24 @@ M.createTerminal = function createTerminal(opts){
       LO.context = mkLine('CONTEXT'); LO.uCtx = uFit(LO.context, W * .66, h * .17);
       LO.uEden = Math.min(LO.uEden, uFit(LO.eden, W * .8, h * .3));
       LO.cE = mkConst(LO.eden, LO.uEden, cx, h * .44 + 3 * LO.uEden); LO.cA = mkConst(LO.agents, LO.uAg, cx, h * .5 + 3 * LO.uAg);
-      LO.the = mkLine('THE'); LO.goat = mkLine('GOAT'); LO.q = mkLine('?');
+      LO.just = mkLine('JUST'); LO.start = mkLine('START'); LO.bang = mkLine('!');
       /* the halftone */
       htTile = mkCache(6 * pxk, 6 * pxk); { const c = htTile.getContext('2d'); c.fillStyle = P.bright; c.beginPath(); c.arc(3 * pxk, 3 * pxk, 1.7 * pxk, 0, TAU); c.fill(); }
       JOBS.length = 0; JOBS.push(() => { htc = mkCache(W, h); const c = htc.getContext('2d'), st = 11 * pxk, R = Math.hypot(W, h) / 2; c.fillStyle = SH[si(.5)];
         for (let y = st / 2, r = 0; y < h; y += st, r++) for (let x = (r & 1 ? st / 2 : 0); x < W + st; x += st){ const d = Math.hypot(x - cx, y - h / 2) / R, rr = st * .56 * Math.pow(c01(d * 1.15 - .12), 1.4); if (rr > .4){ c.beginPath(); c.arc(x, y, rr, 0, TAU); c.fill(); } } });
       htPat = null;
-      /* the panels: three for THE GOAT? (side by side, or stacked on a tall tube), two for EDEN */
+      /* the panels: three for JUST / START / ! (side by side, or stacked on a tall tube), two for EDEN */
       const gp = 7 * pxk;
       if (!tall){
-        const a0 = W * .29, a1 = W * .25, b0 = W * .73, b1 = W * .69;
+        const a0 = W * .39, a1 = W * .35, b0 = W * .85, b1 = W * .81;
         PANEL3.set([0, 0, a0 - gp, 0, a1 - gp, h, 0, h, a0 + gp, 0, b0 - gp, 0, b1 - gp, h, a1 + gp, h, b0 + gp, 0, W, 0, W, h, b1 + gp, h]);
         PANEL2.set([0, 0, W * .6 - gp, 0, W * .4 - gp, h, 0, h, W * .6 + gp, 0, W, 0, W, h, W * .4 + gp, h]);
       } else {
-        const a0 = h * .18, a1 = h * .22, b0 = h * .46, b1 = h * .5;
+        const a0 = h * .2, a1 = h * .24, b0 = h * .47, b1 = h * .51;
         PANEL3.set([0, 0, W, 0, W, a1 - gp, 0, a0 - gp, 0, a0 + gp, W, a1 + gp, W, b1 - gp, 0, b0 - gp, 0, b0 + gp, W, b1 + gp, W, h, 0, h]);
         PANEL2.set([0, 0, W, 0, W, h * .44 - gp, 0, h * .56 - gp, 0, h * .56 + gp, W, h * .44 + gp, W, h, 0, h]);
       }
-      VW = tall ? [-2, 1, -2, 2] : [-2, 2, 0, 1]; BOARD = tall ? [[1, 'THE'], [0, 'GOAT'], [-1, '?']] : [[1, 'THE'], [0, 'GOAT?']];
+      VW = tall ? [-2, 2, -1, 2] : [-2, 2, 0, 1]; BOARD = [[1, 'JUST'], [0, 'START']];
       makeTex();
     }
 
@@ -2031,15 +1975,14 @@ M.createTerminal = function createTerminal(opts){
       JOBS.push(() => { TX_J = mk(HW, HH, (c, w, hh) => { texWord(c, LO.J, w, hh, .5, .52, hh * .42); texWord(c, LO.cof, w, hh, .8, .1, hh * .84); }); });
       JOBS.push(() => { TX_E = mk(HW, HH, (c, w, hh) => { texWord(c, LO.eden, w, hh, .8, .3, hh * .44); texWord(c, LO.fdr, w, hh, .7, .1, hh * .76); }); });
       JOBS.push(() => { TX_KN = mk(HW, HH, (c, w, hh) => texKN(c, w, hh, 4)); });
-      /* the video wall: THE GOAT? as a flip-board, one letter to a tube (VW: its grid box; BOARD: a row of the box ->
-         its text). Wide: THE over GOAT?, centred on five columns; tall: THE / GOAT / ? set left on four, like a
-         departures board. No letter crosses the gap between two tubes */
+      /* the video wall: JUST START as a flip-board, one letter to a tube (VW: its grid box; BOARD: a row of the box ->
+         its text), set left like a departures board: JUST over START on five columns (wide: two rows; tall: the
+         middle two of four). No letter crosses the gap between two tubes */
       const vw = VW, pw = (vw[1] - vw[0] + 1) * GX - (GX - TW), ph = (vw[3] - vw[2] + 1) * GY - (GY - TH), sc = 1100 / Math.max(pw, ph);
       JOBS.push(() => { TX_VW = mk(pw * sc, ph * sc, (c, w, hh) => {
         c.fillStyle = SH[si(.03)]; c.fillRect(0, 0, w, hh);
-        const nc = vw[1] - vw[0] + 1;
         for (const [j, t] of BOARD){
-          const L0 = mkLine('W'), u = uFit(L0, TW * sc * .74, TH * sc * .78), c0 = vw[0] + (tall ? 0 : Math.floor((nc - t.length) / 2));
+          const L0 = mkLine('W'), u = uFit(L0, TW * sc * .74, TH * sc * .78), c0 = vw[0];
           for (let k = 0; k < t.length; k++){
             const L = mkLine(t[k]), xc = ((c0 + k - vw[0]) * GX + TW / 2) * sc, yc = ((vw[3] - j) * GY + TH / 2) * sc;
             vlineC(L, xc, yc + 3 * u, u, null, 1);
@@ -2175,6 +2118,14 @@ M.createTerminal = function createTerminal(opts){
       const ph = ((S - (i + j) * .045) % BT + BT) % BT;   // a wave of light across the wall on every beat
       tsBr = .55 + .45 * Math.exp(-ph * 9);
       tsOpen = tsLine = tsFlip = 1;
+      if (LOOPW){   // the loop's wall: each tube on a channel of the intro's pictures, changing now and then (the picture
+                    // folds to its line and opens again, 0.3 s; never a flash), a slow swell of brightness across it
+        const per = 7 + 6 * hash(i * 1.3 + j * 7.7), q = S + hash(i * 9.1 - j * 2.3) * per, k = Math.floor(q / per), uu = q - k * per;
+        const pool = LPOOL || TEX; tsTex = pool[(base + k * 5) % pool.length]; tsSub = 0;
+        if (uu < .3){ const f = uu / .3; tsOpen = f < .5 ? 1 - sstep(0, .5, f) : sstep(.5, 1, f); }
+        tsBr = .5 + .22 * Math.sin(S * .5 + i * .6 + j * 1.1);
+        return -1;
+      }
       if (S < T_J){
         if (i === JI && j === JJ) tsTex = TX_J;
         if (i === 0 && j === 0){ tsTex = TX_NAME; return -1; }
@@ -2215,20 +2166,20 @@ M.createTerminal = function createTerminal(opts){
       tubeState(i, j, S);
       c.setTransform(ax * rwc, ay * rwc, bx * rwc, by * rwc, WLF[0] * rwc + TOX, WLF[1] * rwc + TOY);
       const lu = 1.4 * pxk / Math.sqrt(det);
-      const big = (mx - nx) * rwc > 70 && S < T_KN;   // (small tubes, and the wall behind the KN: square corners, no inner rim)
+      const big = (mx - nx) * rwc > 70 && (S < T_KN || LOOPW);   // (small tubes, and the wall behind the KN: square corners, no inner rim)
       if (big) rrect(c, -BZ, -BZ, TW + 2 * BZ, TH + 2 * BZ, .55); else { c.beginPath(); c.rect(-BZ, -BZ, TW + 2 * BZ, TH + 2 * BZ); }
       c.fillStyle = SH[si(.06)]; c.fill(); c.strokeStyle = SH[si(.24)]; c.lineWidth = lu; c.stroke();
       if (big){ rrect(c, -.04, -.04, TW + .08, TH + .08, .3); c.fillStyle = SH[si(.025)]; c.fill(); c.strokeStyle = SH[si(.14)]; c.stroke(); }
       const open = tsOpen, line = tsLine;
       if (open > 0){
         const tex = tsTex, sx = tsSub ? (i - VW[0]) * GX * VWS : 0, sy = tsSub ? (VW[3] - j) * GY * VWS : 0, sw = tsSub ? TW * VWS : tex.width, sh = tsSub ? TH * VWS : tex.height;
-        c.globalAlpha = c01(tsBr); c.drawImage(tex, sx, sy, sw, sh, TW / 2 * (1 - tsFlip), TH / 2 * (1 - open), TW * tsFlip, TH * open);
+        c.globalAlpha = GA * c01(tsBr); c.drawImage(tex, sx, sy, sw, sh, TW / 2 * (1 - tsFlip), TH / 2 * (1 - open), TW * tsFlip, TH * open);
         if (tsBr > 1){ c.globalCompositeOperation = 'lighter'; c.globalAlpha = tsBr - 1; c.drawImage(tex, sx, sy, sw, sh, 0, TH / 2 * (1 - open), TW, TH * open); c.globalCompositeOperation = 'source-over'; }
-        c.globalAlpha = 1; lumAcc += det * TW * TH * .14 * tsBr * open;
+        c.globalAlpha = GA; lumAcc += det * TW * TH * .14 * tsBr * open;
       } else if (S > T_W3 && S < T_W4){ c.fillStyle = SH[si(.04 + .03 * hash(i + j * 9 + Math.floor(S * 15)))]; c.fillRect(0, 0, TW, TH); }
       if (open < 1 && line > 0){ c.fillStyle = P.bright; const lw = TW * line; c.fillRect(TW / 2 - lw / 2, TH / 2 - lu, lw, 2 * lu); }
       /* the glass: a glint along its top */
-      if (big){ c.strokeStyle = SH[si(.3)]; c.globalAlpha = .5; c.beginPath(); c.moveTo(.35, .22); c.lineTo(1.6, .22); c.stroke(); c.globalAlpha = 1; }
+      if (big){ c.strokeStyle = SH[si(.3)]; c.globalAlpha = .5 * GA; c.beginPath(); c.moveTo(.35, .22); c.lineTo(1.6, .22); c.stroke(); c.globalAlpha = GA; }
     }
     /* dust between the camera and the wall: parallax, drawn as streaks from where the last instant's camera saw it */
     const ND = 46, dxs = new Float32Array(ND), dys = new Float32Array(ND), dzs = new Float32Array(ND);
@@ -2338,9 +2289,9 @@ M.createTerminal = function createTerminal(opts){
         const cl = Math.cos(fdT[i]), X = cl * Math.cos(fdP[i] + spin), Z = cl * Math.sin(fdP[i] + spin), Y = Math.sin(fdT[i]), yy = Y * ct - Z * st, zz = Y * st + Z * ct;
         if (zz > 0) continue;
         const lit = ((S * 2.5 + hash(i * 3.3)) % 1), s = (2 + 5 * Math.max(0, 1 - lit * 4)) * pxk;
-        G.globalAlpha = .4 + .6 * Math.max(0, 1 - lit * 3); G.fillRect(x + R * X - s / 2, y - R * yy - s / 2, s, s);
+        G.globalAlpha = GA * (.4 + .6 * Math.max(0, 1 - lit * 3)); G.fillRect(x + R * X - s / 2, y - R * yy - s / 2, s, s);
       }
-      G.globalAlpha = 1;
+      G.globalAlpha = GA;
     }
     /* a word over the globe: its dark plate (the globe's lines stop at it), then the slam (word(): in from big, a
        squash, a glint); out: when it flies off, to (odx, ody) */
@@ -2385,7 +2336,7 @@ M.createTerminal = function createTerminal(opts){
       for (let e = 0; e < NE; e++){ const f = (S * (1.2 + fire * 2) + EP[e]) % 1, px = lerp(nsx[EA[e]], nsx[EB[e]], f), py = lerp(nsy[EA[e]], nsy[EB[e]], f), q = 4 * pxk; G.fillRect(px - q / 2, py - q / 2, q, q); }
       G.strokeStyle = SH[si(v)];
       for (let i = 0; i < NN; i++){ const q = (7 - 2 * nsz[i]) * pxk; G.lineWidth = 2 * pxk; G.strokeRect(nsx[i] - q / 2, nsy[i] - q / 2, q, q);
-        if (fire > .02){ const r = q * (1 + 5 * (1 - fire)); G.globalAlpha = fire; G.beginPath(); G.arc(nsx[i], nsy[i], r, 0, TAU); G.stroke(); G.globalAlpha = 1; } }
+        if (fire > .02){ const r = q * (1 + 5 * (1 - fire)); G.globalAlpha = GA * fire; G.beginPath(); G.arc(nsx[i], nsy[i], r, 0, TAU); G.stroke(); G.globalAlpha = GA; } }
       lumAcc += NE * R * .5 * pxk * v + NN * 200 * pxk;
     }
     function bracket(x, y, hh, d, dir){
@@ -2503,7 +2454,7 @@ M.createTerminal = function createTerminal(opts){
       tg.strokeStyle = P.bright; tg.lineWidth = 4 * pxk; for (let p = 0; p < 2; p++){ polyPath(PANEL2, p * 8); tg.stroke(); }
       lumAcc += W2 * h * .1;
     }
-    /* THE / GOAT / ?: three comic panels, frozen on the hit, then alive (speed lines running, the panels easing apart) */
+    /* JUST / START / !: three comic panels, frozen on the hit, then alive (speed lines running, the panels easing apart) */
     function panels(S, a){
       const live = S - T_GOAT, sep = eO3(live / .3) * 26 * pxk, zin = 1 + .1 * eO3(live / .4);
       tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h);
@@ -2515,10 +2466,10 @@ M.createTerminal = function createTerminal(opts){
         if (p === 1){ G = tg; speedLines(SD, pcx, pcy, 1.6, .7, 1); radial(pcx, pcy, Math.min(W2, h) * .3, SH[si(.25)], .4); }
         if (p === 2) rings(SD, pcx, pcy, 1.4, .45);
         typeOn(tg, true);
-        const pw = tall ? W2 * .82 : (PANEL3[o + 2] - PANEL3[o]) * .82, phh = tall ? (PANEL3[o + 5] - PANEL3[o + 1]) * (p === 2 ? .8 : .7) : h * .5;
-        const L = p === 0 ? LO.the : p === 1 ? LO.goat : LO.q, u = uFit(L, pw, p === 0 ? phh * .7 : phh) * zin, jit = live > .1 ? Math.sin(SD * 61 + p) * pxk : 0;
+        const pw = tall ? W2 * .82 : (PANEL3[o + 2] - PANEL3[o]) * .8, phh = tall ? (PANEL3[o + 5] - PANEL3[o + 1]) * (p === 2 ? .5 : .7) : h * (p === 2 ? .4 : .42);
+        const L = p === 0 ? LO.just : p === 1 ? LO.start : LO.bang, u = uFit(L, pw, phh) * zin, jit = live > .1 ? Math.sin(SD * 61 + p) * pxk : 0;
         if (p === 1){ hollow(L, pcx + jit, pcy, u * 1.04); vlineC(L, pcx + jit, pcy + 3 * u, u, null, 1); }
-        else if (p === 2){ ROT = -.22 + .05 * Math.sin(SD * 7); hollow(L, pcx, pcy, u * 1.06, ROT); vlineC(L, pcx, pcy + 3 * u, u, animRot, 1); ROT = 0; }
+        else if (p === 2){ ROT = -.1 + .04 * Math.sin(SD * 7); hollow(L, pcx, pcy, u * 1.06, ROT); vlineC(L, pcx, pcy + 3 * u, u, animRot, 1); ROT = 0; }
         else vlineC(L, pcx, pcy + 3 * u, u, null, 1);
         tg.globalCompositeOperation = 'source-over'; tg.restore();
       }
@@ -2579,29 +2530,34 @@ M.createTerminal = function createTerminal(opts){
       G.fillStyle = SH[si(.5)]; G.fillRect(0, hy - pxk, W2, 2 * pxk);
     }
     let SS = 4;
+    /* the scroller: the intro's own vector type, small, riding a slow sine along the floor, with its reflection on the
+       floor under it; letters fade in and out at the edges and only the ones on the tube are drawn. Reduced motion: the
+       name, still, in the middle */
+    let LSC = null, scX = 0, scU = 1, scY = 0, scA = 0, scPh = 0, scRef = false, scN = 1e9;
+    const animSc = i => {
+      const L = LSC, gw = L.gl[i] ? L.gl[i].w : 0, px = scX + scU * COND * (L.ox[i] + gw / 2);
+      if (i >= scN || px < -6 * scU || px > W2 + 6 * scU){ LA.on = false; return; }
+      const wv = Math.sin(px / W2 * TAU * .85 - scPh) * scA / scU;
+      LA.a = scN < 1e9 ? 1 : c01(px / (W2 * .14)) * c01((W2 - px) / (W2 * .14));
+      if (scRef){ LA.sy = -1; LA.dy = -6.9 - wv; } else LA.dy = wv;
+    };
     function scroller(a, L, still){
-      if (!strip) makeStrip();
-      let s = Math.max(2, Math.round(Math.min(h * .021, W2 / 100)));
-      if (still) s = Math.max(2, Math.min(s, Math.floor(W2 * .9 / (nameW + GW))));
-      const amp = Math.round(Math.min(h * .04, s * 3.2)), ys = Math.round(Math.min(h * .74, h - (4 * s + amp * 1.3 + 4.6 * s + 6)));
-      const cols = Math.ceil(W2 / s) + 1;
-      const pos = still ? nameAt + nameW / 2 - cols / 2 : (a - SCROLL0) * 2.6 * GW - cols;
-      if (!still && pos < -cols) return;
-      const ip = Math.floor(pos), fr = pos - ip, gh = (GH + 1) * s, rh = Math.round(gh * .5), y0 = ys - 4 * s;
-      const am = amp * (still ? .7 : .6 + .08 * Math.sin(L * .19)), wl = W2 * 1.4, ph = still ? 2.1 : a * 1.9;
-      G.imageSmoothingEnabled = false;
-      let n = 0;
-      for (let j = 0; j < cols; j++){
-        let src = ip + j; if (src < 0) continue;
-        src %= stripW;
-        const x = Math.round((j - fr) * s), y = Math.round(y0 + am * Math.sin(x / wl * TAU - ph));
-        G.drawImage(strip, src, 0, 1, GH + 1, x, y, s, gh);
-        if (SS > 1) G.drawImage(stripR, src, 0, 1, GH + 1, x, y + 8 * s + Math.round(s * .6), s, rh);
-        n++;
+      if (!LSC){ LSC = mkLine(scrollText()); const nm = mkLine(C.name || 'KN'); LSC.nw = nm.sw; LSC.nn = nm.n; }
+      scN = still ? LSC.nn : 1e9;   // (the still frame: the name alone)
+      scU = Math.max(1.4, Math.min(h * .0092, W2 * .0064)); scA = still ? 0 : h * .018 * (1 + .25 * Math.sin(L * .19)); scPh = still ? 0 : a * 1.3;
+      scY = Math.min(h * .82, h - 9 * scU);
+      const span = LSC.sw * scU, per = span + W2 * .2, v = W2 * .085, pos = still ? 0 : (a - SCROLL0) * v;
+      if (pos < 0) return;
+      typeOn(tg, true); kHot = 0;
+      const n = Math.floor(pos / per);
+      for (let k = n; k >= Math.max(0, n - 1); k--){   // (the copy coming in, and the one going out: one continuous strip)
+        scX = still ? cx - LSC.nw * scU / 2 : W2 - pos + k * per;
+        if (scX + span < 0 || scX > W2) continue;
+        scRef = false; vline(LSC, scX, scY, scU, animSc, .9);
+        if (SS > 1){ scRef = true; vline(LSC, scX, scY + .6 * scU, scU, animSc, .16); scRef = false; }
+        if (still) break;
       }
-      G.imageSmoothingEnabled = true;
-      lumAcc += n * s * gh * .3 * .75;
-      if (SS > 1){ G.fillStyle = P.bg; for (let y = Math.round(ys + 4 * s - am * 1.3 + s * .6); y < Math.min(h, ys + 4 * s + am + s * .6 + rh); y += 6) G.fillRect(0, y, W2, 2); }
+      kHot = kHot0; tg.globalCompositeOperation = 'source-over';
     }
 
     /* ---- the clock, the physics, the quality ---- */
@@ -2660,7 +2616,48 @@ M.createTerminal = function createTerminal(opts){
       y = logoY + wI * .55 * Math.sin(L * 1.2);
       z += wI * 2 * Math.sin(L * .33);
       if (!still && L > SECTION - TURN){ const k = Math.floor((L + TURN) / SECTION), sec = L + TURN - k * SECTION; yaw += TAU * (k - 1 + s5(sec / TURN)); }   // a full turn ends each section
+      if (!still){   // the movement's own way of holding the KN (eased in and out with it: never a jump)
+        mvAt(L);
+        if (MVK === 0){ yaw += MVW * .5 * Math.sin(MVU * .21); pit -= .06 * MVW; z += MVW * Z0 * .06; }           // the wall: a slow orbit
+        else if (MVK === 1){ z += MVW * Z0 * .14; y += MVW * .35; yaw += MVW * .12 * Math.sin(MVU * .25); }      // the globe: back a little, inside it
+        else if (MVK === 2){ rol += MVW * .05 * Math.sin(MVU * .33); yaw += MVW * .22 * Math.sin(MVU * .17); }   // the constellation: a drift
+      }
       POSE[0] = yaw + lean + spin; POSE[1] = pit + tilt; POSE[2] = rol; POSE[3] = y + hop; POSE[4] = z; POSE[5] = sx; POSE[6] = sy;
+    }
+    /* ---- the loop's movements: after a first section on the set, every SECTION (16 s, the KN making its full turn at
+       each change) a backdrop comes in behind it and goes again: the wall of tubes (a slow drift past the intro's words,
+       the tubes changing channel now and then, the KN orbiting), the J globe turning round it, the Eden constellation
+       drifting behind it, then the set alone. Each eases in and out over 2.5 s (MVW); the set's sky steps back under it;
+       the backdrop is drawn soft, on the wall's layer at its own resolution, and added over the sky ---- */
+    let MVK = -1, MVW = 0, MVU = 0, LOOPW = false, LPOOL = null, GA = 1;   // (GA: the backdrop's fade, through tube(), globe(), graph())
+    const LCAM = { x: 0, y: 0, z: -15, yaw: 0, pit: 0, rol: 0 };
+    function mvAt(L){
+      const mv = Math.floor(L / SECTION); MVK = -1; MVW = 0; if (mv < 1) return;
+      const k = (mv - 1) % 4; if (k === 3) return;
+      MVU = L - mv * SECTION; MVK = k; MVW = s5(MVU / 2.5) * (1 - s5((MVU - SECTION + 2.5) / 2.5));
+    }
+    function loopBack(L){
+      const w = MVW, l0 = lumAcc;
+      tg.globalAlpha = .62 * w; tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, h + hy); tg.globalAlpha = 1;   // (the bars step back)
+      tg.save(); tg.beginPath(); tg.rect(-W2, -h, 3 * W2, h + hy); tg.clip();   // (the sky only: the floor stays the floor)
+      const sv = G; G = tg;
+      let str = .95;
+      if (MVK === 0){
+        str = .5; camF = h * 1.05; CONV = 1; rwc = 1; TOX = BX; TOY = BY;
+        LCAM.x = GX * 1.4 * Math.sin(L * .043); LCAM.y = GY * (.9 + .35 * Math.sin(L * .057)); LCAM.z = -(tall ? 26 : 15);
+        LCAM.yaw = .1 * Math.sin(L * .05); LCAM.pit = .05 + .03 * Math.sin(L * .037); LCAM.rol = .025 * Math.sin(L * .029);
+        setCam(LCAM);
+        if (!LPOOL && TX_NAME && TX_J && TX_E && TEX.length === NT) LPOOL = [...TEX, TX_NAME, TX_J, TX_E, TX_NAME, TX_J, TX_E];
+        GA = w * str; tg.globalAlpha = GA;
+        LOOPW = true; for (let j = -3; j <= 5; j++) for (let i = -7; i <= 7; i++) tube(tg, i, j, L); LOOPW = false;
+        TOX = TOY = 0;
+      } else {
+        GA = w * str; tg.globalAlpha = GA; tg.setTransform(1, 0, 0, 1, BX, BY);
+        if (MVK === 1) globe(L, cx, hy - h * .2, Math.min(W2 * .38, h * .47), L * .2, .8);
+        else graph(L, cx, hy - h * .24, Math.min(W2 * .52, h * .52), L * .12, .14 * Math.exp(-(L % 3.2) * 2.2), .85);   // (a soft pulse along it every eight beats)
+      }
+      GA = 1; G = sv; tg.restore(); tg.globalAlpha = 1; tg.setTransform(1, 0, 0, 1, BX, BY);
+      lumAcc = l0 + (lumAcc - l0) * w * str;
     }
     function physics(dt){
       /* the pointer's lean (its target smoothed, then a critically damped spring), the spin (a spring toward whole
@@ -2757,6 +2754,7 @@ M.createTerminal = function createTerminal(opts){
       /* the backdrop: the set (bars, floor, stars), or a shot's own field of lines */
       if (SETK){
         bars(still ? 3.1 : S, S, still, 0);
+        if (!still && SHOT === K_LOOP && MVW > .005) loopBack(L);
         floor(S, still, shT, shS, z, 0, floorD);
         drawStars(dist + (still ? 37 : 0), speed, z, 1e9, 1, NST);
         drawShadow(SOLID);
@@ -2772,7 +2770,7 @@ M.createTerminal = function createTerminal(opts){
       /* the logo: crisp on the tube, or (moving fast) blurred: sub-frame poses added up on a layer */
       let sweep = SWEEP;
       if (!still && SHOT === K_LOOP){
-        const gq = (L - 1.2) % .8; if (L > 1.2 && gq < .6) sweep = s5(gq / .6);   // a glint across the chrome every two beats (eased, soft at its ends: alive, no flash)
+        const gq = (L - 1.2) % 3.2; if (L > 1.2 && gq < .9) sweep = s5(gq / .9);   // a glint across the chrome every eight beats (eased: alive, no flash)
         if (L >= .05 && L < .95) sweep = (L - .05) / .9;
         else if (L > SECTION - .3){ const sec = (L + TURN) % SECTION; if (sec >= TURN - .1 && sec < TURN + .8) sweep = (sec - TURN + .1) / .9; }
       }
@@ -2855,6 +2853,10 @@ M.createTerminal = function createTerminal(opts){
         radial(lsx, lsy, 0, SH[si(.4)], .45);
         drawLogo(1, 0, 0, lw * 2.2, -1);
         lumAcc += W2 * h * .08;
+      }
+      if (!still && SHOT === K_LOOP && L > SECTION){   // each change of movement: a quiet ring off the KN as it finishes its turn
+        const u = (L % SECTION) / 1.8;
+        if (u < 1){ tg.globalAlpha = .2 * (1 - u) * (1 - u); tg.strokeStyle = P.bright; tg.lineWidth = 2 * pxk; tg.beginPath(); tg.arc(lsx, lsy, lr * (.55 + 2.4 * eO3(u)), 0, TAU); tg.stroke(); tg.globalAlpha = 1; lumAcc += lr * 10 * pxk * (1 - u); }
       }
       if (!still && A >= .1 && A < .74){              // the shockwave: a white ring out of the slam, through the hit-stop
         const u = (A - .1) / .64, r = lr * (.25 + 3.2 * eO3(u));
@@ -3915,7 +3917,7 @@ M.createTerminal = function createTerminal(opts){
     if (TAP && RETURNING){ pageRow = null; page = ''; pages = []; goHome('', 'welcome back'); blinkT0 = now; dirty = true; return; }
     const w = landingRows();
     pageRow = null; page = ''; pages = [];
-    emit(w, (C.name || '') + '. ' + (A.role || '') + '. An animated intro: the name, Co-founder of J, Founder of Eden, The GOAT?, then the letters K N slam down over copper bars while a message scrolls along the bottom. Type help and press Enter to get started.');
+    emit(w, (C.name || '') + '. ' + (A.role || '') + '. An animated intro: the name, Co-founder of J, Founder of Eden, Just start, then the letters K N slam down over copper bars while a message scrolls along the bottom. Type help and press Enter to get started.');
     blinkT0 = now; dirty = true;
   }
 

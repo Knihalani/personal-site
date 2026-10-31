@@ -7,9 +7,10 @@ It is a room at night. A beige 1980s computer sits on a desk under a lamp, and i
 screen is a working terminal. When you type, the hands on the desk type the same keys on the 3D
 keyboard, and you hear a real Topre switch for every press and release. Each visit opens on an
 silent 12.8-second anime-style opening on the screen, cut to a fixed 150 bpm grid with impact frames on the big hits: the name
-and 16 slammed in, a camera flying a wall of CRTs and diving into them (J, then Eden), THE GOAT? as three comic panels,
-and the answer (a chrome 3D "KN", cut from angle to angle, slamming down over copper bars), then a loop with a sine
-scroller, until the first command.
+and 16 slammed in, a camera flying a wall of CRTs and diving into them (J, then Eden), JUST START on a flip-board and as three comic panels,
+and the answer (a chrome 3D "KN", cut from angle to angle, slamming down over copper bars), then a loop in slow
+movements (the wall of CRTs, the J globe, the Eden constellation drifting behind the KN) with a sine scroller, until
+the first command.
 
 ## Using it
 

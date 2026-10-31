@@ -119,14 +119,17 @@ ignites on a tunnel of bezels; KAIAV, NIHALANI and a huge 16 slam in (the name b
 picture was the middle tube of a wall of CRTs: the camera blasts back, flies along the wall as the tubes switch on in
 cascades (each a word or motif: KN, J, EDEN, AGENTS, CONTEXT, FOUNDERS, 16, a globe, a graph), whips round and dives
 into the J tube (a turning globe with CO-FOUNDER, YOUNG FOUNDERS and GLOBAL slammed flat over it), out in a barrel roll and into
-the EDEN tube (EDEN and AGENTS drawn by linking constellations, CONTEXT squeezed in by brackets); the wall spells THE
-GOAT? column by column and hits as three comic panels; every tube flips to KN, the KN bursts out of the middle one in
+the EDEN tube (EDEN and AGENTS drawn by linking constellations, CONTEXT squeezed in by brackets); the wall becomes a
+flip-board spelling JUST START a tube to a letter and hits as three comic panels (JUST / START / !); every tube flips to KN, the KN bursts out of the middle one in
 wireframe, turns chrome on a split impact frame, and is cut from angle to angle on the hits while the wall behind it
 collapses into it, the shots shortening to a 0.1 s run, into the slam on the set (an inverted, overscaled frame, a
 hit-stop with a white ring shockwave, the land). Each act has its own way of putting words on screen (slams, globe
 bands, constellations, flip tiles). Impact frames last two or three frames over a short hit-stop (the picture's clock
-holds, then catches up); one is a bright full frame (the slam), the rest dark field with bright line art. Motion blur is real (sub-frame samples averaged). Then a loop: the logo breathing on smooth curves with
-a full turn a section, and a sine scroller of `MAC.CONTENT` facts (the name, J, Eden). Keys glint the type, or give the
+holds, then catches up); one is a bright full frame (the slam), the rest dark field with bright line art. Motion blur is real (sub-frame samples averaged). Then a loop in movements of 16 s, each
+opened by a full turn of the KN and a quiet ring: the set alone first, then (cycling) the wall of CRTs drifting past
+the intro's words with the KN orbiting, the J globe turning round it, the Eden constellation behind it, the set again;
+each backdrop eases in and out over the dimmed bars. A glint every eight beats, and a sine scroller of `MAC.CONTENT`
+facts (the name, J, Eden) in the intro's vector type with its reflection. Keys glint the type, or give the
 logo one more smooth turn and a hop; reduced motion gets one still frame. It is silent. It animates at 30 fps through
 the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's real age, s, from its first frame) and
 `introPose` (the logo's pose in the last frame).
