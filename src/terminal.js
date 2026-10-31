@@ -1867,7 +1867,7 @@ M.createTerminal = function createTerminal(opts){
     let htc = null, htPat = null, htTile = null;     // halftone: a full-frame vignette of dots, and a tile for patterns
     const HTM = new DOMMatrix();
     const LO = {}, TEX = [], NT = 15;
-    let TX_NAME = null, TX_J = null, TX_E = null, TX_KN = null, TX_VW = null;
+    let TX_NAME = null, TX_J = null, TX_E = null, TX_KN = null, TX_VW = null, TX_JS = null;
     const PANEL3 = new Float32Array(24), PANEL2 = new Float32Array(16);
     function mkCache(w, hh){ const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(hh)); return c; }
     const uFit = (L, mw, mh) => Math.min(mw / Math.max(1, L.sw), mh / 6);
@@ -1975,6 +1975,7 @@ M.createTerminal = function createTerminal(opts){
       JOBS.push(() => { TX_J = mk(HW, HH, (c, w, hh) => { texWord(c, LO.J, w, hh, .5, .52, hh * .42); texWord(c, LO.cof, w, hh, .8, .1, hh * .84); }); });
       JOBS.push(() => { TX_E = mk(HW, HH, (c, w, hh) => { texWord(c, LO.eden, w, hh, .8, .3, hh * .44); texWord(c, LO.fdr, w, hh, .7, .1, hh * .76); }); });
       JOBS.push(() => { TX_KN = mk(HW, HH, (c, w, hh) => texKN(c, w, hh, 4)); });
+      JOBS.push(() => { TX_JS = mk(HW, HH, (c, w, hh) => { texWord(c, LO.just, w, hh, .7, .3, hh * .3); texWord(c, LO.start, w, hh, .82, .3, hh * .68); }); });
       /* the video wall: JUST START as a flip-board, one letter to a tube (VW: its grid box; BOARD: a row of the box ->
          its text), set left like a departures board: JUST over START on five columns (wide: two rows; tall: the
          middle two of four). No letter crosses the gap between two tubes */
@@ -2120,11 +2121,15 @@ M.createTerminal = function createTerminal(opts){
       tsOpen = tsLine = tsFlip = 1;
       if (LOOPW){   // the loop's wall: each tube on a channel of the intro's pictures, changing now and then (the picture
                     // folds to its line and opens again, 0.3 s; never a flash), a slow swell of brightness across it
-        const per = 7 + 6 * hash(i * 1.3 + j * 7.7), q = S + hash(i * 9.1 - j * 2.3) * per, k = Math.floor(q / per), uu = q - k * per;
-        const pool = LPOOL || TEX; tsTex = pool[(base + k * 5) % pool.length]; tsSub = 0;
-        if (uu < .3){ const f = uu / .3; tsOpen = f < .5 ? 1 - sstep(0, .5, f) : sstep(.5, 1, f); }
-        tsBr = .62 + .25 * Math.sin(S * .5 + i * .6 + j * 1.1);
-        if (i === POPI && j === POPJ && POPB > .01 && POPX){ tsTex = POPX; tsOpen = 1; tsBr = lerp(tsBr, 1.6, POPB); }   // (the tube that comes forward: a word, bright)
+        /* a wave every RW s runs across the wall from a point of its own: each tube it reaches changes channel (folds to its
+           line and opens again, 0.3 s) and brightens softly as the front passes */
+        let n = Math.floor(S / RW); const wd = d2 => Math.sqrt(d2) * .075;
+        let tw = S - n * RW - wd((i - WOX(n)) ** 2 + (j - WOY(n)) ** 2);
+        if (tw < 0){ n--; tw = S - n * RW - wd((i - WOX(n)) ** 2 + (j - WOY(n)) ** 2); }
+        const pool = LPOOL || TEX; tsTex = pool[(base + n * 7) % pool.length]; tsSub = 0;
+        if (tw < .3){ const f = tw / .3; tsOpen = f < .5 ? 1 - sstep(0, .5, f) : sstep(.5, 1, f); }
+        tsBr = .6 + .14 * Math.sin(S * .5 + i * .6 + j * 1.1) + .32 * Math.exp(-tw * tw * 30);
+        for (let k = 0; k < POPN; k++) if (POPS[k].i === i && POPS[k].j === j){ const q = POPS[k]; tsTex = q.tex; tsOpen = 1; tsBr = lerp(tsBr, 1.6, q.b); break; }   // (a tube that comes forward: a word, bright)
         return -1;
       }
       if (S < T_J){
@@ -2154,7 +2159,7 @@ M.createTerminal = function createTerminal(opts){
     }
     const WLF = new Float32Array(8);
     function tube(c, i, j, S){
-      const X = i * GX * CONV, Y = j * GY * CONV, Z = LOOPW && i === POPI && j === POPJ ? POPZ : 0;   // (CONV: the wall pulling together into the KN; Z: the loop's tube coming forward)
+      const pq = LOOPW ? popAt(i, j) : null, X = i * GX * CONV, Y = j * GY * CONV, Z = pq ? pq.z : 0;   // (CONV: the wall pulling together into the KN; Z: the loop's tube coming forward)
       proj(X, Y, Z); const zc = pjz;
       proj(X - TW / 2, Y + TH / 2, Z); if (pjz < .3 || pjz < zc * .8) return; WLF[0] = pjx; WLF[1] = pjy;
       proj(X + TW / 2, Y + TH / 2, Z); if (pjz < .3 || pjz < zc * .8) return; WLF[2] = pjx; WLF[3] = pjy;
@@ -2169,7 +2174,7 @@ M.createTerminal = function createTerminal(opts){
       const lu = 1.4 * pxk / Math.sqrt(det);
       const big = (mx - nx) * rwc > 70 && (S < T_KN || LOOPW);   // (small tubes, and the wall behind the KN: square corners, no inner rim)
       if (big) rrect(c, -BZ, -BZ, TW + 2 * BZ, TH + 2 * BZ, .55); else { c.beginPath(); c.rect(-BZ, -BZ, TW + 2 * BZ, TH + 2 * BZ); }
-      const pop = LOOPW && i === POPI && j === POPJ ? POPB : 0;   // (the loop's tube coming forward: a lit rim)
+      const pop = pq ? pq.b : 0;   // (the loop's tube coming forward: a lit rim)
       c.fillStyle = SH[si(.06)]; c.fill(); c.strokeStyle = SH[si(.24 + .66 * pop)]; c.lineWidth = lu * (1 + 1.5 * pop); c.stroke();
       if (big){ rrect(c, -.04, -.04, TW + .08, TH + .08, .3); c.fillStyle = SH[si(.025)]; c.fill(); c.strokeStyle = SH[si(.14)]; c.stroke(); }
       const open = tsOpen, line = tsLine;
@@ -2618,9 +2623,10 @@ M.createTerminal = function createTerminal(opts){
       LXO = 0;
       if (!still){   // the movement's own way of holding the KN, blended across the change; the change itself is one full
                      // roll in the picture plane (the KN never shows its edge or its back)
-        mvAt(L); PO.fill(0); poseOf(MVK, MVU, MVT); if (MVT < 1) poseOf(MVP, MVU + SECTION, 1 - MVT);
+        mvAt(L); PO.fill(0); poseOf(MVK, MVU, MVT); if (MVT < 1) poseOf(MVP, MVU + MSEC, 1 - MVT);
         z *= 1 + PO[0]; y += PO[1]; yaw += PO[2]; pit += PO[3]; rol += PO[4]; LXO = PO[5] * W2;
-        if (MVM >= 1) rol += TAU * (MVM - 1 + (MVU < TURN ? s5(MVU / TURN) : 1));
+        if (MVM >= 1) rol += TAU * (MVM - 1 + (MVU < MTURN ? s5(MVU / MTURN) : 1));
+        if (MVK === MV_WALL && MVT >= 1){ const pu = (L % POPE) / .45; if (pu < 1) y += .3 * Math.sin(Math.PI * pu); }   // (a small hop as each tube comes forward)
       }
       POSE[0] = yaw + lean; POSE[1] = pit + tilt; POSE[2] = rol + spin; POSE[3] = y + hop; POSE[4] = z; POSE[5] = sx; POSE[6] = sy;   // (a key's turn and a drag spin it in the picture plane too)
     }
@@ -2633,32 +2639,58 @@ M.createTerminal = function createTerminal(opts){
        a scanline sweeps down the bars). Calm, continuous, no flashes ---- */
     const MV_WALL = 0, MV_GLOBE = 1, MV_CONST = 2, MV_SET = 3;
     let MVK = MV_SET, MVP = MV_SET, MVT = 1, MVU = 0, MVM = 0, LXO = 0, LOOPW = false, LPOOL = null, GA = 1;   // (GA: a backdrop's fade, through tube(), globe(), graph())
-    let POPI = 99, POPJ = 99, POPZ = 0, POPB = 0, POPX = null, CNOUT = .1, LPL = null, LCC = null, LCW = 0;
+    let CNOUT = .1, LPL = null, LCC = null, LCW = 0, POPN = 0, PWORDS = null;
+    const MSEC = 8, MTURN = 1.6, RW = 2, SHOTL = 8 / 3, POPE = 1.4, POPL = 2.6;   // movement, its roll, a wave, a wall shot, a pop every, a pop lasts
+    const POPS = [{ i: 0, j: 0, z: 0, b: 0, tex: null }, { i: 0, j: 0, z: 0, b: 0, tex: null }];
+    const WOX = n => Math.round(8 * hash(n * 3.7) - 4), WOY = n => Math.round(5 * hash(n * 5.3 + 1) - 2);   // (where wave n starts)
+    const POPO = [[-2, 2], [2, 1], [-2, 0], [2, 2], [-2, 1], [2, 0], [-3, 1], [3, 2], [-1, 2], [1, 2]];   // (pop places, beside the KN)
+    function popAt(i, j){ for (let k = 0; k < POPN; k++) if (POPS[k].i === i && POPS[k].j === j) return POPS[k]; return null; }
+    /* the wall's camera: a new shot every SHOTL s (a truck, a push in, a look up from below, a dolly past, a short orbit),
+       each eased into the next over 0.9 s: never a cut */
+    function shotCam(q, u, o){
+      const kind = Math.floor(hash(q * 2.31) * 5), x0 = GX * 2.2 * Math.sin(q * 1.7), dir = hash(q * 7.7) > .5 ? 1 : -1, z0 = -(tall ? 30 : 19);
+      o.x = x0; o.y = GY * .9; o.z = z0; o.yaw = 0; o.pit = .05; o.rol = 0;
+      if (kind === 0){ o.x = x0 + dir * GX * .6 * u; }                                                  // a truck
+      else if (kind === 1){ o.z = z0 * (1.15 - .08 * u); o.x = x0 + dir * GX * .1 * u; }                  // a push in
+      else if (kind === 2){ o.y = -GY * .3; o.pit = .2; o.z = z0 * 1.1; o.x = x0 + dir * GX * .3 * u; }   // from below
+      else if (kind === 3){ o.x = x0 + dir * GX * 1.1 * (u - 1.3); o.yaw = -dir * .06; o.z = z0 * .95; }  // a dolly past
+      else { const a = dir * (.5 * u - .65); o.yaw = -.16 * Math.sin(a); o.x = x0 + GX * 1.6 * Math.sin(a); }   // a short orbit
+    }
+    const CA = { x: 0, y: 0, z: 0, yaw: 0, pit: 0, rol: 0 }, CB = { x: 0, y: 0, z: 0, yaw: 0, pit: 0, rol: 0 };
+    const PCB = { x: 0, y: 0, z: 0, yaw: 0, pit: 0, rol: 0 };
+    function shotCamAt(L, o){ const sv = {}; for (const k in CB) sv[k] = CB[k]; wallCam(L, o); for (const k in CB) CB[k] = sv[k]; }
+    function wallCam(L, o){
+      const q = Math.floor(L / SHOTL), u = L - q * SHOTL, b = s5(u / .9);
+      shotCam(q, u, CB); if (b < 1){ shotCam(q - 1, u + SHOTL, CA); for (const k in CB) CB[k] = lerp(CA[k], CB[k], b); }
+      for (const k in CB) o[k] = CB[k];
+    }
     const LCAM = { x: 0, y: 0, z: -15, yaw: 0, pit: 0, rol: 0 }, PO = new Float32Array(6);
     const GLC = rgb(P.normal).join(',');   // (the phosphor, for a gradient's rgba)
-    const kindOf = m => m < 1 ? MV_SET : (m - 1) % 4;
+    const CYC = [MV_WALL, MV_WALL, MV_GLOBE, MV_WALL, MV_WALL, MV_CONST, MV_WALL, MV_SET];   // (the wall most of the time)
+    const kindOf = m => m < 1 ? MV_SET : CYC[(m - 1) % CYC.length];
     function mvAt(L){   // the movement now (MVK, its time MVU), the one before (MVP), the change between them (MVT: 0..1 over the roll)
-      const m = Math.floor((L + TURN) / SECTION), t = L + TURN - m * SECTION;
-      MVM = m; MVU = t; MVK = kindOf(m); MVP = kindOf(m - 1); MVT = m < 1 ? 1 : s5(t / TURN);
+      const m = Math.floor((L + MTURN) / MSEC), t = L + MTURN - m * MSEC;
+      MVM = m; MVU = t; MVK = kindOf(m); MVP = kindOf(m - 1); MVT = m < 1 ? 1 : s5(t / MTURN);
     }
     function poseOf(k, t, w){   // into PO, weighted: [z scale, y, yaw, pitch, roll, x offset as a share of the width]
-      if (k === MV_WALL){ PO[0] += w * .65; PO[1] += w * .3; PO[2] += w * .26 * Math.sin(t * .21); PO[3] -= w * .05; }
+      if (k === MV_WALL){ PO[0] += w * .65; PO[1] += w * .3; PO[2] += w * .26 * Math.sin(t * .5); PO[3] -= w * .05; PO[4] += w * .05 * Math.sin(t * .7); }
       else if (k === MV_GLOBE){ PO[0] += w * .6; PO[1] += w * .5; PO[2] += w * .14 * Math.sin(t * .25); }
-      else if (k === MV_SET){ PO[0] -= w * .2 * Math.sin(Math.PI * c01((t - TURN) / (SECTION - TURN))); PO[1] += w * .25 * Math.sin(Math.PI * c01((t - TURN) / (SECTION - TURN))); }   // home: one slow push in and back
-      else if (k === MV_CONST){ PO[0] += w * .5; PO[1] -= w * .9; PO[5] -= w * .22; PO[2] += w * .18 * Math.sin(t * .17); PO[4] += w * .04 * Math.sin(t * .33); }
+      else if (k === MV_SET){ PO[0] -= w * .2 * Math.sin(Math.PI * c01((t - MTURN) / (MSEC - MTURN))); PO[1] += w * .25 * Math.sin(Math.PI * c01((t - MTURN) / (MSEC - MTURN))); }   // home: one slow push in and back
+      else if (k === MV_CONST){ PO[0] += w * .5; PO[1] -= w * .9; PO[5] -= w * .22; PO[2] += w * .18 * Math.sin(t * .4); PO[4] += w * .04 * Math.sin(t * .6); }
     }
     function loopBack(L, S, ox, oy){
       const dim = (MVK !== MV_SET ? MVT : 0) + (MVT < 1 && MVP !== MV_SET ? 1 - MVT : 0), l0 = lumAcc;
       if (dim > .005){ tg.globalAlpha = .62 * Math.min(1, dim); tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, h + hy); tg.globalAlpha = 1; }   // (the bars step back)
-      if (MVT < 1 && MVP !== MV_SET) mvBack(MVP, 1 - MVT, L, S, MVU + SECTION, ox, oy, -1);
-      if (MVK !== MV_SET) mvBack(MVK, 1, L, S, MVU, ox, oy, MVT < 1 ? MVT * Math.hypot(W2, h) : -1);
-      else if (MVT >= 1 && MVU > 7 && MVU < 9.6){   // the set's moment: a scanline sweeping down the bars
-        const v = (MVU - 7) / 2.6, yb = lerp(-h * .1, hy, v), gr = tg.createLinearGradient(0, yb - h * .08, 0, yb + h * .02);
+      const same = MVT < 1 && MVP === MVK;   // (wall to wall: the wall carries on, no wipe)
+      if (MVT < 1 && MVP !== MV_SET && !same) mvBack(MVP, 1 - MVT, L, S, MVU + MSEC, ox, oy, -1);
+      if (MVK !== MV_SET) mvBack(MVK, 1, L, S, MVU, ox, oy, MVT < 1 && !same ? MVT * Math.hypot(W2, h) : -1);
+      else if (MVT >= 1 && MVU > 3.5 && MVU < 6.1){   // the set's moment: a scanline sweeping down the bars
+        const v = (MVU - 3.5) / 2.6, yb = lerp(-h * .1, hy, v), gr = tg.createLinearGradient(0, yb - h * .08, 0, yb + h * .02);
         const sa = Math.sin(Math.PI * v); gr.addColorStop(0, 'rgba(' + GLC + ',0)'); gr.addColorStop(.85, 'rgba(' + GLC + ',' + (.22 * sa).toFixed(3) + ')'); gr.addColorStop(1, 'rgba(' + GLC + ',0)');
         tg.globalCompositeOperation = 'lighter'; tg.fillStyle = gr; tg.fillRect(0, yb - h * .08, W2, h * .1);
         tg.globalAlpha = .3 * sa; tg.fillStyle = P.bright; tg.fillRect(0, yb + h * .005, W2, 1.5 * pxk); tg.globalAlpha = 1; tg.globalCompositeOperation = 'source-over';   // (its leading line)
       }
-      if (MVT < 1 && MVM >= 1){   // the change: a soft ring at the edge of the wipe
+      if (MVT < 1 && MVM >= 1 && !same){   // the change: a soft ring at the edge of the wipe
         const r = MVT * Math.hypot(W2, h); tg.globalAlpha = .22 * (1 - MVT); tg.strokeStyle = P.bright; tg.lineWidth = 2 * pxk;
         tg.beginPath(); tg.arc(ox, oy, Math.max(1, r), 0, TAU); tg.stroke(); tg.globalAlpha = 1;
       }
@@ -2671,19 +2703,30 @@ M.createTerminal = function createTerminal(opts){
       const sv = G; G = tg; tg.setTransform(1, 0, 0, 1, BX, BY);
       if (k === MV_WALL){
         camF = h * 1.05; CONV = 1; rwc = 1; TOX = BX; TOY = BY;
-        LCAM.x = GX * (t - 8) / 3; LCAM.y = GY * (.9 + .3 * Math.sin(L * .057)); LCAM.z = -(tall ? 30 : 19);   // (a steady pan: a tube every 3 s)
-        LCAM.yaw = .12 * Math.sin(L * .05); LCAM.pit = .05 + .03 * Math.sin(L * .037); LCAM.rol = .02 * Math.sin(L * .029);
-        setCam(LCAM);
+        wallCam(L, LCAM); setCam(LCAM);
         if (!LPOOL && TX_NAME && TX_J && TX_E && TEX.length === NT) LPOOL = [...TEX, TX_NAME, TX_J, TX_E, TX_NAME, TX_J, TX_E];
-        /* the moment: one tube beside the KN comes forward with a word (1.4x, over 1.5 s), holds, and
-           settles back (5 to 11 s in) */
-        const pe = s5(c01((t - 5) / 1.5)) * (1 - s5(c01((t - 9.5) / 1.5)));
-        POPI = Math.round((7.5 - 8) / 3) + (MVM % 2 ? 2 : -2); POPJ = 2; POPZ = LCAM.z * (1 - 1 / 1.5) * pe; POPB = pe; POPX = [TX_J, TX_E, TX_NAME][MVM % 3];   // (beside the KN, in view)
+        if (!PWORDS && TX_KN && TX_J && TX_E && TX_JS && TEX.length === NT) PWORDS = [TX_KN, TEX[0], TX_J, TX_E, TEX[6], TEX[3], TEX[4], TX_JS];   // KN, KAIAV, J, EDEN, 16, AGENTS, CONTEXT, JUST START
+        /* the pops: every POPE s a tube beside the KN comes forward with a word (1.5x, over 0.6 s), holds, settles back; two
+           can overlap */
+        POPN = 0;
+        if (PWORDS) for (let n = Math.floor(L / POPE); n >= 0 && n > Math.floor(L / POPE) - 2; n--){
+          const f = L - n * POPE; if (f >= POPL) continue;
+          const pe = s5(c01(f / .6)) * (1 - s5(c01((f - POPL + .7) / .7))), q = POPS[POPN++];
+          /* its tube: the first of the places (from this pop's own start in the list) that sits well inside the frame and
+             clear of the KN, seen from the camera when it started */
+          shotCamAt(n * POPE, PCB); setCam(PCB); const ic = Math.round(PCB.x / GX); let best = null;
+          for (let k = 0; k < POPO.length; k++){ const o = POPO[(n + k) % POPO.length]; proj((ic + o[0]) * GX, o[1] * GY, 0);
+            if (pjx > W2 * .14 && pjx < W2 * .86 && pjy > h * .08 && pjy < hy - h * .1 && (Math.abs(pjx - ox) > W2 * .2 || Math.abs(pjy - oy) > h * .22)){ best = o; break; } }
+          setCam(LCAM); if (!best){ POPN--; continue; }   // (nowhere clear: this one is skipped)
+          q.i = ic + best[0]; q.j = best[1]; q.z = LCAM.z * (1 - 1 / 1.5) * pe; q.b = pe; q.tex = PWORDS[n % PWORDS.length];
+          if (POPN === 2) break;
+        }
         GA = a * .85; tg.globalAlpha = GA;
         LOOPW = true;
-        for (let j = -3; j <= 5; j++) for (let i = -8; i <= 8; i++) if (i !== POPI || j !== POPJ) tube(tg, i, j, L);
-        tube(tg, POPI, POPJ, L);   // (last: in front)
-        LOOPW = false; TOX = TOY = 0; POPI = POPJ = 99;
+        const i0 = Math.round(LCAM.x / GX);
+        for (let j = -3; j <= 5; j++) for (let i = i0 - 8; i <= i0 + 8; i++) if (!popAt(i, j)) tube(tg, i, j, L);
+        for (let k = POPN - 1; k >= 0; k--) tube(tg, POPS[k].i, POPS[k].j, L);   // (last: in front)
+        LOOPW = false; TOX = TOY = 0; POPN = 0;
         /* the KN's ground: a soft dark halo behind it, so it stands off the wall */
         tg.setTransform(1, 0, 0, 1, BX, BY); const hr = Math.min(W2, h) * .42, hg = tg.createRadialGradient(ox, oy, 0, ox, oy, hr);
         hg.addColorStop(0, 'rgba(0,0,0,.62)'); hg.addColorStop(.5, 'rgba(0,0,0,.42)'); hg.addColorStop(1, 'rgba(0,0,0,0)');
@@ -2695,7 +2738,7 @@ M.createTerminal = function createTerminal(opts){
         if (!LPL) LPL = [LO.cof, mkLine('YOUNG FOUNDERS'), LO.global];
         const u = Math.max(1.2, h * .0085);
         for (let p = 0; p < 3; p++){
-          const f = c01((t - 1.6 - p * 4.6) / 5.6); if (f <= 0 || f >= 1) continue;
+          const f = c01((t - .9 - p * 1.9) / 3.4); if (f <= 0 || f >= 1) continue;
           const Lp = LPL[p], al = a * s5(f / .15) * (1 - s5((f - .85) / .15)), x = lerp(W2 * 1.15, -W2 * .15, f), y = h * (p === 1 ? .13 : .2);
           const pw = Lp.sw * u + 6 * u, ph = 9 * u;
           tg.globalAlpha = .8 * al; tg.fillStyle = P.bg; rrect(tg, x - pw / 2, y - ph / 2, pw, ph, u); tg.fill(); tg.strokeStyle = SH[si(.35)]; tg.lineWidth = pxk; tg.stroke();
@@ -2706,10 +2749,10 @@ M.createTerminal = function createTerminal(opts){
         graph(L, cx, hy - h * .26, Math.min(W2 * .56, h * .56), L * .12, .12 * Math.exp(-(L % 3.2) * 2.2), 1);
         /* the moment: nodes linking up into EDEN, AGENTS, CONTEXT, one at a time, and dissolving */
         if (!LCC || LCW !== W2){ LCW = W2; LCC = [LO.eden, LO.agents, LO.context].map(Lw => { const uw = Math.min(uFit(LO.context, W2 * .36, h * .11), uFit(Lw, W2 * .36, h * .11)); return { Lw, uw, C: mkConst(Lw, uw, cx + W2 * .22, h * .22 + 3 * uw) }; }); }   // (one cap height for all)
-        GA = 1; tg.globalAlpha = 1; CNOUT = .9;
+        GA = 1; tg.globalAlpha = 1; CNOUT = .6;
         for (let p = 0; p < 3; p++){
-          const T0 = S - t + 1.0 + p * 4.2, c = LCC[p];   // (the next word starts linking while the last one dissolves)
-          if (S >= T0 && S < T0 + 3.5 + CNOUT){ tg.globalAlpha = a; constellation(c.C, c.Lw, c.uw, cx + W2 * .22, h * .22 + 3 * c.uw, S, T0, T0 + 3.5); }
+          const T0 = S - t + .9 + p * 2.1, c = LCC[p];   // (the next word starts linking while the last one dissolves)
+          if (S >= T0 && S < T0 + 1.7 + CNOUT){ tg.globalAlpha = a; constellation(c.C, c.Lw, c.uw, cx + W2 * .22, h * .22 + 3 * c.uw, S, T0, T0 + 1.7); }
         }
         CNOUT = .1;
       }
@@ -2826,7 +2869,7 @@ M.createTerminal = function createTerminal(opts){
       /* the logo: crisp on the tube, or (moving fast) blurred: sub-frame poses added up on a layer */
       let sweep = SWEEP;
       if (!still && SHOT === K_LOOP){
-        const gq = (L - 1.2) % 3.2; if (L > 1.2 && gq < .9) sweep = s5(gq / .9);   // a glint across the chrome every eight beats (eased: alive, no flash)
+        const gq = (L - 1.2) % 1.6; if (L > 1.2 && gq < .7) sweep = s5(gq / .7);   // a glint across the chrome every eight beats (eased: alive, no flash)
         if (L >= .05 && L < .95) sweep = (L - .05) / .9;
         else if (L > SECTION - .3){ const sec = (L + TURN) % SECTION; if (sec >= TURN - .1 && sec < TURN + .8) sweep = (sec - TURN + .1) / .9; }
       }

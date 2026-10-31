@@ -125,11 +125,12 @@ wireframe, turns chrome on a split impact frame, and is cut from angle to angle 
 collapses into it, the shots shortening to a 0.1 s run, into the slam on the set (an inverted, overscaled frame, a
 hit-stop with a white ring shockwave, the land). Each act has its own way of putting words on screen (slams, globe
 bands, constellations, flip tiles). Impact frames last two or three frames over a short hit-stop (the picture's clock
-holds, then catches up); one is a bright full frame (the slam), the rest dark field with bright line art. Motion blur is real (sub-frame samples averaged). Then a loop in movements of 16 s, each
-opened by a full turn of the KN and a quiet ring: the set alone first, then (cycling) the wall of CRTs drifting past
-the intro's words with the KN orbiting, the J globe turning round it, the Eden constellation behind it, the set again;
-each backdrop eases in and out over the dimmed bars. A glint every eight beats, and a sine scroller of `MAC.CONTENT`
-facts (the name, J, Eden) in the intro's vector type with its reflection. Keys glint the type, or give the
+holds, then catches up); one is a bright full frame (the slam), the rest dark field with bright line art. Motion blur is real (sub-frame samples averaged). Then a loop in 8 s movements, the wall of CRTs most of the time
+(a camera whose shot changes every ~2.7 s: trucks, push-ins, a look up from below, a dolly past, a short orbit; waves of
+channel changes rippling across the tubes; every 1.4 s a tube beside the KN comes forward with a word: KN, KAIAV, J,
+EDEN, 16, AGENTS, CONTEXT, JUST START, the KN hopping with it), with the J globe and the Eden constellation as
+interludes and the set now and then; each change is one full roll of the KN in the picture plane. A glint every four
+beats, and a sine scroller of `MAC.CONTENT` facts (the name, J, Eden) in the intro's vector type. Keys glint the type, or give the
 logo one more smooth turn and a hop; reduced motion gets one still frame. It is silent. It animates at 30 fps through
 the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's real age, s, from its first frame) and
 `introPose` (the logo's pose in the last frame).
