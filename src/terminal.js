@@ -771,7 +771,7 @@ M.createTerminal = function createTerminal(opts){
     '  about       who ' + (C.name ? C.name.split(' ')[0] : 'Kaiav') + ' is',
     '  eden        ' + (E.line || E.title || 'Eden'),
     '  j           ' + (J.title || 'J'),
-    '  writing     posts',
+    ...(posts().length ? ['  writing     posts'] : []),
     '  links       LinkedIn, X and GitHub',
     '  contact     email addresses',
     '  open x      open a link in a new tab', '',
@@ -819,8 +819,8 @@ M.createTerminal = function createTerminal(opts){
   function landingRows(){
     const o = out();
     o.viz(Math.max(4, ROWS - 2), (x, y, w, h, age, t) => DEMO.draw(x, y, w, h, age, t), DEMO.live);
-    if (TAP) o.at(0, ['tap anywhere to begin', 'f']);   // phones: any tap or key goes to the title card
-    else o.at(2, ['type ', 'f'], chip('help', 'b'), [' and press enter to get started', 'f']);
+    if (TAP) o.at(0, ['tap anywhere to begin', 'd']);   // phones: any tap or key goes to the title card
+    else o.at(2, ['type ', 'd'], chip('help', 'b'), [' and press enter to get started', 'd']);
     landing = { viz: o.rows[0], note: o.rows[1] };
     return o;
   }
@@ -857,7 +857,7 @@ M.createTerminal = function createTerminal(opts){
       let b = null; if (!wide){ o.at(1, ['x', 'n']); b = o.rows[o.rows.length - 1]; }
       m.rows.push([a, b, (i + 1) + '  ' + (label || cmd).toUpperCase(), '   ' + desc, { cmd, nl: true }]);
     });
-    o.blank().line(['tap a row, or type help', 'f']).blank();
+    o.blank().line(['tap a row, or type help', 'd']).blank();
     homeMenu = m; paintHome();
     return o;
   }
@@ -942,7 +942,7 @@ M.createTerminal = function createTerminal(opts){
     },
     links(o){
       o.blank().card({ title: 'LINKS', note: 'links.txt', items: LINKLIST().map(t => ({ label: t.title, value: t.short, full: t.url, url: t.url, hint: 'open' })) })
-        .blank().at(2, ['also  ', 'f'], ...chips(['contact', 'j'], 'n'), ...(TAP ? [] : [['  ', 'f'], ['open <name>', 'n']])).blank();
+        .blank().at(2, ['see also  ', 'f'], ...chips(['contact', 'j'], 'n'), ...(TAP ? [] : [['  ', 'f'], ['open <name>', 'n']])).blank();
       return o;
     },
   };
@@ -1320,7 +1320,7 @@ M.createTerminal = function createTerminal(opts){
     const all = !!argv[1];
     const exists = n => (M.TERM.cmds[n] && !M.TERM.cmds[n].hidden && typeof M.TERM.cmds[n].run === 'function') || (M.TERM.apps[n] && typeof M.TERM.apps[n].start === 'function');
     if (!all){
-      const groups = HELP_TOP.map(([label, what, names]) => [label, what, names.filter(n => exists(n) && !(TAP && n === 'writing' && !posts().length))]).filter(x => x[2].length);
+      const groups = HELP_TOP.map(([label, what, names]) => [label, what, names.filter(n => exists(n) && !(n === 'writing' && !posts().length))]).filter(x => x[2].length);
       const also = HELP_ALSO.filter(exists);
       if (!io.tty){ io.write(groups.map(([l, w, ns]) => l + ' (' + w + ')\n  ' + ns.join('  ')).join('\n') + '\nalso\n  ' + also.join('  ') + '\n\nhelp all for everything\n'); return; }
       const o = out(); o.blank().head('help').blank();

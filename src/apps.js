@@ -493,11 +493,11 @@ T.apps.snake = {
           c(6, newHi ? 'new high score' : 'best ' + hi, newHi ? 'accent' : 'dim');
           c(8, TOUCH ? 'again starts over' : 'enter again  \u00b7  q quit', REDUCED || Math.floor(t * 2) % 2 === 0 ? 'normal' : 'dim');
         } else if (paused && GH < 12){                          // a short field: say it on the wall, not over the snake
-          const m = ' paused \u00b7 ' + (TOUCH ? 'resume to go on' : 'p to resume') + ' ';
+          const m = ' paused \u00b7 ' + (TOUCH ? 'resume to go on' : 'space to resume') + ' ';
           scr.put(ox + 1 + ((GW * 2 - m.length) / 2 | 0), oy, m, 'bright');
         } else if (paused){
           box(scr, cx, cy + 2, cw, 5, 'dim');
-          c(3, 'PAUSED', 'bright'); c(5, TOUCH ? 'resume to go on' : 'p to resume', 'dim');
+          c(3, 'PAUSED', 'bright'); c(5, TOUCH ? 'resume to go on' : 'space to resume', 'dim');
         } else if (!started){
           box(scr, cx, cy + 1, cw, 7, 'dim');
           c(2, 'S N A K E', 'bright');
