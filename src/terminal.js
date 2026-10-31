@@ -2038,7 +2038,7 @@ M.createTerminal = function createTerminal(opts){
         c.fillStyle = SH[si(.03)]; c.fillRect(0, 0, w, hh);
         const nc = vw[1] - vw[0] + 1;
         for (const [j, t] of BOARD){
-          const L0 = mkLine('W'), u = uFit(L0, TW * sc * .62, TH * sc * .7), c0 = vw[0] + (tall ? 0 : Math.floor((nc - t.length) / 2));
+          const L0 = mkLine('W'), u = uFit(L0, TW * sc * .74, TH * sc * .78), c0 = vw[0] + (tall ? 0 : Math.floor((nc - t.length) / 2));
           for (let k = 0; k < t.length; k++){
             const L = mkLine(t[k]), xc = ((c0 + k - vw[0]) * GX + TW / 2) * sc, yc = ((vw[3] - j) * GY + TH / 2) * sc;
             vlineC(L, xc, yc + 3 * u, u, null, 1);
@@ -2144,8 +2144,8 @@ M.createTerminal = function createTerminal(opts){
         lerpC(o, lerp(jx, ex, p), lerp(jy, ey, p), -d, -.42 * Math.sin(Math.PI * c01((S - 4.45) / .62)), .1 * Math.sin(Math.PI * c01((S - 4.45) / .62)), -TAU * eIO((S - 4.42) / .45));
       } else if (S < T_W4){                            // out to the whole wall, a dutch angle settling, a push in
         const vx = (VW[0] + VW[1]) / 2 * GX, vy = (VW[2] + VW[3]) / 2 * GY, pw = (VW[1] - VW[0] + 1) * GX, ph = (VW[3] - VW[2] + 1) * GY;
-        const dw = Math.max(pw * camF / W2, ph * camF / h) * 1.08, p = eO5((S - T_W3) / .4);
-        const d = Math.exp(lerp(Math.log(dc), Math.log(dw), p)) * lerp(1, .84, sstep(6.75, 7.2, S));
+        const dw = Math.max(pw * camF / W2, ph * camF / h) * 1.12, p = eO5((S - T_W3) / .4);
+        const d = Math.exp(lerp(Math.log(dc), Math.log(dw), p)) * lerp(1, .9, sstep(6.75, 7.2, S));   // (the push in stops short of the board's edges)
         lerpC(o, lerp(ex, vx, p), lerp(ey, vy, p), -d, .05 * Math.sin(S * 3), 0, lerp(.35, -.05, p) + .03 * Math.sin(S * 5));
       } else if (S < T_KN){                            // every tube flips to KN from the middle out; the camera pulls back
         const p = eO3((S - T_W4) / .25);
@@ -2263,7 +2263,7 @@ M.createTerminal = function createTerminal(opts){
       setCam(CAM);
       const disp = Math.max(Math.hypot(ax1 - ax0, ay1 - ay0), Math.hypot(bx1 - bx0, by1 - by0));
       const ni = knAct ? (tall ? 6 : 10) : NI, nj = knAct ? (tall ? 9 : 6) : NJ;
-      const ns = knAct ? 1 : clamp(Math.ceil(disp / (5 * pxk)), 1, S > 4.5 && S < 4.78 ? 3 : TAP ? 6 : 8);   // (the fast middle of the roll: three samples, a spin that stays sharp; slide and dive blur as before)
+      const ns = knAct ? 1 : clamp(Math.ceil(disp / (5 * pxk)), 1, S > 4.52 && S < 4.72 ? 3 : TAP ? 6 : 8);   // (the fast middle of the roll: three samples, a spin that stays sharp; slide and dive blur as before)
       if (ns === 1){   // no blur (or behind the KN): straight onto the tube, no layer
         rwc = 1; TOX = BX; TOY = BY;
         for (let j = -nj; j <= nj; j++) for (let i = -ni; i <= ni; i++) tube(tg, i, j, S);
