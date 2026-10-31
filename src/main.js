@@ -182,6 +182,10 @@ on(window, 'resize', resize); resize();
 /* a GPU that cannot keep up: when most of ~5 s goes to long frames, shadows go first, then pixels below 1x
    (scene.js has already trimmed the pixel ratio down to 1 by then) */
 let slowT = 0, spanT = 0, runT = 0, bad = 0, last = performance.now(), T = 0;
+/* two clocks: dt (capped at 50 ms) steps the physics (hands, keys, camera springs, a game's tick), which must never
+   leap; T is wall time (a frame counts up to 1 s, so a long stall or a tab coming back is not a leap), which the
+   terminal's films (the intro, its loop) are timed by: a GPU that manages a few fps drops frames from the film instead of
+   playing it in slow motion */
 const gl = api.renderer.getContext();
 function degrade(){
   const r = api.renderer;
@@ -190,7 +194,7 @@ function degrade(){
 }
 function frame(now){
   raf = requestAnimationFrame(frame);
-  const raw = (now - last) / 1000, dt = Math.min(.05, raw); last = now; T += dt;
+  const raw = (now - last) / 1000, dt = Math.min(.05, raw); last = now; T += Math.min(1, raw);
   try { if (term.update(dt, T)){ api.markScreenDirty(); if (api.setScreenLum && term.lum != null) api.setScreenLum(term.lum); } } catch (e){ oops(e); }
   if (reading()) return;   // the reader sheet covers the room: hold the last frame and save the GPU
   try { typist.update(dt, T); } catch (e){ oops(e); }
@@ -462,7 +466,7 @@ function flat(prev){   // prev: the 3D layout's terminal, when the 3D view gives
   const tick = TOUCH ? phone() : () => {};
   let last = performance.now(), T = 0;
   const frame = now => {
-    requestAnimationFrame(frame); const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt;
+    requestAnimationFrame(frame); const raw = (now - last) / 1000, dt = Math.min(.05, raw); last = now; T += Math.min(1, raw);   // (the two clocks: as the room's loop)
     let changed = false;
     try { if ((changed = term.update(dt, T))){ place(); glow(); } else if (glowDue) glowSettle(); } catch (e){ oops(e); }
     try { tick(changed); } catch (e){ oops(e); }
