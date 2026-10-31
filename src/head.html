@@ -28,15 +28,15 @@ body.phone::before{ content: ""; position: fixed; top: 0; left: 0; right: 0; hei
 #mute::before{ content: ""; width: 6px; height: 6px; border-radius: 50%; border: 1px solid currentColor; box-sizing: border-box }
 #mute[aria-pressed="true"]::before{ background: #8dffb4; border-color: #8dffb4; box-shadow: 0 0 6px rgba(141,255,180,.6) }
 #mute:hover{ color: var(--fg); border-color: rgba(233,226,208,.4) }
-#mute:focus-visible{ outline: 1px solid rgba(233,226,208,.5); outline-offset: 2px }
+#mute:focus-visible{ outline: 1px solid rgba(233,226,208,.5); outline-offset: 2px } .fk:focus-visible{ outline: 2px solid #5f8f55; outline-offset: 1px }
 #kbd{ position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; resize: none }
 .sr{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
 #loading{ position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); font: 500 11px var(--mono); letter-spacing: .3em; text-transform: uppercase; transition: opacity .35s; z-index: 3; background: var(--bg) }
 #loading.gone{ opacity: 0; pointer-events: none }
 /* phones: no black page while the fonts come in; the machine's shape is there from the first paint, its tube dark */
 html.coarse, html.coarse body{ background: #15120f }
-html.coarse #loading{ color: transparent; background: radial-gradient(130% 80% at 30% 18%, #e6ddcb 0, #d9cfbb 42%, #c9bea8 78%, #b3a891 100%) }
-html.coarse #loading::before{ content: ""; position: absolute; top: calc(env(safe-area-inset-top, 0px) + 34px); left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); border-radius: 18px / 20px; background: #0a0f0a; box-shadow: 0 0 0 1.5px #12100d, 0 0 0 3px #3b342b }
+html.coarse #loading{ color: #6b9061; text-shadow: 0 0 6px rgba(141,255,180,.35); background: radial-gradient(130% 80% at 30% 18%, #e6ddcb 0, #d9cfbb 42%, #c9bea8 78%, #b3a891 100%) }
+html.coarse #loading::before{ content: ""; position: absolute; z-index: -1; top: calc(env(safe-area-inset-top, 0px) + 34px); left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); border-radius: 18px / 20px; background: #0a0f0a; box-shadow: 0 0 0 1.5px #12100d, 0 0 0 3px #3b342b }
 @media (orientation: landscape) and (max-height: 520px){ html.coarse #loading::before{ top: 22px; bottom: 64px } }
 noscript{ position: fixed; inset: 0; z-index: 4; display: grid; place-content: center; gap: 6px; background: var(--bg); font-size: 14px; text-align: center }
 noscript h1{ margin: 0; font: 500 18px var(--mono) } noscript p{ margin: 0; color: var(--dim) } noscript a{ color: #8dffb4 }
