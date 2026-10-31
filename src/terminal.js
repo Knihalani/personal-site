@@ -1830,7 +1830,7 @@ M.createTerminal = function createTerminal(opts){
     function drawShadow(alpha){
       for (let k = 0; k < NV; k++){
         const t = Math.max(0, wy[k] + FY), x = wx[k] + SX * t, z = Math.max(1, wz[k] + SZ * t);
-        sqx[k] = cx + F * x / z; sqy[k] = hy + F * FY / z;
+        sqx[k] = pcx + F * x / z; sqy[k] = hy + F * FY / z;
       }
       G.globalAlpha = alpha; G.fillStyle = SH[si(.03)];
       for (const L of LET){ G.beginPath(); sring(L.o + L.n, L.n); sring(L.o + 2 * L.n, L.n); G.fill(); }
@@ -1917,7 +1917,7 @@ M.createTerminal = function createTerminal(opts){
       /* the panels: three for JUST / START / ! (side by side, or stacked on a tall tube), two for EDEN */
       const gp = 7 * pxk;
       if (!tall){
-        const a0 = W * .39, a1 = W * .35, b0 = W * .85, b1 = W * .81;
+        const a0 = W * .33, a1 = W * .29, b0 = W * .76, b1 = W * .72;
         PANEL3.set([0, 0, a0 - gp, 0, a1 - gp, h, 0, h, a0 + gp, 0, b0 - gp, 0, b1 - gp, h, a1 + gp, h, b0 + gp, 0, W, 0, W, h, b1 + gp, h]);
         PANEL2.set([0, 0, W * .6 - gp, 0, W * .4 - gp, h, 0, h, W * .6 + gp, 0, W, 0, W, h, W * .4 + gp, h]);
       } else {
@@ -1982,7 +1982,7 @@ M.createTerminal = function createTerminal(opts){
       JOBS.push(() => { TX_VW = mk(pw * sc, ph * sc, (c, w, hh) => {
         c.fillStyle = SH[si(.03)]; c.fillRect(0, 0, w, hh);
         for (const [j, t] of BOARD){
-          const L0 = mkLine('W'), u = uFit(L0, TW * sc * .74, TH * sc * .78), c0 = vw[0];
+          const L0 = mkLine('W'), u = uFit(L0, TW * sc * .84, TH * sc * .84), c0 = vw[0];
           for (let k = 0; k < t.length; k++){
             const L = mkLine(t[k]), xc = ((c0 + k - vw[0]) * GX + TW / 2) * sc, yc = ((vw[3] - j) * GY + TH / 2) * sc;
             vlineC(L, xc, yc + 3 * u, u, null, 1);
@@ -2088,8 +2088,8 @@ M.createTerminal = function createTerminal(opts){
         lerpC(o, lerp(jx, ex, p), lerp(jy, ey, p), -d, -.42 * Math.sin(Math.PI * c01((S - 4.45) / .62)), .1 * Math.sin(Math.PI * c01((S - 4.45) / .62)), -TAU * eIO((S - 4.42) / .45));
       } else if (S < T_W4){                            // out to the whole wall, a dutch angle settling, a push in
         const vx = (VW[0] + VW[1]) / 2 * GX, vy = (VW[2] + VW[3]) / 2 * GY, pw = (VW[1] - VW[0] + 1) * GX, ph = (VW[3] - VW[2] + 1) * GY;
-        const dw = Math.max(pw * camF / W2, ph * camF / h) * 1.12, p = eO5((S - T_W3) / .4);
-        const d = Math.exp(lerp(Math.log(dc), Math.log(dw), p)) * lerp(1, .9, sstep(6.75, 7.2, S));   // (the push in stops short of the board's edges)
+        const dw = Math.max(pw * camF / W2, ph * camF / h) * (tall ? 1.1 : 1.12), p = eO5((S - T_W3) / .4);
+        const d = Math.exp(lerp(Math.log(dc), Math.log(dw), p)) * lerp(1, tall ? .95 : .9, sstep(6.75, 7.2, S));   // (the push in stops short of the board's edges)
         lerpC(o, lerp(ex, vx, p), lerp(ey, vy, p), -d, .05 * Math.sin(S * 3), 0, lerp(.35, -.05, p) + .03 * Math.sin(S * 5));
       } else if (S < T_KN){                            // every tube flips to KN from the middle out; the camera pulls back
         const p = eO3((S - T_W4) / .25);
@@ -2123,7 +2123,8 @@ M.createTerminal = function createTerminal(opts){
         const per = 7 + 6 * hash(i * 1.3 + j * 7.7), q = S + hash(i * 9.1 - j * 2.3) * per, k = Math.floor(q / per), uu = q - k * per;
         const pool = LPOOL || TEX; tsTex = pool[(base + k * 5) % pool.length]; tsSub = 0;
         if (uu < .3){ const f = uu / .3; tsOpen = f < .5 ? 1 - sstep(0, .5, f) : sstep(.5, 1, f); }
-        tsBr = .5 + .22 * Math.sin(S * .5 + i * .6 + j * 1.1);
+        tsBr = .62 + .25 * Math.sin(S * .5 + i * .6 + j * 1.1);
+        if (i === POPI && j === POPJ && POPB > .01 && POPX){ tsTex = POPX; tsOpen = 1; tsBr = lerp(tsBr, 1.35, POPB); }   // (the tube that comes forward: a word, bright)
         return -1;
       }
       if (S < T_J){
@@ -2153,12 +2154,12 @@ M.createTerminal = function createTerminal(opts){
     }
     const WLF = new Float32Array(8);
     function tube(c, i, j, S){
-      const X = i * GX * CONV, Y = j * GY * CONV;   // (CONV: the wall pulling together into the KN)
-      proj(X, Y, 0); const zc = pjz;
-      proj(X - TW / 2, Y + TH / 2, 0); if (pjz < .3 || pjz < zc * .8) return; WLF[0] = pjx; WLF[1] = pjy;
-      proj(X + TW / 2, Y + TH / 2, 0); if (pjz < .3 || pjz < zc * .8) return; WLF[2] = pjx; WLF[3] = pjy;
-      proj(X - TW / 2, Y - TH / 2, 0); if (pjz < .3 || pjz < zc * .8) return; WLF[4] = pjx; WLF[5] = pjy;
-      proj(X + TW / 2, Y - TH / 2, 0); if (pjz < .3 || pjz < zc * .8) return; WLF[6] = pjx; WLF[7] = pjy;
+      const X = i * GX * CONV, Y = j * GY * CONV, Z = LOOPW && i === POPI && j === POPJ ? POPZ : 0;   // (CONV: the wall pulling together into the KN; Z: the loop's tube coming forward)
+      proj(X, Y, Z); const zc = pjz;
+      proj(X - TW / 2, Y + TH / 2, Z); if (pjz < .3 || pjz < zc * .8) return; WLF[0] = pjx; WLF[1] = pjy;
+      proj(X + TW / 2, Y + TH / 2, Z); if (pjz < .3 || pjz < zc * .8) return; WLF[2] = pjx; WLF[3] = pjy;
+      proj(X - TW / 2, Y - TH / 2, Z); if (pjz < .3 || pjz < zc * .8) return; WLF[4] = pjx; WLF[5] = pjy;
+      proj(X + TW / 2, Y - TH / 2, Z); if (pjz < .3 || pjz < zc * .8) return; WLF[6] = pjx; WLF[7] = pjy;
       const mx = Math.max(WLF[0], WLF[2], WLF[4], WLF[6]), nx = Math.min(WLF[0], WLF[2], WLF[4], WLF[6]), my = Math.max(WLF[1], WLF[3], WLF[5], WLF[7]), ny = Math.min(WLF[1], WLF[3], WLF[5], WLF[7]);
       const m = (mx - nx) * .12; if (mx < -m || nx > W2 + m || my < -m || ny > h + m) return;
       const ax = (WLF[2] - WLF[0]) / TW, ay = (WLF[3] - WLF[1]) / TW, bx = (WLF[4] - WLF[0]) / TH, by = (WLF[5] - WLF[1]) / TH;
@@ -2174,7 +2175,7 @@ M.createTerminal = function createTerminal(opts){
       if (open > 0){
         const tex = tsTex, sx = tsSub ? (i - VW[0]) * GX * VWS : 0, sy = tsSub ? (VW[3] - j) * GY * VWS : 0, sw = tsSub ? TW * VWS : tex.width, sh = tsSub ? TH * VWS : tex.height;
         c.globalAlpha = GA * c01(tsBr); c.drawImage(tex, sx, sy, sw, sh, TW / 2 * (1 - tsFlip), TH / 2 * (1 - open), TW * tsFlip, TH * open);
-        if (tsBr > 1){ c.globalCompositeOperation = 'lighter'; c.globalAlpha = tsBr - 1; c.drawImage(tex, sx, sy, sw, sh, 0, TH / 2 * (1 - open), TW, TH * open); c.globalCompositeOperation = 'source-over'; }
+        if (tsBr > 1){ c.globalCompositeOperation = 'lighter'; c.globalAlpha = GA * (tsBr - 1); c.drawImage(tex, sx, sy, sw, sh, 0, TH / 2 * (1 - open), TW, TH * open); c.globalCompositeOperation = 'source-over'; }
         c.globalAlpha = GA; lumAcc += det * TW * TH * .14 * tsBr * open;
       } else if (S > T_W3 && S < T_W4){ c.fillStyle = SH[si(.04 + .03 * hash(i + j * 9 + Math.floor(S * 15)))]; c.fillRect(0, 0, TW, TH); }
       if (open < 1 && line > 0){ c.fillStyle = P.bright; const lw = TW * line; c.fillRect(TW / 2 - lw / 2, TH / 2 - lu, lw, 2 * lu); }
@@ -2371,7 +2372,7 @@ M.createTerminal = function createTerminal(opts){
     }
     function constellation(C, L, u, xc, yb, S, T0, out){
       if (S < T0) return;
-      const g = S - T0, ex = out && S > out ? c01((S - out) / .1) : 0; if (ex >= 1) return;
+      const g = S - T0, ex = out && S > out ? c01((S - out) / CNOUT) : 0; if (ex >= 1) return;
       const al = 1 - ex;
       /* the links, each drawn out from its first node once both have arrived */
       G.strokeStyle = SH[si(.8)]; G.lineWidth = Math.max(1.5 * pxk, u * .22); G.lineCap = 'round'; G.globalAlpha = al; G.beginPath();
@@ -2466,7 +2467,7 @@ M.createTerminal = function createTerminal(opts){
         if (p === 1){ G = tg; speedLines(SD, pcx, pcy, 1.6, .7, 1); radial(pcx, pcy, Math.min(W2, h) * .3, SH[si(.25)], .4); }
         if (p === 2) rings(SD, pcx, pcy, 1.4, .45);
         typeOn(tg, true);
-        const pw = tall ? W2 * .82 : (PANEL3[o + 2] - PANEL3[o]) * .8, phh = tall ? (PANEL3[o + 5] - PANEL3[o + 1]) * (p === 2 ? .5 : .7) : h * (p === 2 ? .4 : .42);
+        const pw = tall ? W2 * .72 : (PANEL3[o + 2] - PANEL3[o]) * (p === 0 ? .7 : .8), phh = tall ? (PANEL3[o + 5] - PANEL3[o + 1]) * (p === 2 ? .5 : .7) : h * (p === 2 ? .4 : .42);
         const L = p === 0 ? LO.just : p === 1 ? LO.start : LO.bang, u = uFit(L, pw, phh) * zin, jit = live > .1 ? Math.sin(SD * 61 + p) * pxk : 0;
         if (p === 1){ hollow(L, pcx + jit, pcy, u * 1.04); vlineC(L, pcx + jit, pcy + 3 * u, u, null, 1); }
         else if (p === 2){ ROT = -.1 + .04 * Math.sin(SD * 7); hollow(L, pcx, pcy, u * 1.06, ROT); vlineC(L, pcx, pcy + 3 * u, u, animRot, 1); ROT = 0; }
@@ -2530,16 +2531,15 @@ M.createTerminal = function createTerminal(opts){
       G.fillStyle = SH[si(.5)]; G.fillRect(0, hy - pxk, W2, 2 * pxk);
     }
     let SS = 4;
-    /* the scroller: the intro's own vector type, small, riding a slow sine along the floor, with its reflection on the
-       floor under it; letters fade in and out at the edges and only the ones on the tube are drawn. Reduced motion: the
+    /* the scroller: the intro's own vector type, small, riding a slow sine along the floor; letters fade in and out at the edges and only the ones on the tube are drawn. Reduced motion: the
        name, still, in the middle */
-    let LSC = null, scX = 0, scU = 1, scY = 0, scA = 0, scPh = 0, scRef = false, scN = 1e9;
+    let LSC = null, scX = 0, scU = 1, scY = 0, scA = 0, scPh = 0, scN = 1e9;
     const animSc = i => {
       const L = LSC, gw = L.gl[i] ? L.gl[i].w : 0, px = scX + scU * COND * (L.ox[i] + gw / 2);
       if (i >= scN || px < -6 * scU || px > W2 + 6 * scU){ LA.on = false; return; }
       const wv = Math.sin(px / W2 * TAU * .85 - scPh) * scA / scU;
       LA.a = scN < 1e9 ? 1 : c01(px / (W2 * .14)) * c01((W2 - px) / (W2 * .14));
-      if (scRef){ LA.sy = -1; LA.dy = -6.9 - wv; } else LA.dy = wv;
+      LA.dy = wv;
     };
     function scroller(a, L, still){
       if (!LSC){ LSC = mkLine(scrollText()); const nm = mkLine(C.name || 'KN'); LSC.nw = nm.sw; LSC.nn = nm.n; }
@@ -2553,8 +2553,7 @@ M.createTerminal = function createTerminal(opts){
       for (let k = n; k >= Math.max(0, n - 1); k--){   // (the copy coming in, and the one going out: one continuous strip)
         scX = still ? cx - LSC.nw * scU / 2 : W2 - pos + k * per;
         if (scX + span < 0 || scX > W2) continue;
-        scRef = false; vline(LSC, scX, scY, scU, animSc, .9);
-        if (SS > 1){ scRef = true; vline(LSC, scX, scY + .6 * scU, scU, animSc, .16); scRef = false; }
+        vline(LSC, scX, scY, scU, animSc, .9);
         if (still) break;
       }
       kHot = kHot0; tg.globalCompositeOperation = 'source-over';
@@ -2615,49 +2614,98 @@ M.createTerminal = function createTerminal(opts){
       rol = wI * .045 * Math.sin(L * .43);
       y = logoY + wI * .55 * Math.sin(L * 1.2);
       z += wI * 2 * Math.sin(L * .33);
-      if (!still && L > SECTION - TURN){ const k = Math.floor((L + TURN) / SECTION), sec = L + TURN - k * SECTION; yaw += TAU * (k - 1 + s5(sec / TURN)); }   // a full turn ends each section
-      if (!still){   // the movement's own way of holding the KN (eased in and out with it: never a jump)
-        mvAt(L);
-        if (MVK === 0){ yaw += MVW * .5 * Math.sin(MVU * .21); pit -= .06 * MVW; z += MVW * Z0 * .06; }           // the wall: a slow orbit
-        else if (MVK === 1){ z += MVW * Z0 * .14; y += MVW * .35; yaw += MVW * .12 * Math.sin(MVU * .25); }      // the globe: back a little, inside it
-        else if (MVK === 2){ rol += MVW * .05 * Math.sin(MVU * .33); yaw += MVW * .22 * Math.sin(MVU * .17); }   // the constellation: a drift
+      LXO = 0;
+      if (!still){   // the movement's own way of holding the KN, blended across the change; the change itself is one full
+                     // roll in the picture plane (the KN never shows its edge or its back)
+        mvAt(L); PO.fill(0); poseOf(MVK, MVU, MVT); if (MVT < 1) poseOf(MVP, MVU + SECTION, 1 - MVT);
+        z *= 1 + PO[0]; y += PO[1]; yaw += PO[2]; pit += PO[3]; rol += PO[4]; LXO = PO[5] * W2;
+        if (MVM >= 1) rol += TAU * (MVM - 1 + (MVU < TURN ? s5(MVU / TURN) : 1));
       }
-      POSE[0] = yaw + lean + spin; POSE[1] = pit + tilt; POSE[2] = rol; POSE[3] = y + hop; POSE[4] = z; POSE[5] = sx; POSE[6] = sy;
+      POSE[0] = yaw + lean; POSE[1] = pit + tilt; POSE[2] = rol + spin; POSE[3] = y + hop; POSE[4] = z; POSE[5] = sx; POSE[6] = sy;   // (a key's turn and a drag spin it in the picture plane too)
     }
-    /* ---- the loop's movements: after a first section on the set, every SECTION (16 s, the KN making its full turn at
-       each change) a backdrop comes in behind it and goes again: the wall of tubes (a slow drift past the intro's words,
-       the tubes changing channel now and then, the KN orbiting), the J globe turning round it, the Eden constellation
-       drifting behind it, then the set alone. Each eases in and out over 2.5 s (MVW); the set's sky steps back under it;
-       the backdrop is drawn soft, on the wall's layer at its own resolution, and added over the sky ---- */
-    let MVK = -1, MVW = 0, MVU = 0, LOOPW = false, LPOOL = null, GA = 1;   // (GA: the backdrop's fade, through tube(), globe(), graph())
-    const LCAM = { x: 0, y: 0, z: -15, yaw: 0, pit: 0, rol: 0 };
-    function mvAt(L){
-      const mv = Math.floor(L / SECTION); MVK = -1; MVW = 0; if (mv < 1) return;
-      const k = (mv - 1) % 4; if (k === 3) return;
-      MVU = L - mv * SECTION; MVK = k; MVW = s5(MVU / 2.5) * (1 - s5((MVU - SECTION + 2.5) / 2.5));
+    /* ---- the loop's movements. After a first section on the set, every SECTION (16 s) the KN makes one full roll in the
+       picture plane and the next movement comes in with it: its backdrop revealed by a ring wiping out from the KN, the
+       old one fading, the KN easing into the movement's own framing. They cycle: the WALL (the camera pulled back, the
+       wall of tubes bright and drifting past the intro's pictures, tubes changing channel; one tube pops forward with a
+       word), the GLOBE (the KN small inside a big turning globe; word plates ride past), the CONSTELLATION (the KN low
+       and to one side; a field of agents, nodes linking up into EDEN, AGENTS, CONTEXT and dissolving), the SET (home;
+       a scanline sweeps down the bars). Calm, continuous, no flashes ---- */
+    const MV_WALL = 0, MV_GLOBE = 1, MV_CONST = 2, MV_SET = 3;
+    let MVK = MV_SET, MVP = MV_SET, MVT = 1, MVU = 0, MVM = 0, LXO = 0, LOOPW = false, LPOOL = null, GA = 1;   // (GA: a backdrop's fade, through tube(), globe(), graph())
+    let POPI = 99, POPJ = 99, POPZ = 0, POPB = 0, POPX = null, CNOUT = .1, LPL = null, LCC = null, LCW = 0;
+    const LCAM = { x: 0, y: 0, z: -15, yaw: 0, pit: 0, rol: 0 }, PO = new Float32Array(6);
+    const GLC = rgb(P.normal).join(',');   // (the phosphor, for a gradient's rgba)
+    const kindOf = m => m < 1 ? MV_SET : (m - 1) % 4;
+    function mvAt(L){   // the movement now (MVK, its time MVU), the one before (MVP), the change between them (MVT: 0..1 over the roll)
+      const m = Math.floor((L + TURN) / SECTION), t = L + TURN - m * SECTION;
+      MVM = m; MVU = t; MVK = kindOf(m); MVP = kindOf(m - 1); MVT = m < 1 ? 1 : s5(t / TURN);
     }
-    function loopBack(L){
-      const w = MVW, l0 = lumAcc;
-      tg.globalAlpha = .62 * w; tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, h + hy); tg.globalAlpha = 1;   // (the bars step back)
-      tg.save(); tg.beginPath(); tg.rect(-W2, -h, 3 * W2, h + hy); tg.clip();   // (the sky only: the floor stays the floor)
-      const sv = G; G = tg;
-      let str = .95;
-      if (MVK === 0){
-        str = .5; camF = h * 1.05; CONV = 1; rwc = 1; TOX = BX; TOY = BY;
-        LCAM.x = GX * 1.4 * Math.sin(L * .043); LCAM.y = GY * (.9 + .35 * Math.sin(L * .057)); LCAM.z = -(tall ? 26 : 15);
-        LCAM.yaw = .1 * Math.sin(L * .05); LCAM.pit = .05 + .03 * Math.sin(L * .037); LCAM.rol = .025 * Math.sin(L * .029);
+    function poseOf(k, t, w){   // into PO, weighted: [z scale, y, yaw, pitch, roll, x offset as a share of the width]
+      if (k === MV_WALL){ PO[0] += w * .65; PO[1] += w * .3; PO[2] += w * .26 * Math.sin(t * .21); PO[3] -= w * .05; }
+      else if (k === MV_GLOBE){ PO[0] += w * .6; PO[1] += w * .5; PO[2] += w * .14 * Math.sin(t * .25); }
+      else if (k === MV_CONST){ PO[0] += w * .5; PO[1] -= w * .9; PO[5] -= w * .22; PO[2] += w * .18 * Math.sin(t * .17); PO[4] += w * .04 * Math.sin(t * .33); }
+    }
+    function loopBack(L, S, ox, oy){
+      const dim = (MVK !== MV_SET ? MVT : 0) + (MVT < 1 && MVP !== MV_SET ? 1 - MVT : 0), l0 = lumAcc;
+      if (dim > .005){ tg.globalAlpha = .62 * Math.min(1, dim); tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, h + hy); tg.globalAlpha = 1; }   // (the bars step back)
+      if (MVT < 1 && MVP !== MV_SET) mvBack(MVP, 1 - MVT, L, S, MVU + SECTION, ox, oy, -1);
+      if (MVK !== MV_SET) mvBack(MVK, 1, L, S, MVU, ox, oy, MVT < 1 ? MVT * Math.hypot(W2, h) : -1);
+      else if (MVT >= 1 && MVU > 7 && MVU < 9.6){   // the set's moment: a scanline sweeping down the bars
+        const v = (MVU - 7) / 2.6, yb = lerp(-h * .1, hy, v), gr = tg.createLinearGradient(0, yb - h * .08, 0, yb + h * .02);
+        gr.addColorStop(0, 'rgba(' + GLC + ',0)'); gr.addColorStop(.8, 'rgba(' + GLC + ',' + (.1 * Math.sin(Math.PI * v)).toFixed(3) + ')'); gr.addColorStop(1, 'rgba(' + GLC + ',0)');
+        tg.globalCompositeOperation = 'lighter'; tg.fillStyle = gr; tg.fillRect(0, yb - h * .08, W2, h * .1); tg.globalCompositeOperation = 'source-over';
+      }
+      if (MVT < 1 && MVM >= 1){   // the change: a soft ring at the edge of the wipe
+        const r = MVT * Math.hypot(W2, h); tg.globalAlpha = .22 * (1 - MVT); tg.strokeStyle = P.bright; tg.lineWidth = 2 * pxk;
+        tg.beginPath(); tg.arc(ox, oy, Math.max(1, r), 0, TAU); tg.stroke(); tg.globalAlpha = 1;
+      }
+      lumAcc = l0 + (lumAcc - l0) * .8;
+    }
+    /* one movement's backdrop at fade a (its own time t), clipped to the sky, and to the wipe's circle while it opens */
+    function mvBack(k, a, L, S, t, ox, oy, wipe){
+      tg.save(); tg.beginPath(); tg.rect(-W2, -h, 3 * W2, h + hy); tg.clip();
+      if (wipe >= 0){ tg.beginPath(); tg.arc(ox, oy, Math.max(1, wipe), 0, TAU); tg.clip(); }
+      const sv = G; G = tg; tg.setTransform(1, 0, 0, 1, BX, BY);
+      if (k === MV_WALL){
+        camF = h * 1.05; CONV = 1; rwc = 1; TOX = BX; TOY = BY;
+        LCAM.x = GX * 2.6 * Math.sin(L * .07); LCAM.y = GY * (.9 + .3 * Math.sin(L * .057)); LCAM.z = -(tall ? 30 : 19);
+        LCAM.yaw = .12 * Math.sin(L * .05); LCAM.pit = .05 + .03 * Math.sin(L * .037); LCAM.rol = .02 * Math.sin(L * .029);
         setCam(LCAM);
         if (!LPOOL && TX_NAME && TX_J && TX_E && TEX.length === NT) LPOOL = [...TEX, TX_NAME, TX_J, TX_E, TX_NAME, TX_J, TX_E];
-        GA = w * str; tg.globalAlpha = GA;
-        LOOPW = true; for (let j = -3; j <= 5; j++) for (let i = -7; i <= 7; i++) tube(tg, i, j, L); LOOPW = false;
-        TOX = TOY = 0;
+        /* the moment: one tube near the middle comes forward with a word, bright, and goes back (4.5 to 10.5 s in) */
+        const ls = L - t + 4.5, pe = s5(c01((t - 4.5) / 1.6)) * (1 - s5(c01((t - 8.9) / 1.6)));
+        POPI = Math.round(2.6 * Math.sin(ls * .07)) + (MVM % 2 ? 1 : -1); POPJ = 1; POPZ = -7 * pe; POPB = pe; POPX = [TX_J, TX_E, TX_NAME][MVM % 3];
+        GA = a * .85; tg.globalAlpha = GA;
+        LOOPW = true;
+        for (let j = -3; j <= 5; j++) for (let i = -8; i <= 8; i++) if (i !== POPI || j !== POPJ) tube(tg, i, j, L);
+        tube(tg, POPI, POPJ, L);   // (last: in front)
+        LOOPW = false; TOX = TOY = 0; POPI = POPJ = 99;
+      } else if (k === MV_GLOBE){
+        GA = a; tg.globalAlpha = GA;
+        globe(L, ox, oy, Math.min(W2 * .46, h * .62), L * .2, .95);
+        /* the moment: word plates riding slowly past, one after another */
+        if (!LPL) LPL = [LO.cof, mkLine('YOUNG FOUNDERS'), LO.global];
+        const u = Math.max(1.2, h * .0085);
+        for (let p = 0; p < 3; p++){
+          const f = c01((t - 1.6 - p * 4.6) / 5.6); if (f <= 0 || f >= 1) continue;
+          const Lp = LPL[p], al = a * s5(f / .15) * (1 - s5((f - .85) / .15)), x = lerp(W2 * 1.15, -W2 * .15, f), y = h * (p === 1 ? .13 : .2);
+          const pw = Lp.sw * u + 6 * u, ph = 9 * u;
+          tg.globalAlpha = .8 * al; tg.fillStyle = P.bg; rrect(tg, x - pw / 2, y - ph / 2, pw, ph, u); tg.fill(); tg.strokeStyle = SH[si(.35)]; tg.lineWidth = pxk; tg.stroke();
+          typeOn(tg, true); tg.globalAlpha = 1; vlineC(Lp, x, y + 3 * u, u, null, al * .95); tg.globalCompositeOperation = 'source-over';
+        }
       } else {
-        GA = w * str; tg.globalAlpha = GA; tg.setTransform(1, 0, 0, 1, BX, BY);
-        if (MVK === 1) globe(L, cx, hy - h * .2, Math.min(W2 * .38, h * .47), L * .2, .8);
-        else graph(L, cx, hy - h * .24, Math.min(W2 * .52, h * .52), L * .12, .14 * Math.exp(-(L % 3.2) * 2.2), .85);   // (a soft pulse along it every eight beats)
+        GA = a; tg.globalAlpha = GA;
+        graph(L, cx, hy - h * .26, Math.min(W2 * .56, h * .56), L * .12, .12 * Math.exp(-(L % 3.2) * 2.2), 1);
+        /* the moment: nodes linking up into EDEN, AGENTS, CONTEXT, one at a time, and dissolving */
+        if (!LCC || LCW !== W2){ LCW = W2; LCC = [LO.eden, LO.agents, LO.context].map(Lw => { const uw = uFit(Lw, W2 * .36, h * .11); return { Lw, uw, C: mkConst(Lw, uw, cx + W2 * .22, h * .22 + 3 * uw) }; }); }
+        GA = 1; tg.globalAlpha = 1; CNOUT = .9;
+        for (let p = 0; p < 3; p++){
+          const T0 = S - t + 1.2 + p * 4.9, c = LCC[p];
+          if (S >= T0 && S < T0 + 3.4 + CNOUT){ tg.globalAlpha = a; constellation(c.C, c.Lw, c.uw, cx + W2 * .22, h * .22 + 3 * c.uw, S, T0, T0 + 3.4); }
+        }
+        CNOUT = .1;
       }
       GA = 1; G = sv; tg.restore(); tg.globalAlpha = 1; tg.setTransform(1, 0, 0, 1, BX, BY);
-      lumAcc = l0 + (lumAcc - l0) * w * str;
     }
     function physics(dt){
       /* the pointer's lean (its target smoothed, then a critically damped spring), the spin (a spring toward whole
@@ -2737,7 +2785,7 @@ M.createTerminal = function createTerminal(opts){
       /* the backdrop first: the wall behind the KN (its own camera and blur) */
       if (WALLK && !still){ wallShot(S, a); tg.setTransform(1, 0, 0, 1, BX, BY); }
       const climax = !still && A >= 0 && A < .1;   // (the slam's frames: the KN overscaled, bleeding off the tube)
-      F = F0 * FK; pcx = cx; pcy = hy;
+      F = F0 * FK; pcx = cx + (SHOT === K_LOOP ? LXO : 0); pcy = hy;
       if (climax){
         const k = A >= .033 && A < .067 ? 1.08 : 1, zc = F * 14.4 / ((tall ? 1.3 : 1.1) * W2) / k;
         xform(0, -.1, 0, 0, logoY, zc, 1, 1);
@@ -2749,12 +2797,12 @@ M.createTerminal = function createTerminal(opts){
         pcx += AX - qx[ANCH]; pcy += AY - qy[ANCH];
         xform(yaw, pit, rol, 0, y, z, sx, sy);
       }
-      const lsx = climax ? cx : ANCH >= 0 ? pcx : cx, lsy = climax ? h * .5 : pcy - F * y / z, lr = F * 8.5 / z;
+      const lsx = climax ? cx : pcx, lsy = climax ? h * .5 : pcy - F * y / z, lr = F * 8.5 / z;
       G = tg;
       /* the backdrop: the set (bars, floor, stars), or a shot's own field of lines */
       if (SETK){
         bars(still ? 3.1 : S, S, still, 0);
-        if (!still && SHOT === K_LOOP && MVW > .005) loopBack(L);
+        if (!still && SHOT === K_LOOP) loopBack(L, S, lsx, lsy);
         floor(S, still, shT, shS, z, 0, floorD);
         drawStars(dist + (still ? 37 : 0), speed, z, 1e9, 1, NST);
         drawShadow(SOLID);
@@ -2853,10 +2901,6 @@ M.createTerminal = function createTerminal(opts){
         radial(lsx, lsy, 0, SH[si(.4)], .45);
         drawLogo(1, 0, 0, lw * 2.2, -1);
         lumAcc += W2 * h * .08;
-      }
-      if (!still && SHOT === K_LOOP && L > SECTION){   // each change of movement: a quiet ring off the KN as it finishes its turn
-        const u = (L % SECTION) / 1.8;
-        if (u < 1){ tg.globalAlpha = .2 * (1 - u) * (1 - u); tg.strokeStyle = P.bright; tg.lineWidth = 2 * pxk; tg.beginPath(); tg.arc(lsx, lsy, lr * (.55 + 2.4 * eO3(u)), 0, TAU); tg.stroke(); tg.globalAlpha = 1; lumAcc += lr * 10 * pxk * (1 - u); }
       }
       if (!still && A >= .1 && A < .74){              // the shockwave: a white ring out of the slam, through the hit-stop
         const u = (A - .1) / .64, r = lr * (.25 + 3.2 * eO3(u));
