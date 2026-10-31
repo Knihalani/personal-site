@@ -179,8 +179,8 @@ function resize(){
   api.resize(innerWidth, innerHeight);
 }
 on(window, 'resize', resize); resize();
-/* a GPU that cannot keep up: when most of ~5 s goes to long frames, shadows go first, then pixels below 1x
-   (scene.js has already trimmed the pixel ratio down to 1 by then) */
+/* a GPU that cannot keep up: when most of ~5 s goes to long frames, shadows go first, then pixels below 1x, a step
+   per 5 s (.75, then .5) while it stays slow (scene.js has already trimmed the pixel ratio down to 1 by then) */
 let slowT = 0, spanT = 0, runT = 0, bad = 0, last = performance.now(), T = 0;
 /* two clocks: dt (capped at 50 ms) steps the physics (hands, keys, camera springs, a game's tick), which must never
    leap; T is wall time (a frame counts up to 1 s, so a long stall or a tab coming back is not a leap), which the
@@ -191,6 +191,7 @@ function degrade(){
   const r = api.renderer;
   if (r.shadowMap.enabled){ r.shadowMap.enabled = false; api.scene.traverse(o => { if (o.isLight) o.castShadow = false; }); }
   else if (r.getPixelRatio() <= 1 && r.getPixelRatio() > .75) r.setPixelRatio(.75);
+  else if (r.getPixelRatio() <= .75 && r.getPixelRatio() > .5) r.setPixelRatio(.5);   // a software renderer (SwiftShader) or a very old GPU: still a room, not a slideshow
 }
 function frame(now){
   raf = requestAnimationFrame(frame);
