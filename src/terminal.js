@@ -443,6 +443,7 @@ M.createTerminal = function createTerminal(opts){
 
   /* ---- grid ---- */
   const PADX = Math.round(52 * PX); let cw = (W - 2 * PADX) / COLS;
+  const GU = 2;   // the left gutter: the prompt, what commands print and the pages all start on this column
   let advance = 0.4, fs = cw / advance;                 // VT323 advance is 0.4em; re-measured once loaded
   let ch = Math.round(fs * LINE);
   let ROWS = Math.floor((H - Math.round(64 * PX)) / ch);
@@ -630,8 +631,8 @@ M.createTerminal = function createTerminal(opts){
   function appendSpan(seg, st){
     let cont = 0;                              // the row this wraps onto continues the last: 1 after a dropped space, 2 exactly (for resize)
     while (seg){
-      if (!openRow){ openRow = cont ? { k: 't', i: 0, s: [], c: cont } : { k: 't', i: 0, s: [] }; rows.push(openRow); }
-      const room = COLS - rowLen(openRow);
+      if (!openRow){ openRow = cont ? { k: 't', i: GU, s: [], c: cont } : { k: 't', i: GU, s: [] }; rows.push(openRow); }
+      const room = COLS - GU - rowLen(openRow);
       let piece = seg, rest = '';
       if (seg.length > room){
         /* word wrap: break at the last space that fits; a word that does not fit moves down whole (with the
@@ -643,7 +644,7 @@ M.createTerminal = function createTerminal(opts){
         else {
           const word = /^\S*/.exec(seg)[0], moved = used ? pullWord(openRow) : null;
           const mw = moved ? moved.reduce((n, x) => n + x[0].length, 0) : 0;
-          if (moved && mw + word.length <= COLS && (mw || used)){ openRow = { k: 't', i: 0, s: moved, c: 2 }; rows.push(openRow); continue; }
+          if (moved && mw + word.length <= COLS - GU && (mw || used)){ openRow = { k: 't', i: GU, s: moved, c: 2 }; rows.push(openRow); continue; }
           if (moved) openRow.s.push(...moved);
           piece = seg.slice(0, Math.max(0, room)); rest = seg.slice(Math.max(0, room)); cont = 2;
         }
@@ -678,7 +679,7 @@ M.createTerminal = function createTerminal(opts){
       const segs = t.split('\n');
       segs.forEach((seg, k) => {
         if (seg) appendSpan(seg, st);
-        if (k < segs.length - 1){ if (!openRow) rows.push({ k: 't', i: 0, s: [] }); openRow = null; }
+        if (k < segs.length - 1){ if (!openRow) rows.push({ k: 't', i: GU, s: [] }); openRow = null; }
       });
       if (rows.length > 4000) trim();
       dirty = true;
@@ -819,11 +820,32 @@ M.createTerminal = function createTerminal(opts){
   let landing = null;
   function landingRows(){
     const o = out();
-    o.viz(Math.max(4, ROWS - 2), (x, y, w, h, age, t) => DEMO.draw(x, y, w, h, age, t), DEMO.live);
-    if (TAP) o.at(0, ['tap anywhere to begin', 'd']);   // phones: any tap or key goes to the title card
+    o.viz(Math.max(4, ROWS - 2), (x, y, w, h, age, t) => { DEMO.draw(x, y, w, h, age, t); const l = landing; if (l && l.off != null) powerDown(y, h, (now - l.off) / PD); }, DEMO.live);
+    if (TAP) o.at(2, ['tap anywhere to begin', 'd']);   // phones: any tap or key goes to the title card
     else o.at(2, ['type ', 'd'], chip('help', 'b'), [' and press enter to get started', 'd']);
     landing = { viz: o.rows[0], note: o.rows[1] };
     return o;
+  }
+  /* the landing switches off before it goes (a CRT powering down: squashed to a bright line, then to a dot, PD s), then
+     fn runs; false when it is already going (or under reduced motion: fn is the caller's to run at once) */
+  const PD = .25;
+  function powerOff(fn){
+    if (!landing || landing.off != null || REDUCED) return false;
+    landing.off = now; landing.then = fn; dirty = true; return true;
+  }
+  let pdC = null;
+  function powerDown(top, hh, f){
+    hh = Math.ceil(hh);
+    if (!pdC || pdC.width !== W || pdC.height !== hh){ pdC = document.createElement('canvas'); pdC.width = W; pdC.height = hh; }
+    const c = pdC.getContext('2d'); c.globalCompositeOperation = 'copy'; c.drawImage(g.canvas, 0, top, W, hh, 0, 0, W, hh);
+    g.fillStyle = P.bg; g.fillRect(0, top, W, hh);
+    const a = Math.min(1, f / .6), b = clamp((f - .6) / .4, 0, 1), lh = Math.max(3, hh * (1 - a * a * a)), lw = W * (1 - b * b * .985), x0 = (W - lw) / 2, y0 = top + hh / 2 - lh / 2;
+    if (b < 1){ g.globalAlpha = 1 - b; g.drawImage(pdC, 0, 0, W, hh, x0, y0, lw, lh); }
+    g.globalCompositeOperation = 'lighter'; g.fillStyle = P.bright;
+    g.globalAlpha = .6 * a * (1 - b); g.fillRect(x0, y0, lw, lh);
+    g.globalAlpha = a * (1 - .7 * b * b); g.fillRect(x0, top + hh / 2 - 1.5, lw, 3);
+    g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+    lumAcc += lw * lh * .4;
   }
   function dismissLanding(){
     if (!landing) return;
@@ -844,19 +866,20 @@ M.createTerminal = function createTerminal(opts){
   let homeMenu = null, homeBar = true;   // homeBar: the menu's bar is shown (nothing typed)
   function phoneHome(o, note){
     const tight = COLS >= 50;   // a phone on its side: a short tube, so fewer blank rows
-    if (!tight && ROWS >= 25) o.blank().viz(3, knBadge, () => 12);   // a tall tube: the KN badge, turning slowly over the name
+    if (!tight && ROWS >= 25) o.blank().viz(3, knBadge, age => age < .6 ? 30 : 12);   // a tall tube: the KN badge, turning slowly over the name
     else if (!tight) o.blank();
     o.big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' \u00b7 '), 'n']);
     if (note && tight) o.line([note, 'd']); o.blank();
     if (note && !tight) o.line([note, 'd']).blank();
-    const items = [['about', 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is'], ['j', J.title || 'J'], ['eden', E.line || E.title || 'Eden'],
+    const items = [['about', 'who ' + ((C.name || 'Kaiav').split(' ')[0]) + ' is'], ['j', J.line || J.title || 'J'], ['eden', E.line || E.title || 'Eden'],
       ...(posts().length ? [['writing', 'posts']] : []), ['contact', 'email addresses'], ['links', 'LinkedIn, X and GitHub'], ['games', 'snake, tetris, breakout, typing', 'play']];
     const m = { items, rows: [], sel: 0, top: o.rows[0] };
     const wide = tight;   // and one line a row, so the whole menu shows
     items.forEach(([cmd, desc, label], i) => {
       o.at(1, ['x', 'n']); const a = o.rows[o.rows.length - 1];
       let b = null; if (!wide){ o.at(1, ['x', 'n']); b = o.rows[o.rows.length - 1]; }
-      m.rows.push([a, b, (i + 1) + '  ' + (label || cmd).toUpperCase(), '   ' + desc, { cmd, nl: true }]);
+      const room = COLS - 3 - (wide ? 15 : 4), d = desc.length <= room ? desc : desc.slice(0, Math.max(1, desc.lastIndexOf(' ', room - 3))) + '...';   // (a long line cut at a word)
+      m.rows.push([a, b, (i + 1) + '  ' + (label || cmd).toUpperCase(), '   ' + d, { cmd, nl: true }]);
     });
     o.blank().line(['tap a row, or type help', 'd']).blank();
     homeMenu = m; paintHome();
@@ -872,13 +895,16 @@ M.createTerminal = function createTerminal(opts){
     const sc = h / 10.5, cy = y + h / 2, turn = REDUCED ? 1 : Math.cos(t * .45) * .22 + .78, shear = .24;
     const pt = (px, py, ox) => [x + (ox + px * turn + py * shear) * sc, cy - py * sc];   // (y up, as drawn)
     const run = REDUCED ? -1 : (t * .35) % 1.6 - .3;   // the light along the letters, from the left
+    const fl = REDUCED ? 0 : .8 * Math.pow(clamp(1 - age / .4, 0, 1), 2);   // (as it lands: a flash)
     g.lineJoin = 'round';
     KN_OUT.forEach((poly, li) => {
-      const ox = .6 + li * 7.6;
+      const ox = .96 + li * 7.6;   // (the K's foot on the column the name and the menu start on)
       for (const [dz, col, lw] of [[.55, P.faint, 2.5], [0, P.bright, 3]]){   // a faint copy behind: depth
         g.beginPath(); poly.forEach(([px, py], i) => { const q = pt(px, py, ox); i ? g.lineTo(q[0] + dz * sc, q[1] + dz * sc) : g.moveTo(q[0] + dz * sc, q[1] + dz * sc); }); g.closePath();
         g.strokeStyle = col; g.lineWidth = lw; g.stroke();
       }
+      if (fl > 0){ g.beginPath(); poly.forEach(([px, py], i) => { const q = pt(px, py, ox); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }); g.closePath();
+        g.globalCompositeOperation = 'lighter'; g.globalAlpha = fl; g.strokeStyle = P.bright; g.lineWidth = 6; g.stroke(); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
       const f = run - li * .25;
       if (f > 0 && f < 1){ const q = pt(3, 0, ox); const gr = g.createLinearGradient(q[0] - 6 * sc, 0, q[0] + 6 * sc, 0); gr.addColorStop(Math.max(0, f - .15), 'rgba(240,255,232,0)'); gr.addColorStop(f, 'rgba(240,255,232,.5)'); gr.addColorStop(Math.min(1, f + .15), 'rgba(240,255,232,0)'); g.fillStyle = gr; g.beginPath(); poly.forEach(([px, py], i) => { const q2 = pt(px, py, ox); i ? g.lineTo(q2[0], q2[1]) : g.moveTo(q2[0], q2[1]); }); g.closePath(); g.fill(); }
     });
@@ -914,17 +940,17 @@ M.createTerminal = function createTerminal(opts){
       return o;
     },
     eden(o){
-      o.blank().big(E.title || 'Eden').line([E.role || '', 'd']).blank();
+      o.blank().head('eden', 'eden.txt').blank().big(E.title || 'Eden').line([E.role || '', 'd']).blank();
       if (E.line) o.para(E.line, 'b').blank();
       if (E.body) o.para(E.body, 'n').blank();
       return o.line(['see also  ', 'f'], ...chips(['contact', 'j', 'about'], 'n')).blank();
     },
     j(o){
-      o.blank().big(J.title || 'J').line([J.role || '', 'd']).blank()
+      o.blank().head('j', 'j.txt').blank().big(J.title || 'J').line([J.role || '', 'd']).blank()
         .para(J.line || '', 'b').blank().para(J.body || '', 'n').blank();
       if (TAP && URLS.j) o.at(2, ['[ visit ' + bare(URLS.j) + ' ]', 'b', { url: URLS.j }]).blank();   // phones: one clear button, before the details
       o
-        .card({ title: 'J', note: 'j.txt', items: [...(J.facts || []).map(f => ({ label: f[0], value: f[1] })),
+        .card({ title: 'J', items: [...(J.facts || []).map(f => ({ label: f[0], value: f[1] })),
           { label: 'site', value: bare(URLS.j), full: URLS.j, url: URLS.j, hint: 'open' }] }).blank();
       o.line(['see also  ', 'f'], ...chips(['contact', 'eden', 'about'], 'n')).blank();
       return o;
@@ -942,7 +968,7 @@ M.createTerminal = function createTerminal(opts){
       return o;
     },
     links(o){
-      o.blank().card({ title: 'LINKS', note: 'links.txt', items: LINKLIST().map(t => ({ label: t.title, value: t.short, full: t.url, url: t.url, hint: 'open' })) })
+      o.blank().head('links', 'links.txt').blank().card({ title: 'PROFILES', items: LINKLIST().map(t => ({ label: t.title, value: t.short, full: t.url, url: t.url, hint: 'open' })) })
         .blank().at(2, ['see also  ', 'f'], ...chips(['contact', 'j'], 'n'), ...(TAP ? [] : [['  ', 'f'], ['open <name>', 'n']])).blank();
       return o;
     },
@@ -1061,7 +1087,7 @@ M.createTerminal = function createTerminal(opts){
       if (ls.length){ o.at(2, ['elsewhere', 'd']); o.at(2, ...ls.flatMap((t, i) => [...(i ? [['   ', 'f']] : []), [t.title, 'b', { url: t.url }]])); o.blank(); }
       io.rich(o); return;
     }
-    const o = out().blank().card({ title: 'CONTACT', note: 'email', verb: 'copy', items: EMAILS.map(e => ({ label: e.label, value: e.email, copy: e.email, hint: 'copy' })) }).blank()
+    const o = out().blank().head('contact').blank().card({ title: 'EMAIL', verb: 'copy', items: EMAILS.map(e => ({ label: e.label, value: e.email, copy: e.email, hint: 'copy' })) }).blank()
       .line(['see also  ', 'f'], ...chips(['about', 'links', 'j'], 'n')).blank();
     io.rich(o); return io.pick(o.lastCard);
   } });
@@ -2156,6 +2182,7 @@ M.createTerminal = function createTerminal(opts){
     }
     const WLF = new Float32Array(8);
     function tube(c, i, j, S){
+      if (LOOPW){ loopTube(i, j); if (!tsTex) return; }   // (the loop's dark tubes are drawn all at once, in loopBack)
       const X = i * GX * CONV, Y = j * GY * CONV, Z = 0;   // (CONV: the wall pulling together into the KN)
       proj(X, Y, Z); const zc = pjz;
       proj(X - TW / 2, Y + TH / 2, Z); if (pjz < .3 || pjz < zc * .8) return; WLF[0] = pjx; WLF[1] = pjy;
@@ -2169,6 +2196,12 @@ M.createTerminal = function createTerminal(opts){
       if (!LOOPW) tubeState(i, j, S);
       c.setTransform(ax * rwc, ay * rwc, bx * rwc, by * rwc, WLF[0] * rwc + TOX, WLF[1] * rwc + TOY);
       const lu = 1.4 * pxk / Math.sqrt(det);
+      if (LOOPW && tsTex === LTX.PX){   // a pixel: a flat block of light
+        c.globalAlpha = GA * c01(tsBr); c.fillStyle = SH[si(.86)]; c.fillRect(-BZ * .5, -BZ * .5, TW + BZ, TH + BZ); c.globalAlpha = GA;   // (one fill: the block runs into its bezel, which so lights with it)
+        lumAcc += det * TW * TH * .6 * tsBr;
+        if (NRF < RFN){ RFB[NRF * 5] = nx; RFB[NRF * 5 + 1] = ny; RFB[NRF * 5 + 2] = mx - nx; RFB[NRF * 5 + 3] = my - ny; RFB[NRF * 5 + 4] = Math.min(1, tsBr); NRF++; }
+        return;
+      }
       const big = (mx - nx) * rwc > 70 && (S < T_KN || LOOPW);   // (small tubes, and the wall behind the KN: square corners, no inner rim)
       if (LOOPW && !big){ c.fillStyle = SH[si(tsRim)]; c.fillRect(-BZ - lu / 2, -BZ - lu / 2, TW + 2 * BZ + lu, TH + 2 * BZ + lu); c.fillStyle = SH[si(.012)]; c.fillRect(-BZ + lu / 2, -BZ + lu / 2, TW + 2 * BZ - lu, TH + 2 * BZ - lu); }   // (small: two fills, no path)
       else {
@@ -2182,10 +2215,10 @@ M.createTerminal = function createTerminal(opts){
         c.globalAlpha = GA * c01(tsBr); c.drawImage(tex, sx, sy, sw, sh, TW / 2 * (1 - tsFlip), TH / 2 * (1 - open), TW * tsFlip, TH * open);
         if (tsBr > 1){ c.globalCompositeOperation = 'lighter'; c.globalAlpha = GA * (tsBr - 1); c.drawImage(tex, sx, sy, sw, sh, 0, TH / 2 * (1 - open), TW, TH * open); c.globalCompositeOperation = 'source-over'; }
         c.globalAlpha = GA; lumAcc += det * TW * TH * .14 * tsBr * open;
+        if (LOOPW && NRF < RFN){ RFB[NRF * 5] = nx; RFB[NRF * 5 + 1] = ny; RFB[NRF * 5 + 2] = mx - nx; RFB[NRF * 5 + 3] = my - ny; RFB[NRF * 5 + 4] = Math.min(1, tsBr); NRF++; }   // (for the floor's reflection)
       } else if (!LOOPW && S > T_W3 && S < T_W4){ c.fillStyle = SH[si(.04 + .03 * hash(i + j * 9 + Math.floor(S * 15)))]; c.fillRect(0, 0, TW, TH); }
       if (open < 1 && line > 0){ c.fillStyle = P.bright; const lw = TW * line; c.fillRect(TW / 2 - lw / 2, TH / 2 - lu, lw, 2 * lu); }
       /* the glass: a glint along its top */
-      if (LOOPW){ loopTube(i, j); if (!tsTex) return; }   // (the loop's dark tubes are drawn all at once, in loopBack)
       if (big && !LOOPW){ c.strokeStyle = SH[si(.3)]; c.globalAlpha = .5 * GA; c.beginPath(); c.moveTo(.35, .22); c.lineTo(1.6, .22); c.stroke(); c.globalAlpha = GA; }
     }
     /* dust between the camera and the wall: parallax, drawn as streaks from where the last instant's camera saw it */
@@ -2199,12 +2232,6 @@ M.createTerminal = function createTerminal(opts){
         setCam(PCAM); proj(X, Y, Z); const x0 = pjx, y0 = pjy, z0 = pjz; setCam(CAM); proj(X, Y, Z);
         if (pjz < .4 || z0 < .4) continue;
         let ddx = pjx - x0, ddy = pjy - y0; const l = Math.hypot(ddx, ddy); if (l > W2 * .5) continue;
-      if (LOOPW && tsTex === LTX.PX){   // a pixel: a flat block of light
-        c.globalAlpha = GA * c01(tsBr); c.fillStyle = SH[si(.86)]; c.fillRect(-BZ * .5, -BZ * .5, TW + BZ, TH + BZ); c.globalAlpha = GA;   // (one fill: the block runs into its bezel, which so lights with it)
-        lumAcc += det * TW * TH * .6 * tsBr;
-        if (NRF < RFN){ RFB[NRF * 5] = nx; RFB[NRF * 5 + 1] = ny; RFB[NRF * 5 + 2] = mx - nx; RFB[NRF * 5 + 3] = my - ny; RFB[NRF * 5 + 4] = Math.min(1, tsBr); NRF++; }
-        return;
-      }
         if (l > W2 * .07){ const k = W2 * .07 / l; ddx *= k; ddy *= k; }   // (a mote close to the lens in a dive: a short streak, never a line across the frame)
         G.lineWidth = clamp(10 / pjz, 1, 5) * pxk; G.beginPath(); G.moveTo(pjx, pjy); G.lineTo(pjx - ddx * 1.6 - .01, pjy - ddy * 1.6); G.stroke();
       }
@@ -2215,7 +2242,6 @@ M.createTerminal = function createTerminal(opts){
     let TOX = 0, TOY = 0;
     function wallShot(S, a){
       camF = h * 1.05;
-        if (LOOPW && NRF < RFN){ RFB[NRF * 5] = nx; RFB[NRF * 5 + 1] = ny; RFB[NRF * 5 + 2] = mx - nx; RFB[NRF * 5 + 3] = my - ny; RFB[NRF * 5 + 4] = Math.min(1, tsBr); NRF++; }   // (for the floor's reflection)
       const s0 = S >= T_KN ? KCUT[shotOf(S)] : S >= T_W4 ? T_W4 : S >= T_W3 ? T_W3 : S >= T_OUTJ ? T_OUTJ : T_I1;   // (the shutter never reaches back across a cut)
       const knAct = S >= T_KN; CONV = knAct ? 1 - eI3((S - 10.0) / .4) : 1;
       const dim = !knAct || S < T_CH ? 1 : S < 10.0 ? .38 : .38 + .55 * sstep(10.0, 10.1, S);   // (soft behind the chrome KN; back up for the collapse)
@@ -2515,6 +2541,7 @@ M.createTerminal = function createTerminal(opts){
         }
       }
     }
+    let FLP = -1;   // (where the beat's floor line is: a depth, or -1)
     function floor(a, still, shT, shS, zl, bk, floorD){
       const reveal = still ? 1 : eO3((a - T_CH) / .25), bot = h, y1 = hy + (bot - hy) * reveal;
       for (let k = 0; k < 5; k++){ G.fillStyle = SH[si((.17 - k * .032))]; G.fillRect(0, hy - 4 - k * 4, W2, 4); }
@@ -2524,6 +2551,7 @@ M.createTerminal = function createTerminal(opts){
           const z = zN + ((k * gs - floorD) % span + span) % span; let y = hy + F * FY / z, v = .04 + .26 * Math.pow(1 - (z - zN) / span, 3);
           if (z > zN + 6 && F * FY / z - F * FY / (z + gs) < 3) continue;
           if (shS > 0 && shT < 2.5){ const d = Math.abs(z - zl) - shT * 50, e = shS * Math.exp(-d * d / 40) * Math.exp(-shT * 1.6); y -= e * F / z * .5; v += .4 * e; }
+          if (FLP > 0) v += .3 * c01(1 - Math.abs(z - FLP) / (gs * .6));   // (the beat: one line lit, coming toward the viewer)
           if (y > y1 || y > bot || y < hy) continue;
           G.fillStyle = SH[si(v + .18 * bk)]; G.fillRect(0, Math.round(y), W2, flw);
         }
@@ -2541,7 +2569,6 @@ M.createTerminal = function createTerminal(opts){
         G.drawImage(fan, 0, 0, fan.width, fh, 0, hy, fan.width, fh);
         lumAcc += (bot - hy) * W2 * .05 * reveal;
       }
-    let FLP = -1;   // (where the beat's floor line is: a depth, or -1)
       G.fillStyle = SH[si(.5)]; G.fillRect(0, hy - pxk, W2, 2 * pxk);
     }
     let SS = 4;
@@ -2551,7 +2578,6 @@ M.createTerminal = function createTerminal(opts){
     const animSc = i => {
       const L = LSC, gw = L.gl[i] ? L.gl[i].w : 0, px = scX + scU * COND * (L.ox[i] + gw / 2);
       if (i >= scN || px < -6 * scU || px > W2 + 6 * scU){ LA.on = false; return; }
-          if (FLP > 0) v += .3 * c01(1 - Math.abs(z - FLP) / (gs * .6));   // (the beat: one line lit, coming toward the viewer)
       const wv = Math.sin(px / W2 * TAU * .85 - scPh) * scA / scU;
       LA.a = scN < 1e9 ? 1 : c01(px / (W2 * .14)) * c01((W2 - px) / (W2 * .14));
       LA.dy = wv;
@@ -2790,6 +2816,20 @@ M.createTerminal = function createTerminal(opts){
       G = sv; tg.restore(); tg.globalAlpha = 1; tg.setTransform(1, 0, 0, 1, BX, BY);
       lumAcc = l0 + (lumAcc - l0) * .8;
     }
+    /* the wall on the floor: its lit tubes reflected under the horizon, faint, fading out toward the viewer */
+    /* (the lit tubes this frame, as screen boxes: x, y, w, h, light; drawn again under the horizon as soft blocks) */
+    const RFN = 400, RFB = new Float32Array(RFN * 5); let NRF = 0;
+    function reflect(wf){
+      const rh = Math.min(hy, h - hy) * .55; if (rh < 4 || wf <= 0) return;
+      tg.setTransform(1, 0, 0, 1, BX, BY); tg.globalCompositeOperation = 'lighter'; tg.fillStyle = P.normal;
+      for (let k = 0; k < NRF; k++){
+        const x = RFB[k * 5], y = RFB[k * 5 + 1], w = RFB[k * 5 + 2], hh = RFB[k * 5 + 3], d0 = (hy - (y + hh)) * .5, d1 = (hy - y) * .5;   // (mirrored, squashed to half)
+        if (d0 > rh || d1 < 0) continue;
+        const a = .18 * wf * RFB[k * 5 + 4] * (1 - (Math.max(0, d0) + d1) / (2 * rh));   // (fading out toward the viewer)
+        if (a > .004){ tg.globalAlpha = a; tg.fillRect(x, hy + Math.max(0, d0), w, Math.min(rh, d1) - Math.max(0, d0)); }
+      }
+      tg.globalAlpha = 1; tg.globalCompositeOperation = 'source-over';
+    }
     function physics(dt){
       /* the pointer's lean (its target smoothed, then a critically damped spring), the spin (a spring toward whole
          turns), the hop (a soft spring): every one continuous in position and speed */
@@ -2816,20 +2856,6 @@ M.createTerminal = function createTerminal(opts){
       ageNow = a;
       /* quality: when frames keep coming late, fewer blur samples, then no mirror under the scroller (never the
          resolution, so nothing pops); back up after a long run of good frames */
-    /* the wall on the floor: its lit tubes reflected under the horizon, faint, fading out toward the viewer */
-    /* (the lit tubes this frame, as screen boxes: x, y, w, h, light; drawn again under the horizon as soft blocks) */
-    const RFN = 400, RFB = new Float32Array(RFN * 5); let NRF = 0;
-    function reflect(wf){
-      const rh = Math.min(hy, h - hy) * .55; if (rh < 4 || wf <= 0) return;
-      tg.setTransform(1, 0, 0, 1, BX, BY); tg.globalCompositeOperation = 'lighter'; tg.fillStyle = P.normal;
-      for (let k = 0; k < NRF; k++){
-        const x = RFB[k * 5], y = RFB[k * 5 + 1], w = RFB[k * 5 + 2], hh = RFB[k * 5 + 3], d0 = (hy - (y + hh)) * .5, d1 = (hy - y) * .5;   // (mirrored, squashed to half)
-        if (d0 > rh || d1 < 0) continue;
-        const a = .18 * wf * RFB[k * 5 + 4] * (1 - (Math.max(0, d0) + d1) / (2 * rh));   // (fading out toward the viewer)
-        if (a > .004){ tg.globalAlpha = a; tg.fillRect(x, hy + Math.max(0, d0), w, Math.min(rh, d1) - Math.max(0, d0)); }
-      }
-      tg.globalAlpha = 1; tg.globalCompositeOperation = 'source-over';
-    }
       const wn = performance.now();
       if (lastW && !still){ const iv = wn - lastW; if (iv < 400){ slowAcc = slowAcc * .97 + (iv > 48 ? .03 : 0); fastAcc = iv < 40 ? fastAcc + iv : 0;
         if (slowAcc > .5 && wn - qAt > 2000){ qAt = wn; slowAcc = 0; if (NMAX > 2) NMAX = 2; else SS = 1; }
@@ -2900,7 +2926,10 @@ M.createTerminal = function createTerminal(opts){
       if (SETK){
         bars(still ? 3.1 : S, S, still, 0);
         if (!still && SHOT === K_LOOP){ KB[0] = KB[1] = 1e9; KB[2] = KB[3] = -1e9; for (let k = 0; k < NV; k++){ if (qx[k] < KB[0]) KB[0] = qx[k]; if (qx[k] > KB[2]) KB[2] = qx[k]; if (qy[k] < KB[1]) KB[1] = qy[k]; if (qy[k] > KB[3]) KB[3] = qy[k]; } loopBack(L); }
+        FLP = !still && SHOT === K_LOOP && L >= LS ? zN + 4 + 40 * (1 - ((L - LS) % BT) / BT) : -1;
         floor(S, still, shT, shS, z, 0, floorD);
+        if (!still && SHOT === K_LOOP) reflect(s5((L - LS + .8) / .8));
+        FLP = -1;
         drawStars(dist + (still ? 37 : 0), speed, z, 1e9, 1, NST);
         drawShadow(SOLID);
       } else if (SHOT === K_BURST) speedLines(S, cx, lsy, 1.6, .45, 1, 40);
@@ -2926,10 +2955,7 @@ M.createTerminal = function createTerminal(opts){
         const disp = Math.abs(yaw - pYaw) * lr * .9 + Math.abs(pit - pPit) * lr * .7 + Math.abs(rol - pRol) * lr * .7 + Math.abs(F * y / z - F * pY / pZ) + Math.abs(F * 8.5 / z - F * 8.5 / pZ) * .5;
         ns = clamp(Math.ceil(disp / 7), 1, SOLID < 1 || WALLK ? Math.min(3, NMAX) : NMAX);   // (a wireframe, or the KN over the wall: few samples)   // (a wireframe gets few samples: many read as a blob)
       }
-        FLP = !still && SHOT === K_LOOP && L >= LS ? zN + 4 + 40 * (1 - ((L - LS) % BT) / BT) : -1;
       const impact = climax, imp5 = !still && a >= T_CH && a < T_CH + .07, imp6 = !still && a >= T_EDGE && a < T_EDGE + .07;
-        if (!still && SHOT === K_LOOP) reflect(s5((L - LS + .8) / .8));
-        FLP = -1;
       if (!impact && !imp5 && !imp6){
         if (ns <= 1) drawLogo(ALPHA, SOLID, CHK, lw, sweep);
         else {
@@ -2963,6 +2989,8 @@ M.createTerminal = function createTerminal(opts){
           G = tg; xform(yaw, pit, rol, 0, y, z, sx, sy);
         }
       }
+      if (!still && SHOT === K_LOOP && L >= LS && (L - LS) % PH < .067){ tg.globalCompositeOperation = 'lighter'; tg.globalAlpha = .28; silhouette(P.bright); tg.globalAlpha = 1; tg.globalCompositeOperation = 'source-over'; }   // (each phrase's downbeat: the chrome flares, two frames)
+      SWB = .1;
       pYaw = yaw; pPit = pit; pRol = rol; pY = y; pZ = z; pSx = sx; pSy = sy; prevOk = true;
       if (SETK) drawStars(dist + (still ? 37 : 0), speed, 0, z, 1, NST);
       if (still || S > SCROLL0 - .5) scroller(S, L, still);
@@ -2989,8 +3017,6 @@ M.createTerminal = function createTerminal(opts){
         { const p0x = pcx; pcx = cx + (tall ? 0 : W2 * .2); pcy = hy + (tall ? h * .12 : 0); xform(.25, -.2, 0, 0, logoY, Z0 * (tall ? 1.4 : 1.55), 1, 1); pcx = p0x; }
         tg.strokeStyle = SH[si(.45)]; tg.lineWidth = 1.5 * pxk; tg.lineJoin = 'round';
         for (const Lt of LET){ ring(Lt.o + 2 * Lt.n, Lt.n); tg.stroke(); }
-      if (!still && SHOT === K_LOOP && L >= LS && (L - LS) % PH < .067){ tg.globalCompositeOperation = 'lighter'; tg.globalAlpha = .28; silhouette(P.bright); tg.globalAlpha = 1; tg.globalCompositeOperation = 'source-over'; }   // (each phrase's downbeat: the chrome flares, two frames)
-      SWB = .1;
         tg.strokeStyle = P.bright; tg.lineWidth = 4 * pxk;
         for (const Lt of LET){ ring(Lt.o, Lt.n); tg.stroke(); }
         tg.lineJoin = 'miter'; tg.restore(); pcy = hy; xform(yaw, pit, rol, 0, y, z, sx, sy);
@@ -3559,7 +3585,7 @@ M.createTerminal = function createTerminal(opts){
     if (app) closeApp(app, 130);
     j.dead = true;
     openRow = null;
-    rows.push({ k: 't', i: 0, s: [['^C', 'd']] });
+    rows.push({ k: 't', i: GU, s: [['^C', 'd']] });
     j.plain += ' Stopped.';
     status = 130;
     for (const t of j.timers) clearTimeout(t);
@@ -3687,16 +3713,16 @@ M.createTerminal = function createTerminal(opts){
     const out = []; let row = [], w = 0;
     for (const [s0, st] of spans){
       let t = s0;
-      while (t.length){ if (w >= COLS){ out.push(row); row = []; w = 0; } const n = Math.min(COLS - w, t.length); row.push([t.slice(0, n), st]); w += n; t = t.slice(n); }
+      while (t.length){ if (w >= COLS - GU){ out.push(row); row = []; w = 0; } const n = Math.min(COLS - GU - w, t.length); row.push([t.slice(0, n), st]); w += n; t = t.slice(n); }
     }
     out.push(row);
-    out.forEach((s, k) => rows.push(k ? { k: 't', i: 0, s, c: 2 } : { k: 't', i: 0, s }));
+    out.forEach((s, k) => rows.push(k ? { k: 't', i: GU, s, c: 2 } : { k: 't', i: GU, s }));
     shown = rows.length; partial = 0;
   }
-  function said(cmd){ rows.push({ k: 't', i: 0, s: [['\u2192 ', 'f'], [cmd, 'd']] }); shown = rows.length; partial = 0; return cmd; }
+  function said(cmd){ rows.push({ k: 't', i: GU, s: [['\u2192 ', 'f'], [cmd, 'd']] }); shown = rows.length; partial = 0; return cmd; }
   function execute(raw, programmatic){
     ghostKey = null;   // (a line may change the filesystem the ghost lists)
-    if (landing && raw.trim()) dismissLanding();   // the first command clears the landing, then runs on a clean screen
+    if (landing && raw.trim()){ if (!TAP && powerOff(() => execute(raw, programmatic))) return; dismissLanding(); }   // the first command switches the landing off, then runs on a clean screen
     ttyRows([...promptSpans(), [raw, 'n']]);
     openRow = null;
     input = ''; cur = 0; suggestion = ''; tabState = null; disarm();
@@ -3849,7 +3875,7 @@ M.createTerminal = function createTerminal(opts){
   function openPage(cmd, note, noHist){
     leave();
     const r = { k: 't', i: 2, s: [['\u2190 back', 'd', { cmd: 'back' }]] };   // (the arrow is drawn: VT323 has none)
-    rows.push(r); pageRow = r; shown = rows.length; partial = 0; trim(); pinned = true;
+    rows.push(r); if (!(TAP && COLS >= 50)) rows.push({ k: 't', i: 0, s: [] }); pageRow = r; shown = rows.length; partial = 0; trim(); pinned = true;   // (one blank line under it, then the page's header; not on a phone on its side: a short tube)
     page = cmd;
     if (note) mirror(note); else mirror('', cmd);
     eatBlank = true;
@@ -4202,7 +4228,7 @@ M.createTerminal = function createTerminal(opts){
   function drawPrompt(top){
     const gh = rs ? null : ghost();
     const PL = promptLen();
-    let off = 0; const room = COLS - PL - 1;
+    let off = 0; const room = COLS - GU - PL - 1;
     if (cur > room) off = cur - room;
     const vis = input.slice(off, off + room);
     let body = [[vis, 'n']];
@@ -4211,12 +4237,12 @@ M.createTerminal = function createTerminal(opts){
       if (at >= 0 && at < vis.length) body = [[vis.slice(0, at), 'd'], [vis.slice(at, at + rs.q.length), 'b'], [vis.slice(at + rs.q.length), 'd']];
     }
     if (off > 0){ const k = body.findIndex(x => x[0]); if (k >= 0){ body[k] = [body[k][0].slice(1), body[k][1]]; body.unshift(['\u2190', 'f']); } }   // more to the left
-    drawSpans({ i: 0, s: [...promptSpans(), ...body] }, top, 999);
-    if (input.length > off + room && PL + cur - off !== COLS - 1) text('\u2192', COLS - 1, top, 'f');   // more to the right
+    drawSpans({ i: GU, s: [...promptSpans(), ...body] }, top, 999);
+    if (input.length > off + room && GU + PL + cur - off !== COLS - 1) text('\u2192', COLS - 1, top, 'f');   // more to the right
     promptY = top + ch;
-    const cx = X(PL + cur - off);
+    const cx = X(GU + PL + cur - off);
     if (gh){
-      const gcol = PL + input.length - off;
+      const gcol = GU + PL + input.length - off;
       if (gh.kind === 'prefix') text(gh.text.slice(0, Math.max(0, COLS - gcol)), gcol, top, 'f');
       else if (gcol + 8 + gh.text.length <= COLS){   // fuzzy: an arrow and the target, set apart
         const ax = X(gcol + 1), ay = top + ch * 0.48;
@@ -4231,7 +4257,7 @@ M.createTerminal = function createTerminal(opts){
       const bx0 = Math.round(cx), bx1 = Math.round(cx + cw);
       g.fillStyle = P.normal; g.fillRect(bx0, Math.round(top + 3), bx1 - bx0, Math.round(ch - 6));
       const under = input[cur] || (gh && gh.kind === 'prefix' ? gh.text[0] : '');
-      if (under && SPAN_VEC.test(under)) vecGlyph(under, PL + cur - off, top, P.bg);
+      if (under && SPAN_VEC.test(under)) vecGlyph(under, GU + PL + cur - off, top, P.bg);
       else if (under){ setFont(); g.fillStyle = P.bg; fillT(under, cx, top + fs * 0.68); }
     }
   }
@@ -4369,13 +4395,13 @@ M.createTerminal = function createTerminal(opts){
     }
     if (promptVisible()){
       if (u >= first && u < first + ROWS) drawPrompt(PADY + (u - first + lift) * ch);
-      belowPrompt().forEach((r, k) => { const y = u + 1 + k; if (y >= first && y < first + ROWS) drawSpans({ i: 0, s: r }, PADY + (y - first + lift) * ch, 999); });
+      belowPrompt().forEach((r, k) => { const y = u + 1 + k; if (y >= first && y < first + ROWS) drawSpans({ i: GU, s: r }, PADY + (y - first + lift) * ch, 999); });
     } else if (job && job.ask && !app && !typing()){
       if (u >= first && u < first + ROWS) drawAsk(PADY + (u - first + lift) * ch);
     } else if (job && !app && !typing() && ahead && u >= first && u < first + ROWS){
-      drawSpans({ i: 0, s: [[ahead.replace(/\n/g, ' ').slice(-(COLS - 1)), 'd']] }, PADY + (u - first + lift) * ch, 999);   // typed ahead: echoed now, run at the prompt
+      drawSpans({ i: GU, s: [[ahead.replace(/\n/g, ' ').slice(-(COLS - GU - 1)), 'd']] }, PADY + (u - first + lift) * ch, 999);   // typed ahead: echoed now, run at the prompt
     } else if (job && !app && !typing() && now - job.t0 > 0.9 && u >= first && u < first + ROWS){
-      drawSpans({ i: 0, s: [[TAP ? 'tap here to stop' : COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 'f', { stop: true }]] }, PADY + (u - first + lift) * ch, 999);
+      drawSpans({ i: GU, s: [[TAP ? 'tap here to stop' : COLS >= 46 ? 'ctrl+c to stop' : '^C stops', 'f', { stop: true }]] }, PADY + (u - first + lift) * ch, 999);
     }
     g.restore(); curFont = '';
     // scroll position: a thin rail on the right and a quiet note at the bottom
@@ -4386,7 +4412,7 @@ M.createTerminal = function createTerminal(opts){
       g.fillStyle = P.dim; g.fillRect(railX - 2, ty, 6, th);
       const below = raw - first - ROWS;          // (under a short page the view runs on past the end: nothing more, just back down)
       /* the longest note that fits after what the bottom row says, so it never sits over a word or a chip */
-      const end = u >= first + ROWS ? lastEnd : promptVisible() && u === first + ROWS - 1 - lift ? promptLen() + input.length + 1 : 0;
+      const end = u >= first + ROWS ? lastEnd : promptVisible() && u === first + ROWS - 1 - lift ? GU + promptLen() + input.length + 1 : 0;
       const what = below > 0 ? below + ' more below' : 'back down';
       const note = ['  ' + what + (COLS >= 46 && !TAP ? '  space ' : ' '), '  ' + what + ' ', '  ' + (below > 0 ? below + ' more' : 'down') + ' ', ' ↓ ']
         .find(s => COLS - s.length >= end + 1) || ' ↓ ';
@@ -4432,7 +4458,8 @@ M.createTerminal = function createTerminal(opts){
   function update(dt, t){
     now = t;
     /* phones: the intro plays once (its opening, DEMO.LENGTH s), then settles on the title card (not while something is typed) */
-    if (TAP && landing && !landing.full && !app && !job && !input && landing.viz.t0 >= 0 && now - landing.viz.t0 > DEMO.LENGTH) toHome();
+    if (TAP && landing && !landing.full && !app && !job && !input && landing.off == null && landing.viz.t0 >= 0 && now - landing.viz.t0 > DEMO.LENGTH - PD){ if (!powerOff(toHome)) toHome(); }   // (switching off first; a tap or a key still skips at once)
+    if (landing && landing.then && now - landing.off >= PD){ const fn = landing.then; landing.then = null; fn(); }   // (the power-down is over)
     let changed = dirty;
     if (booting){
       bootT += dt;
