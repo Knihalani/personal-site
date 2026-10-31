@@ -127,15 +127,15 @@ collapses into it, the shots shortening to a 0.1 s run, into the slam on the set
 hit-stop with a white ring shockwave, the land). Each act has its own way of putting words on screen (slams, globe
 bands, constellations, flip tiles). Impact frames last two or three frames over a short hit-stop (the picture's clock
 holds, then catches up); one is a bright full frame (the slam), the rest dark field with bright line art. Motion blur is real (sub-frame samples averaged). Then a loop: a bar on the set while the KN eases back
-and the dark wall fades up behind it, then the wall of CRTs as one display running a fixed 32 s show on the 150 bpm
-grid (five phrases of four bars, each a few named shots of one or two bars), in two framings, a push or a pull a
-phrase (never a slide): wide, the wall a dot-matrix display of small tubes, each a pixel (a flat block of light or
-near-black glass): rings out of the KN, a giant 16 and a giant J (5x7), an equalizer, a turning globe around the KN;
-close, nine tubes across, one word at a time spelled a letter to two stacked tubes and centred over the KN (AGENTS,
-CONTEXT, JUST, START, KAIAV, NIHALANI). Tubes switch with a blink of light; something lands on every beat; the lit
-tubes are reflected faintly on the floor, and a floor line runs toward the viewer on every beat. The KN holds the
-middle on a dark halo, with an accent on every phrase's downbeat (a light sweep, a 7% punch, or both, and a
-two-frame flare of the chrome). A small, dim sine scroller of `MAC.CONTENT` facts (the name, J, Eden) in the intro's vector type. Keys glint the type,
+and the dark wall fades up behind it, then a fixed 32 s show on the 150 bpm grid, staged in 3D: the wall of CRTs is a set the camera trucks along at an
+angle, orbits, cranes over, flies low across and dives into; cuts land on downbeats. Two dives push into one tube
+until its screen fills the frame and play the opening's own scenes inside it (the J globe; the EDEN graph), then
+pull back to hundreds of tubes flipping in a wave from it; a whip-pan, and the opening's comic panels, cut in. The
+KN performs: it rides the moves (big in a third of the frame, turned with an orbit, small on the pull-back), falls
+out of the frame on a dive, is gone inside the scenes and slams back with a ring. On the wall a tube shows a letter
+two tubes tall (AGENTS, CONTEXT, JUST, START, KAIAV, NIHALANI), a flat block of light used as a pixel (rings, a
+giant 16 and J, an equalizer, a planet, waves), or near-black glass, switching with a blink; lit tubes are
+reflected on the floor and a floor line runs toward the viewer on every beat. A small, dim sine scroller of `MAC.CONTENT` facts (the name, J, Eden) in the intro's vector type. Keys glint the type,
 or give the logo a hop (and one smooth turn for the first key after a 1.6 s pause); reduced motion gets one still frame. It is silent. It animates at 30 fps through
 the viz `live` mechanism and stops when dismissed, scrolled off, or the reader is open. Test hooks (read-only, `?debug`): `introAge` (the intro's real age, s, from its first frame) and
 `introPose` (the logo's pose in the last frame).
