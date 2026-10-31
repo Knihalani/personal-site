@@ -497,6 +497,7 @@ M.createTerminal = function createTerminal(opts){
   /* ---- shell state ---- */
   const FS = createFS(() => cwd, diskSound);
   let cwd = HOME;
+  let ghostKey = null, ghostVal = null;   // ghost(): the completion offered for the line, worked out once per line
   const ENV = { HOME, USER: 'kaiav', LOGNAME: 'kaiav', HOSTNAME: 'kn84', SHELL: '/bin/sh', TERM: 'vt320', PATH: '/bin:/usr/bin:/usr/games',
     PWD: HOME, LANG: 'en_US.UTF-8', COLUMNS: String(COLS), LINES: String(ROWS) };
   const ALIAS_KEY = 'kaiav.term.alias';
@@ -840,7 +841,7 @@ M.createTerminal = function createTerminal(opts){
   const PAGE_WORDS = ['about', 'j', 'eden', 'writing', 'contact', 'links'];
   /* phones: home is a title card over a boot-disk menu of big rows: tap one, or press its number; the arrows move the
      bar and return opens it. The prompt still works under it */
-  let homeMenu = null;
+  let homeMenu = null, homeBar = true;   // homeBar: the menu's bar is shown (nothing typed)
   function phoneHome(o, note){
     const tight = COLS >= 50;   // a phone on its side: a short tube, so fewer blank rows
     if (!tight && ROWS >= 25) o.blank().viz(3, knBadge, () => 12);   // a tall tube: the KN badge, turning slowly over the name
@@ -886,7 +887,7 @@ M.createTerminal = function createTerminal(opts){
     const m = homeMenu; if (!m) return;
     const w = COLS - 3;
     m.rows.forEach(([a, b, t1, t2, link], i) => {
-      const on = i === m.sel;
+      const on = i === m.sel && !input;   // a line being typed is what return runs: the bar steps aside until it is empty
       if (!b){   // one line: number, name, what it is
         const t = (' ' + t1.padEnd(14) + t2.trim()).slice(0, w).padEnd(w);
         a.s = on ? [[t, 'i', link]] : [[t.slice(0, 4), 'd', link], [t.slice(4, 15), 'b', link], [t.slice(15), 'd', link]];
@@ -1342,7 +1343,7 @@ M.createTerminal = function createTerminal(opts){
     }
     const by = {};
     const add = (n, c) => { const gk = c.g && HELP_ALL.some(x => x[0] === c.g) ? c.g : 'misc'; (by[gk] = by[gk] || []).push(n); };
-    for (const [n, c] of Object.entries(M.TERM.cmds)) if (c && !c.hidden && typeof c.run === 'function') add(n, c);
+    for (const [n, c] of Object.entries(M.TERM.cmds)) if (c && !c.hidden && typeof c.run === 'function' && !(n === 'writing' && !posts().length)) add(n, c);   // (no posts: no empty page offered)
     for (const [n, a] of Object.entries(M.TERM.apps)) if (a && !a.hidden && typeof a.start === 'function' && !M.TERM.cmds[n]) add(n, Object.assign({ g: 'fun' }, a));
     const more = TAP && argv[2] !== 'more';   // phones: the everyday groups, the rest behind a "more" row
     const groups = HELP_ALL.filter(([k]) => by[k] && (!more || ['read', 'fun', 'tools', 'net'].includes(k))).map(([k, label]) => [label, by[k]]);
@@ -3546,6 +3547,7 @@ M.createTerminal = function createTerminal(opts){
   }
   function said(cmd){ rows.push({ k: 't', i: 0, s: [['\u2192 ', 'f'], [cmd, 'd']] }); shown = rows.length; partial = 0; return cmd; }
   function execute(raw, programmatic){
+    ghostKey = null;   // (a line may change the filesystem the ghost lists)
     if (landing && raw.trim()) dismissLanding();   // the first command clears the landing, then runs on a clean screen
     ttyRows([...promptSpans(), [raw, 'n']]);
     openRow = null;
@@ -3611,7 +3613,14 @@ M.createTerminal = function createTerminal(opts){
     scored.sort((a, b) => b[0] - a[0] || a[1].length - b[1].length);
     return [...new Set(scored.map(x => x[1]))];
   }
+  /* the ghost is asked for on every frame the prompt is drawn: worked out once per line (a path argument lists and
+     escapes a whole directory), not per frame. The filesystem only changes when a line runs, which changes the line */
   function ghost(){
+    const k = input + '\0' + cur + '\0' + suggestion + '\0' + cwd;
+    if (k !== ghostKey){ ghostVal = ghostOf(); ghostKey = k; }
+    return ghostVal;
+  }
+  function ghostOf(){
     if (!input && suggestion) return { text: suggestion, full: suggestion, kind: 'prefix', from: 0 };
     if (cur !== input.length || !input) return null;
     const ctx = context(); const list = candidates(ctx);
@@ -4308,6 +4317,7 @@ M.createTerminal = function createTerminal(opts){
     if (pendingNav && !job && !app){ const n = pendingNav; pendingNav = null; if (n === 'home') goHome(); else goBack(); changed = true; }
     if (runQueued && !job && !app && !rs){ runQueued = false; execute(input); if (!job) flushAhead(); changed = true; }
     if (job && !job.hinted && !app && now - job.t0 > 0.9){ job.hinted = true; changed = true; }
+    if (homeMenu && !input !== homeBar){ homeBar = !input; paintHome(); changed = true; }
     const on = ((t - blinkT0) % 1.06) < 0.53;
     if (on !== blinkOn){ blinkOn = on; if (promptVisible() || (job && job.ask && !job.ask.one) || (app && gridCursor)) changed = true; }
     if (idleT0 < 0 && !booting) idleT0 = t;

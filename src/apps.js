@@ -761,8 +761,8 @@ T.cmds.lamp = lamp;
 T.cmds.games = { g: 'fun', hidden: true, desc: 'what you can play', usage: 'games', run(argv, io){
   const list = [['tetris', 'the falling blocks'], ['snake', 'eat and grow'], ['breakout', 'clear the wall'], ['typing', 'how fast you type']].filter(([n]) => T.apps[n] || T.cmds[n]);
   if (!io.tty){ io.out(list.map(x => x[0]).join('\n') + '\n'); return; }
-  const o = io.ui(); o.blank();
-  for (const [n, d] of list) o.at(2, [n, 'b', { cmd: n }], [' '.repeat(Math.max(2, 9 - n.length)) + d, 'f']);
-  o.blank().at(2, ['esc or q leaves a game', 'f']).blank(); io.rich(o);
+  const o = io.ui(); o.blank(); if (o.head) o.head('games').blank();   // a page like the others: its title under back
+  for (const [n, d] of list) o.at(2, [n, 'b', { cmd: n }], [' '.repeat(Math.max(2, 9 - n.length)) + d, 'd']);
+  o.blank().at(2, [TOUCH ? 'quit, on the strip, leaves a game' : 'esc or q leaves a game', 'f']).blank(); io.rich(o);
 } };
 })();
