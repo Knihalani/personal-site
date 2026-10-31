@@ -2082,7 +2082,7 @@ M.createTerminal = function createTerminal(opts){
        to dx px and scale ok over .12 s */
     function word(L, S, T0, x, y, u, k0, out, odx, ody, ok, alpha){
       if (S < T0) return;
-      const moving = S - T0 < .12 || (out && S > out), ng = moving ? 3 : 1;
+      const ng = S - T0 < .04 ? 3 : 1;   // (ghosts on the slam's first frame only; a word leaving goes as one: no doubled glyphs where two words swap)
       for (let k = 0; k < ng; k++){
         const tt = S - k * .011; if (tt < T0) break;
         const g = tt - T0, sc = (1 + (k0 - 1) * Math.pow(1 - c01(g / .1), 3)) * (1 + .1 * c01((g - .1) / 1.2));   // (then a slow push in)
@@ -2238,7 +2238,7 @@ M.createTerminal = function createTerminal(opts){
       const knAct = S >= T_KN; CONV = knAct ? 1 - eI3((S - 10.0) / .4) : 1;
       const dim = !knAct || S < T_CH ? 1 : S < 10.0 ? .38 : .38 + .55 * sstep(10.0, 10.1, S);   // (soft behind the chrome KN; back up for the collapse)
       if (CONV <= .02) return;
-      camAt(Math.max(s0, warp(toFilm(AR - (S > T_OUTJ && S < T_E ? .01 : .02)))), PCAM);   // (a half shutter in the barrel roll: a spin, not a vortex) camAt(S, CAM);
+      camAt(Math.max(s0, warp(toFilm(AR - (S > T_OUTJ && S < T_E ? .01 : .02)))), PCAM); camAt(S, CAM);   // (a half shutter in the barrel roll: a spin, not a vortex)
       /* the blur's transform: where two wall points were an instant ago */
       setCam(CAM);
       const fx = syw * cpt, fz = cyw * cpt, fy = spt, t = fz > .05 ? -CAM.z / fz : 10, Pax = CAM.x + fx * t, Pay = CAM.y + fy * t;
@@ -2755,7 +2755,7 @@ M.createTerminal = function createTerminal(opts){
       /* the logo: crisp on the tube, or (moving fast) blurred: sub-frame poses added up on a layer */
       let sweep = SWEEP;
       if (!still && SHOT === K_LOOP){
-        const gq = (L - 3.2) % 6.4; if (L > 3.2 && gq < 1.3) sweep = s5(gq / 1.3);   // a slow glint across the chrome every 16 beats (calm: eased, no flash)
+        const gq = (L - 1.2) % .8; if (L > 1.2 && gq < .6) sweep = s5(gq / .6);   // a glint across the chrome every two beats (eased, soft at its ends: alive, no flash)
         if (L >= .05 && L < .95) sweep = (L - .05) / .9;
         else if (L > SECTION - .3){ const sec = (L + TURN) % SECTION; if (sec >= TURN - .1 && sec < TURN + .8) sweep = (sec - TURN + .1) / .9; }
       }
