@@ -205,7 +205,7 @@ M.dressRoom = function (api){
     const disp = mesh(new THREE.PlaneGeometry(.07, .028), new THREE.MeshStandardMaterial({ map: face, emissive: lin('#ffffff'), emissiveMap: face, emissiveIntensity: .32, roughness: .3 }), rc, .028, .033, .0352);
     disp.castShadow = false;
     // keep the clock honest: it shows the visitor's own time
-    draw(); setInterval(draw, 1000);
+    draw(); setInterval(() => { if (!document.hidden) draw(); }, 1000);   // (no repaint and texture upload in a background tab)
     mesh(softBox(.016, .008, .016, .003, .002), mat('#b9ad90', { roughness: .5 }), rc, .055, .066, 0);
   }
 
