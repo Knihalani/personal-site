@@ -3430,7 +3430,7 @@ M.createTerminal = function createTerminal(opts){
     }
     sfx('error');
     errLine(ctx.errSink, name + ': command not found\n');
-    const f = fuzzy(name, cmdItems());
+    const f = fuzzy(name, [...cmdItems()].sort((a, b) => VISITOR.has(b.name) - VISITOR.has(a.name)));   // (a tie goes to a page: con -> contact)
     if (f){ j.hint = [f.item.name, ...argv.slice(1)].join(' '); }
     else if (ctx.errSink === tty) tty.rich(out().at(2, [argv.length > 2 ? 'this shell knows commands, not sentences. try ' : 'not something this machine knows. try ', 'f'], chip('help', 'n')));
     return 127;
@@ -3875,6 +3875,7 @@ M.createTerminal = function createTerminal(opts){
       for (const a of it.alias || []) s = Math.max(s, fscore(ctx.q, a) - 5);
       for (const k of it.kw || []) s = Math.max(s, fscore(ctx.q, k) * 0.8);
       if (TAP && s >= 150 && ctx.kind === 'cmd' && VISITOR.has(it.name)) s += 400;   // phones: the pages before the Unix
+      else if (s >= 150 && ctx.kind === 'cmd' && VISITOR.has(it.name)) s += .5;   // desktops: a page only breaks a tie (con -> contact, not convert)
       if (s >= 150) scored.push([s, it.name]);
     }
     scored.sort((a, b) => b[0] - a[0] || a[1].length - b[1].length);
