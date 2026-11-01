@@ -4549,7 +4549,9 @@ M.createTerminal = function createTerminal(opts){
   }
 
   /* ---- frame ---- */
+  let tPrev = -1;
   function update(dt, t){
+    const wdt = tPrev < 0 ? dt : Math.max(0, t - tPrev); tPrev = t;   // wall time since the last frame (t is wall time, up to 1 s a frame)
     now = t;
     /* phones: the intro plays once (its opening, DEMO.LENGTH s), then settles on the title card (not while something is typed) */
     if (TAP && landing && !landing.full && !app && !job && !input && landing.off == null && landing.viz.t0 >= 0 && now - landing.viz.t0 > DEMO.LENGTH - PD){ if (!powerOff(toHome)) toHome(); }   // (switching off first; a tap or a key still skips at once)
@@ -4572,7 +4574,7 @@ M.createTerminal = function createTerminal(opts){
         let pend = -partial; for (let i = shown; i < rows.length && i - shown < 5000; i++) pend += costOf(rows[i]);
         rate = Math.max(RATE, pend / 0.8); rateRows = rows.length; rateShown = shown;
       }
-      carry += dt * rate;
+      carry += wdt * rate;   // (wall time: on a GPU managing a few fps a page still types out in under a second, not four)
       while (carry > 0 && shown < rows.length){
         const r = rows[shown]; const c = costOf(r);
         if (r.k === 'viz' && r.t0 < 0) r.t0 = now;
