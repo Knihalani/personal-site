@@ -42,6 +42,7 @@ def _content():
 C = _content()
 NAME, ROLE, LK = C['name'], C['about']['role'], C['links']
 J, E = C['j'], C['eden']
+JLINE = J['line'][:1].upper() + J['line'][1:]   # the line as a sentence, after "Co-founder."
 BULLETS = [l[2:].strip() for b in C['about']['body'] for l in b.split('\n') if l.startswith('- ')]
 DESC = f"{NAME}, co-founder of {J['title']} ({J['line']}) and founder of {E['title']} ({E['line'].lower()})."
 SAME = [LK[k] for k in ('linkedin', 'x', 'github') if LK.get(k)]
@@ -90,7 +91,7 @@ SEO = '\n'.join([
 PROFILE = '\n'.join([
     f'  <h1>{e(NAME)}</h1>', f'  <p>{e(ROLE)}</p>',
     '  <h2>About</h2>', '  <ul>' + ''.join(f'<li>{e(b)}</li>' for b in BULLETS) + '</ul>',
-    f'  <h2>{e(J["title"])}</h2>', f'  <p>{e(J["role"])}. {e(J["line"])}.</p>'] +
+    f'  <h2>{e(J["title"])}</h2>', f'  <p>{e(J["role"])}. {e(JLINE)}.</p>'] +
     [f'  <p>{e(p)}</p>' for p in J['body'].split('\n\n')] +
     ['  <ul>' + ''.join(f'<li>{e(k)}: {e(v)}</li>' for k, v in J.get('facts', [])) + '</ul>',
      f'  <p><a tabindex="-1" href="{e(J["url"])}">{e(J["url"].split("//")[-1])}</a></p>',
@@ -222,7 +223,8 @@ SIMPLE_CSS = (":root{color-scheme:light dark;--bg:#fbfaf7;--fg:#1d1c1a;--dim:#5f
   "h1{font-size:clamp(30px,6vw,40px);line-height:1.15;margin:0 0 4px;letter-spacing:-.01em}.role{color:var(--dim);margin:0 0 36px}"
   "h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:40px 0 10px;padding-top:20px;border-top:1px solid var(--rule)}"
   "ul{padding-left:1.1em;margin:0}li{margin:.25em 0}p{margin:.5em 0}a{color:var(--link);text-underline-offset:3px}"
-  "dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 18px}dt{color:var(--dim)}dd{margin:0}"
+  "dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 18px}dt{color:var(--dim)}dd{margin:0;min-width:0;overflow-wrap:anywhere}"
+  "@media (max-width:440px){dl.stack{grid-template-columns:1fr;gap:0}dl.stack dd{margin-bottom:10px}}"
   ".back{display:inline-block;margin-top:44px;color:var(--dim)}a:focus-visible{outline:2px solid var(--link);outline-offset:3px;border-radius:2px}")
 def _links(): return [(n, u) for n, u in (('LinkedIn', LK.get('linkedin')), ('X', LK.get('x')), ('GitHub', LK.get('github'))) if u]
 SIMPLE = '\n'.join([
@@ -232,17 +234,18 @@ SIMPLE = '\n'.join([
   f'<link rel="canonical" href="{SITE}/simple">', '<meta name="robots" content="index, follow">',
   '<meta name="theme-color" content="#0d110d" media="(prefers-color-scheme: dark)">', '<meta name="theme-color" content="#fbfaf7" media="(prefers-color-scheme: light)">',
   '<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png">', '<link rel="apple-touch-icon" href="/apple-touch-icon.png">',
-  f'<meta property="og:type" content="profile">', f'<meta property="og:title" content="{e(NAME)}">', f'<meta property="og:description" content="{e(ROLE)}">',
-  f'<meta property="og:url" content="{SITE}/simple">', f'<meta property="og:image" content="{SITE}/og.png">', '<meta name="twitter:card" content="summary_large_image">',
+  '<meta property="og:type" content="profile">', f'<meta property="og:site_name" content="{e(NAME)}">', f'<meta property="og:title" content="{e(NAME)}">', f'<meta property="og:description" content="{e(ROLE)}">',
+  f'<meta property="og:url" content="{SITE}/simple">', f'<meta property="og:image" content="{SITE}/og.png">', '<meta property="og:image:width" content="1200">', '<meta property="og:image:height" content="630">',
+  f'<meta property="og:image:alt" content="{e(NAME + " · " + ROLE)}, on a green terminal screen">', '<meta name="twitter:card" content="summary_large_image">',
   f'<style>{SIMPLE_CSS}</style>', '</head>', '<body>', '<main>',
   f'<h1>{e(NAME)}</h1>', f'<p class="role">{e(ROLE)}</p>',
   '<h2>About</h2>', '<ul>' + ''.join(f'<li>{e(b)}</li>' for b in BULLETS) + '</ul>',
-  f'<h2>{e(J["title"])}</h2>', f'<p><strong>{e(J["role"])}.</strong> {e(J["line"][:1].upper() + J["line"][1:])}.</p>'] +
+  f'<h2>{e(J["title"])}</h2>', f'<p><strong>{e(J["role"])}.</strong> {e(JLINE)}.</p>'] +
   [f'<p>{e(p)}</p>' for p in J['body'].split('\n\n')] +
   ['<dl>' + ''.join(f'<dt>{e(k)}</dt><dd>{e(v)}</dd>' for k, v in J.get('facts', [])) + '</dl>',
    f'<p><a href="{e(J["url"])}">{e(J["url"].split("//")[-1])}</a></p>',
    f'<h2>{e(E["title"])}</h2>', f'<p><strong>{e(E["role"])}.</strong> {e(E["line"])}.</p>', f'<p>{e(E["body"])}</p>',
-   '<h2>Contact</h2>', '<dl>' + ''.join(f'<dt>{e(c["label"])}</dt><dd><a href="mailto:{e(c["email"])}">{e(c["email"])}</a></dd>' for c in C['contact']) + '</dl>',
+   '<h2>Contact</h2>', '<dl class="stack">' + ''.join(f'<dt>{e(c["label"])}</dt><dd><a href="mailto:{e(c["email"])}">{e(c["email"])}</a></dd>' for c in C['contact']) + '</dl>',
    '<h2>Links</h2>', '<ul>' + ''.join(f'<li><a rel="me" href="{e(u)}">{e(n)}</a></li>' for n, u in _links()) + '</ul>',
    '<a class="back" href="/">&larr; back to the terminal</a>', '</main>', '</body>', '</html>', ''])
 WEB and (out / 'simple.html').write_text(SIMPLE, encoding='utf-8')
@@ -255,7 +258,7 @@ WEB and (out / 'site.webmanifest').write_text(json.dumps({'name': NAME, 'short_n
     'icons': [{'src': '/icon-512.png', 'sizes': '512x512', 'type': 'image/png'}, {'src': '/apple-touch-icon.png', 'sizes': '180x180', 'type': 'image/png'}]}, indent=1), encoding='utf-8')
 # llms.txt: a plain summary for answer engines and agents (https://llmstxt.org)
 WEB and (out / 'llms.txt').write_text('\n'.join([f'# {NAME}', '', f'> {DESC}', '', '## About', *[f'- {b}' for b in BULLETS], '',
-    f'## {J["title"]}', f'{J["role"]}. {J["line"]}.', '', J['body'], '', *[f'- {k}: {v}' for k, v in J.get('facts', [])], f'- site: {J["url"]}', '',
+    f'## {J["title"]}', f'{J["role"]}. {JLINE}.', '', J['body'], '', *[f'- {k}: {v}' for k, v in J.get('facts', [])], f'- site: {J["url"]}', '',
     f'## {E["title"]}', f'{E["role"]}. {E["line"]}.', '', E['body'], '',
     '## Contact', *[f'- {c["label"]}: {c["email"]}' for c in C['contact']], '',
     '## Links', *[f'- [{n}]({u})' for n, u in (('LinkedIn', LK.get('linkedin')), ('X', LK.get('x')), ('GitHub', LK.get('github'))) if u],
