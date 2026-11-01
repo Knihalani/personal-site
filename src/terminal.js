@@ -857,7 +857,7 @@ M.createTerminal = function createTerminal(opts){
   function welcome(o){
     return o.blank().big(C.name || '', 'b').line([A.role || [E.role && 'Founder of ' + E.title, J.title].filter(Boolean).join(' · '), 'n']).blank()
       .line([TAP ? 'tap a word below, or type one' : 'type a word and press enter, or click one', 'd'])
-      .flow(PAGE_WORDS.map(w => [chip(w, 'b')]), '  ')
+      .flow(PAGE_WORDS.filter(w => w !== 'writing' || posts().length).map(w => [chip(w, 'b')]), '  ')   // (writing once something is published, as in help and the phone menu)
       .blank();
   }
   const PAGE_WORDS = ['about', 'j', 'eden', 'writing', 'contact', 'links'];
