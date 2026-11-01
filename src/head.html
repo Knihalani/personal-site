@@ -28,7 +28,7 @@ body.phone::before{ content: ""; position: fixed; top: 0; left: 0; right: 0; hei
 #mute::before{ content: ""; width: 6px; height: 6px; border-radius: 50%; border: 1px solid currentColor; box-sizing: border-box }
 #mute[aria-pressed="true"]::before{ background: #8dffb4; border-color: #8dffb4; box-shadow: 0 0 6px rgba(141,255,180,.6) }
 #mute:hover{ color: var(--fg); border-color: rgba(233,226,208,.4) }
-#mute:focus-visible{ outline: 1px solid rgba(233,226,208,.5); outline-offset: 2px } .fk:focus-visible{ outline: 2px solid #5f8f55; outline-offset: 1px }
+#mute:focus-visible{ outline: 2px solid rgba(233,226,208,.85); outline-offset: 2px; color: var(--fg) } .fk:focus-visible{ outline: 2px solid #5f8f55; outline-offset: 1px }
 #kbd{ position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; resize: none }
 .sr{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
 #loading{ position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); font: 500 11px var(--mono); letter-spacing: .3em; text-transform: uppercase; transition: opacity .35s; z-index: 3; background: var(--bg) }
