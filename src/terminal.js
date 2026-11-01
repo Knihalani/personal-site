@@ -2504,7 +2504,9 @@ M.createTerminal = function createTerminal(opts){
     let PNW = null;   // (the loop's other set of panels: its three words)
     function panels(S, a){
       const live = S - T_GOAT, sep = eO3(live / .3) * 26 * pxk, zin = 1 + .1 * eO3(live / .4);
-      tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h);
+      tg.fillStyle = P.bg;
+      if (!PDOOR) tg.fillRect(-W2, -h, 3 * W2, 3 * h);
+      else for (let p = 0; p < 3; p++){ tg.save(); tg.translate((tall ? 0 : (p - 1) * sep) + (p - 1) * PDOOR * W2 * .7, (tall ? (p - 1) * sep : 0) + (p === 1 ? PDOOR * h * 1.1 : 0)); polyPath(PANEL3, p * 8); tg.fill(); tg.restore(); }   // (parting: only behind the doors; the wall shows between them)
       for (let p = 0; p < 3; p++){
         const o = p * 8, pcx = (PANEL3[o] + PANEL3[o + 2] + PANEL3[o + 4] + PANEL3[o + 6]) / 4, pcy = (PANEL3[o + 1] + PANEL3[o + 3] + PANEL3[o + 5] + PANEL3[o + 7]) / 4;
         const dx = (tall ? 0 : (p - 1) * sep) + (p - 1) * PDOOR * W2 * .7, dy = (tall ? (p - 1) * sep : 0) + (p === 1 ? PDOOR * h * 1.1 : 0);   // (PDOOR: the panels part like doors)
@@ -2742,7 +2744,7 @@ M.createTerminal = function createTerminal(opts){
           return s; } },
       { b0: 24, kick: 1, cell: (i, j, Q, o) => inM(MO.glob, i, j) ? spell(MO.glob, i, Q, o, BQ(24), BT / 2, BQ(24)) : cut(o, Q, BQ(24)),   // GLOBAL
         pz: (i, j, Q) => inM(MO.glob, i, j) ? pz(Q, BQ(27)) + sw(MO.glob, i, Q, 26.5, 1) : 0 },
-      { b0: 28, cell: (i, j, Q, o) => cut(o, Q, BQ(28)) },   // (the panels)
+      { b0: 28, cell: (i, j, Q, o) => cut(o, Q, BQ(28)), pz: (i, j, Q) => .9 * pz(Q, BQ(29.1) + rd(i, j) * .05) + .7 * pz(Q, BQ(29.5) + rd(i, j) * .05) },   // (the panels; behind the doors, waves out of the middle)
       { b0: 30, pz: (i, j, Q) => pz(Q, BQ(29.8) + (6 - Math.min(6, rd(i, j))) * .06) + pz(Q, BQ(30.4) + (6 - Math.min(6, rd(i, j))) * .06) + pz(Q, BQ(31.2) + (8 - Math.min(8, rd(i, j))) * .05) },   // BLACKOUT: two rings closing in
       { b0: 32, kick: 1, cell: (i, j, Q, o) => inM(MO.agents, i, j) ? spell(MO.agents, i, Q, o, BQ(32), BT / 2, BQ(32)) : cut(o, Q, BQ(32)),   // AGENTS
         pz: (i, j, Q) => inM(MO.agents, i, j) ? pz(Q, BQ(35)) + sw(MO.agents, i, Q, 36) + sw(MO.agents, i, Q, 37, 1) + sw(MO.agents, i, Q, 38) + pz(Q, BQ(39)) : 0 },
@@ -2814,14 +2816,14 @@ M.createTerminal = function createTerminal(opts){
       [25, 3.5, 0, 1.05, 1.78, 1.5, -.22, 0, 0, .3, .13, .72, -.45, 0, 1],
       [27, -1.5, 0, 1.05, .93, 1.5, -.22, 0, 0, .3, .13, .72, -.45, 0, 1],
       [28, -.4, 1.2, .85, 0, 1.5, -.1, .7, 0, 1.3, .13, .72, -.45, 0, 1],    // turning to the wall: the panels flip on; the KN rides off right
-      [28.5, -.2, 1.35, .86, F_, F_, -.03, .9, 0, 1.3, .13, .72, -.45, 0, 0],
-      [29, 0, 1.5, .8, F_, F_, 0, 1, 0, -1.3, -.4, .5, .6, 0, 0],
-      [30.4, 0, 1.6, .74, F_, F_, 0, 1, 0, -1.3, -.4, .5, .6, 0, 0],         // the doors open; rings close in
+      [28.5, -.2, 1.45, .74, F_, F_, -.03, .9, 0, 1.3, .13, .72, -.45, 0, 0],
+      [29, 0, 1.5, .68, F_, F_, 0, 1, 0, -1.3, -.4, .5, .6, 0, 0],
+      [30.4, 0, 1.6, .62, F_, F_, 0, 1, 0, -1.3, -.4, .5, .6, 0, 0],         // the doors open; rings close in
       [31.2, -2.5, .3, .9, 0, 1.5, -.2, .5, 0, -1.2, -.5, .5, .6, 0, 1],      // swooping down: the KN flies in and slams
       [32, -4.4, -1.5, 1.05, 0, 1.5, -.3, 0, 0, 0, .03, 1, 0, 0, 1],          // CRANE from under the wall to over it
       [38, 0, 2.5, .95, 0, 1.5, -.3, 0, 0, 0, .03, 1, 0, 0, 1],
       [44, 3.6, 6.5, .85, 0, 1.5, -.3, 0, 0, 0, .03, 1, 0, 0, 1],
-      [45.3, 2.3, 3.4, .5, F_, F_, -.12, .6, 0, -1.3, .5, .7, -.5, 0, 1],    // down into CONTEXT's X; the KN slides away
+      [45.3, 2.05, 2.1, .55, F_, F_, 0, 1, 0, -1.3, .5, .7, -.5, 0, 1],    // down into CONTEXT's X; the KN slides away
       [46.6, 2, 2, -1, F_, F_, 0, 1, 0, -1.3, .5, .7, -.5, 0, 0],              // through its glass: the EDEN scene
       [50.5, 2, 2, -.86, F_, F_, 0, 1, 0, -1.3, .5, .7, -.5, 0, 0],
       [52, 1, 1.5, .4, 2.5, 1.5, 0, .8, 0, -1.3, .5, .7, -.5, 0, 0],         // out, whipping round and down
@@ -2841,7 +2843,20 @@ M.createTerminal = function createTerminal(opts){
       [77, 0, 2.8, 2.3, F_, F_, 0, 0, 0, 0, -.04, 1.9, 0, 0, 1],              // PULL BACK, rings; then down into the truck
       [80, -6.5, 1.4, .95, -2, 3.2, 0, 0, 0, .22, .02, .8, .3, 0, 1],
     ];
-    const NK = KF.length, NC = 14, KV = new Float64Array(NK * NC), CH = new Float64Array(NC), CH2 = new Float64Array(NC);
+    const NK = KF.length, NC = 14, KV = new Float64Array(NK * NC), CH = new Float64Array(NC), CH2 = new Float64Array(NC), CH3 = new Float64Array(NC);
+    /* the hit-stops: at each impact (a screen filling the frame, a slam landing) the path holds two frames, then catches up
+       over a third of a beat (the beat grid itself never stops) */
+    const IMPB = [15.2, 32.12, 46.6, 64.2, 66.25], HSH = .167, HSC = .33;
+    let RUSH = 0;
+    function hitStop(b){
+      for (const t of IMPB){
+        const d = b - t; if (d < 0 || d >= HSH + HSC) continue;
+        if (d < HSH) return t;
+        const x = d - HSH, H = HSC, D = HSH + HSC, c = 2 * (H / 2 - D) / (H * H * H), a = (1 - 3 * c * H * H) / (2 * H);   // (out of the hold from rest, back to full speed at its end)
+        return t + a * x * x + c * x * x * x;
+      }
+      return b;
+    }
     let KVW = -1, KVH = -1;
     function keyVals(D, DF){   // each key as the channels: x, y, log distance, yaw, pitch, lens shift, fill, roll, the KN's six
       for (let k = 0; k < NK; k++){
@@ -2873,17 +2888,20 @@ M.createTerminal = function createTerminal(opts){
       camF = h * 1.05;
       const Q = L < LS ? 0 : (L - LS) % LP, b = Q / BT, D = 4.5 * GX * camF / (Math.min(W2, h * 1.6) / 2), o = LCAM;
       if (KVW !== W2 || KVH !== h){ KVW = W2; KVH = h; keyVals(D, dfill()); }
-      evalKeys(b, CH);
+      evalKeys(L < LS ? b : hitStop(b), CH);
       o.x = CH[0] * GX; o.y = CH[1] * GY; o.z = -Math.exp(CH[2]); o.yaw = CH[3]; o.pit = CH[4]; o.rol = CH[7];
       LPPY = CH[5] * h; LFL = c01(CH[6]);
       kp(CH[8], CH[9], CH[10], CH[11], CH[12] - o.pit * .4, CH[13] > .5 && Math.abs(CH[8]) < 1.08 && CH[9] < .85 ? 1 : 0);   // (it is there unless the path has carried it out of the frame)
-      evalKeys(b + .05, CH2); WHIP = L < LS ? 0 : c01((Math.abs(CH2[3] - CH[3]) / (.05 * BT) - 1.2) / 2);   // (a whip: from the camera's own turn)
+      evalKeys(b + .05, CH2); evalKeys(b, CH3);   // (the path's own speed, for the blur)
+      const dt0 = .05 * BT, zr = (CH2[2] - CH3[2]) / dt0, xr = Math.hypot(CH2[0] - CH3[0], CH2[1] - CH3[1]) * GX / Math.exp(CH3[2]) / dt0;
+      WHIP = L < LS ? 0 : Math.max(c01((Math.abs(CH2[3] - CH3[3]) / dt0 - 1.2) / 2), c01((xr - .9) / 1.5));   // (a whip: from the camera's own turn or slide)
+      RUSH = L < LS ? 0 : c01((Math.abs(zr) - .8) / 2.2) * (zr < 0 ? 1 : -1);   // (a rush in (+) or out (-))
       LSCN = 0; HOLE = 0; VWALL = 0; PDOOR = 0; KSL = -9;
       if (L >= LS){
         if (b >= 13 && b < 23){ HOLE = 1; HDV = DV1; LSCN = 1; LSS = Math.min(4.38, T_J - .15 + Math.max(0, Q - BQ(14.5)) * .6); }
         else if (b >= 45 && b < 53.5){ HOLE = 1; HDV = DV2; LSCN = 2; LSS = Math.min(6.38, T_E - .2 + Math.max(0, Q - BQ(46)) * .6); }
         else if (b >= 62.5 && b < 67.5){ HOLE = 1; HDV = DV3; LSCN = 3; LSS = T_GOAT + Math.max(0, Q - BQ(63.6)); }
-        else if (b >= 26.8 && b < 30){ VWALL = b >= 28.3 ? 2 : 1; LSCN = 4; LSS = T_GOAT + Math.max(0, Q - BQ(27.4)); PDOOR = eI3(c01((b - 29.1) / .8)); }
+        else if (b >= 26.8 && b < 30){ VWALL = b >= 28.3 ? 2 : 1; LSCN = 4; LSS = T_GOAT + Math.max(0, Q - BQ(28.3)); PDOOR = eI3(c01((b - 29.1) / .8)); }
         if (b >= 32 && b < 36) KSL = Q - BQ(32); else if (b >= 66 && b < 70) KSL = Q - BQ(66);
       }
       LSID = L < LS ? -1 : 0;
@@ -2893,20 +2911,20 @@ M.createTerminal = function createTerminal(opts){
     /* an opening scene, drawn into its own canvas (the scene's code draws into tg: it is pointed there for the while) */
     /* (the scene's code draws as if full frame; every transform it sets goes through a scale k and an offset, so it can be
        drawn at a share of the size into its canvas, or straight onto the tube at its screen's size and place) */
-    let SCV = null, SCC = null, SCT = -1, SCK = .5, STK = 1, STX = 0, STY = 0;
-    const sceneKey = () => .4;
+    let SCV = null, SCC = null, SCT = -99, SCK = .5, STK = 1, STX = 0, STY = 0;
+    const sceneKey = () => 1;
     function patchT(c){ const set = CanvasRenderingContext2D.prototype.setTransform; c.setTransform = function(a, b, cc, d, e, f){ return typeof a === 'object' ? set.call(this, a) : set.call(this, a * STK, b * STK, cc * STK, d * STK, e * STK + STX, f * STK + STY); }; }
     function renderScene(direct, k, ox, oy){
-      if (direct){ const st0 = SCC; SCC = tg; STK = k; STX = ox; STY = oy; patchT(tg); drawSceneInto(); delete tg.setTransform; SCC = st0; SCT = -1; return; }
+      if (direct){ const st0 = SCC; SCC = tg; STK = k; STX = ox; STY = oy; patchT(tg); drawSceneInto(); delete tg.setTransform; SCC = st0; return; }
       const kk = sceneKey();
-      if (SCK === kk && AR >= SCT && AR - SCT < .05) return; SCT = AR;   // (the tiles' picture: redrawn every other frame)
+      if (SCK === kk && SCT === LSS && SCV) return; SCT = LSS;   // (the tiles' picture: the panels frozen on their hit while the tiles flip, so drawn once)
       if (!SCV || SCV.width !== Math.ceil(W2 * kk) || SCV.height !== Math.ceil(h * kk)){ SCV = mkCache(W2 * kk, h * kk); SCC = SCV.getContext('2d', CPU); patchT(SCC); }
       SCK = kk; STK = kk; STX = STY = 0; drawSceneInto();
     }
     function drawSceneInto(){
       const st = tg, sg0 = G, bx = BX, by = BY, sd = SD, kh = kHot0, ga = GA, direct = SCC === tg;
       tg = SCC; G = SCC; if (!direct){ BX = BY = 0; } SD = LSS + 40; GA = 1;
-      SCC.setTransform(1, 0, 0, 1, BX, BY); SCC.globalAlpha = 1; SCC.globalCompositeOperation = 'source-over'; SCC.fillStyle = P.bg; SCC.fillRect(-BX - 2, -BY - 2, W2 + 4, h + 4);
+      SCC.setTransform(1, 0, 0, 1, BX, BY); SCC.globalAlpha = 1; SCC.globalCompositeOperation = 'source-over'; SCC.fillStyle = P.bg; if (!(LSCN === 4 && PDOOR > 0)) SCC.fillRect(-BX - 2, -BY - 2, W2 + 4, h + 4);   // (doors parting: the wall shows between them)
       if (LSCN === 1) jScene(LSS); else if (LSCN === 2) edenScene(LSS); else { if (LSCN === 4) PNW = [LO.young, LO.founders, LO.global]; panels(LSS, LSS); PNW = null; }
       SCC.setTransform(1, 0, 0, 1, BX, BY); SCC.globalAlpha = 1; SCC.globalCompositeOperation = 'source-over';
       tg = st; G = sg0; BX = bx; BY = by; SD = sd; kHot0 = kh; GA = ga;
@@ -2918,7 +2936,7 @@ M.createTerminal = function createTerminal(opts){
       if (!VWALL || i < RI0 || i > RI1 || j < RJ0 || j > RJ1) return false;
       const fa = BQ(27) + Math.hypot(i + .5, j - 1.5) * .07, f = (LQ - fa) / .14;   // (flipped in a wave out of GLOBAL)
       if (f < 0) return false;
-      if (VWALL > 1){ tsTex = null; return true; }   // (all flipped: the picture is laid over the block whole, in loopBack)
+      if (VWALL > 1){ if (PDOOR > 0) return false; tsTex = null; return true; }   // (all flipped: the picture is laid over the block whole, in loopBack; as the doors part, the wall's own picture between them)
       tsOpen = 1; tsLine = 0; tsFlip = f < 1 ? Math.max(.04, Math.abs(Math.cos(f * Math.PI))) : 1;
       if (f < .5){ tsTex = LTX.PX; tsSub = 0; tsBr = .8; tsRim = .5; return true; }
       renderScene();
@@ -3123,6 +3141,7 @@ M.createTerminal = function createTerminal(opts){
           tg.setTransform(1, 0, 0, 1, BX, BY);
         }
         if (!LCOVER) drawStars(dist + (still ? 37 : 0), speed, z, 1e9, 1, NST);
+        if (lp && Math.abs(RUSH) > .02){ G = tg; tg.setTransform(1, 0, 0, 1, BX, BY); speedLines(SD, cx, h / 2, 1.5, .4 * Math.abs(RUSH), RUSH > 0 ? 1 : -1, 48); }   // (a rush: speed lines out of the middle, or into it)
         if (lp && WHIP > .02){ G = tg; tg.setTransform(1, 0, 0, 1, BX, BY); streaks(SD * 1.7, false, 4, .45 * WHIP); streaks(SD * 2.3 + 3, false, 5, .3 * WHIP); }   // (a whip: speed lines along the turn)
       } else if (SHOT === K_BURST) speedLines(S, cx, lsy, 1.6, .45, 1, 40);
       else if (SHOT === K_WHIP) streaks(S, false, 2.6, .3);
