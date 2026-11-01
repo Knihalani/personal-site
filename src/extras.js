@@ -219,10 +219,10 @@ const net = {
       http: [e.message, e.status === 404 ? 'nothing there' : e.status === 403 || e.status === 429 ? 'refused, or rate limited. try again later' : ''],
     }[e.kind] || [e.message, ''];
     if (io.tty && io.ui){
-      const o = io.ui(), ls = wrap(name + ': ' + why[0], io.cols - 1);
-      o.at(0, [name + ': ', 'd'], [ls[0].slice(name.length + 2), 'n']);
-      for (const l of ls.slice(1)) o.at(2, [l, 'n']);
-      if (why[1]) o.para(why[1], 'f', io.cols - 4, 2);
+      const o = io.ui(), ls = wrap(name + ': ' + why[0], io.cols - 3);
+      o.at(2, [name + ': ', 'd'], [ls[0].slice(name.length + 2), 'n']);
+      for (const l of ls.slice(1)) o.at(4, [l, 'n']);
+      if (why[1]) o.para(why[1], 'f', io.cols - 6, 4);
       io.rich(o);
     } else io.err(name + ': ' + why[0] + '\n');
     return 1;
@@ -603,29 +603,29 @@ T.cmds.curl = { g: 'net', desc: 'fetch a url and show the answer', usage: 'curl 
     }
     const o = io.ui(), max = Math.max(24, io.rows * 2);
     if (!silent){
-      o.at(0, ['HTTP ' + r.status, r.ok ? 'b' : 'a'], [' ' + r.statusText, 'd']);
+      o.at(2, ['HTTP ' + r.status, r.ok ? 'b' : 'a'], [' ' + r.statusText, 'd']);
       if (inc){
         const hs = r.headers.slice(0, 12);
-        for (const [k, v] of hs){ const row = wrapSpans([[k + ': ', 'd'], [v, 'n']], io.cols - 1)[0]; o.at(0, ...row.toks); }
-        if (r.headers.length > hs.length) o.at(0, ['(' + (r.headers.length - hs.length) + ' more headers)', 'f']);
+        for (const [k, v] of hs){ const row = wrapSpans([[k + ': ', 'd'], [v, 'n']], io.cols - 3)[0]; o.at(2, ...row.toks); }
+        if (r.headers.length > hs.length) o.at(2, ['(' + (r.headers.length - hs.length) + ' more headers)', 'f']);
       }
       o.blank();
     }
     let hidden = 0;
-    if (r.data !== undefined) hidden = showJSON(o, r.data, io.cols, max, 0);
+    if (r.data !== undefined) hidden = showJSON(o, r.data, io.cols, max, 2);
     else {
       let n = 0;
       const text = r.text.replace(/\r/g, '').replace(/\t/g, '  ').replace(/\n+$/, '');
       for (const line of text ? text.split('\n') : []){
-        for (const row of wrapSpans([[line, 'n']], io.cols)){ if (n >= max){ hidden++; continue; } o.at(row.cont ? 2 : 0, ...(row.toks.length ? row.toks : [['', 'n']])); n++; }
+        for (const row of wrapSpans([[line, 'n']], io.cols - 2)){ if (n >= max){ hidden++; continue; } o.at(row.cont ? 4 : 2, ...(row.toks.length ? row.toks : [['', 'n']])); n++; }
       }
-      if (!text) o.at(0, ['(empty body)', 'f']);
+      if (!text) o.at(2, ['(empty body)', 'f']);
     }
-    if (hidden) o.at(0, ['... ' + hidden + ' more lines', 'd'], ['   > file for all of it', 'f']);
+    if (hidden) o.at(2, ['... ' + hidden + ' more lines', 'd'], ['   > file for all of it', 'f']);
     if (!silent){
       o.blank();
       const bits = [String(r.status), kb(r.bytes), msStr(r.ms), r.type].filter(Boolean);
-      o.at(0, [bits.join(' · ').slice(0, io.cols), 'f']);
+      o.at(2, [bits.join(' · ').slice(0, io.cols - 2), 'f']);
     }
     io.rich(o);
     return r.ok ? 0 : 22;

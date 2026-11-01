@@ -713,7 +713,7 @@ M.createTerminal = function createTerminal(opts){
         for (const [part, st] of [[m[1], 'dim'], [m[2], 'normal'], [m[3] || '', 'faint']]) for (let q = 0; q < part.length; q++) sty.push(st);
         let at = 0, first = true;
         while (at < l.length){
-          const room = first ? COLS : COLS - 2;
+          const room = first ? COLS - GU : COLS - GU - 2;   // (tty rows start on the gutter)
           let end = l.length;
           if (end - at > room){ end = l.lastIndexOf(' ', at + room); if (end <= at + room / 2) end = at + room; }
           if (!first) sink.write('\n  ');
@@ -1038,10 +1038,10 @@ M.createTerminal = function createTerminal(opts){
     if (/^mailto:/i.test(url)){                         // addresses are copied, never mailto'd
       const addr = url.replace(/^mailto:/i, '').split('?')[0];
       const ok = copyText(addr); sfx('beep'); toast(ok, addr);
-      io.rich(out().at(0, [ok ? 'copied ' : 'copy this: ', 'd'], [addr, 'b'])); return;
+      io.rich(out().at(2, [ok ? 'copied ' : 'copy this: ', 'd'], [addr, 'b'])); return;
     }
     const w = openTarget(url);
-    const o = out(); o.at(0, ['opening ', 'd'], [label, 'b', { url }]); if (!w) o.at(2, ['if nothing opened, click the address above', 'f']); io.rich(o);
+    const o = out(); o.at(2, ['opening ', 'd'], [label, 'b', { url }]); if (!w) o.at(4, ['if nothing opened, click the address above', 'f']); io.rich(o);
   } });
   def('read', { g: 'read', desc: 'read a post', usage: 'read <slug | n>', ex: ['read 1', 'open post <slug>'], run(argv, io){
     const q = argv.slice(1).join(' ').trim();
@@ -1051,10 +1051,10 @@ M.createTerminal = function createTerminal(opts){
     if (!io.tty){ io.write(TEXT.writing().split('\n\n')[posts().indexOf(p)] + '\n'); return; }
     if (!p.html && p.url){
       const w = openTarget(p.url);
-      const o = out(); o.at(0, ['opening ', 'd'], [p.title || bare(p.url), 'b', { url: p.url }]); if (!w) o.at(2, ['if nothing opened, click the address above', 'f']); io.rich(o); return;
+      const o = out(); o.at(2, ['opening ', 'd'], [p.title || bare(p.url), 'b', { url: p.url }]); if (!w) o.at(4, ['if nothing opened, click the address above', 'f']); io.rich(o); return;
     }
     const ok = !!(M.reader && M.reader.open(slugOf(p)));
-    io.rich(out().at(0, [ok ? 'reading ' : 'the reader is not available: ', 'd'], [p.title || slugOf(p), 'b']).at(2, [ok ? (TAP ? 'tap \u2190 back' : 'esc comes back') : '', 'f']));
+    io.rich(out().at(2, [ok ? 'reading ' : 'the reader is not available: ', 'd'], [p.title || slugOf(p), 'b']).at(4, [ok ? (TAP ? 'tap \u2190 back' : 'esc comes back') : '', 'f']));
     return ok ? 0 : 1;
   } });
   /* one link, printed, then a one-key prompt to open it */
@@ -1329,14 +1329,14 @@ M.createTerminal = function createTerminal(opts){
     if (!c){ io.err('man: no manual entry for ' + n + '  (try: help all)\n'); return 1; }
     const isApp = !!M.TERM.apps[name] && !M.TERM.cmds[name];
     const o = out(); const h = name.toUpperCase() + '(' + (isApp && c.g !== 'files' && c.g !== 'tools' ? 6 : 1) + ')';
-    o.at(0, [h, 'b'], [' '.repeat(Math.max(1, Math.floor((COLS - 12) / 2) - h.length)) + 'KN-84 manual', 'd'], [' '.repeat(Math.max(1, Math.ceil((COLS - 12) / 2) - h.length)) + h, 'b']).blank();
-    o.at(0, ['NAME', 'b']).at(4, [name, 'n'], [' - ' + (c.desc || ''), 'n']).blank();
-    o.at(0, ['SYNOPSIS', 'b']).at(4, [c.usage || name, 'n']).blank();
-    if (c.more){ o.at(0, ['DESCRIPTION', 'b']); o.para(c.more, 'n', COLS - 6, 4); o.blank(); }
-    if (c.opts && c.opts.length){ o.at(0, ['OPTIONS', 'b']); const w = Math.max(...c.opts.map(x => x[0].length)) + 3; for (const [f, d] of c.opts){ const ls = wrap(d, Math.max(12, COLS - 4 - w)); o.at(4, [pad(f, w), 'b'], [ls[0], 'n']); for (const l of ls.slice(1)) o.at(4 + w, [l, 'n']); } o.blank(); }
+    o.at(2, [h, 'b'], [' '.repeat(Math.max(1, Math.floor((COLS - 14) / 2) - h.length)) + 'KN-84 manual', 'd'], [' '.repeat(Math.max(1, Math.ceil((COLS - 14) / 2) - h.length)) + h, 'b']).blank();
+    o.at(2, ['NAME', 'b']).at(6, [name, 'n'], [' - ' + (c.desc || ''), 'n']).blank();
+    o.at(2, ['SYNOPSIS', 'b']).at(6, [c.usage || name, 'n']).blank();
+    if (c.more){ o.at(2, ['DESCRIPTION', 'b']); o.para(c.more, 'n', COLS - 8, 6); o.blank(); }
+    if (c.opts && c.opts.length){ o.at(2, ['OPTIONS', 'b']); const w = Math.max(...c.opts.map(x => x[0].length)) + 3; for (const [f, d] of c.opts){ const ls = wrap(d, Math.max(12, COLS - 6 - w)); o.at(6, [pad(f, w), 'b'], [ls[0], 'n']); for (const l of ls.slice(1)) o.at(6 + w, [l, 'n']); } o.blank(); }
     /* an example that is a whole command line runs when clicked or tapped (a placeholder, a note or a !bang does not) */
-    if (c.ex && c.ex.length){ o.at(0, ['EXAMPLES', 'b']); for (const x of c.ex) o.at(4, !/[<]|\s{2,}|^!/.test(x) && x.length <= COLS - 6 ? chip(x, 'd') : [x, 'd']); o.blank(); }
-    if (hasAlias(n) && n !== name) o.at(0, ['(' + n + ' is an alias for ' + ALIASES[n] + ')', 'f']).blank();
+    if (c.ex && c.ex.length){ o.at(2, ['EXAMPLES', 'b']); for (const x of c.ex) o.at(6, !/[<]|\s{2,}|^!/.test(x) && x.length <= COLS - 8 ? chip(x, 'd') : [x, 'd']); o.blank(); }
+    if (hasAlias(n) && n !== name) o.at(2, ['(' + n + ' is an alias for ' + ALIASES[n] + ')', 'f']).blank();
     if (io.tty) io.rich(o); else io.write(o.rows.map(textOf).join('\n') + '\n');
   } });
   /* help: a short, curated page by default (everything a visitor is likely to want, fitting one screen);
@@ -1936,7 +1936,7 @@ M.createTerminal = function createTerminal(opts){
       /* the loop's spelled words, a letter to two tubes, centred over the KN */
       { const ok = t => /^[A-Z0-9]{1,8}$/.test(t);   // (a word too long for the wall is left out)
         MO.kai = ok(LO.w1.t) ? wd(LO.w1.t) : null; MO.nih = ok(LO.w2.t) ? wd(LO.w2.t) : null;
-        MO.agents = wd('AGENTS'); MO.ctx = wd('CONTEXT'); MO.just = wd('JUST'); MO.start = wd('START');
+        MO.agents = wd('AGENTS'); MO.ctx = wd('CONTEXT'); MO.just = wd('JUST'); MO.start = wd('START'); MO.glob = wd('GLOBAL');
         if (window.__glyphs){ const g7 = window.__glyphs.match(/.{1,7}/g); [MO.agents, MO.ctx, MO.just, MO.start, MO.kai, MO.nih] = g7.map(wd); } }   // (a test hook: every glyph on the wall)
       /* the halftone */
       htTile = mkCache(6 * pxk, 6 * pxk); { const c = htTile.getContext('2d'); c.fillStyle = P.bright; c.beginPath(); c.arc(3 * pxk, 3 * pxk, 1.7 * pxk, 0, TAU); c.fill(); }
@@ -2027,7 +2027,7 @@ M.createTerminal = function createTerminal(opts){
       put('PX', 16, 12, null);
       /* (the split between the two tubes falls at 3.8 of the glyph's 6 units: above every crossbar (A at 2.6; B E F G H K P R S Y 3 5 6 8 9 at 3),
          below the bowls' tops, so no bar is lost in the bezels' gap; the halves are shown whole, nothing is cut out) */
-      for (const ch of new Set((LO.w1.t + LO.w2.t + 'AGENTSCONTEXTJUSTSTART' + (window.__glyphs || '')).replace(/[^A-Z0-9]/g, ''))) put('T' + ch, TXW, 2 * TXH, (c, w, hh) => { const L = mkLine(ch), u = Math.min(TXH * .86 / 3.8, w * .84 / L.sw); vlineC(L, w / 2, TXH + 3.8 * u, u, null, 1); });
+      for (const ch of new Set((LO.w1.t + LO.w2.t + 'AGENTSCONTEXTJUSTSTARTGLOBAL' + (window.__glyphs || '')).replace(/[^A-Z0-9]/g, ''))) put('T' + ch, TXW, 2 * TXH, (c, w, hh) => { const L = mkLine(ch), u = Math.min(TXH * .86 / 3.8, w * .84 / L.sw); vlineC(L, w / 2, TXH + 3.8 * u, u, null, 1); });
     }
 
     /* ---- motion graphics: speed lines, tunnels, rings ---- */
@@ -2187,7 +2187,7 @@ M.createTerminal = function createTerminal(opts){
       if (LOOPW){ loopTube(i, j); if (!tsTex) return; }   // (the loop's dark tubes are drawn all at once, in loopBack)
       const X = i * GX * CONV, Y = j * GY * CONV, Z = 0;   // (CONV: the wall pulling together into the KN)
       proj(X, Y, Z); const zc = pjz;
-      if (LOOPW) GA = LGA * c01(1.7 - zc / LZF);   // (the far wall fades into the dark)
+      if (LOOPW){ GA = LGA * c01(1.7 - zc / LZF); if (GA < .03) return; }   // (the far wall fades into the dark)
       proj(X - TW / 2, Y + TH / 2, Z); if (pjz < .3 || pjz < zc * .8) return; WLF[0] = pjx; WLF[1] = pjy;
       proj(X + TW / 2, Y + TH / 2, Z); if (pjz < .3 || pjz < zc * .8) return; WLF[2] = pjx; WLF[3] = pjy;
       proj(X - TW / 2, Y - TH / 2, Z); if (pjz < .3 || pjz < zc * .8) return; WLF[4] = pjx; WLF[5] = pjy;
@@ -2498,6 +2498,7 @@ M.createTerminal = function createTerminal(opts){
       lumAcc += W2 * h * .1;
     }
     /* JUST / START / !: three comic panels, frozen on the hit, then alive (speed lines running, the panels easing apart) */
+    let PNW = null;   // (the loop's other set of panels: its three words)
     function panels(S, a){
       const live = S - T_GOAT, sep = eO3(live / .3) * 26 * pxk, zin = 1 + .1 * eO3(live / .4);
       tg.fillStyle = P.bg; tg.fillRect(-W2, -h, 3 * W2, 3 * h);
@@ -2510,7 +2511,7 @@ M.createTerminal = function createTerminal(opts){
         if (p === 2) rings(SD, pcx, pcy, 1.4, .45);
         typeOn(tg, true);
         const pw = tall ? W2 * .72 : (PANEL3[o + 2] - PANEL3[o]) * (p === 0 ? .62 : .8), phh = tall ? (PANEL3[o + 5] - PANEL3[o + 1]) * (p === 2 ? .5 : .7) : h * (p === 2 ? .4 : .42);
-        const L = p === 0 ? LO.just : p === 1 ? LO.start : LO.bang, u = uFit(L, pw, phh) * zin, jit = live > .1 ? Math.sin(SD * 61 + p) * pxk : 0;
+        const L = PNW ? PNW[p] : p === 0 ? LO.just : p === 1 ? LO.start : LO.bang, u = uFit(L, pw, phh) * zin, jit = live > .1 ? Math.sin(SD * 61 + p) * pxk : 0;
         if (p === 1){ hollow(L, pcx + jit, pcy, u * 1.04); vlineC(L, pcx + jit, pcy + 3 * u, u, null, 1); }
         else if (p === 2){ ROT = -.1 + .04 * Math.sin(SD * 7); hollow(L, pcx, pcy, u * 1.06, ROT); vlineC(L, pcx, pcy + 3 * u, u, animRot, 1); ROT = 0; }
         else vlineC(L, pcx, pcy + 3 * u, u, null, 1);
@@ -2673,8 +2674,10 @@ M.createTerminal = function createTerminal(opts){
                 8-12  ORBIT     round the wall's middle; an equalizer, a new shape a beat; the KN turns against the orbit
                12-16  DIVE      cut frontal on a giant J; the camera rushes into one of its pixels; the KN falls away
                16-20  INSIDE J  the opening's J globe: J, CO-FOUNDER, YOUNG / FOUNDERS, GLOBAL (an impact frame in)
-               20-32  REVEAL    a pull-back out of that tube: hundreds of tubes flip in a wave from it, a planet rises
-                                across them, rings every beat, then a blackout closing in
+               20-24  REVEAL    a pull-back out of that tube: hundreds of tubes flip in a wave from it, a planet rises
+               24-28  FLY LOW   the JUST START move mirrored: the KN rides in big from the right, GLOBAL lands beside it
+               28-30  PANELS    the opening's comic panels with YOUNG / FOUNDERS / GLOBAL
+               30-32  BLACKOUT  the wall lights whole on the downbeat, then rings close in on the middle
                32-44  SLAM, CRANE  the KN slams back (ring); the camera cranes from under the wall to over it: AGENTS,
                                 then CONTEXT
                44-48  DIVE      into the X of CONTEXT; the KN slides out of the frame
@@ -2685,7 +2688,8 @@ M.createTerminal = function createTerminal(opts){
                66-74  SLAM, ORBIT  the KN slams back; orbit; KAIAV, then NIHALANI
                74-80  PULL BACK rings out of the KN every beat as the camera pulls back and the KN goes small; blackout
        A tube shows a letter two tubes tall, a flat block of light (a pixel), or near-black glass, and switches with a
-       blink. Lit tubes are reflected on the floor and a floor line runs toward the viewer on every beat ---- */
+       blink. Lit tubes are reflected on the floor and a floor line runs toward the viewer on every beat. Every cut
+       lands on a downbeat with a hit (a short flash, softer than the slam's) ---- */
     const LS = TAP ? 3.2 : 1.6, LP = 32, PH = 6.4, LV = [0, .5, 1.35];   // (the levels: off, dim, lit)
     let LOOPW = false, LQ = 0, GA = 1, LGA = 1, LTX = null;
     const LJB = -1, LHT = () => 7.5 * GY;   // (the content's frame: rows 0 to 7 over the KN, as the wide wall was)
@@ -2733,18 +2737,21 @@ M.createTerminal = function createTerminal(opts){
           return Q < at ? 0 : .7 + .5 * (pz(Q, at) + pz(Q, BQ(14)) + pz(Q, BQ(15))); } },
       { b0: 16, cell: (i, j, Q, o) => cut(o, Q, BQ(16)) },   // (inside J)
       { b0: 20, pz: (i, j, Q) => { let s = 1.2 * wv(DV1, i, j, Q, 20) + .6 * wv(DV1, i, j, Q, 21);   // REVEAL: the flip wave, then the planet
-          if (Q >= BQ(22) && Q < BQ(30)){ const b = Math.floor(Q / BT), gl = planet(i, j, b); s += (gl === 1 ? .6 + .4 * pz(Q, BQ(b)) : gl === 2 ? .25 + .6 * pz(Q, BQ(b)) : 0) + .3 * rgs(i, j, Q, b); }
+          if (Q >= BQ(22) && Q < BQ(24)){ const b = Math.floor(Q / BT), gl = planet(i, j, b); s += (gl === 1 ? .6 + .4 * pz(Q, BQ(b)) : gl === 2 ? .25 + .6 * pz(Q, BQ(b)) : 0) + .3 * rgs(i, j, Q, b); }
           return s; } },
-      { b0: 30, pz: (i, j, Q) => pz(Q, BQ(30) + (14 - Math.min(14, rd(i, j))) * .055) },   // BLACKOUT
+      { b0: 24, kick: 1, cell: (i, j, Q, o) => inM(MO.glob, i, j) ? spell(MO.glob, i, Q, o, BQ(24), BT / 2, BQ(24)) : cut(o, Q, BQ(24)),   // GLOBAL
+        pz: (i, j, Q) => inM(MO.glob, i, j) ? pz(Q, BQ(27)) + sw(MO.glob, i, Q, 26.5, 1) : 0 },
+      { b0: 28, cell: (i, j, Q, o) => cut(o, Q, BQ(28)) },   // (the panels)
+      { b0: 30, pz: (i, j, Q) => .8 * pz(Q, BQ(30)) + pz(Q, BQ(30) + .1 + (14 - Math.min(14, rd(i, j))) * .055) + pz(Q, BQ(31) + (14 - Math.min(14, rd(i, j))) * .04) },   // BLACKOUT: two rings closing in
       { b0: 32, kick: 1, cell: (i, j, Q, o) => inM(MO.agents, i, j) ? spell(MO.agents, i, Q, o, BQ(32), BT / 2, BQ(32)) : cut(o, Q, BQ(32)),   // AGENTS
         pz: (i, j, Q) => inM(MO.agents, i, j) ? pz(Q, BQ(35)) + sw(MO.agents, i, Q, 36) + sw(MO.agents, i, Q, 37, 1) + sw(MO.agents, i, Q, 38) + pz(Q, BQ(39)) : 0 },
       { b0: 40, kick: 1, cell: (i, j, Q, o) => inM(MO.ctx, i, j) ? spell(MO.ctx, i, Q, o, BQ(40), BT / 2, BQ(40)) : cut(o, Q, BQ(40)),   // CONTEXT
         pz: (i, j, Q) => inM(MO.ctx, i, j) ? pz(Q, BQ(44)) + sw(MO.ctx, i, Q, 45, 1) + 1.5 * pz(Q, BQ(46)) * (i === DV2[0] ? 1 : .3) : 0 },
       { b0: 48, cell: (i, j, Q, o) => cut(o, Q, BQ(48)) },   // (inside EDEN)
-      { b0: 52, pz: (i, j, Q) => 1.2 * wv(DV2, i, j, Q, 52) + .7 * wv(DV2, i, j, Q, 53) + .5 * (rgs(i, j, Q, 54) + rgs(i, j, Q, 55)) },   // the whip: a flip wave out of the tube; rings as the KN rides in
-      { b0: 56, kick: 1, cell: (i, j, Q, o) => inM(MO.just, i, j) ? spell(MO.just, i, Q, o, BQ(56), BT, BQ(56)) : cut(o, Q, BQ(56)) },   // JUST
-      { b0: 60, kick: 1, cell: (i, j, Q, o) => inM(MO.start, i, j) ? spell(MO.start, i, Q, o, BQ(60), BT / 2, BQ(60)) : cut(o, Q, BQ(60)),   // START
-        pz: (i, j, Q) => { let s = 0; for (let b = 62; b < 64; b++) s += (inM(MO.start, i, j) ? 1 : .6) * pz(Q, BQ(b) + rd(i, j) * .02); return s; } },
+      { b0: 52, pz: (i, j, Q) => .9 * wv(DV2, i, j, Q, 52) + .7 * wv(DV2, i, j, Q, 53) + .9 * pz(Q, BQ(53.75)) + .5 * (rgs(i, j, Q, 54) + rgs(i, j, Q, 55)) },   // the whip: a flip wave out of the tube; rings as the KN rides in
+      { b0: 54, kick: 1, cell: (i, j, Q, o) => inM(MO.just, i, j) ? spell(MO.just, i, Q, o, BQ(54), BT, BQ(54)) : cut(o, Q, BQ(54)) },   // JUST
+      { b0: 58, kick: 1, cell: (i, j, Q, o) => inM(MO.start, i, j) ? spell(MO.start, i, Q, o, BQ(58), BT / 2, BQ(58)) : cut(o, Q, BQ(58)),   // START
+        pz: (i, j, Q) => { let s = 0; for (let b = 60; b < 64; b++) s += (inM(MO.start, i, j) ? 1 : .6) * pz(Q, BQ(b) + rd(i, j) * .02); return s; } },
       { b0: 64, cell: (i, j, Q, o) => cut(o, Q, BQ(64)) },   // (the panels)
       { b0: 66, kick: 1, cell: (i, j, Q, o) => inM(MO.kai, i, j) ? spell(MO.kai, i, Q, o, BQ(66), BT / 4, BQ(66)) : cut(o, Q, BQ(66)),   // the first name
         pz: (i, j, Q) => inM(MO.kai, i, j) ? pz(Q, BQ(67)) : 0 },
@@ -2785,8 +2792,9 @@ M.createTerminal = function createTerminal(opts){
        width and height, its scale (a distance: under 1 nearer), turn, tilt and alpha), and the mode: the wall over the
        floor, the wall filling the frame (a dive), or one of the opening's scenes (LSCN: 1 J, 2 EDEN, 3 the panels, at its
        film time LSS, held from LSE), seen through a hole where the dived tube is (HOLE) ---- */
-    const KP = { x: 0, y: 0, s: 1, yaw: 0, pit: 0, a: 1 }, KE = [0, 8, 32, 54, 66];   // (KE: where the KN comes on: a light sweep)
-    let LPPY = 0, LFULL = 0, LWALL = 1, LSCN = 0, LSS = 0, LSE = 0, HOLE = 0, HDV = DV1, WHIP = 0, LSID = -1, LIMP = 0, KSL = -9, LZF = 60, KSW = -9;
+    const KP = { x: 0, y: 0, s: 1, yaw: 0, pit: 0, a: 1 }, KE = [0, 8, 24, 32, 54, 66];   // (KE: where the KN comes on: a light sweep)
+    const CUTS = [8, 12, 16, 20, 24, 28, 30, 32, 44, 48, 52, 54, 64, 66, 74];   // (the staging's cuts, each on a downbeat)
+    let KCUT2 = -9, LPPY = 0, LFULL = 0, LWALL = 1, LSCN = 0, LSS = 0, LSE = 0, HOLE = 0, HDV = DV1, WHIP = 0, LSID = -1, LIMP = 0, KSL = -9, LZF = 60, KSW = -9;
     function look(o, px, py, pz2, tx, ty, tz){ o.x = px; o.y = py; o.z = pz2; const dx = tx - px, dy = ty - py, dz = tz - pz2; o.yaw = Math.atan2(dx, dz); o.pit = Math.atan2(dy, Math.hypot(dx, dz)); o.rol = 0; }
     function frontal(o, x, y, d){ o.x = x; o.y = y; o.z = -d; o.yaw = o.pit = o.rol = 0; }
     function kp(x, y, s, yaw, pit, a){ KP.x = x; KP.y = y; KP.s = s; KP.yaw = yaw; KP.pit = pit; KP.a = a; }
@@ -2803,28 +2811,32 @@ M.createTerminal = function createTerminal(opts){
       else if (b < 12){ LSID = 1; u = seg(8, 12); const a = lerp(-.55, .45, s5(u)), r = .95 * D; look(o, r * Math.sin(a), 3.4 * GY, -r * Math.cos(a), 0, 2.6 * GY, 0); kp(0, 0, 1.05, -a * .8, 0, 1); }   // ORBIT
       else if (b < 16){ LSID = 2; u = seg(12, 16); dive(o, u, DV1, 1.3 * D); e = s5(c01(u * 1.6 - .1)); kp(0, .85 * e, 1 - .45 * e, 0, .3 * e, 1); scene(1, T_J + Q - BQ(16), 4.38); }   // DIVE (the KN falls out of the frame before the rush)
       else if (b < 20){ LSID = 3; LFULL = 1; LWALL = 0; kp(0, 0, 1, 0, 0, 0); scene(1, T_J + Q - BQ(16), 4.38); if (Q - BQ(16) < .07) LIMP = 2; }   // INSIDE J
-      else if (b < 32){ LSID = 4; LFULL = 1; u = seg(20, 22); e = eO5(u);   // REVEAL
-        frontal(o, lerp(DV1[0], 0, e) * GX, lerp(DV1[1], 2, e) * GY, Math.exp(lerp(Math.log(dfill()), Math.log(2.9 * D), e)) * (1 - .18 * s5(seg(22, 32)))); o.rol = .1 * Math.sin(Math.PI * seg(21, 32));
+      else if (b < 24){ LSID = 4; LFULL = 1; u = seg(20, 22); e = eO5(u);   // REVEAL
+        frontal(o, lerp(DV1[0], 0, e) * GX, lerp(DV1[1], 2, e) * GY, Math.exp(lerp(Math.log(dfill()), Math.log(2.9 * D), e)) * (1 - .2 * s5(seg(22, 24)))); o.rol = .12 * Math.sin(Math.PI * seg(21, 24));
         HDV = DV1; HOLE = 1; kp(0, 0, 1, 0, 0, 0); scene(1, T_J + Q - BQ(16), 4.38); }
+      else if (b < 28){ LSID = 13; u = seg(24, 28); const x = lerp(6, -4, u) * GX; look(o, x, 0, -1.05 * D, lerp(2.2, .5, u) * GX, wy, 0); LPPY = -.22 * h; kp(lerp(.9, .3, back(c01(b - 24), 1.2)), .13, .72, -.45, 0, 1); }   // FLY LOW (mirrored): GLOBAL
+      else if (b < 30){ LSID = 14; LFULL = 1; LWALL = 0; kp(0, 0, 1, 0, 0, 0); scene(4, T_GOAT + Q - BQ(28), 8); }   // PANELS: YOUNG / FOUNDERS / GLOBAL
+      else if (b < 32){ LSID = 15; u = seg(30, 32); frontal(o, 0, 2.4 * GY, lerp(1.7, 1.25, s5(u)) * D); kp(0, 0, 1, 0, 0, 0); }   // BLACKOUT
       else if (b < 44){ LSID = 5; u = seg(32, 44); e = s5(u); look(o, lerp(-.55, .45, e) * D, lerp(-1.5, 6.5, e) * GY, -lerp(1.05, .85, e) * D, 0, wy, 0); LPPY = lift; kp(0, .03, 1, 0, -o.pit * .5, 1); KSL = Q - BQ(32); }   // SLAM, CRANE
-      else if (b < 48){ LSID = 6; u = seg(44, 48); dive(o, u, DV2, 1.3 * D); e = s5(c01(u * 1.6 - .1)); kp(-1.1 * e, 0, 1 - .3 * e, -.5 * e, 0, 1); scene(2, T_E + Q - BQ(48), 6.38); }   // DIVE
+      else if (b < 48){ LSID = 6; u = seg(44, 48); dive(o, u, DV2, 1.3 * D); LPPY = lift * (1 - s5(c01(u * 1.7))); e = eO3(c01(u * 2.5)); kp(-1.3 * e, .5 * e, 1 - .3 * e, -.5 * e, 0, 1); scene(2, T_E + Q - BQ(48), 6.38); }   // DIVE (the crane's lens shift eased out: no jump at the cut)
       else if (b < 52){ LSID = 7; LFULL = 1; LWALL = 0; kp(0, 0, 1, 0, 0, 0); scene(2, T_E + Q - BQ(48), 6.38); if (Q - BQ(48) < .07) LIMP = 3; }   // INSIDE EDEN
       else if (b < 54){ LSID = 8; LFULL = 1; u = seg(52, 54); e = eO5(c01(u * 1.6)); const w = eI3(c01(u * 2 - .8));   // WHIP
         frontal(o, DV2[0] * GX + w * 9 * GX, DV2[1] * GY, Math.exp(lerp(Math.log(dfill()), Math.log(.9 * D), e))); o.yaw = .9 * w; WHIP = Math.sin(Math.PI * c01(u * 2 - .6));
         HDV = DV2; HOLE = 1; kp(0, 0, 1, 0, 0, 0); scene(2, T_E + Q - BQ(48), 6.38); }
-      else if (b < 64){ LSID = 9; u = seg(54, 64); const x = lerp(-7, 5, u) * GX; look(o, x, 0, -.95 * D, lerp(-3, -1.2, u) * GX, wy, 0); LPPY = -.22 * h; kp(lerp(-1.1, -.27, back(c01((b - 54) / 1.5), 1.2)), .13, .72, .45, 0, 1); }   // FLY LOW
+      else if (b < 64){ LSID = 9; u = seg(54, 64); const x = lerp(-5, 5, u) * GX; look(o, x, 0, -.95 * D, lerp(-3, -1.2, u) * GX, wy, 0); LPPY = -.22 * h; kp(lerp(-.9, -.27, back(c01(b - 54), 1.2)), .13, .72, .45, 0, 1); }   // FLY LOW
       else if (b < 66){ LSID = 10; LFULL = 1; LWALL = 0; kp(0, 0, 1, 0, 0, 0); scene(3, T_GOAT + Q - BQ(64), 8); }   // PANELS
       else if (b < 74){ LSID = 11; u = seg(66, 74); const a = lerp(.55, -.5, s5(u)), r = 1.05 * D; look(o, r * Math.sin(a), 3.5 * GY, -r * Math.cos(a), 0, wy, 0); LPPY = lift; kp(0, .03, 1.1, -a * .8, -o.pit * .4, 1); KSL = Q - BQ(66); }   // SLAM, ORBIT
-      else { LSID = 12; u = seg(74, 80); e = eO3(u); frontal(o, 0, lerp(1.6, 3, e) * GY, lerp(1.05, 2.8, e) * D); kp(0, -.04 * e, lerp(1.1, 2, e), 0, 0, 1); }   // PULL BACK
+      else { LSID = 12; u = seg(74, 80); e = eO3(u); frontal(o, 0, lerp(1.6, 3, e) * GY, lerp(1.05, 2.4, e) * D); kp(0, -.04 * e, lerp(1.1, 2, e), 0, 0, 1); }   // PULL BACK
       if (L < LS) LSID = -1;
       LZF = Math.max(1.4 * D, 1.1 * Math.abs(o.z)); LD = D;
       KSW = -9; for (const k of KE) if (b >= k && b < k + 2.25) KSW = Q - BQ(k);
+      KCUT2 = -9; if (L >= LS) for (const k of CUTS) if (b >= k && b < k + .5) KCUT2 = Q - BQ(k);   // (time since the last cut, for its hit)
     }
     /* an opening scene, full frame, at its film time (the backdrop's clock runs on through a hold) */
     function drawScene(){
       const sv = SD, sh = kHot0; SD = LSS + 40; G = tg; tg.setTransform(1, 0, 0, 1, BX, BY); tg.globalAlpha = 1;
       const S = Math.min(LSS, LSE);
-      if (LSCN === 1) jScene(S); else if (LSCN === 2) edenScene(S); else panels(S, S);
+      if (LSCN === 1) jScene(S); else if (LSCN === 2) edenScene(S); else { if (LSCN === 4) PNW = [LO.young, LO.founders, LO.global]; panels(S, S); PNW = null; }
       tg.setTransform(1, 0, 0, 1, BX, BY);
       if (LIMP === 2) impact2(T_J + (LSS - T_J)); else if (LIMP === 3) impact3();
       SD = sv; kHot0 = sh; tg.globalCompositeOperation = 'source-over'; tg.globalAlpha = 1; tg.setTransform(1, 0, 0, 1, BX, BY);
@@ -2855,7 +2867,7 @@ M.createTerminal = function createTerminal(opts){
       HOLE = hole ? 1 : 0;
       if (full){ tg.beginPath(); tg.rect(-W2, -h, 3 * W2, 3 * h); if (hole){ tg.moveTo(HQ[0], HQ[1]); tg.lineTo(HQ[2], HQ[3]); tg.lineTo(HQ[4], HQ[5]); tg.lineTo(HQ[6], HQ[7]); tg.closePath(); } tg.fillStyle = P.bg; tg.fill('evenodd'); }
       /* the glass, all of it dark: one path */
-      const near = Math.abs(LCAM.z) < LD * .5, ir = near ? 6 : 17, jr0 = near ? -3 : -9, jr1 = near ? 8 : 13, ic = Math.round(LCAM.x / GX), jc = Math.round(LCAM.y / GY);
+      const near = Math.abs(LCAM.z) < LD * .5, ir = near ? 6 : 15, jr0 = near ? -3 : -8, jr1 = near ? 8 : 13, ic = Math.round(LCAM.x / GX), jc = Math.round(LCAM.y / GY);
       const i0 = ic - ir, i1 = ic + ir, j0 = Math.max(jr0, jc - 10), j1 = Math.min(jr1, jc + 10);
       tg.beginPath(); TV.fill(0);
       for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++){
@@ -3112,6 +3124,10 @@ M.createTerminal = function createTerminal(opts){
         tg.globalAlpha = .75 * (1 - u); tg.strokeStyle = P.bright; tg.lineWidth = (12 * (1 - u) + 2) * pxk; tg.beginPath(); tg.arc(lsx, lsy, r, 0, TAU); tg.stroke(); tg.globalAlpha = 1;
         lumAcc += r * TAU * 8 * pxk * (1 - u);
       }
+      if (!still && SHOT === K_LOOP && KCUT2 >= 0 && KCUT2 < .2){   // each cut's hit: a flash on the downbeat, softer than the slam's
+        tg.setTransform(1, 0, 0, 1, BX, BY); tg.globalCompositeOperation = 'lighter'; tg.globalAlpha = .13 * Math.exp(-KCUT2 * 22); tg.fillStyle = P.bright; tg.fillRect(-W2, -h, 3 * W2, 3 * h); tg.globalAlpha = 1; tg.globalCompositeOperation = 'source-over';
+        lumAcc += W2 * h * .13 * Math.exp(-KCUT2 * 22);
+      }
       const flash = !still && A >= .1 ? .2 * Math.exp(-(A - .1) * 12) : 0;
       if (flash > .01){ tg.globalAlpha = flash; tg.fillStyle = P.bright; tg.fillRect(-W2, -h, 3 * W2, 3 * h); tg.globalAlpha = 1; lumAcc += W2 * h * flash; }
       F = F0; pcx = cx; pcy = hy;
@@ -3345,7 +3361,7 @@ M.createTerminal = function createTerminal(opts){
     for (const t of j.timers) clearTimeout(t);
     job = null; openRow = null; eatBlank = false;
     if (status === 0 && !j.dead) okRuns++;
-    if (j.hint){ suggestion = j.hint; tty.rich(out().at(0, ['did you mean ', 'd'], chip(j.hint, 'b'), ['?  ' + (TAP ? 'tap it' : 'press enter'), 'f'])); j.plain += ' Did you mean ' + j.hint + '? Press Enter to run it.'; }
+    if (j.hint){ suggestion = j.hint; tty.rich(out().at(2, ['did you mean ', 'd'], chip(j.hint, 'b'), ['?  ' + (TAP ? 'tap it' : 'press enter'), 'f'])); j.plain += ' Did you mean ' + j.hint + '? Press Enter to run it.'; }
     if (ahead) flushAhead();
     const held = scrollOff, pin = pinned;      // someone reading back up (or a page opened at its top) keeps their place; any key or the note brings them down
     trim(); mirror(j.plain || ''); if (j.tail) mirror(j.tail); touched(); scrollOff = held; pinned = pin;
@@ -3416,7 +3432,7 @@ M.createTerminal = function createTerminal(opts){
     errLine(ctx.errSink, name + ': command not found\n');
     const f = fuzzy(name, cmdItems());
     if (f){ j.hint = [f.item.name, ...argv.slice(1)].join(' '); }
-    else if (ctx.errSink === tty) tty.rich(out().at(0, [argv.length > 2 ? 'this shell knows commands, not sentences. try ' : 'not something this machine knows. try ', 'f'], chip('help', 'n')));
+    else if (ctx.errSink === tty) tty.rich(out().at(2, [argv.length > 2 ? 'this shell knows commands, not sentences. try ' : 'not something this machine knows. try ', 'f'], chip('help', 'n')));
     return 127;
   }
   function makeIo(ctx, j){
@@ -3602,7 +3618,7 @@ M.createTerminal = function createTerminal(opts){
         nav(h.link.cmd);
         sfx('beep'); return true;
       }
-      const w = openTarget(h.link.url); const o = out(); o.at(0, ['opening ', 'd'], [bare(h.link.url), 'n']); if (!w) o.at(0, ['if nothing opened, the address is above', 'f']);
+      const w = openTarget(h.link.url); const o = out(); o.at(2, ['opening ', 'd'], [bare(h.link.url), 'n']); if (!w) o.at(4, ['if nothing opened, the address is above', 'f']);
       if (!job) emit(o); touched(); return true;
     }
     return false;
