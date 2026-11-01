@@ -19,7 +19,7 @@ M.TERM = M.TERM || {}; M.TERM.cmds = M.TERM.cmds || {}; M.TERM.apps = M.TERM.app
 const GLYPH_COVER = .22;      // the share of a cell a VT323 glyph lights, on average (see lum)
 const PALETTE = {             // one phosphor, four intensities. Retune here to match the scene.
   bg:     '#0a0f0a',
-  faint:  '#43603c',          // structure: rules, ghost text, hints
+  faint:  '#4c6b44',          // structure: rules, ghost text, hints (3.2:1 on bg: a hint still reads)
   dim:    '#6b9061',          // labels, secondary copy
   normal: '#c8f5b8',          // body copy
   bright: '#f0ffe8',          // titles, emphasis
