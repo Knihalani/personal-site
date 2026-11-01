@@ -19,7 +19,8 @@ M.TERM = M.TERM || {}; M.TERM.cmds = M.TERM.cmds || {}; M.TERM.apps = M.TERM.app
 const GLYPH_COVER = .22;      // the share of a cell a VT323 glyph lights, on average (see lum)
 const PALETTE = {             // one phosphor, four intensities. Retune here to match the scene.
   bg:     '#0a0f0a',
-  faint:  '#4c6b44',          // structure: rules, ghost text, hints (3.2:1 on bg: a hint still reads)
+  faint:  '#43603c',          // structure: rules, ghost text, hints
+  hint:   '#4c6b44',          // faint words ("see also", "(try: ...)"): a step over faint, 3.2:1 on bg, so they still read
   dim:    '#6b9061',          // labels, secondary copy
   normal: '#c8f5b8',          // body copy
   bright: '#f0ffe8',          // titles, emphasis
@@ -4188,7 +4189,7 @@ M.createTerminal = function createTerminal(opts){
   }
 
   /* ---- drawing primitives ---- */
-  const color = st => st === 'f' ? P.faint : st === 'd' ? P.dim : st === 'b' ? P.bright : st === 'a' ? P.accent : st === 'z' ? P.bg : P.normal;
+  const color = st => st === 'f' ? P.hint : st === 'd' ? P.dim : st === 'b' ? P.bright : st === 'a' ? P.accent : st === 'z' ? P.bg : P.normal;
   /* a card: vector rules in the phosphor (VT323 has no box glyphs), cells on the text grid */
   function drawCard(r, top){
     const n = r.body, active = r.sel >= 0 && !r.done;
