@@ -11,7 +11,8 @@ MAC.CONTENT = {
     "title": "Eden",
     "role": "Founder",
     "line": "Giving agents context",
-    "body": "Pivoting around but working in the agent context space, more to come soon ..."
+    "body": "Pivoting around but working in the agent context space, more to come soon ...",
+    "url": "https://geteden.pages.dev"
   },
   "j": {
     "title": "J: Rising Founder",

@@ -735,6 +735,7 @@ M.createTerminal = function createTerminal(opts){
     x: L.x || 'https://x.com/KaiavRNihalani',
     gh: L.github || L.gh || 'https://github.com/knihalani/personal-site',
     j: J.url || 'https://risingfounder.net',
+    eden: E.url || 'https://geteden.pages.dev',
   };
   const EMAILS = (Array.isArray(C.contact) && C.contact.length) ? C.contact : (C.contact && Array.isArray(C.contact.emails) && C.contact.emails.length) ? C.contact.emails : [
     { label: 'J', email: 'kaiav@risingfounder.net' },
@@ -761,7 +762,7 @@ M.createTerminal = function createTerminal(opts){
   };
   const TEXT = {
     about: () => [C.name, A.role, '', ...(A.body || []).map(p => wrapT(p))].filter(x => x != null).join('\n') + '\n',
-    eden: () => [E.title || 'Eden', E.role, '', E.line, E.body ? '\n' + E.body : null].filter(x => x != null).join('\n') + '\n',
+    eden: () => [E.title || 'Eden', E.role, '', E.line, E.body ? '\n' + E.body : null, '', URLS.eden].filter(x => x != null).join('\n') + '\n',
     j: () => [J.title || 'J', J.role, '', J.line, wrapT(J.body || ''), '', ...(J.facts || []).map(f => pad(f[0], 9) + f[1]), '', J.url].filter(x => x != null).join('\n') + '\n',
     links: () => LINKLIST().map(t => pad(t.name, 10) + t.url).join('\n') + '\n',
     writing: () => posts().length ? posts().map(p => [p.date, p.title, p.summary && wrapT(p.summary), p.html ? 'read ' + slugOf(p) : p.url].filter(Boolean).join('\n')).join('\n\n') + '\n' : 'nothing published yet\n',
@@ -944,6 +945,8 @@ M.createTerminal = function createTerminal(opts){
       o.blank().head('eden', 'eden.txt').blank().big(E.title || 'Eden').line([E.role || '', 'd']).blank();
       if (E.line) o.para(E.line, 'b').blank();
       if (E.body) o.para(E.body, 'n').blank();
+      if (TAP && URLS.eden) o.at(2, ['[ visit ' + bare(URLS.eden) + ' ]', 'b', { url: URLS.eden }]).blank();   // phones: one clear button, before the details
+      o.card({ title: 'Eden', items: [{ label: 'site', value: bare(URLS.eden), full: URLS.eden, url: URLS.eden, hint: 'open' }] }).blank();
       return o.line(['see also  ', 'f'], ...chips(['contact', 'j', 'about'], 'n')).blank();
     },
     j(o){
